@@ -382,6 +382,39 @@ function helpoff(elem) {
     $(elem).parents(".usertext-edit:first").children(".markhelp:first").hide();
 };
 
+var converter = new Showdown.converter();
+
+function convertText(text, preview_pane) {
+	text = converter.makeHtml(text);
+	preview_pane.html(text);
+}
+
+reddit.sd_preview = {};
+function previewon(elem) {
+	reddit.sd_preview.user_text = $(elem).parents(".usertext-edit:first");
+	reddit.sd_preview.text_area = reddit.sd_preview.user_text.find("textarea[name=text]");
+	if (reddit.sd_preview.text_area.val() != "") {
+		reddit.sd_preview.preview_div = reddit.sd_preview.user_text.children(".markpreview:first"
+);
+		convertText(reddit.sd_preview.text_area.val(), reddit.sd_preview.preview_div);
+		reddit.sd_preview.text_area.bind("keyup", function(e) {
+			var val = $(this).val();
+			convertText(val, reddit.sd_preview.preview_div);
+		});
+		reddit.sd_preview.preview_div.show();
+	}
+};
+
+function previewoff(elem) {
+	var user_text = $(elem).parents(".usertext-edit:first");
+	var text_area = user_text.find("textarea[name=text]");
+	var preview_div = user_text.children(".markpreview:first");
+	preview_div.html('');
+	preview_div.hide();
+	reddit.sd_preview.text_area.unbind("keyup");
+};
+
+
 function show_all_messages(elem) {
     var m = $(elem).parents(".message");
     var ids = [];

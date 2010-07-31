@@ -4103,3 +4103,8 @@ tr.gold-accent + tr > td {
 .tiny {
     font-size: xx-small;
 }
+
+.usertext .preview-toggle {
+	font-size: smaller;
+	margin-top: 5px;
+}

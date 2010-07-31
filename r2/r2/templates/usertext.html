@@ -68,6 +68,9 @@
         ${toggle_button("help-toggle", _("formatting help"), _("hide help"),
                         "helpon", "helpoff",
                          style = "" if thing.creating else "display: none")}
+	${toggle_button("preview-toggle", _("preview"), _("hide preview"), 
+			"previewon", "previewoff", 
+			 style= "" if thing.creating else "display: none")}
 
         ${error_field("TOO_LONG", thing.name, "span")}
         ${error_field("RATELIMIT", "ratelimit", "span")}
@@ -83,6 +86,8 @@
             <span class="status"></span>
           %endif
         </div>
+      </div>
+      <div class="markpreview md" style="display: none">
       </div>
 
       <table class="markhelp md" style="display: none">
