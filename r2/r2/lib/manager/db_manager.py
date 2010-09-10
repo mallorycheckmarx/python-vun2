@@ -101,6 +101,10 @@ class db_manager:
         if len(tables) == 1:
             return tables[0]
 
+        regen_ips = False # assume tables unaltered by dead connection handling below
+        ips = dict((t[0].bind.url.host, t) for t in tables)
+        logger.debug("There are {0} unique IPs in our pgsql cluster.".format(len(ips.keys())))
+
         if self.dead:
             tables = set(tables)
             dead = set(t for t in tables if t[0].bind in self.dead)
@@ -108,15 +112,23 @@ class db_manager:
                 # TODO: tune the reconnect code.  We have about 1-2
                 # requests per second per app, so this should
                 # reconnect every 50-100 seconds.
-                if (random.randint(1,100) == 42 and 
-                    self.test_engine(t[0].bind)):
-                    dead.remove(t)
-            tables = tables - dead
+                #
+                # right now we only try to reconnect if we roll a 42
+                # or if there is one or fewer hosts in our cluster.
+                if random.randint(1,100) == 42 or len(ips.keys()) < 2:
+                    if self.test_engine(t[0].bind):
+                      dead.remove(t)
+            #only apply changes to tables if there are changes to apply
+            #this is here mainly so we don't regenerate ips dict needlessly
+            if dead:
+                tables = tables - dead
+                regen_ips = True
 
         #'t' is a list of engines itself. since we assume those engines
         #are on the same machine, just take the first one. len(ips) may be
         #< len(tables) if some tables are on the same host.
-        ips = dict((t[0].bind.url.host, t) for t in tables)
+        if regen_ips:
+            ips = dict((t[0].bind.url.host, t) for t in tables)
         ip_loads = AppServiceMonitor.get_db_load(ips.keys())
 
         total_load = 0
@@ -166,6 +178,8 @@ class db_manager:
             r = r - load
 
         #should never happen
-        print 'yer stupid'
+        logger.error("""I couldn't find any usable PGSQLs anymore. Maybe it is down or maybe I just think it is down.
+        Restarting reddit or postgresql may be a good short-term fix for this. Please examine the logs more thorougly
+        to attempt to find the time I lose all record of usable connections and fix whatever causes this.""")
         return  random.choice(list(tables))
 
