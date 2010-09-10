@@ -24,6 +24,8 @@ import sqlalchemy as sa
 import logging, traceback
 import time, random
 
+from pylons import g
+
 logger = logging.getLogger('dm_manager')
 logger.addHandler(logging.StreamHandler())
 
@@ -116,10 +118,19 @@ class db_manager:
                 # TODO: tune the reconnect code.  We have about 1-2
                 # requests per second per app, so this should
                 # reconnect every 50-100 seconds.
-                if (random.randint(1,100) == 42 and 
-                    self.test_engine(t[0].bind)):
-                    dead.remove(t)
-            tables = tables - dead
+                #
+                # random.random() generates a random float <= 1.
+                # db_dead_reconnect_prob is defined in the ini
+                # 0.01 makes a 1/100 chance of attempting a reconnect
+                # 1.00 makes a 1/1 chance.
+                c = random.random()
+                logger.debug("if {0} < {1} , we are trying to reconnect...".format(c, g.db_dead_reconnect_prob))
+                if c < g.db_dead_reconnect_prob:
+                    if self.test_engine(t[0].bind):
+                      dead.remove(t)
+            #only apply changes to tables if there are changes to apply
+            if dead:
+                tables = tables - dead
 
         #'t' is a list of engines itself. since we assume those engines
         #are on the same machine, just take the first one. len(ips) may be
@@ -174,6 +185,8 @@ class db_manager:
             r = r - load
 
         #should never happen
-        print 'yer stupid'
+        logger.error("""I couldn't find any usable PGSQLs anymore. Maybe it is down or maybe I just think it is down.
+        Restarting reddit or postgresql may be a good short-term fix for this. Please examine the logs more thorougly
+        to attempt to find the time I lose all record of usable connections and fix whatever causes this.""")
         return  random.choice(list(tables))
 
