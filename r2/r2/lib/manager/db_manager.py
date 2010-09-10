@@ -24,6 +24,8 @@ import sqlalchemy as sa
 import logging, traceback
 import time, random
 
+from pylons import g
+
 logger = logging.getLogger('dm_manager')
 logger.addHandler(logging.StreamHandler())
 
@@ -101,10 +103,6 @@ class db_manager:
         if len(tables) == 1:
             return tables[0]
 
-        regen_ips = False # assume tables unaltered by dead connection handling below
-        ips = dict((t[0].bind.url.host, t) for t in tables)
-        logger.debug("There are {0} unique IPs in our pgsql cluster.".format(len(ips.keys())))
-
         if self.dead:
             tables = set(tables)
             dead = set(t for t in tables if t[0].bind in self.dead)
@@ -113,22 +111,23 @@ class db_manager:
                 # requests per second per app, so this should
                 # reconnect every 50-100 seconds.
                 #
-                # right now we only try to reconnect if we roll a 42
-                # or if there is one or fewer hosts in our cluster.
-                if random.randint(1,100) == 42 or len(ips.keys()) < 2:
+                # random.random() generates a random float <= 1.
+                # db_dead_reconnect_prob is defined in the ini
+                # 0.01 makes a 1/100 chance of attempting a reconnect
+                # 1.00 makes a 1/1 chance.
+                c = random.random()
+                logger.debug("if {0} < {1} , we are trying to reconnect...".format(c, g.db_dead_reconnect_prob))
+                if c < g.db_dead_reconnect_prob:
                     if self.test_engine(t[0].bind):
                       dead.remove(t)
             #only apply changes to tables if there are changes to apply
-            #this is here mainly so we don't regenerate ips dict needlessly
             if dead:
                 tables = tables - dead
-                regen_ips = True
 
         #'t' is a list of engines itself. since we assume those engines
         #are on the same machine, just take the first one. len(ips) may be
         #< len(tables) if some tables are on the same host.
-        if regen_ips:
-            ips = dict((t[0].bind.url.host, t) for t in tables)
+        ips = dict((t[0].bind.url.host, t) for t in tables)
         ip_loads = AppServiceMonitor.get_db_load(ips.keys())
 
         total_load = 0
