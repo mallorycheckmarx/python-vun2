@@ -1,5 +1,6 @@
 from r2.models import Account, Link, Comment, Trial, Vote, SaveHide
 from r2.models import Message, Inbox, Subreddit, ModContribSR, ModeratorInbox
+from r2.models import MultiReddit, FakeSubreddit
 from r2.lib.db.thing import Thing, Merge
 from r2.lib.db.operators import asc, desc, timeago
 from r2.lib.db.sorts import epoch_seconds
@@ -408,10 +409,22 @@ def user_query(kind, user, sort, time):
         q._filter(db_times[time])
     return make_results(q)
 
-def get_all_comments():
-    """the master /comments page"""
-    q = Comment._query(sort = desc('_date'))
+def get_sr_comments(sr):
+    q = Comment._query(Comment.c.sr_id == sr._id,
+                       sort = desc('_date'))
     return make_results(q)
+
+def get_all_comments(sr):
+    if isinstance(sr, MultiReddit):
+        srs = Subreddit._byID(sr.sr_ids, return_dict=False)
+        results = [get_sr_comments(srid) for srid in srs]
+        return merge_results(*results)
+    elif isinstance(sr, FakeSubreddit):
+        """the master /comments page"""
+        q = Comment._query(sort = desc('_date'))
+        return make_results(q)
+    else:
+        return get_sr_comments(sr)
 
 def get_comments(user, sort, time):
     return user_query(Comment, user, sort, time)
@@ -563,14 +576,16 @@ def new_link(link):
 
 def new_comment(comment, inbox_rels):
     author = Account._byID(comment.author_id)
+    sr = Subreddit._byID(comment.sr_id)
     job = [get_comments(author, 'new', 'all')]
     if comment._deleted:
-        job.append(get_all_comments())
+        job.append(get_all_comments(sr))
         add_queries(job, delete_items = comment)
     else:
         #if comment._spam:
         #    sr = Subreddit._byID(comment.sr_id)
         #    job.append(get_spam_comments(sr))
+        job.append(get_all_comments(sr))
         add_queries(job, insert_items = comment)
         amqp.add_item('new_comment', comment._fullname)
         if not g.amqp_host:
@@ -870,8 +885,9 @@ def run_new_comments():
     def _run_new_comment(msg):
         fname = msg.body
         comment = Comment._by_fullname(fname)
+        sr = Subreddit._byID(comment.sr_id)
 
-        add_queries([get_all_comments()],
+        add_queries([get_all_comments(sr)],
                     insert_items = [comment])
 
     amqp.consume_items('newcomments_q', _run_new_comment)

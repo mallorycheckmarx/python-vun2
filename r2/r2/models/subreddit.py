@@ -318,7 +318,7 @@ class Subreddit(Thing, Printable):
 
     def get_all_comments(self):
         from r2.lib.db import queries
-        return queries.get_all_comments()
+        return queries.get_all_comments(self)
 
 
     @classmethod
