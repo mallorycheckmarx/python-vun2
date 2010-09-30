@@ -32,7 +32,7 @@
       url = thing.mousedown_url
    else:
       url = permalink
-   use_thumbs = thing.thumbnail and not request.GET.has_key("nothumbs")
+   use_thumbs = thing.has_thumbnail and not request.GET.has_key("nothumbs")
  %>
 <item>
   <title>${thing.title}</title>
