@@ -52,7 +52,7 @@
     %endif
   <div class="entry ${like_cls}">
   %if thing.has_thumbnail and thing.thumbnail:
-   <a href="${thing.href_url}" class="thumbnail">
+   <a href="${thing.preferred_url}" class="thumbnail">
     <img src="${thing.thumbnail}" alt=""/>
    </a>
   %endif
@@ -60,7 +60,7 @@
      %if thing.is_self:
       <a href="${add_sr(thing.href_url)}">${thing.title}</a>
      %else:
-      <a href="${thing.tblink}.compact">${thing.title}</a>
+      <a href="${thing.preferred_url}.compact">${thing.title}</a>
      %endif
     </p>
     %if thing.link_child and not c.permalink_page and thing.link_child.css_style.strip(' ') != 'video':
