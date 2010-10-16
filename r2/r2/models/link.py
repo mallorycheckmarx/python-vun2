@@ -432,7 +432,7 @@ class Link(Thing, Printable):
             # is neither a promoted link nor a self post
             if pref_frame and not item.is_self and not item.promoted:
                 item.mousedown_url = item.tblink
-                item.preferred_url = item.tblink
+                item.preferred_url = item.tblink + (".%s" % c.render_style)
             else:
                 item.mousedown_url = None
                 item.preferred_url = item.href_url
