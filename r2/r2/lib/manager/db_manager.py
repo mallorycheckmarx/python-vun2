@@ -24,8 +24,6 @@ import sqlalchemy as sa
 import logging, traceback
 import time, random
 
-from pylons import g
-
 logger = logging.getLogger('dm_manager')
 logger.addHandler(logging.StreamHandler())
 
@@ -51,6 +49,7 @@ class db_manager:
         self._engines = {}
         self.avoid_master_reads = {}
         self.dead = {}
+        self.db_dead_reconnect_prob = None
 
     def add_thing(self, name, thing_dbs, avoid_master = False, **kw):
         """thing_dbs is a list of database engines. the first in the
@@ -123,9 +122,9 @@ class db_manager:
                 # db_dead_reconnect_prob is defined in the ini
                 # 0.01 makes a 1/100 chance of attempting a reconnect
                 # 1.00 makes a 1/1 chance.
-                c = random.random()
-                logger.debug("if {0} < {1} , we are trying to reconnect...".format(c, g.db_dead_reconnect_prob))
-                if c < g.db_dead_reconnect_prob:
+                rand = random.random()
+                logger.debug("if {0} < {1} , we are trying to reconnect...".format(rand, self.db_dead_reconnect_prob))
+                if rand < self.db_dead_reconnect_prob:
                     if self.test_engine(t[0].bind):
                       dead.remove(t)
             #only apply changes to tables if there are changes to apply

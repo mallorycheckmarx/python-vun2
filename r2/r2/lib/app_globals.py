@@ -65,6 +65,7 @@ class Globals(object):
     float_props = ['min_promote_bid',
                    'max_promote_bid',
                    'usage_sampling',
+                   'db_dead_reconnect_prob'
                    ]
 
     bool_props = ['debug', 'translator',
@@ -405,6 +406,8 @@ class Globals(object):
 
         dbm.type_db = dbm.get_engine(gc['type_db'])
         dbm.relation_type_db = dbm.get_engine(gc['rel_type_db'])
+
+        dbm.db_dead_reconnect_prob = gc['db_dead_reconnect_prob']
 
         def split_flags(p):
             return ([n for n in p if not n.startswith("!")],
