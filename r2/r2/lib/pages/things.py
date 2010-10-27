@@ -33,7 +33,7 @@ from pylons.i18n import _, ungettext
 class PrintableButtons(Styled):
     def __init__(self, style, thing,
                  show_delete = False, show_report = True,
-                 show_distinguish = False,
+                 show_distinguish = False, show_marknsfw,
                  show_indict = False, is_link=False, **kw):
         show_ignore = (thing.show_reports or
                        (thing.reveal_trial_info and not thing.show_spam))
@@ -54,6 +54,7 @@ class PrintableButtons(Styled):
                         show_report = show_report,
                         show_indict = show_indict,
                         show_distinguish = show_distinguish,
+                        show_marknsfw = show_marknsfw,
                         **kw)
         
 class BanButtons(PrintableButtons):
@@ -76,6 +77,11 @@ class LinkButtons(PrintableButtons):
             show_indict = True
         else:
             show_indict = False
+
+        if (c.user_is_admin or thing.can_ban or is_author) and not thing.nsfw:
+            show_marknsfw = True
+        else:
+            show_marknsfw = False
 
         # do we show the delete button?
         show_delete = is_author and delete and not thing._deleted
@@ -114,6 +120,7 @@ class LinkButtons(PrintableButtons):
                                   show_report = show_report and c.user_is_loggedin,
                                   show_indict = show_indict,
                                   show_distinguish = show_distinguish,
+                                  show_marknsfw = show_marknsfw,
                                   show_comments = comments,
                                   # promotion
                                   promoted = thing.promoted,
