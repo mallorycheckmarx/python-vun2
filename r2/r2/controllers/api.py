@@ -685,6 +685,18 @@ class ApiController(RedditController):
             delete_comment(thing)
             queries.new_comment(thing, None)
 
+    @noresponse(VUser(),
+                VModhash(),
+                thing = VByName('id'))
+    def POST_marknsfw(self, thing):
+        append = ' (NSFW)'
+        thing.title = thing.title + append
+        thing.nsfw = True
+        thing._commit()
+
+        # flag search indexer that something has changed
+        changed(thing)
+
     @noresponse(VUser(), VModhash(),
                 thing = VByName('id'))
     def POST_report(self, thing):
