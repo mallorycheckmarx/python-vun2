@@ -382,11 +382,9 @@ function helpoff(elem) {
     $(elem).parents(".usertext-edit:first").children(".markhelp:first").hide();
 };
 
-var converter = new Showdown.converter();
-
 function convertText(text, preview_pane) {
 	text = converter.makeHtml(text);
-	preview_pane.html(text);
+	preview_pane.html('test');
 }
 
 reddit.sd_preview = {};
