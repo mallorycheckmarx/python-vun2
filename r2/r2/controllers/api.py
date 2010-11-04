@@ -1107,6 +1107,20 @@ class ApiController(RedditController):
         """
         return "nothing to see here."
 
+    @validatedForm(VUser(),
+                   VModhash(),
+                   VRatelimit(rate_user = True, rate_ip = True,
+                              prefix = "rate_comment_preview_"),
+                   ip = ValidIP(),
+                   comment = VMarkdown(['text', 'comment']))
+    def POST_comment_preview(self, form, jquery, comment, ip): 
+	should_ratelimit = False
+	if not should_ratelimit:
+		c.errors.remove((errors.RATELIMIT, 'ratelimit'))
+	form.set_html('.markpreview', safemarkdown(comment))
+	if should_ratelimit:
+		VRatelimit.ratelimit(rate_user=True, rate_ip = True, prefix = "rate_comment_preview_")
+
     @validate(VSrModerator(),
               VModhash(),
               file = VLength('file', max_length=1024*500),
