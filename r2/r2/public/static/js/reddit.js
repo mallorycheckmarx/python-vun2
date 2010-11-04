@@ -382,24 +382,15 @@ function helpoff(elem) {
     $(elem).parents(".usertext-edit:first").children(".markhelp:first").hide();
 };
 
-function convertText(text, preview_pane) {
-	text = converter.makeHtml(text);
-	preview_pane.html('test');
-}
-
-reddit.sd_preview = {};
+/* Comment Preview Support */
 function previewon(elem) {
-	reddit.sd_preview.user_text = $(elem).parents(".usertext-edit:first");
-	reddit.sd_preview.text_area = reddit.sd_preview.user_text.find("textarea[name=text]");
-	if (reddit.sd_preview.text_area.val() != "") {
-		reddit.sd_preview.preview_div = reddit.sd_preview.user_text.children(".markpreview:first"
-);
-		convertText(reddit.sd_preview.text_area.val(), reddit.sd_preview.preview_div);
-		reddit.sd_preview.text_area.bind("keyup", function(e) {
-			var val = $(this).val();
-			convertText(val, reddit.sd_preview.preview_div);
-		});
-		reddit.sd_preview.preview_div.show();
+	var user_text = $(elem).parents(".usertext-edit:first");
+	var text_area = user_text.find("textarea[name=text]");
+	if (text_area.val() != "") {
+		var preview_div = user_text.children(".markpreview:first");
+		var form = preview_div.parents("form:first");
+		post_form($(form), "comment_preview");
+		preview_div.show();
 	}
 };
 
@@ -409,9 +400,8 @@ function previewoff(elem) {
 	var preview_div = user_text.children(".markpreview:first");
 	preview_div.html('');
 	preview_div.hide();
-	reddit.sd_preview.text_area.unbind("keyup");
 };
-
+/* Comment Preview Support End */
 
 function show_all_messages(elem) {
     var m = $(elem).parents(".message");
