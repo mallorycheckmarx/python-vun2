@@ -77,6 +77,7 @@ def auto_expand_panel(link):
 class ToolbarController(RedditController):
 
     allow_stylesheets = True
+    allow_logo = True
 
     @validate(link1 = VByName('id'),
               link2 = VLink('id', redirect = False))

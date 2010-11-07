@@ -1197,6 +1197,8 @@ class ApiController(RedditController):
                    sponsor_name =VLength('sponsorship-name', max_length = 500),
                    sponsor_url = VLength('sponsorship-url', max_length = 500),
                    css_on_cname = VBoolean("css_on_cname"),
+                   logo_on_cname = VBoolean("logo_on_cname"),
+                   couple_looks = VBoolean("couple_looks"),
                    )
     def POST_site_admin(self, form, jquery, name, ip, sr,
                         sponsor_text, sponsor_url, sponsor_name,  **kw):
@@ -1207,8 +1209,8 @@ class ApiController(RedditController):
         kw = dict((k, v) for k, v in kw.iteritems()
                   if k in ('name', 'title', 'domain', 'description', 'over_18',
                            'show_media', 'type', 'link_type', 'lang',
-                           "css_on_cname", "header_title", 
-                           'allow_top'))
+                           "css_on_cname", "logo_on_cname", "couple_looks",
+                           "header_title", 'allow_top',))
 
         #if a user is banned, return rate-limit errors
         if c.user._spam:
@@ -1267,6 +1269,7 @@ class ApiController(RedditController):
 
             if not sr.domain:
                 del kw['css_on_cname']
+                del kw['logo_on_cname']
             for k, v in kw.iteritems():
                 setattr(sr, k, v)
             sr._commit()

@@ -473,6 +473,7 @@ def base_listing(fn):
 class MinimalController(BaseController):
 
     allow_stylesheets = False
+    allow_logo = False
 
     def request_key(self):
         # note that this references the cookie at request time, not
@@ -754,14 +755,31 @@ class RedditController(MinimalController):
 
         #check whether to allow custom styles
         c.allow_styles = self.allow_stylesheets
+        # check whether to allow custom logo
+        c.allow_logo = self.allow_logo
+
         if g.css_killswitch:
             c.allow_styles = False
-        #if the preference is set and we're not at a cname
-        elif not c.user.pref_show_stylesheets and not c.cname:
-            c.allow_styles = False
-        #if the site has a cname, but we're not using it
-        elif c.site.domain and c.site.css_on_cname and not c.cname:
-            c.allow_styles = False
+            c.allow_logo = False
+        else:
+            #if the preference is set and we're not at a cname
+            if not c.user.pref_show_stylesheets and not c.cname:
+                c.allow_styles = False
+            #if the site has a cname, but we're not using it
+            elif c.site.domain and c.site.css_on_cname and not c.cname:
+                c.allow_styles = False
+
+            #if the preference is set and we're not at a cname
+            if not c.user.pref_show_logos and not c.cname:
+                c.allow_logo = False
+            #if the site has a cname, but we're not using it
+            elif c.site.domain and c.site.logo_on_cname and not c.cname:
+                c.allow_logo = False
+
+            #if the style/logo are inseparable and one is disabled, both are
+            if c.couple_looks and not c.allow_styles or not c.allow_logo:
+                c.allow_logo = False
+                c.allow_styles = False
 
     def check_modified(self, thing, action,
                        private=True, max_age=0, must_revalidate=True):
