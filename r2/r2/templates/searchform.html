@@ -38,8 +38,7 @@
       <input type="hidden" name="restrict_sr" value="off" />
     %else:
       <br /><br />
-      <input type="checkbox" ${'checked="checked"' if thing.restrict_sr else ''} name="restrict_sr" />
-      <label for="restrict_sr">${_('limit my search to %(path)s') % dict(path=thing.site.path.rstrip('/'))}</label>
+      <label for="restrict_sr"><input type="checkbox" ${'checked="checked"' if thing.restrict_sr else ''} name="restrict_sr" id="restrict_sr"/> ${_('limit my search to %(path)s') % dict(path=thing.site.path.rstrip('/'))}</label>
       <br /><br />
     %endif
     <input type="submit" />
