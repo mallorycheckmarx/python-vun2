@@ -1501,7 +1501,7 @@ textarea.gray { color: gray; }
 }
 
 .popup {
-    position: fixed;
+    position: absolute;
     left: 10%;
     background-color: white;
     top: 40px;
