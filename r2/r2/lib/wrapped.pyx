@@ -101,7 +101,7 @@ class CacheStub(object):
 
     This class is suitable as a stub object (in the case of API calls)
     and wil render in a string form suitable for replacement with
-    StringTemplate in the case of normal rendering. 
+    StringTemplate in the case of normal rendering.
     """
     def __init__(self, item, style):
         self.name = "h%s%s" % (id(item), str(style).replace('-', '_'))
@@ -141,7 +141,7 @@ class Templated(object):
 
     def __repr__(self):
         return "<Templated: %s>" % self.__class__.__name__
-    
+
     def __init__(self, **context):
         """
         uses context to init __dict__ (making this object a bit like a storage)
@@ -186,7 +186,7 @@ class Templated(object):
 
     def cache_key(self, *a):
         """
-        if cachable, this function is used to generate the cache key. 
+        if cachable, this function is used to generate the cache key.
         """
         raise NotImplementedError
 
@@ -244,12 +244,12 @@ class Templated(object):
         """
         from pylons import c, g
         style = style or c.render_style or 'html'
-        # prepare (and store) the list of cachable items. 
+        # prepare (and store) the list of cachable items.
         primary = False
         if not isinstance(c.render_tracker, dict):
             primary = True
             c.render_tracker = {}
-        
+
         # insert a stub for cachable non-primary templates
         if self.cachable:
             res = CacheStub(self, style)
@@ -279,7 +279,7 @@ class Templated(object):
                 # any of the subsequent render()s call cached objects.
                 current = c.render_tracker
                 c.render_tracker = {}
-    
+
                 # do a multi-get.  NOTE: cache keys are the first item
                 # in the tuple that is the current dict's values.
                 # This dict cast will generate a new dict of cache_key
@@ -305,10 +305,10 @@ class Templated(object):
                     # cached for caching
                     replacements[key] = r.finalize(kw)
                     new_updates[key] = (cache_key, (r, kw))
-                        
+
                 # update the updates so that when we can do the
                 # replacement in one pass.
-                
+
                 # NOTE: keep kw, but don't update based on them.
                 # We might have to cache these later, and we want
                 # to have things like $child present.
@@ -318,7 +318,7 @@ class Templated(object):
                     updates[k] = cache_key, (value, kw)
 
                 updates.update(new_updates)
-    
+
             # at this point, we haven't touched res, but updates now
             # has the list of all the updates we could conceivably
             # want to make, and to_cache is the list of cache keys
@@ -330,11 +330,11 @@ class Templated(object):
                 if k in to_cache:
                     _to_cache[k] = v
             self._write_cache(_to_cache)
-    
+
             # edge case: this may be the primary tempalte and cachable
             if isinstance(res, CacheStub):
                 res = updates[res.name][1][0]
-                
+
             # now we can update the updates to make use of their kw args.
             _updates = {}
             for k, (foo, (v, kw)) in updates.iteritems():
@@ -342,7 +342,7 @@ class Templated(object):
             updates = _updates
 
             # update the response to use these values
-            # replace till we can't replace any more. 
+            # replace till we can't replace any more.
             npasses = 0
             while True:
                 npasses += 1
@@ -352,13 +352,13 @@ class Templated(object):
                 if r.finalize() == res.finalize():
                     res = semi_final
                     break
-                
+
             # wipe out the render tracker object
             c.render_tracker = None
         elif not isinstance(res, CacheStub):
             # we're done.  Update the template based on the args passed in
             res = res.finalize(kwargs)
-        
+
         return res
 
     def _write_cache(self, keys):
@@ -389,7 +389,7 @@ class Templated(object):
         from r2.lib.filters import unsafe
         res = self._render(None, style, **kw)
         return unsafe(res) if isinstance(res, str) else res
-        
+
     def part_render(self, attr, **kw):
         style = kw.get('style')
         if style: del kw['style']
@@ -402,7 +402,7 @@ _easy_cache_cls = set([bool, int, long, float, unicode, str, types.NoneType,
                       datetime])
 def make_cachable(v, *a):
     """
-    Given an arbitrary object, 
+    Given an arbitrary object,
     """
     if v.__class__ in _easy_cache_cls or isinstance(v, type):
         try:
@@ -445,27 +445,30 @@ class CachedTemplate(Templated):
 
         # if template debugging is on, there will be no hash and we
         # can make the caching process-local.
-        template_hash = getattr(self.template(style), "hash",
-                                id(self.__class__))
+        template_hash = None
+        if hasattr(self.template(style), "hash"):
+            template_hash = getattr(self.template(style), "hash")
+        else:
+            template_hash = id(self.__class__)
 
         # these values are needed to render any link on the site, and
         # a menu is just a set of links, so we best cache against
         # them.
         keys = [c.user_is_loggedin, c.user_is_admin, c.domain_prefix,
                 style, c.cname, c.lang, c.site.path,
-                getattr(c.user, "gold", False),
+                hasattr(c.user, "gold") and getattr(c.user, "gold") or False,
                 template_hash, g.markdown_backend]
         keys = [make_cachable(x, *a) for x in keys]
 
         # add all parameters sent into __init__, using their current value
         auto_keys = [(k,  make_cachable(v, attr, style, *a))
                      for k, v in self.cachable_attrs()]
-        
+
         # lastly, add anything else that was passed in.
         keys.append(repr(auto_keys))
         for x in a:
             keys.append(make_cachable(x))
-        
+
         return "<%s:[%s]>" % (self.__class__.__name__, u''.join(keys))
 
 
@@ -473,7 +476,7 @@ class Wrapped(CachedTemplate):
     # default to false, evaluate
     cachable = False
     cache_ignore = set(['lookups'])
-    
+
     def cache_key(self, attr, style):
         if self.cachable:
             for i, l in enumerate(self.lookups):
@@ -495,14 +498,14 @@ class Wrapped(CachedTemplate):
         # this shouldn't be too surprising
         self.cache_ignore = self.cache_ignore.union(
             set(['cachable', 'render', 'cache_ignore', 'lookups']))
-        if (not self._any_hasattr(lookups, 'cachable') and 
+        if (not self._any_hasattr(lookups, 'cachable') and
             self._any_hasattr(lookups, 'wrapped_cache_key')):
             self.cachable = True
         if self.cachable:
             for l in lookups:
                 if hasattr(l, "cache_ignore"):
                     self.cache_ignore = self.cache_ignore.union(l.cache_ignore)
-            
+
         Templated.__init__(self, **context)
 
     def _any_hasattr(self, lookups, attr):
@@ -560,5 +563,5 @@ class Styled(CachedTemplate):
         """Using the canonical template file, only renders the <%def>
         in the template whose name is given by self.style"""
         return CachedTemplate.part_render(self, self.style, **kw)
-            
+
 
