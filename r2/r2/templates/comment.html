@@ -61,6 +61,20 @@ ${parent.collapsed()}
 </%def>
 
 <%def name="tagline(collapse=False,showexpandcollapse=True)">
+  %if showexpandcollapse:
+    <a href="#" class="expand"
+       %if collapse:
+         onclick="return showcomment(this)">
+       %else:
+         onclick="return hidecomment(this)">
+       %endif
+       [${_("+") if collapse else _("-")}]
+    %if collapse:
+       (${thing.num_children} 
+        ${ungettext("child", "children", thing.num_children)})
+    %endif
+    </a>
+  %endif
   <%
      if c.user_is_admin:
        show = True
@@ -89,20 +103,6 @@ ${parent.collapsed()}
     %if thing.editted:
       <em>*</em>&nbsp;
     %endif
-  %endif
-  %if showexpandcollapse:
-    <a href="#" class="expand"
-       %if collapse:
-         onclick="return showcomment(this)">
-       %else:
-         onclick="return hidecomment(this)">
-       %endif
-       [${_("+") if collapse else _("-")}]
-    %if collapse:
-       (${thing.num_children} 
-        ${ungettext("child", "children", thing.num_children)})
-    %endif
-    </a>
   %endif
 </%def>
 
