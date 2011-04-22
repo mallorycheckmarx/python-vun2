@@ -60,6 +60,9 @@
      %endif
      >
      ${caller.body()}
+     %if thing.nsfw and not thing.nsfw_str:
+        ${_(" (NSFW)")}
+     %endif
   </a>
 </%def>
 
