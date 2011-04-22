@@ -689,9 +689,19 @@ class ApiController(RedditController):
                 VModhash(),
                 thing = VByName('id'))
     def POST_marknsfw(self, thing):
-        append = ' (NSFW)'
-        thing.title = thing.title + append
         thing.nsfw = True
+        thing.over_18 = True
+        thing._commit()
+
+        # flag search indexer that something has changed
+        changed(thing)
+
+    @noresponse(VUser(),
+                VModhash(),
+                thing = VByName('id'))
+    def POST_unmarknsfw(self, thing):
+        thing.nsfw = False
+        thing.over_18 = False
         thing._commit()
 
         # flag search indexer that something has changed
