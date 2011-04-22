@@ -50,6 +50,7 @@ class Link(Thing, Printable):
     _data_int_props = Thing._data_int_props + ('num_comments', 'reported')
     _defaults = dict(is_self = False,
                      over_18 = False,
+                     nsfw_str = False,
                      reported = 0, num_comments = 0,
                      moderator_banned = False,
                      banned_before_moderator = False,
@@ -333,6 +334,7 @@ class Link(Thing, Printable):
                 elif pref_media != 'off' and not user.pref_compress:
                     show_media = True
 
+            item.nsfw_str = item._nsfw.findall(item.title)
             item.over_18 = bool(item.over_18 or item.subreddit.over_18 or
                                 item._nsfw.findall(item.title))
             item.nsfw = item.over_18 and user.pref_label_nsfw
