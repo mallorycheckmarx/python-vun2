@@ -336,7 +336,7 @@ class Link(Thing, Printable):
 
             item.nsfw_str = item._nsfw.findall(item.title)
             item.over_18 = bool(item.over_18 or item.subreddit.over_18 or
-                                item._nsfw.findall(item.title))
+                                item.nsfw_str)
             item.nsfw = item.over_18 and user.pref_label_nsfw
 
             item.is_author = (user == item.author)
