@@ -84,7 +84,7 @@ class LinkButtons(PrintableButtons):
         else:
             show_marknsfw = False
 
-        if (c.user_is_admin or thing.can_ban or is_author) and thing.nsfw and not re.search(r"\bnsfw\b", thing.title, re.I):
+        if (c.user_is_admin or thing.can_ban or is_author) and thing.nsfw and not thing.nsfw_str:
             show_unmarknsfw = True
         else:
             show_unmarknsfw = False
