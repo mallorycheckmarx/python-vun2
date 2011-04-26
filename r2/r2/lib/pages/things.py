@@ -33,7 +33,7 @@ from pylons.i18n import _, ungettext
 class PrintableButtons(Styled):
     def __init__(self, style, thing,
                  show_delete = False, show_report = True,
-                 show_distinguish = False, show_marknsfw,
+                 show_distinguish = False, show_marknsfw = True,
                  show_unmarknsfw = False, show_indict = False, is_link=False, **kw):
         show_ignore = (thing.show_reports or
                        (thing.reveal_trial_info and not thing.show_spam))
