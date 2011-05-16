@@ -61,6 +61,9 @@
             type="text/css" />
       %endif
   %endif
+  %if thing.a.shortlink:
+    <link rel="shorturl" href="${thing.a.shortlink}"/>
+  %endif
 
   %if c.allow_styles and c.site.stylesheet_contents:
      <% inline_stylesheet = (
