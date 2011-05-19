@@ -650,12 +650,11 @@ class FrontController(RedditController):
         href = comment.make_permalink_slow(context=5, anchor=True)
         return self.redirect(href)
 
-    @validate(VUser(), 
-              VSRSubmitPage(),
+    @validate(canSubmit = VSRSubmitPage(),
               url = VRequired('url', None),
               title = VRequired('title', None),
               then = VOneOf('then', ('tb','comments'), default = 'comments'))
-    def GET_submit(self, url, title, then):
+    def GET_submit(self, url, title, then, canSubmit):
         """Submit form."""
         if url and not request.get.get('resubmit'):
             # check to see if the url has already been submitted
@@ -669,18 +668,20 @@ class FrontController(RedditController):
                                  content = wrap_links(links),
                                  infotext = infotext).render()
                 return res
+        if(canSubmit):
+            captcha = Captcha() if c.user.needs_captcha() else None
+            sr_names = (Subreddit.submit_sr_names(c.user) or
+                      Subreddit.submit_sr_names(None))
 
-        captcha = Captcha() if c.user.needs_captcha() else None
-        sr_names = (Subreddit.submit_sr_names(c.user) or
-                    Subreddit.submit_sr_names(None))
-
-        return FormPage(_("submit"),
-                        show_sidebar = True,
-                        content=NewLink(url=url or '',
-                                        title=title or '',
-                                        subreddits = sr_names,
-                                        captcha=captcha,
-                                        then = then)).render()
+            return FormPage(_("submit"),
+                          show_sidebar = True,
+                          content=NewLink(url=url or '',
+                                          title=title or '',
+                                          subreddits = sr_names,
+                                          captcha=captcha,
+                                          then = then)).render()
+        else:
+            raise UserRequiredException
 
     def GET_frame(self):
         """used for cname support.  makes a frame and
