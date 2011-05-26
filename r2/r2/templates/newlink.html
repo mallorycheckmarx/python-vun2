@@ -55,14 +55,6 @@ ${thing.formtabs_menu}
     %endif
 </div>
 
-<div class="spacer">
-  <%utils:round_field title="${_('title')}" id="title-field">
-    <textarea name="title" rows="2" cols="1" wrap="hard">${thing.title}</textarea>
-    ${error_field("NO_TEXT", "title", "div")}
-    ${error_field("TOO_LONG", "title", "div")}
-  </%utils:round_field>
-</div>
-
 %if thing.show_link:
 <div class="spacer">
   <%utils:round_field title="${_('url')}" id="url-field">
@@ -93,6 +85,14 @@ ${thing.formtabs_menu}
   </%utils:round_field>
 </div>
 %endif
+
+<div class="spacer">
+  <%utils:round_field title="${_('title')}" id="title-field">
+    <textarea name="title" rows="2" cols="1" wrap="hard">${thing.title}</textarea>
+    ${error_field("NO_TEXT", "title", "div")}
+    ${error_field("TOO_LONG", "title", "div")}
+  </%utils:round_field>
+</div>
 
 <div class="spacer">
   <%utils:round_field title="${_('reddit')}" id="reddit-field">
