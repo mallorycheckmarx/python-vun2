@@ -27,7 +27,6 @@ from cStringIO import StringIO
 from xml.sax.handler import ContentHandler
 from lxml.sax import saxify
 import lxml.etree
-import lxml.html
 from BeautifulSoup import BeautifulSoup
 
 from pylons import g, c
@@ -171,26 +170,14 @@ def markdown_souptest(text, nofollow=False, target=None, lang=None):
     if not text:
         return text
 
-    text = html_sanitize(text)
     smd = safemarkdown(text, nofollow, target, lang)
-    
+
     s = StringIO(smd)
     tree = lxml.etree.parse(s)
     handler = SouptestSaxHandler(markdown_ok_tags)
     saxify(tree, handler)
 
     return smd
-
-def html_sanitize(text):
-    # Strip out all html entities
-    import htmlentitydefs
-    
-    for d in htmlentitydefs.entitydefs.keys():
-        htmlentity = '&' + d + ';'
-        replacement = ''
-        text = text.replace(htmlentity,replacement)
-
-    return text
 
 #TODO markdown should be looked up in batch?
 #@memoize('markdown')
