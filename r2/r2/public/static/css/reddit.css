@@ -103,7 +103,11 @@ label.disabled { color: gray; }
 .fancybutton {
     padding: 5px 10px;
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, from( hsl(210, 54%, 89%)), to( hsl(210, 54%, 79%)));
+    background: -webkit-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
     background: -moz-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
+    background: -o-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
+    background: -ms-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
+    background: linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
     background-color: #ADC9E6;
     border: 1px solid #5E96CF;
     -webkit-border-radius: 7px;
@@ -121,12 +125,20 @@ label.disabled { color: gray; }
 }
 .fancybutton:hover {
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, from( hsl(210, 54%, 93%)), to( hsl(210, 54%, 89%)));
+    background:-webkit-linear-gradient(top, hsl(210, 54%, 93%), hsl(210, 54%, 89%));
     background:-moz-linear-gradient(top, hsl(210, 54%, 93%), hsl(210, 54%, 89%));
+    background:-o-linear-gradient(top, hsl(210, 54%, 93%), hsl(210, 54%, 89%));
+    background:-ms-linear-gradient(top, hsl(210, 54%, 93%), hsl(210, 54%, 89%));
+    background: linear-gradient(top, hsl(210, 54%, 93%), hsl(210, 54%, 89%));
     background-color: #D4E3F2;
 }
 .fancybutton:focus, .fancybutton:active {
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, to( hsl(210, 54%, 89%)), from( hsl(210, 54%, 79%)));
+    background: -webkit-linear-gradient(top, hsl(210, 54%, 79%), hsl(210, 54%, 89%));
     background: -moz-linear-gradient(top, hsl(210, 54%, 79%), hsl(210, 54%, 89%));
+    background: -o-linear-gradient(top, hsl(210, 54%, 79%), hsl(210, 54%, 89%));
+    background: -ms-linear-gradient(top, hsl(210, 54%, 79%), hsl(210, 54%, 89%));
+    background: linear-gradient(top, hsl(210, 54%, 79%), hsl(210, 54%, 89%));
     background-color: #D4E3F2;
     -webkit-box-shadow: inset 0px -1px 0px hsla(0,0%,100%,.7);
     -moz-box-shadow: inset 0px -1px 0px hsla(0,0%,100%, .7);
@@ -136,7 +148,11 @@ label.disabled { color: gray; }
 .fancybutton.disabled, 
 .fancybutton.disabled:active {
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, from( hsl(210, 24%, 93%)), to( hsl(210, 24%, 89%)));
+    background:-webkit-linear-gradient(top, hsl(210, 24%, 93%), hsl(210, 24%, 89%));
     background:-moz-linear-gradient(top, hsl(210, 24%, 93%), hsl(210, 24%, 89%));
+    background:-o-linear-gradient(top, hsl(210, 24%, 93%), hsl(210, 24%, 89%));
+    background:-ms-linear-gradient(top, hsl(210, 24%, 93%), hsl(210, 24%, 89%));
+    background:linear-gradient(top, hsl(210, 24%, 93%), hsl(210, 24%, 89%));
     background-color: #D4E3F2;
     border-color: #999;
     color: #999;
@@ -3618,7 +3634,11 @@ table.lined-table {
 }
 .ui-datepicker-header {
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, from( hsl(210, 54%, 89%)), to( hsl(210, 54%, 79%)));
+    background: -webkit-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
     background: -moz-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
+    background: -o-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
+    background: -ms-linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
+    background: linear-gradient(top, hsl(210, 54%, 89%), hsl(210, 54%, 79%));
     background-color: #ADC9E6;
     border:  1px solid #5E96CF;
     color: #2E6399;
@@ -3711,7 +3731,11 @@ table.lined-table {
  {
     color:  white;;
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, from( hsl(210, 54%, 65%)), to( hsl(210, 54%, 45%)));
+    background: -webkit-linear-gradient(top, hsl(210, 54%, 65%), hsl(210, 54%, 45%));
     background: -moz-linear-gradient(top, hsl(210, 54%, 65%), hsl(210, 54%, 45%));
+    background: -o-linear-gradient(top, hsl(210, 54%, 65%), hsl(210, 54%, 45%));
+    background: -ms-linear-gradient(top, hsl(210, 54%, 65%), hsl(210, 54%, 45%));
+    background: linear-gradient(top, hsl(210, 54%, 65%), hsl(210, 54%, 45%));
     background-color: #4F8AC9;
     -webkit-box-shadow: inset 0px 2px 3px hsla(0,0%,0%,.6);
     -moz-box-shadow: inset 0px 2px 3px hsla(0,0%,0%,.6);
@@ -3731,7 +3755,11 @@ table.lined-table {
 
 .ui-datepicker-inline .ui-datepicker-calendar td a.ui-state-active {
     background: -webkit-gradient(linear, 0% 0%, 0% 100%, from( hsl(0, 54%, 75%)), to( hsl(0, 54%, 55%)));
+    background: -webkit-linear-gradient(top, hsl(0,54%,75%), hsl(0,54%,55%));
     background: -moz-linear-gradient(top, hsl(0,54%,75%), hsl(0,54%,55%));
+    background: -o-linear-gradient(top, hsl(0,54%,75%), hsl(0,54%,55%));
+    background: -ms-linear-gradient(top, hsl(0,54%,75%), hsl(0,54%,55%));
+    background: linear-gradient(top, hsl(0,54%,75%), hsl(0,54%,55%));
     background-color: #E19D9D;
 }
 
@@ -3923,8 +3951,8 @@ dd { margin-left: 20px;  }
 
 .calendar .blob.link:hover { 
     border: 1px solid red;
-    box-shadow: 2px 2px 2px #000;
     -moz-box-shadow: 2px 2px 2px #000;
+    box-shadow: 2px 2px 2px #000;
     z-index: 100; 
 }
 
