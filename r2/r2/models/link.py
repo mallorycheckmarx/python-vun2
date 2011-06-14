@@ -524,7 +524,7 @@ class LinksByUrl(tdb_cassandra.View):
         case_sens_domains = ['i.imgur.com','youtube.com']
 
         if not utils.domain(url) in case_sens_domains:
-            keyurl = _force_utf8(url.lower())
+            keyurl = _force_utf8(UrlParser.base_url(url.lower()))
         else:
             # Convert only hostname to lowercase
             up = UrlParser(url)
