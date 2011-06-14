@@ -842,12 +842,30 @@ class VUrl(VRequired):
         elif not self.lookup:
             return url
         elif url:
-            try:
-                l = Link._by_url(url, sr)
+            up = utils.UrlParser(url)
+            if up.path != '' and up.path[-1] == '/': up.path = up.path[:-1]
+            urls = []
+            urls.append(up.unparse())
+            
+            # Check both with and without trailing '/'
+            if up.params == '' and up.query == '' and up.fragment == '':
+                if not '.' in up.path.split('/')[-1]:
+                    up.path += '/'
+                    urls.append(up.unparse())
+            
+            found_link = None
+            for u in urls:
+                try:
+                    found_link = Link._by_url(u, sr)
+                except NotFound:
+                    pass
+            
+            if found_link:
                 self.error(errors.ALREADY_SUB)
-                return utils.tup(l)
-            except NotFound:
+                return utils.tup(found_link)
+            else:
                 return url
+
         return self.error(errors.BAD_URL)
 
 class VExistingUname(VRequired):

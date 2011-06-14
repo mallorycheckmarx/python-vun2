@@ -27,6 +27,7 @@ from cStringIO import StringIO
 from xml.sax.handler import ContentHandler
 from lxml.sax import saxify
 import lxml.etree
+import htmlentitydefs
 from BeautifulSoup import BeautifulSoup
 
 from pylons import g, c
@@ -170,6 +171,7 @@ def markdown_souptest(text, nofollow=False, target=None, lang=None):
     if not text:
         return text
 
+    text = html_sanitize(text)
     smd = safemarkdown(text, nofollow, target, lang)
 
     s = StringIO(smd)
@@ -178,6 +180,16 @@ def markdown_souptest(text, nofollow=False, target=None, lang=None):
     saxify(tree, handler)
 
     return smd
+
+def html_sanitize(text):
+    """Strip out all html entities"""
+    entities = htmlentitydefs.entitydefs.keys()
+    for e in entities:
+        html_entity = '&' + e + ';'
+        replacement = ''
+        text = text.replace(html_entity,replacement)
+
+    return text
 
 #TODO markdown should be looked up in batch?
 #@memoize('markdown')
