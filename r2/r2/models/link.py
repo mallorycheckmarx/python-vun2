@@ -519,7 +519,17 @@ class LinksByUrl(tdb_cassandra.View):
 
     @classmethod
     def _key_from_url(cls, url):
-        keyurl = _force_utf8(UrlParser.base_url(url.lower()))
+        # Check for case sensitive domains, this list should probably
+        # be kept somewhere better than definining it here
+        case_sens_domains = ['i.imgur.com','youtube.com']
+
+        if not utils.domain(url) in case_sens_domains:
+            keyurl = _force_utf8(url.lower())
+        else:
+            # Convert only hostname to lowercase
+            up = UrlParser(url)
+            up.hostname = up.hostname.lower()
+            keyurl = _force_utf8(UrlParser.base_url(up.unparse()))
         return keyurl
 
 # Note that there are no instances of PromotedLink or LinkCompressed,
