@@ -586,7 +586,7 @@ class UserController(ListingController):
         c.profilepage = True
 
         if vuser.pref_hide_from_robots:
-            robots = 'noindex,nofollow'
+            self.robots = 'noindex,nofollow'
 
         return ListingController.GET_listing(self, **env)
 
