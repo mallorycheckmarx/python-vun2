@@ -72,6 +72,9 @@ class ListingController(RedditController):
     # page title
     title_text = ''
 
+    # robots meta tag content
+    robots = None
+
     # login box, subreddit box, submit box, etc, visible
     show_sidebar = True
 
@@ -106,6 +109,7 @@ class ListingController(RedditController):
                               show_sidebar = self.show_sidebar,
                               nav_menus = self.menus,
                               title = self.title(),
+                              robots = self.robots,
                               **self.render_params).render()
         return res
 
@@ -580,6 +584,9 @@ class UserController(ListingController):
         self.vuser = vuser
         self.render_params = {'user' : vuser}
         c.profilepage = True
+
+        if vuser.pref_hide_from_robots:
+            robots = 'noindex,nofollow'
 
         return ListingController.GET_listing(self, **env)
 
