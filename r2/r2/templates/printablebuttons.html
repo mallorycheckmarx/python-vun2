@@ -59,6 +59,12 @@
       ${ynbutton(_("report"), _("reported"), "report", "hide_thing")}
     </li>
   %endif
+  %if thing.show_marknsfw:
+    <li>${ynbutton(_("mark NSFW"), _("marked NSFW"), "marknsfw")}</li>
+  %endif
+  %if thing.show_unmarknsfw:
+    <li>${ynbutton(_("unmark NSFW"), _("unmarked NSFW"), "unmarknsfw")}</li>
+  %endif
 </%def>
 
 <%def name="distinguish_setter(value)">

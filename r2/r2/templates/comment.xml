@@ -37,6 +37,10 @@
   permalink = add_sr(thing.permalink, force_hostname = True)
 %>
 
+<%
+   permalink = add_sr(thing.permalink, force_hostname = True)
+%>
+
 <item>
   <guid isPermaLink="true">${permalink}</guid>
   <title>${author} ${_("on")} ${thing.link.title}</title>

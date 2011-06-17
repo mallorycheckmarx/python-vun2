@@ -427,6 +427,7 @@ class ApiController(RedditController):
     def POST_register(self, form, jquery, name, email,
                       password, dest, rem, reason):
         if not (form.has_errors("user", errors.BAD_USERNAME,
+                                errors.USERNAME_TAKEN_DEL,
                                 errors.USERNAME_TAKEN) or
                 form.has_errors("email", errors.BAD_EMAILS) or
                 form.has_errors("passwd", errors.BAD_PASSWORD) or
@@ -714,6 +715,28 @@ class ApiController(RedditController):
                 d = inbox_class._fast_query(recipient, thing, ("inbox", "selfreply"))
                 rels = filter(None, d.values()) or None
                 queries.new_comment(thing, rels)
+
+    @noresponse(VUser(),
+                VModhash(),
+                thing = VByName('id'))
+    def POST_marknsfw(self, thing):
+        thing.nsfw = True
+        thing.over_18 = True
+        thing._commit()
+
+        # flag search indexer that something has changed
+        changed(thing)
+
+    @noresponse(VUser(),
+                VModhash(),
+                thing = VByName('id'))
+    def POST_unmarknsfw(self, thing):
+        thing.nsfw = False
+        thing.over_18 = False
+        thing._commit()
+
+        # flag search indexer that something has changed
+        changed(thing)
 
     @noresponse(VUser(), VModhash(),
                 thing = VByName('id'))
