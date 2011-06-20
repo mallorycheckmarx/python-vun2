@@ -49,6 +49,7 @@ def renderurl_cached(path):
 
 class EmbedController(RedditController):
     allow_stylesheets = True
+    allow_logo = True
 
     def rendercontent(self, input, fp):
         soup = BeautifulSoup(input)

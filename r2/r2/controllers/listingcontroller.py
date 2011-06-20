@@ -59,6 +59,9 @@ class ListingController(RedditController):
     # allow stylesheets on listings
     allow_stylesheets = True
 
+    # allow logo on listings
+    allow_logo = True
+
     # toggles showing numbers 
     show_nums = True
 
@@ -598,6 +601,7 @@ class MessageController(ListingController):
     show_nums = False
     render_cls = MessagePage
     allow_stylesheets = False
+    allow_logo = False
 
     @property
     def menus(self):

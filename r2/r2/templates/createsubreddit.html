@@ -189,12 +189,24 @@ function update_title(elem) {
   <%utils:line_field title="${_('domain')}" css_class="usertext">
     <div class="delete-field">
       %if thing.site and c.site.domain:
+      <ul>
+        <li>
           <input class="nomargin" type="checkbox" 
                  name="css_on_cname" id="css_on_cname"
                  ${thing.site.css_on_cname and "checked='checked'" or ""}/>
           <label for="css_on_cname">
             ${_("make custom CSS styles apply only when accessed from the cname.")}
           </label>
+        </li>
+        <li>
+          <input class="nomargin" type="checkbox" 
+                 name="logo_on_cname" id="logo_on_cname"
+                 ${thing.site.logo_on_cname and "checked='checked'" or ""}/>
+          <label for="logo_on_cname">
+            ${_("make custom logo apply only when accessed from the cname.")}
+          </label>
+        </li>
+      </ul>
       %endif
     </div>
     <div class="usertext-edit">
@@ -230,6 +242,14 @@ function update_title(elem) {
           <input type="text" name="header-title" id="header-title"
                  value="${thing.site.header_title}"
                  />
+        </li>
+        <li>
+          <input class="nomargin" type="checkbox" 
+                 name="couple_looks" id="couple_looks"
+                 ${(thing.site.couple_looks) and "checked='checked'" or ""}/>
+          <label for="couple_looks">
+            ${_("only show custom logo and custom style together.")
+          </label>
         </li>
         <li>
           <%utils:image_upload post_target="/api/upload_sr_img" 

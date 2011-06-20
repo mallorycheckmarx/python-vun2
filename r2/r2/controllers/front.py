@@ -55,6 +55,7 @@ from urllib import quote_plus
 class FrontController(RedditController):
 
     allow_stylesheets = True
+    allow_logo = True
 
     @validate(article = VLink('article'),
               comment = VCommentID('comment'))

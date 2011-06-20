@@ -60,6 +60,8 @@ class Subreddit(Thing, Printable):
                      valid_votes = 0,
                      show_media = False,
                      css_on_cname = True,
+                     logo_on_cname = True,
+                     couple_looks = False,
                      domain = None,
                      over_18 = False,
                      mod_actions = 0,
