@@ -56,7 +56,8 @@
     %endif
   %elif thing.show_report:
     <li>
-      ${ynbutton(_("report"), _("reported"), "report", "hide_thing")}
+      ${ynbutton(_("report"), _("reported"), "report", "hide_thing",
+          _("report guideline violations only! are you sure?"))}
     </li>
   %endif
   %if thing.show_marknsfw:
