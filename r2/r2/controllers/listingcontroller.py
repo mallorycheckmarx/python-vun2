@@ -380,6 +380,12 @@ class NewController(ListingController):
             return c.site.get_links('new', 'all')
 
     @validate(sort = VMenu('controller', NewMenu))
+    def POST_listing(self, sort, **env):
+        # VMenu validator will save the value of sort before we reach this
+        # point. Now just redirect to GET mode.
+        return self.redirect(request.fullpath + query_string(dict(sort=sort)))
+
+    @validate(sort = VMenu('controller', NewMenu))
     def GET_listing(self, sort, **env):
         self.sort = sort
         return ListingController.GET_listing(self, **env)
@@ -407,14 +413,23 @@ class BrowseController(ListingController):
 
     # TODO: this is a hack with sort.
     @validate(sort = VOneOf('sort', ('top', 'controversial')),
-              time = VMenu('where', ControversyTimeMenu))
-    def GET_listing(self, sort, time, **env):
+              t = VMenu('sort', ControversyTimeMenu))
+    def POST_listing(self, sort, t, **env):
+        # VMenu validator will save the value of time before we reach this
+        # point. Now just redirect to GET mode.
+        return self.redirect(
+            request.fullpath + query_string(dict(sort=sort, t=t)))
+
+    # TODO: this is a hack with sort.
+    @validate(sort = VOneOf('sort', ('top', 'controversial')),
+              t = VMenu('sort', ControversyTimeMenu))
+    def GET_listing(self, sort, t, **env):
         self.sort = sort
         if sort == 'top':
             self.title_text = _('top scoring links')
         elif sort == 'controversial':
             self.title_text = _('most controversial links')
-        self.time = time
+        self.time = t
         return ListingController.GET_listing(self, **env)
 
 
@@ -625,8 +640,11 @@ class MessageController(ListingController):
     def keep_fn(self):
         def keep(item):
             wouldkeep = item.keep_item(item)
+
             # TODO: Consider a flag to disable this (and see above plus builder.py)
             if (item._deleted or item._spam) and not c.user_is_admin:
+                return False
+            if item.author_id in c.user.enemies:
                 return False
             # don't show user their own unread stuff
             if ((self.where == 'unread' or self.subwhere == 'unread')

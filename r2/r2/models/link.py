@@ -213,10 +213,10 @@ class Link(Thing, Printable):
                 #return False
 
         if user and not c.ignore_hide_rules:
-            if user.pref_hide_ups and wrapped.likes == True:
+            if user.pref_hide_ups and wrapped.likes == True and self.author_id != user._id:
                 return False
 
-            if user.pref_hide_downs and wrapped.likes == False:
+            if user.pref_hide_downs and wrapped.likes == False and self.author_id != user._id:
                 return False
 
             if wrapped._score < user.pref_min_link_score:
@@ -225,15 +225,16 @@ class Link(Thing, Printable):
             if wrapped.hidden:
                 return False
 
-        # hide NSFW links from non-logged users if they're not explicitly
-        # visiting an NSFW subreddit
-        if not c.user_is_loggedin and c.site != wrapped.subreddit:
+        # hide NSFW links from non-logged users and under 18 logged users 
+        # if they're not explicitly visiting an NSFW subreddit
+        if ((not c.user_is_loggedin and c.site != wrapped.subreddit)
+            or (c.user_is_loggedin and not c.over18)):
             is_nsfw = bool(wrapped.over_18)
             is_from_nsfw_sr = bool(wrapped.subreddit.over_18)
 
             if is_nsfw or is_from_nsfw_sr:
                 return False
-
+                
         return True
 
     # none of these things will change over a link's lifetime
@@ -620,7 +621,12 @@ class Comment(Thing, Printable):
 
         inbox_rel = None
         # only global admins can be message spammed.
-        if to and (not c._spam or to.name in g.admins):
+        # Don't send the message if the recipient has blocked
+        # the author
+        if to and ((not c._spam and author._id not in to.enemies)
+            or to.name in g.admins):
+            # When replying to your own comment, record the inbox
+            # relation, but don't give yourself an orangered
             orangered = (to.name != author.name)
             inbox_rel = Inbox._add(to, c, name, orangered=orangered)
 
@@ -756,10 +762,16 @@ class Comment(Thing, Printable):
 
 
             # don't collapse for admins, on profile pages, or if deleted
-            item.collapsed = ((item.score < min_score) and
-                             not (profilepage or
-                                  item.deleted or
-                                  user_is_admin))
+            item.collapsed = False
+            if ((item.score < min_score) and not (profilepage or
+                item.deleted or user_is_admin)):
+                item.collapsed = True
+                item.collapsed_reason = _("comment score below threshold")
+            if c.user_is_loggedin and item.author_id in c.user.enemies:
+                if "grayed" not in extra_css:
+                    extra_css += " grayed"
+                item.collapsed = True
+                item.collapsed_reason = _("blocked user")
 
             item.editted = getattr(item, "editted", False)
 
@@ -959,7 +971,11 @@ class Message(Thing, Printable):
             # if the current "to" is not a sr moderator,
             # they need to be notified
             if not sr_id or not sr.is_moderator(to):
-                orangered = (to.name != author.name)
+                # Record the inbox relation, but don't give the user
+                # an orangered, if they PM themselves.
+                # Don't notify on PMs from blocked users, either
+                orangered = (to.name != author.name and
+                             author._id not in to.enemies)
                 inbox_rel.append(Inbox._add(to, m, 'inbox',
                                             orangered=orangered))
             # find the message originator
@@ -1090,6 +1106,12 @@ class Message(Thing, Printable):
                     item.is_collapsed = item.author_collapse
                 if c.user.pref_collapse_read_messages:
                     item.is_collapsed = (item.is_collapsed is not False)
+            if item.author_id in c.user.enemies and not item.was_comment:
+                item.is_collapsed = True
+                if not c.user_is_admin:
+                    item.subject = _('[message from blocked user]')
+                    item.body = _('[unblock user to see this message]')
+
 
         # Run this last
         Printable.add_props(user, wrapped)
