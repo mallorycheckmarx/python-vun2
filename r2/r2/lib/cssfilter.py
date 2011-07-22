@@ -94,7 +94,7 @@ nonstandard_values = {
     # (This description doesn't support multiple shadows)
     'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
     
-    'opacity': r'inherit|0\.?[0-9]*|1|0',
+    'opacity': r'inherit|^0?\.?[0-9]*|1\.0*|1|0',
 }
 
 
