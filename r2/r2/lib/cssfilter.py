@@ -105,12 +105,7 @@ nonstandard_values = {
 custom_values.update(nonstandard_values);
 
 def _build_regex_prefix(prefixes):
-    opt=""
-    prefix_regex=""
-    for p in prefixes:
-        prefix_regex+=opt+"^-"+p+"-"
-        opt="|"
-    return prefix_regex
+    return "|".join("^-"+p+"-" for p in prefixes)
 
 prefix_regex = _build_regex_prefix(browser_prefixes)
 
@@ -234,7 +229,7 @@ def strip_browser_prefix(prop):
     return t[len(t)-1]
 
 def valid_value(prop,value,report):
-    prop.name=strip_browser_prefix(prop.name) # Remove browser-specific prefixes eg: -moz-border-radius becomes border-radius
+    prop.name = strip_browser_prefix(prop.name) # Remove browser-specific prefixes eg: -moz-border-radius becomes border-radius
     if not (value.valid and value.wellformed):
         if (value.wellformed
             and prop.name in cssproperties.cssvalues
