@@ -94,10 +94,13 @@ nonstandard_values = {
     # (This description doesn't support multiple shadows)
     'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
     
+    
+    # Value between 0 and 1
     'opacity': r'inherit|^0?\.?[0-9]*|1\.0*|1|0',
+    
+    'background': r'^\S*-gradient\(.*\)',
+    'background-image': r'^\S*-gradient\(.*\)',
 }
-
-
 
 custom_values.update(nonstandard_values);
 
@@ -244,7 +247,6 @@ def valid_value(prop,value,report):
               and custom_values[prop.name](prop.value)):
             # we're allowing it via our own custom validator
             value.valid = True
-
             # see if this suddenly validates the entire property
             prop.valid = True
             prop.cssValue.valid = True
