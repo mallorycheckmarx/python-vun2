@@ -105,7 +105,7 @@ nonstandard_values = {
 custom_values.update(nonstandard_values);
 
 def _build_regex_prefix(prefixes):
-    return "|".join("^-"+p+"-" for p in prefixes)
+    return re.compile("|".join("^-"+p+"-" for p in prefixes))
 
 prefix_regex = _build_regex_prefix(browser_prefixes)
 
@@ -225,7 +225,7 @@ def valid_url(prop,value,report):
 
 
 def strip_browser_prefix(prop):
-    t=re.split(prefix_regex,prop,maxsplit=1)
+    t=prefix_regex.split(prop,maxsplit=1)
     return t[len(t)-1]
 
 def valid_value(prop,value,report):
