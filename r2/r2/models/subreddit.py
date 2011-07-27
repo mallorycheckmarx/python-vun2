@@ -35,6 +35,9 @@ from r2.lib.utils import timeago
 from r2.lib.cache import sgm
 from r2.lib.strings import strings, Score
 from r2.lib.filters import _force_unicode
+from r2.lib.db import tdb_cassandra
+from r2.lib.cache import CL_ONE
+
 
 import os.path
 import random
@@ -438,6 +441,11 @@ class Subreddit(Thing, Printable):
         # has_subscribed == False by default.
         if user and user.has_subscribed:
             sr_ids = Subreddit.reverse_subscriber_ids(user)
+
+            # Allow the goldies to see more subreddits
+            if user.gold:
+                limit = 100
+
             if limit and len(sr_ids) > limit:
                 sr_ids.sort()
                 sr_ids = cls.random_reddits(user.name, sr_ids, limit)
@@ -944,3 +952,10 @@ Subreddit.__bases__ += (UserRel('moderator', SRMember),
                         UserRel('contributor', SRMember),
                         UserRel('subscriber', SRMember, disable_ids_fn = True),
                         UserRel('banned', SRMember))
+
+
+class SubredditPopularityByLanguage(tdb_cassandra.View):
+    _use_db = True
+    _value_type = 'pickle'
+    _use_new_ring = True
+    _read_consistency_level = CL_ONE

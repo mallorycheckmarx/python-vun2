@@ -23,12 +23,13 @@
    from r2.lib.template_helpers import add_sr
    import urllib
    from r2.lib.filters import _force_unicode, _force_utf8
-   from r2.lib.template_helpers import add_sr
  %>
 <%namespace file="printable.compact" import="delete_report_buttons"/>
 <%namespace file="printable.html" import="arrow, score"/>
 <%namespace file="link.html" import="tagline"/>
 <%namespace file="utils.html" import="plain_link" />
+<%namespace file="utils.compact" import="icon_button, toggle_button" />
+<%namespace file="printablebuttons.html" import="state_button" />
 
 <div class="thing link id-${thing._fullname}">
   <span class="rank" style="width:${thing.numcolmargin};">
@@ -66,18 +67,23 @@
   %endif
     <p class="title">
     <a href="${url}">${thing.title}</a>
+    <span class="domain">
+    %if thing.is_self:
+        (self)
+    %else:
+        (<a href="${thing.domain_path}">${thing.domain}</a>)
+    %endif
+    </span>
     </p>
     %if thing.link_child and not c.permalink_page and thing.link_child.css_style.strip(' ') != 'video':
-      <a href="javascript:void(0)" class="expando-button collapsed button 
-                  ${thing.link_child.css_style}">
-          Aa
-      </a>
+      <a href="javascript:void(0)" class="expando-button collapsed
+                  ${thing.link_child.css_style}"></a>
     %endif
     <div class="tagline">
       ${tagline()}
     </div>
     </div>
-    <a href="javascript:void(0)" class="triangle_link button">Options</a>
+    <a href="javascript:void(0)" class="options_link"></a>
     <%
        expand = thing.link_child and thing.link_child.expand
      %>
@@ -86,7 +92,7 @@
       ${thing.link_child.content()}
     %endif
   </div>
-  <div class="clear options_triangle_parent">
+  <div class="clear options_expando hidden">
     <% 
        subject = "[reddit] I wanted to share this link with you"
        body = """%(user)s shared a link with you from reddit (http://www.reddit.com/):
@@ -106,16 +112,23 @@ there's also a discussion going on here:
        title = _force_unicode(thing.title)
        tweet = "%s %s" % (title[0:(139-len(url))], url)
        %>
-      <div class="options_triangle hidden">
-        <a href="mailto:?subject=${urllib.quote(_force_utf8(subject))}&body=${urllib.quote(_force_utf8(body))}" class="group_button button">Email</a>
-        <a href="http://twitter.com/home?status=${tweet}" class="group_button button">Tweet</a>
-        <a href="javascript:void(0)"  onclick="return change_state(this, 'report', hide_thing)"  class="group_button button">Report</a>
-        %if not thing.is_self:
-         <span class="button group_button">
-           ${plain_link(thing.domain, thing.domain_path, _sr_path = False)}
-         </span>
-        %endif
-      </div>
+
+        ${icon_button("Share", "email-icon", "mailto:?subject=${urllib.quote(_force_utf8(subject))}&body=${urllib.quote(_force_utf8(body))}")}
+        ${self.save_button()}
+        ${self.hide_button()}
+        ${icon_button("Report","report-icon",onclick="return change_state(this, 'report', hide_thing)")}
+
+      
 
   </div>
 </div>
+<%def name="hide_button()">
+    %if c.user_is_loggedin:
+            ${toggle_button("hide", thing.hidden)}
+    %endif
+</%def>
+<%def name="save_button()">
+    %if c.user_is_loggedin:
+        ${toggle_button("save", thing.saved)}
+    %endif
+</%def>
