@@ -815,7 +815,7 @@ class LinkInfoPage(Reddit):
         else:
             self.duplicates = duplicates
 
-        short_description = link.selftext.strip() if link else None
+        short_description = link.selftext.strip()[0:150] if link else None
         Reddit.__init__(self, title = title, short_description=short_description, *a, **kw)
 
     def build_toolbars(self):
