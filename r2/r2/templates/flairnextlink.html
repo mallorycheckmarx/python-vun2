@@ -19,38 +19,13 @@
 ## All portions of the code written by CondeNet are Copyright (c) 2006-2010
 ## CondeNet, Inc. All Rights Reserved.
 ################################################################################
-<%namespace file="utils.html" import="plain_link"/>
-<%namespace file="subreddit.html" import="addremove_button, permission_icons"/>
 
-<div class="subscription-box">
-  % if thing.prelink or thing.goldlink:
-  <div class="box-top">
-    % if thing.prelink:
-    <span class="column centered">
-      <a href="${thing.prelink[0]}">${thing.prelink[1]}</a>
-    </span>
-    % endif
-    % if thing.goldlink:
-    <span class="giftgold column">
-    <a href="${thing.goldlink}">
-      ${thing.goldmsg}
-    </a>
-    </span>
-    % endif
-  </div>
-  % endif
-  <div class="clear">
-  % if thing.prelink or thing.goldlink:
-    <div class="box-separator"></div>
-  % endif
-    <ul>
-    %for sr in thing.reddits:
-      <li>
-        ${addremove_button(sr)}
-        ${plain_link(sr.name, sr.path, _class="title")}
-        ${permission_icons(sr)}
-      </li>
-    %endfor
-    </ul>
-  </div>
-</div>
+<%namespace file="utils.html" import="plain_link"/>
+
+${plain_link(_('prev') if thing.reverse else _('next'),
+             '/about/flair?%s=%s'
+             % ('before' if thing.reverse else 'after', thing.after),
+             class_='nextprev')}
+%if thing.needs_border:
+    &#32;|&#32;
+%endif

@@ -28,7 +28,7 @@ from r2.lib.db.thing import Thing, Relation, NotFound
 from account import Account
 from printable import Printable
 from r2.lib.db.userrel import UserRel
-from r2.lib.db.operators import lower, or_, and_, desc
+from r2.lib.db.operators import lower, or_, and_, desc, asc
 from r2.lib.memoize import memoize
 from r2.lib.utils import tup, interleave_lists, last_modified_multi, flatten
 from r2.lib.utils import timeago
@@ -72,11 +72,15 @@ class Subreddit(Thing, Printable):
                      sponsorship_name = None,
                      # do we allow self-posts, links only, or any?
                      link_type = 'any', # one of ('link', 'self', 'any')
+                     flair_enabled = True,
+                     flair_position = 'right', # one of ('left', 'right')
                      )
     _essentials = ('type', 'name', 'lang')
     _data_int_props = Thing._data_int_props + ('mod_actions', 'reported')
 
     sr_limit = 50
+    gold_limit = 100
+    DEFAULT_LIMIT = object()
 
     # note: for purposely unrenderable reddits (like promos) set author_id = -1
     @classmethod
@@ -185,6 +189,23 @@ class Subreddit(Thing, Printable):
     @property
     def subscribers(self):
         return self.subscriber_ids()
+
+    @property
+    def flair(self):
+        return self.flair_ids()
+
+    def flair_id_query(self, limit, after, reverse=False):
+        extra_rules = [
+            Flair.c._thing1_id == self._id,
+            Flair.c._name == 'flair',
+          ]
+        if after:
+            if reverse:
+                extra_rules.append(Flair.c._thing2_id < after._id)
+            else:
+                extra_rules.append(Flair.c._thing2_id > after._id)
+        sort = (desc if reverse else asc)('_thing2_id')
+        return Flair._query(*extra_rules, sort=sort, limit=limit)
 
     def spammy(self):
         return self._spam
@@ -430,21 +451,32 @@ class Subreddit(Thing, Printable):
                 if srs else Subreddit._by_name(g.default_sr))
 
     @classmethod
-    def user_subreddits(cls, user, ids = True, over18=False, limit = sr_limit, stale=False):
+    def user_subreddits(cls, user, ids=True, over18=False, limit=DEFAULT_LIMIT,
+                        stale=False):
         """
         subreddits that appear in a user's listings. If the user has
         subscribed, returns the stored set of subscriptions.
+        
+        limit - if it's Subreddit.DEFAULT_LIMIT, limits to 50 subs
+                (100 for gold users)
+                if it's None, no limit is used
+                if it's an integer, then that many subs will be returned
 
         Otherwise, return the default set.
         """
+        # Limit the number of subs returned based on user status,
+        # if no explicit limit was passed
+        if limit is Subreddit.DEFAULT_LIMIT:
+            if user and user.gold:
+                # Goldies get extra subreddits
+                limit = Subreddit.gold_limit
+            else:
+                limit = Subreddit.sr_limit
+        
         # note: for user not logged in, the fake user account has
         # has_subscribed == False by default.
         if user and user.has_subscribed:
             sr_ids = Subreddit.reverse_subscriber_ids(user)
-
-            # Allow the goldies to see more subreddits
-            if user.gold:
-                limit = 100
 
             if limit and len(sr_ids) > limit:
                 sr_ids.sort()
@@ -953,6 +985,30 @@ Subreddit.__bases__ += (UserRel('moderator', SRMember),
                         UserRel('subscriber', SRMember, disable_ids_fn = True),
                         UserRel('banned', SRMember))
 
+class Flair(Relation(Subreddit, Account)):
+    @classmethod
+    def store(cls, sr, account, text = None, css_class = None):
+        flair = Flair(sr, account, 'flair', text = text, css_class = css_class)
+        flair._commit()
+
+        setattr(account, 'flair_%s_text' % sr._id, text)
+        setattr(account, 'flair_%s_css_class' % sr._id, css_class)
+        account._commit()
+
+    @classmethod
+    @memoize('flair.all_flair_by_sr')
+    def all_flair_by_sr_cache(cls, sr_id):
+        q = cls._query(cls.c._thing1_id == sr_id)
+        return [t._id for t in q]
+
+    @classmethod
+    def all_flair_by_sr(cls, sr_id, _update=False):
+        relids = cls.all_flair_by_sr_cache(sr_id, _update=_update)
+        return cls._byID(relids).itervalues()
+
+Subreddit.__bases__ += (UserRel('flair', Flair,
+                                disable_ids_fn = True,
+                                disable_reverse_ids_fn = True),)
 
 class SubredditPopularityByLanguage(tdb_cassandra.View):
     _use_db = True

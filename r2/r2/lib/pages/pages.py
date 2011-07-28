@@ -23,7 +23,7 @@ from r2.lib.wrapped import Wrapped, Templated, CachedTemplate
 from r2.models import Account, FakeAccount, DefaultSR, make_feedurl
 from r2.models import FakeSubreddit, Subreddit, Ad, AdSR
 from r2.models import Friends, All, Sub, NotFound, DomainSR, Random, Mod, RandomNSFW, MultiReddit
-from r2.models import Link, Printable, Trophy, bidding, PromotionWeights
+from r2.models import Link, Printable, Trophy, bidding, PromotionWeights, Comment, Flair
 from r2.config import cache
 from r2.lib.tracking import AdframeInfo
 from r2.lib.jsonresponse import json_respond
@@ -43,7 +43,7 @@ from r2.lib.menus import SubredditButton, SubredditMenu, ModeratorMailButton
 from r2.lib.menus import OffsiteButton, menu, JsNavMenu
 from r2.lib.strings import plurals, rand_strings, strings, Score
 from r2.lib.utils import title_to_url, query_string, UrlParser, to_js, vote_hash
-from r2.lib.utils import link_duplicates, make_offset_date, to_csv, median
+from r2.lib.utils import link_duplicates, make_offset_date, to_csv, median, to36
 from r2.lib.utils import trunc_time, timesince, timeuntil
 from r2.lib.template_helpers import add_sr, get_domain
 from r2.lib.subreddit_search import popular_searches
@@ -185,6 +185,7 @@ class Reddit(Templated):
                 NamedButton('reports', css_class = 'reddit-reported'),
                 NamedButton('spam', css_class = 'reddit-spam'),
                 NamedButton('banned', css_class = 'reddit-ban'),
+                NamedButton('flair', css_class = 'reddit-flair'),
                 ])
         return [NavMenu(buttons, type = "flat_vert", base_path = "/about/",
                         css_class = "icon-menu",  separator = '')]
@@ -506,6 +507,7 @@ class SubredditInfoBar(CachedTemplate):
                     NavButton(menu.banusers, 'banned'),
                     NamedButton('traffic'),
                     NavButton(menu.community_settings, 'edit'),
+                    NavButton(menu.flair, 'flair'),
                     ])
         return [NavMenu(buttons, type = "flat_vert", base_path = "/about/",
                         separator = '')]
@@ -1047,7 +1049,10 @@ class SubredditsPage(Reddit):
 
     def rightbox(self):
         ps = Reddit.rightbox(self)
-        ps.append(SideContentBox(_("your front page reddits"), [SubscriptionBox()]))
+        subscribe_box = SubscriptionBox()
+        num_reddits = len(subscribe_box.srs)
+        ps.append(SideContentBox(_("your front page reddits (%s)") %
+                                 num_reddits, [subscribe_box]))
         return ps
 
 class MySubredditsPage(SubredditsPage):
@@ -1334,10 +1339,31 @@ class SubscriptionBox(Templated):
     the right pane."""
     def __init__(self, srs=None):
         if srs is None:
-            srs = Subreddit.user_subreddits(c.user, ids = False)
+            srs = Subreddit.user_subreddits(c.user, ids = False, limit=None)
         srs.sort(key = lambda sr: sr.name.lower())
         self.srs = srs
-        Templated.__init__(self, srs=srs)
+        self.goldlink = None
+        self.goldmsg = None
+        self.prelink = None
+        
+        if len(srs) > Subreddit.sr_limit and c.user_is_loggedin:
+            if not c.user.gold:
+                self.goldlink = "/gold"
+                self.goldmsg = _("raise it to %s") % Subreddit.gold_limit
+                self.prelink = ["/help/faq#HowmanyredditscanIsubscribeto",
+                                _("%s visible") % Subreddit.sr_limit]
+            else:
+                self.goldlink = "/help/gold#WhatdoIgetforjoining"
+                extra = min(len(srs) - Subreddit.sr_limit,
+                            Subreddit.gold_limit - Subreddit.sr_limit)
+                visible = min(len(srs), Subreddit.gold_limit)
+                bonus = {"bonus": extra}
+                self.goldmsg = _("%(bonus)s bonus reddits") % bonus
+                self.prelink = ["/help/faq#HowmanyredditscanIsubscribeto",
+                                _("%s visible") % visible]
+        
+        Templated.__init__(self, srs=srs, goldlink=self.goldlink,
+                           goldmsg=self.goldmsg)
 
     @property
     def reddits(self):
@@ -2217,12 +2243,27 @@ class Page_down(Templated):
         message = kw.get('message', _("This feature is currently unavailable. Sorry"))
         Templated.__init__(self, message = message)
 
+def wrapped_flair(user, subreddit, force_show_flair):
+    if (not hasattr(subreddit, '_id')
+        or not (force_show_flair or getattr(subreddit, 'flair_enabled', True))):
+        return False, 'right', '', ''
+
+    get_flair_attr = lambda a, default=None: getattr(
+        user, 'flair_%s_%s' % (subreddit._id, a), default)
+
+    return (get_flair_attr('enabled', default=True),
+            getattr(subreddit, 'flair_position', 'right'),
+            get_flair_attr('text'), get_flair_attr('css_class'))
+
 class WrappedUser(CachedTemplate):
-    def __init__(self, user, attribs = [], context_thing = None, gray = False):
+    FLAIR_CSS_PREFIX = 'flair-'
+
+    def __init__(self, user, attribs = [], context_thing = None, gray = False,
+                 subreddit = None, force_show_flair = None):
         attribs.sort()
         author_cls = 'author'
 
-        author_title = None
+        author_title = ''
         if gray:
             author_cls += ' gray'
         for tup in attribs:
@@ -2230,6 +2271,12 @@ class WrappedUser(CachedTemplate):
             # Hack: '(' should be in tup[3] iff this friend has a note
             if tup[1] == 'F' and '(' in tup[3]:
                 author_title = tup[3]
+
+        flair = wrapped_flair(user, subreddit or c.site, force_show_flair)
+        flair_enabled, flair_position, flair_text, flair_css_class = flair
+        has_flair = bool(flair_text or flair_css_class)
+        if flair_css_class:
+            flair_css_class = self.FLAIR_CSS_PREFIX + flair_css_class
 
         target = None
         ip_span = None
@@ -2245,6 +2292,12 @@ class WrappedUser(CachedTemplate):
 
         CachedTemplate.__init__(self,
                                 name = user.name,
+                                force_show_flair = force_show_flair,
+                                has_flair = has_flair,
+                                flair_enabled = flair_enabled,
+                                flair_position = flair_position,
+                                flair_text = flair_text,
+                                flair_css_class = flair_css_class,
                                 author_cls = author_cls,
                                 author_title = author_title,
                                 attribs = attribs,
@@ -2326,6 +2379,97 @@ class UserList(Templated):
     @property
     def container_name(self):
         return c.site._fullname
+
+class FlairPane(Templated):
+    def __init__(self, num, after, reverse, name, user):
+        # Make sure c.site isn't stale before rendering.
+        c.site = Subreddit._byID(c.site._id)
+        Templated.__init__(
+            self,
+            flair_list=FlairList(num, after, reverse, name, user),
+            flair_enabled=c.site.flair_enabled,
+            flair_position=c.site.flair_position)
+
+class FlairList(Templated):
+    """List of users who are tagged with flair within a subreddit."""
+
+    def __init__(self, num, after, reverse, name, user):
+        Templated.__init__(self, num=num, after=after, reverse=reverse,
+                           name=name, user=user)
+
+    @property
+    def flair(self):
+        if self.user:
+            return [FlairListRow(self.user)]
+
+        if self.name:
+            # user lookup was requested, but no user was found, so abort
+            return []
+
+        # Fetch one item more than the limit, so we can tell if we need to link
+        # to a "next" page.
+        query = c.site.flair_id_query(self.num + 1, self.after, self.reverse)
+        flair_rows = list(query)
+        if len(flair_rows) > self.num:
+            next_page = flair_rows.pop()
+        else:
+            next_page = None
+        uids = [row._thing2_id for row in flair_rows]
+        users = Account._byID(uids, data=True)
+        result = [FlairListRow(users[row._thing2_id])
+                  for row in flair_rows if row._thing2_id in users]
+        links = []
+        if self.after:
+            links.append(
+                FlairNextLink(result[0].user._fullname,
+                              reverse=not self.reverse,
+                              needs_border=bool(next_page)))
+        if next_page:
+            links.append(
+                FlairNextLink(result[-1].user._fullname, reverse=self.reverse))
+        if self.reverse:
+            result.reverse()
+            links.reverse()
+            if len(links) == 2 and links[1].needs_border:
+                # if page was rendered after clicking "prev", we need to move
+                # the border to the other link.
+                links[0].needs_border = True
+                links[1].needs_border = False
+        return result + links
+
+class FlairListRow(Templated):
+    def __init__(self, user):
+        get_flair_attr = lambda a: getattr(user,
+                                           'flair_%s_%s' % (c.site._id, a), '')
+        Templated.__init__(self, user=user,
+                           flair_text=get_flair_attr('text'),
+                           flair_css_class=get_flair_attr('css_class'))
+
+class FlairNextLink(Templated):
+    def __init__(self, after, reverse=False, needs_border=False):
+        Templated.__init__(self, after=after, reverse=reverse,
+                           needs_border=needs_border)
+
+class FlairCsv(Templated):
+    class LineResult:
+        def __init__(self):
+            self.errors = {}
+            self.warnings = {}
+            self.status = 'skipped'
+            self.ok = False
+
+        def error(self, field, desc):
+            self.errors[field] = desc
+
+        def warn(self, field, desc):
+            self.warnings[field] = desc
+
+    def __init__(self):
+        Templated.__init__(self, results_by_line=[])
+
+    def add_line(self):
+        self.results_by_line.append(self.LineResult())
+        return self.results_by_line[-1]
 
 class FriendList(UserList):
     """Friend list on /pref/friends"""

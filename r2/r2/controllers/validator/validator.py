@@ -359,10 +359,15 @@ class VCount(Validator):
 
 
 class VLimit(Validator):
+    def __init__(self, param, default=25, max_limit=100, **kw):
+        self.default_limit = default
+        self.max_limit = max_limit
+        Validator.__init__(self, param, **kw)
+
     def run(self, limit):
         default = c.user.pref_numsites
         if c.render_style in ("compact", api_type("compact")):
-            default = 25 # TODO: ini param?
+            default = self.default_limit  # TODO: ini param?
 
         if limit is None:
             return default
@@ -372,7 +377,7 @@ class VLimit(Validator):
         except ValueError:
             return default
 
-        return min(max(i, 1), 100)
+        return min(max(i, 1), self.max_limit)
 
 class VCssMeasure(Validator):
     measure = re.compile(r"\A\s*[\d\.]+\w{0,3}\s*\Z")
@@ -642,6 +647,14 @@ class VSrModerator(Validator):
                 or c.user_is_admin):
             abort(403, "forbidden")
 
+class VFlairManager(VSrModerator):
+    """Validates that a user is permitted to manage flair for a subreddit.
+       
+    Currently this is the same as VSrModerator. It's a separate class to act as
+    a placeholder if we ever need to give mods a way to delegate this aspect of
+    subreddit administration."""
+    pass
+
 class VSrCanDistinguish(VByName):
     def run(self, thing_name):
         if c.user_is_admin:
@@ -873,7 +886,7 @@ class VUrl(VRequired):
                 return url
         return self.error(errors.BAD_URL)
 
-class VExistingUname(VRequired):
+class VOptionalExistingUname(VRequired):
     def __init__(self, item, *a, **kw):
         VRequired.__init__(self, item, errors.NO_USER, *a, **kw)
 
@@ -893,7 +906,13 @@ class VExistingUname(VRequired):
                 return Account._by_name(name)
             except NotFound:
                 return self.error(errors.USER_DOESNT_EXIST)
-        self.error()
+
+class VExistingUname(VOptionalExistingUname):
+    def run(self, name):
+        user = VOptionalExistingUname.run(self, name)
+        if not user:
+            self.error()
+        return user
 
 class VMessageRecipient(VExistingUname):
     def run(self, name):
@@ -1002,16 +1021,22 @@ class VBid(VNumber):
                 return float(bid)
 
 
-
 class VCssName(Validator):
     """
     returns a name iff it consists of alphanumeric characters and
     possibly "-", and is below the length limit.
     """
+
     r_css_name = re.compile(r"\A[a-zA-Z0-9\-]{1,100}\Z")
+
     def run(self, name):
-        if name and self.r_css_name.match(name):
-            return name
+        if name:
+            if self.r_css_name.match(name):
+                return name
+            else:
+                self.set_error(errors.BAD_CSS_NAME)
+        return ''
+
 
 class VMenu(Validator):
 

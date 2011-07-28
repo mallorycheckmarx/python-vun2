@@ -529,6 +529,9 @@ class Account(Thing):
         except (NotFound, AttributeError):
             return None
 
+    def flair_enabled_in_sr(self, sr_id):
+        return getattr(self, 'flair_%d_enabled' % sr_id, True)
+
 class FakeAccount(Account):
     _nodb = True
     pref_no_profanity = True
@@ -638,7 +641,7 @@ def register(name, password):
 class Friend(Relation(Account, Account)): pass
 
 Account.__bases__ += (UserRel('friend', Friend, disable_reverse_ids_fn=True),
-                      UserRel('enemy', Friend, disable_reverse_ids_fn=True))
+                      UserRel('enemy', Friend, disable_reverse_ids_fn=False))
 
 class DeletedUser(FakeAccount):
     @property

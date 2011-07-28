@@ -19,38 +19,27 @@
 ## All portions of the code written by CondeNet are Copyright (c) 2006-2010
 ## CondeNet, Inc. All Rights Reserved.
 ################################################################################
-<%namespace file="utils.html" import="plain_link"/>
-<%namespace file="subreddit.html" import="addremove_button, permission_icons"/>
 
-<div class="subscription-box">
-  % if thing.prelink or thing.goldlink:
-  <div class="box-top">
-    % if thing.prelink:
-    <span class="column centered">
-      <a href="${thing.prelink[0]}">${thing.prelink[1]}</a>
+<%!
+from r2.lib.pages import WrappedUser
+%>
+
+<div id="flairrow_${thing.user._id36}" class="flairrow">
+  <form action="/post/flair" id="flair-${thing.user._id36}" method="post"
+        class="medium-text flair-entry">
+    <input type="hidden" name="name" value="${thing.user.name}" />
+    <span class="tagline flaircell">
+      ${unsafe(WrappedUser(thing.user, force_show_flair=True).render())}
     </span>
-    % endif
-    % if thing.goldlink:
-    <span class="giftgold column">
-    <a href="${thing.goldlink}">
-      ${thing.goldmsg}
-    </a>
+    <span class="flaircell">
+      <input type="text" maxlength="32" name="text"
+             value="${thing.flair_text}" />
     </span>
-    % endif
-  </div>
-  % endif
-  <div class="clear">
-  % if thing.prelink or thing.goldlink:
-    <div class="box-separator"></div>
-  % endif
-    <ul>
-    %for sr in thing.reddits:
-      <li>
-        ${addremove_button(sr)}
-        ${plain_link(sr.name, sr.path, _class="title")}
-        ${permission_icons(sr)}
-      </li>
-    %endfor
-    </ul>
-  </div>
+    <span class="flaircell">
+      <input type="text" maxlength="32" name="css_class"
+             value="${thing.flair_css_class}" />
+    </span>
+    <button type="submit">save</button>
+    <span class="status"></span>
+  </form>
 </div>

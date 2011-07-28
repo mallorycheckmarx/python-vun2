@@ -22,6 +22,15 @@
 
 <%namespace file="utils.html" import="plain_link" />
 
+<%def name="flair(user, enabled=None)">
+  %if enabled is None:
+    <% enabled = user.flair_enabled %>
+  %endif
+  %if user.has_flair and enabled:
+    <span class="flair ${user.flair_css_class}">${user.flair_text}</span>
+  %endif
+</%def>
+
 %if context_deleted and not c.user_is_admin:
   [deleted]
 %else:
@@ -30,12 +39,18 @@
   %elif thing.name == '[blocked]':
     <span>${_(thing.thing.original_author.name)}</span>
   %else:
+    %if thing.flair_position == 'left':
+      ${flair(thing, enabled=thing.force_show_flair)}
+    %endif
     ${plain_link(thing.name + thing.karma, "/user/%s" % thing.name,
-               _class = thing.author_cls + (" id-%s" % thing.fullname),
-               _sr_path = False, target=target, title=thing.author_title)}
+                 _class = thing.author_cls + (" id-%s" % thing.fullname),
+                 _sr_path = False, target=target, title=thing.author_title)}
+    %if thing.flair_position == 'right':
+      ${flair(thing, enabled=thing.force_show_flair)}
+    %endif
     <span class="userattrs">
     %if thing.attribs:
-      &#32;[
+      [
       %for priority, abbv, css_class, label, attr_link, img in thing.attribs:
         %if attr_link:
           <a class="${css_class}" title="${label}"
