@@ -4112,6 +4112,10 @@ dd { margin-left: 20px;  }
     width: 175px;
 }
 
+.linkinfo .shortlink input:hover {
+    cursor: text;
+}
+
 .linkinfo table {margin-top: 5px;}
 
 .linkinfo td, .linkinfo th {
