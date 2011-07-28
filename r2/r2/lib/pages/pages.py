@@ -113,11 +113,12 @@ class Reddit(Templated):
     additional_css     = None
 
     def __init__(self, space_compress = True, nav_menus = None, loginbox = True,
-                 infotext = '', content = None, title = '', robots = None, 
+                 infotext = '', content = None, short_description='', title = '', robots = None, 
                  show_sidebar = True, footer = True, srbar = True,
                  **context):
         Templated.__init__(self, **context)
         self.title          = title
+        self.short_description = short_description
         self.robots         = robots
         self.infotext       = infotext
         self.loginbox       = True
@@ -814,7 +815,8 @@ class LinkInfoPage(Reddit):
         else:
             self.duplicates = duplicates
 
-        Reddit.__init__(self, title = title, *a, **kw)
+        short_description = link.selftext.strip() if link else None
+        Reddit.__init__(self, title = title, short_description=short_description, *a, **kw)
 
     def build_toolbars(self):
         base_path = "/%s/%s/" % (self.link._id36, title_to_url(self.link.title))
