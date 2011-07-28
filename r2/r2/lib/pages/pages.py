@@ -761,6 +761,9 @@ class CommentVisitsBox(Templated):
             self.visits.append(pretty)
         Templated.__init__(self, *a, **kw)
 
+def _truncate(text, length):
+    return text[0:length]+'...' if len(text)>150 else text
+
 class LinkInfoPage(Reddit):
     """Renders the varied /info pages for a link.  The Link object is
     passed via the link argument and the content passed to this class
@@ -794,7 +797,7 @@ class LinkInfoPage(Reddit):
         # defaults whether or not there is a comment
         params = {'title':_force_unicode(link_title), 'site' : c.site.name}
         title = strings.link_info_title % params
-
+        short_description = _truncate(link.selftext.strip(),150) if link else None
         # only modify the title if the comment/author are neither deleted nor spam
         if comment and not comment._deleted and not comment._spam:
             author = Account._byID(comment.author_id, data=True)
@@ -802,6 +805,8 @@ class LinkInfoPage(Reddit):
             if not author._deleted and not author._spam:
                 params = {'author' : author.name, 'title' : _force_unicode(link_title)}
                 title = strings.permalink_title % params
+                short_description = _truncate(comment.body.strip(),150) if comment.body else None
+                
 
         self.subtitle = subtitle
 
@@ -815,7 +820,6 @@ class LinkInfoPage(Reddit):
         else:
             self.duplicates = duplicates
 
-        short_description = link.selftext.strip()[0:150] if link else None
         Reddit.__init__(self, title = title, short_description=short_description, *a, **kw)
 
     def build_toolbars(self):
