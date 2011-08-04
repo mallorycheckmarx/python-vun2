@@ -758,21 +758,21 @@ class RedditController(MinimalController):
         elif c.site == RandomNSFW:
             c.site = Subreddit.random_reddit(over18 = True)
             redirect_to("/" + c.site.path.strip('/') + request.path)
+        
+        if not(request.path == "/api/login/reddit"):
+            # check that the site is available:
+            if c.site.spammy() and not c.user_is_admin and not c.error_page:
+                abort(404, "not found")
 
+            # check if the user has access to this subreddit
+            if not c.site.can_view(c.user) and not c.error_page:
+                abort(403, "forbidden")
 
-        # check that the site is available:
-        if c.site.spammy() and not c.user_is_admin and not c.error_page:
-            abort(404, "not found")
-
-        # check if the user has access to this subreddit
-        if not c.site.can_view(c.user) and not c.error_page:
-            abort(403, "forbidden")
-
-        #check over 18
-        if (c.site.over_18 and not c.over18 and
-            request.path not in  ("/frame", "/over18")
-            and c.render_style == 'html'):
-            return self.intermediate_redirect("/over18")
+            #check over 18
+            if (c.site.over_18 and not c.over18 and
+                request.path not in ("/frame", "/over18")
+                and c.render_style == 'html'):
+                return self.intermediate_redirect("/over18")
 
         #check whether to allow custom styles
         c.allow_styles = self.allow_stylesheets
