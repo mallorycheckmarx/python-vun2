@@ -50,6 +50,7 @@ from r2.lib.subreddit_search import popular_searches
 from r2.lib.scraper import get_media_embed
 from r2.lib.log import log_text
 from r2.lib.memoize import memoize
+from r2.lib.utils import trunc_string as _truncate
 
 import sys, random, datetime, locale, calendar, simplejson, re, time
 import graph, pycountry, time
@@ -760,9 +761,6 @@ class CommentVisitsBox(Templated):
             pretty = timesince(visit, precision=60)
             self.visits.append(pretty)
         Templated.__init__(self, *a, **kw)
-
-def _truncate(text, length):
-    return text[0:length]+'...' if len(text)>150 else text
 
 class LinkInfoPage(Reddit):
     """Renders the varied /info pages for a link.  The Link object is
