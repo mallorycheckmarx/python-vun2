@@ -279,7 +279,7 @@ def set_subreddit():
             sr_name = chksrname(sr_name)
             if sr_name:
                 redirect_to("/reddits/search?q=%s" % sr_name)
-            elif not c.error_page:
+            elif not c.error_page and not request.path == "/api/login/reddit" :
                 abort(404)
     #if we didn't find a subreddit, check for a domain listing
     if not sr_name and isinstance(c.site, DefaultSR) and domain:
