@@ -1082,7 +1082,7 @@ class VRatelimit(Validator):
         Validator.__init__(self, *a, **kw)
 
     def run (self):
-        if(g.ratelimit):
+        if(g.use_ratelimit):
             to_check = []
             if self.rate_user and c.user_is_loggedin:
                 to_check.append('user' + str(c.user._id36))

@@ -87,7 +87,7 @@ class Globals(object):
                   'db_create_tables',
                   'disallow_db_writes',
                   'exception_logging',
-                  'ratelimit',
+                  'use_ratelimit',
                   'amqp_logging',
                   'read_only_mode',
                   'frontpage_dart',
