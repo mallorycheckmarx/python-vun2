@@ -48,6 +48,8 @@ from xml.dom import DOMException
 
 msgs = string_dict['css_validator_messages']
 
+browser_prefixes = ['o','moz','webkit','ms','khtml','apple','xv']
+
 custom_macros = {
     'num': r'[-]?\d+|[-]?\d*\.\d+',
     'percentage': r'{num}%',
@@ -79,16 +81,6 @@ custom_values = {
 
 nonstandard_values = {
     # http://www.w3.org/TR/css3-background/#border-top-right-radius
-    '-moz-border-radius': r'(({length}|{percentage}){w}){1,2}',
-    '-moz-border-radius-topleft': r'(({length}|{percentage}){w}){1,2}',
-    '-moz-border-radius-topright': r'(({length}|{percentage}){w}){1,2}',
-    '-moz-border-radius-bottomleft': r'(({length}|{percentage}){w}){1,2}',
-    '-moz-border-radius-bottomright': r'(({length}|{percentage}){w}){1,2}',
-    '-webkit-border-radius': r'(({length}|{percentage}){w}){1,2}',
-    '-webkit-border-top-left-radius': r'(({length}|{percentage}){w}){1,2}',
-    '-webkit-border-top-right-radius': r'(({length}|{percentage}){w}){1,2}',
-    '-webkit-border-bottom-left-radius': r'(({length}|{percentage}){w}){1,2}',
-    '-webkit-border-bottom-right-radius': r'(({length}|{percentage}){w}){1,2}',
     'border-radius': r'(({length}|{percentage}){w}){1,2}',
     'border-radius-topleft': r'(({length}|{percentage}){w}){1,2}',
     'border-radius-topright': r'(({length}|{percentage}){w}){1,2}',
@@ -101,8 +93,21 @@ nonstandard_values = {
     # http://www.w3.org/TR/css3-background/#the-box-shadow
     # (This description doesn't support multiple shadows)
     'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
+    
+    
+    # Value between 0 and 1
+    'opacity': r'inherit|^0?\.?[0-9]*|1\.0*|1|0',
+    
+    'background': r'^\S*-gradient\(.*\)',
+    'background-image': r'^\S*-gradient\(.*\)',
 }
+
 custom_values.update(nonstandard_values);
+
+def _build_regex_prefix(prefixes):
+    return re.compile("|".join("^-"+p+"-" for p in prefixes))
+
+prefix_regex = _build_regex_prefix(browser_prefixes)
 
 def _expand_macros(tokdict,macrodict):
     """ Expand macros in token dictionary """
@@ -219,7 +224,12 @@ def valid_url(prop,value,report):
     #                                  value))
 
 
+def strip_browser_prefix(prop):
+    t=prefix_regex.split(prop,maxsplit=1)
+    return t[len(t)-1]
+
 def valid_value(prop,value,report):
+    prop.name = strip_browser_prefix(prop.name) # Remove browser-specific prefixes eg: -moz-border-radius becomes border-radius
     if not (value.valid and value.wellformed):
         if (value.wellformed
             and prop.name in cssproperties.cssvalues
@@ -232,7 +242,6 @@ def valid_value(prop,value,report):
               and custom_values[prop.name](prop.value)):
             # we're allowing it via our own custom validator
             value.valid = True
-
             # see if this suddenly validates the entire property
             prop.valid = True
             prop.cssValue.valid = True
