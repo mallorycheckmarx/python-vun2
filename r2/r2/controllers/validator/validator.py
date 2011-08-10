@@ -1082,26 +1082,27 @@ class VRatelimit(Validator):
         Validator.__init__(self, *a, **kw)
 
     def run (self):
-        to_check = []
-        if self.rate_user and c.user_is_loggedin:
-            to_check.append('user' + str(c.user._id36))
-        if self.rate_ip:
-            to_check.append('ip' + str(request.ip))
+        if(g.ratelimit):
+            to_check = []
+            if self.rate_user and c.user_is_loggedin:
+                to_check.append('user' + str(c.user._id36))
+            if self.rate_ip:
+                to_check.append('ip' + str(request.ip))
 
-        r = g.cache.get_multi(to_check, self.prefix)
-        if r:
-            expire_time = max(r.values())
-            time = utils.timeuntil(expire_time)
+            r = g.cache.get_multi(to_check, self.prefix)
+            if r:
+                expire_time = max(r.values())
+                time = utils.timeuntil(expire_time)
 
-            g.log.debug("rate-limiting %s from %s" % (self.prefix, r.keys()))
+                g.log.debug("rate-limiting %s from %s" % (self.prefix, r.keys()))
 
-            # when errors have associated field parameters, we'll need
-            # to add that here
-            if self.error == errors.RATELIMIT:
-                self.set_error(errors.RATELIMIT, {'time': time},
-                               field = 'ratelimit')
-            else:
-                self.set_error(self.error)
+                # when errors have associated field parameters, we'll need
+                # to add that here
+                if self.error == errors.RATELIMIT:
+                    self.set_error(errors.RATELIMIT, {'time': time},
+                                   field = 'ratelimit')
+                else:
+                    self.set_error(self.error)
 
     @classmethod
     def ratelimit(self, rate_user = False, rate_ip = False, prefix = "rate_",
