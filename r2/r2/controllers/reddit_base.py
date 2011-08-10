@@ -759,7 +759,7 @@ class RedditController(MinimalController):
             c.site = Subreddit.random_reddit(over18 = True)
             redirect_to("/" + c.site.path.strip('/') + request.path)
         
-        if not(request.path.startswith("/api/login/")):
+        if not request.path.startswith("/api/login/"):
             # check that the site is available:
             if c.site.spammy() and not c.user_is_admin and not c.error_page:
                 abort(404, "not found")
