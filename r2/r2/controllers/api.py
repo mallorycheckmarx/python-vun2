@@ -1274,7 +1274,7 @@ class ApiController(RedditController):
                    over_18 = VBoolean('over_18'),
                    allow_top = VBoolean('allow_top'),
                    show_media = VBoolean('show_media'),
-                   show_sidebar = VBoolean('show_sidebar'),
+                   show_cname_sidebar = VBoolean('show_cname_sidebar'),
                    type = VOneOf('type', ('public', 'private', 'restricted')),
                    link_type = VOneOf('link_type', ('any', 'link', 'self')),
                    ip = ValidIP(),
