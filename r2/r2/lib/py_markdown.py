@@ -8,6 +8,7 @@ href_re = re.compile('<a href="([^"]+)"', re.I)
 code_re = re.compile('<code>([^<]+)</code>')
 a_re    = re.compile('>([^<]+)</a>')
 fix_url = re.compile('&lt;(http://[^\s\'\"\]\)]+)&gt;')
+sr_link_re = re.compile(r'((?:^|\s)/?(r/[A-Za-z0-9][A-Za-z0-9_]{2,20}))')
 
 def code_handler(m):
     l = m.group(1)
@@ -55,5 +56,8 @@ def py_markdown(text, nofollow=False, target=None):
     text = code_re.sub(code_handler, text)
     text = a_re.sub(inner_a_handler, text)
     text = fix_url.sub(r'\1', text)
+
+    # link literal subreddits
+    text = sr_link_re.sub(r'<a href="/\2">\1</a>', text)
 
     return text
