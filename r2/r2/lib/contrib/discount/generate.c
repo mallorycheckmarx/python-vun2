@@ -409,6 +409,7 @@ static struct _protocol {
     _aprotocol( "http://" ), 
     _aprotocol( "news://" ),
     _aprotocol( "ftp://" ), 
+    _aprotocol( "irc://" ),
 #undef _aprotocol
 };
 #define NRPROTOCOLS	(sizeof protocol / sizeof protocol[0])
