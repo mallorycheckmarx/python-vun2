@@ -1082,7 +1082,7 @@ class VRatelimit(Validator):
         Validator.__init__(self, *a, **kw)
 
     def run (self):
-        if(g.disable_ratelimit):
+        if g.disable_ratelimit:
             return
         to_check = []
         if self.rate_user and c.user_is_loggedin:
