@@ -139,8 +139,8 @@ $(function() {
             $(".bling a, a.bling").attr("href", submit);
             $(".arrow").each(function() {
                     $(this).get(0).onclick = function() {
-                        if(target == '_blank'){
-                            window.open(submit, target);
+                        if(querydict.newwindow){
+                            window.open(submit, "_blank");
                         } else {
                             window.parent.location = submit;
                        }
