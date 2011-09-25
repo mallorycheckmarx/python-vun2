@@ -357,6 +357,11 @@ class YoutubeScraper(MediaScraper):
         return self.thumbnail_template.replace("$video_id",
                                                self.video_id.split("&")[0])
 
+class YoutubeShortlinkScraper(YoutubeScraper):
+    domains = ['youtu.be']
+    video_id_rx = re.compile('.*/([A-Za-z0-9-_]+).*')
+    video_deeplink_rx = re.compile('.*\?t=(\d+)m(\d+)s.*')
+
 class TedScraper(MediaScraper):
     domains = ['ted.com']
     height = 326
@@ -1372,6 +1377,7 @@ class YoutubeEmbedDeepScraper(DeepScraper):
 scrapers = {}
 for scraper in [ EmbedlyOEmbed,
                  YoutubeScraper,
+                 YoutubeShortlinkScraper,
                  MetacafeScraper,
                  GootubeScraper,
                  VimeoScraper,
