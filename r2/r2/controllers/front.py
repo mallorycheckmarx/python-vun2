@@ -709,6 +709,7 @@ class FrontController(RedditController):
                                         title=title or '',
                                         subreddits = sr_names,
                                         captcha=captcha,
+                                        resubmit=request.get.get('resubmit'),
                                         then = then)).render()
 
     def GET_frame(self):
