@@ -65,12 +65,12 @@ r.ui.Form.prototype = $.extend(new r.ui.Base(), {
     },
 
     checkCaptcha: function(errors) {
-        if (this.$el.has('input[name="captcha"]').length) {
+        if (this.$el.has('#recaptcha_area').length) {
             var badCaptcha = $.grep(errors, function(el) {
-                return el[0] == 'badCaptcha'
+                return el[0] == 'BAD_CAPTCHA'
             })
-            if (badCaptcha) {
-                $.request("new_captcha", {id: this.$el.attr('id')})
+            if (badCaptcha.length) {
+                Recaptcha.reload();
             }
         }
     },

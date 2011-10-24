@@ -1,5 +1,4 @@
 <%namespace file="utils.html" import="error_field"/>
-<%namespace file="captcha.html" import="captchagen"/>
 
 <form onsubmit="return post_form(this, 'share')" method="post"
       id="sharelink_${thing.link_name}"
@@ -17,9 +16,7 @@
         </th>
         <td>
           <textarea id="share_to_${thing.link_name}" 
-                    name="share_to" rows="4" cols="40">
-            ${unsafe('&#x0D;&#x0A;'.join(websafe(e) for e in thing.emails))}
-          </textarea>
+                    name="share_to" rows="4" cols="40">${unsafe('&#x0D;&#x0A;'.join(websafe(e) for e in thing.emails))}</textarea>
         </td>
         <td class="share-to-errors">
           ${error_field("BAD_EMAILS", "share_to")}
@@ -75,28 +72,26 @@
         </th>
         <td>
           <textarea id="message_${thing.link_name}" 
-                    name="message" rows="4" cols="40">
-            ${_("%(user)s from http://%(site)s/ has shared a link with you.") % dict(user = c.user.name, site=c.site.domain if c.cname and hasattr(c.site, 'domain') else g.domain)}
-          </textarea>
+                    name="message" rows="4" cols="40">${_("%(user)s from http://%(site)s/ has shared a link with you.") % dict(user = c.user.name, site=c.site.domain if c.cname and hasattr(c.site, 'domain') else g.domain)}</textarea>
         </td>
         <td class="message-errors">
           ${error_field("TOO_LONG", "message")}
         </td>
       </tr>
+       <tr><td></td><td>
       %if thing.captcha:
-        ${captchagen('', tabulate = False, size = 30)}
-      %endif
-      <tr>
-        <td>
-        </td>
-        <td>
+            <div class="captchagen inglip-summoned" data-key="${g.recaptcha_key_public}">Error with captcha</div>
+            ${error_field("BAD_CAPTCHA", "recaptcha_challenge_field")}
+      %else:
           <button type="submit" class="btn">
             ${_("share")}
           </button>
           <button class="btn" 
                   onclick="return cancelShare(this);">
             ${_("cancel")}
-          </button>
+          </button>    
+      %endif
+          
           <span class="status error"></span>
         </td>
         <td>

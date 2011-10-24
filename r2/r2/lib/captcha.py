@@ -19,54 +19,17 @@
 # All portions of the code written by CondeNet are Copyright (c) 2006-2010
 # CondeNet, Inc. All Rights Reserved.
 ################################################################################
-import random, string
-from pylons import g
-from Captcha.Base import randomIdentifier
-from Captcha.Visual import Text, Backgrounds, Distortions, ImageCaptcha
+from recaptcha.client import captcha
 
-from r2.lib.cache import make_key
+def get_captcha_html(public_key, use_ssl=False):
+    return captcha.displayhtml(public_key, use_ssl=use_ssl)
 
-IDEN_LENGTH = 32
-SOL_LENGTH = 6
+def validate_captcha(challenge, response, ip, private_key):
+    response = captcha.submit(challenge, response, private_key, ip)
+    return response.is_valid and response.error_code == None
 
-class RandCaptcha(ImageCaptcha):
-    defaultSize = (120, 50)
-    fontFactory = Text.FontFactory(18, "vera/VeraBd.ttf")
-
-    def getLayers(self, solution="blah"):
-        self.addSolution(solution)
-        return ((Backgrounds.Grid(size=8, foreground="white"),
-                 Distortions.SineWarp(amplitudeRange=(5,9))),
-                (Text.TextLayer(solution,
-                               textColor = 'white',
-                               fontFactory = self.fontFactory),
-                 Distortions.SineWarp()))
-
-def get_iden():
-    return randomIdentifier(length=IDEN_LENGTH)
-
-def make_solution():
-    return randomIdentifier(alphabet=string.ascii_letters, length = SOL_LENGTH).upper()
-
-def get_image(iden):
-    key = make_key(iden)
-    solution = g.cache.get(key)
-    if not solution:
-        solution = make_solution()
-        g.cache.set(key, solution, time = 300)
-    return RandCaptcha(solution=solution).render()
-
-def valid_solution(iden, solution):
-    key = make_key(iden)
-
-    if (not iden
-        or not solution
-        or len(iden) != IDEN_LENGTH
-        or len(solution) != SOL_LENGTH
-        or solution.upper() != g.cache.get(key)):
-        solution = make_solution()
-        g.cache.set(key, solution, time = 300)
-        return False
-    else:
-        g.cache.delete(key)
-        return True
+def bool_validate_captcha(captcha):
+    if captcha != None:
+        if not validate_captcha(captcha[0], captcha[1], captcha[2], captcha[3]):
+            return False
+    return True

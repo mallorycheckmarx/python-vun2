@@ -30,6 +30,12 @@ $.fn.debug = function() {
     return $(this);
 }
 
+$.fn.refreshCaptcha = function() {
+    if(window.Recaptcha) {
+        Recaptcha.reload();
+    }
+};
+
 $.redirect = function(dest) {
     window.location = dest;
 };
@@ -154,6 +160,9 @@ function handleResponse(action) {
         }
     };
 };
+
+r.ajax = {};
+r.ajax.handleResponse = handleResponse;
 
 var api_loc = '/api/';
 $.request = function(op, parameters, worker_in, block, type, 

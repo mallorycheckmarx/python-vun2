@@ -105,8 +105,27 @@ function form_error(form) {
     }
 }
 
+function checkCaptchaRefresh() {
+    /* Finds the recaptcha area on the page and refreshes the captcha if the captcha error field in the parent form is visible */
+    if (window.Recaptcha) {
+        var form = $("#recaptcha_area").parents('form:first')
+        var err = form.find(".BAD_CAPTCHA");
+        if (err.length && err.is(':visible')) {
+            Recaptcha.reload();
+        }
+    }
+}
+
+function checkCaptchaCallback(){
+     return function() {
+         var res = r.ajax.handleResponse().apply(this, arguments);
+         checkCaptchaRefresh();
+         return res;
+    }
+}
+
 function simple_post_form(form, where, fields, block) {
-    $.request(where, get_form_fields(form, fields), null, block, 
+    $.request(where, get_form_fields(form, fields), checkCaptchaCallback(), block, 
               "json", false, form_error(form));
     return false;
 };
@@ -357,12 +376,71 @@ function unfriend(user_name, container_name, type) {
     }
 };
 
+function showRecaptcha(element, submitButton, recaptchaButton, pubkey, lang) {
+    Recaptcha.destroy();
+    Recaptcha.create(pubkey, element, {
+        tabindex: 0,
+        theme: 'red',
+        lang :  lang,
+        callback: Recaptcha.focus_response_field
+    });
+    $(".contact_submit").hide();
+    $(".recaptcha_required").show();
+    $("#"+recaptchaButton).hide();
+    $("#"+submitButton).show();
+}
+
+function createCaptcha(id, pubkey, lang){
+    if(!$('#recaptcha_required_'+id).is(':visible')){
+        return true;
+    }
+    showRecaptcha('recaptcha_div_'+id,
+        'submit_'+id,
+        'recaptcha_required_'+id,
+        pubkey, lang);
+    return false;
+}
+
 function share(elem) {
-    $.request("new_captcha");
+    id = $(elem).thing_id();
     $(elem).new_thing_child($(".sharelink:first").clone(true)
-                            .attr("id", "sharelink_" + $(elem).thing_id()),
+                            .attr("id", "sharelink_" + id),
                              false);
-    $.request("new_captcha");
+    newelem=$("#sharelink_" + id).find(".captchagen");
+    if(newelem.length > 0){
+        if(!window.Recaptcha){
+            $('<script>').attr('src', "http://api.recaptcha.net/js/recaptcha_ajax.js").appendTo('body')
+        }
+        keys = ["", newelem.data('key'), r.strings.canceltext, r.strings.sharetext, reddit.lang];
+        newelem.empty();
+        $('<div>').attr('id', 'recaptcha_div_' + id).appendTo(newelem);
+        
+        $('<button>').attr({
+            id: 'recaptcha_required_' + id,
+            onclick: "return false"
+        })
+        .bind('click', {id: id, keys: keys}, function(event){
+            createCaptcha(event.data.id, event.data.keys[1], event.data.keys[4]);
+        })
+            .addClass('recaptcha_required btn' + keys[3])
+            .html(keys[3])
+            .appendTo(newelem);
+        
+        $("<button type='submit'>").attr({
+            id: 'submit_' + id})
+            .addClass('btn contact_submit')
+            .text(keys[3])
+            .appendTo(newelem);
+        
+        btn = $('<button>');
+        btn.bind('click', {t: btn}, function(event) {cancelShare(event.data.t);})
+            .addClass('btn cancel_share')
+            .text(keys[2])
+            .appendTo(newelem);
+
+        $(".contact_submit").hide();
+        $(".cancelShare").hide();
+    }
 };
 
 function cancelShare(elem) {

@@ -77,7 +77,7 @@ setup(
         "pycountry",
         "pycassa==1.1.0",
         "PIL",
-        "pycaptcha",
+        "recaptcha-client",
         "amqplib",
         "pylibmc==1.2.1-dev",
         "py-bcrypt",

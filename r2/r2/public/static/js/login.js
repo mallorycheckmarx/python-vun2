@@ -216,7 +216,6 @@ r.ui.LoginPopup.prototype = $.extend(new r.ui.Base(), {
     show: function(notice, callback) {
         this.loginForm.successCallback = callback
         this.registerForm.successCallback = callback
-        $.request("new_captcha", {id: this.$el.attr('id')})
         this.$el
             .find(".cover-msg").toggle(!!notice).end()
             .show()
