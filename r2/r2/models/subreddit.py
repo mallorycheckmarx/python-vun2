@@ -73,6 +73,7 @@ class Subreddit(Thing, Printable):
                      sponsorship_url = None,
                      sponsorship_img = None,
                      sponsorship_name = None,
+		     link_url = None,
                      # do we allow self-posts, links only, or any?
                      link_type = 'any', # one of ('link', 'self', 'any')
                      flair_enabled = True,
@@ -843,6 +844,10 @@ class DefaultSR(_DefaultSR):
     @property
     def sponsorship_img(self):
         return self._base.sponsorship_img if self._base else ""
+
+    @property
+    def link_url(self):
+	return self._base.link_url if self._base else ""
 
 
 
