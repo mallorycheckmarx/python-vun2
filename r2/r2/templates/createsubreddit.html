@@ -239,13 +239,51 @@
     </%utils:line_field>
 
     <%utils:line_field title="${_('custom menus')}">
-      <ul class="upload">
+      <ul class="upload" id="menu-links">
+        <script language="javascript">
+            function add() {
+                i++;
+                var li = document.createElement("li");
+                li.setAttribute("id", "link-url-"+i);
+
+                var list = document.getElementById("menu-links");
+
+                li.innerHTML = "<input type=\"text\" id=\"link-url-"+i+"\" value=\"${thing.site.link_urls}\" />";
+
+                list.appendChild(li);
+                if(i >= 1){
+                    document.getElementById("remove-button").style.visibility = "visible";
+                    }
+ 
+                }
+
+            function remove() {
+                var d = document.getElementById("menu-links");
+
+                var olddiv = document.getElementById("link-url-" + i);
+
+                d.removeChild(olddiv);
+
+                i--;
+                if(i < 1){
+                    document.getElementById("remove-button").style.visibility = "hidden";
+                    }
+                }
+
+            $(window).load(function(){
+                document.getElementById("remove-button").style.visibility = "hidden";
+                i=0;
+            });
+        </script>
         <li>
-          <input type="text" name="link-url"
-                 value="${thing.site.link_url}"
+          <input type="text" name="link-url-0" id="link-url-0"
+                 value="${thing.site.link_urls}"
                  />
         </li>
+
       </ul>
+      <button type="button" id="add-button" onclick="add()">Add link</button>
+      <button type="button" id="remove-button" onclick="remove()">Remove link</button>
     </%utils:line_field>
 
   %if c.user_is_admin:
