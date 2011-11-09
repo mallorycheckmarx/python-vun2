@@ -421,7 +421,6 @@ class FrontController(RedditController):
 
     def _edit_modcontrib_reddit(self, location, num, after, reverse, count, created):
         extension_handling = False
-
         if not c.user_is_loggedin:
             return self.abort404()
         if isinstance(c.site, ModSR):
@@ -453,6 +452,7 @@ class FrontController(RedditController):
         is_moderator = c.user_is_loggedin and c.site.is_moderator(c.user) or c.user_is_admin
         extension_handling = False
         if is_moderator and location == 'edit':
+            print "editing"
             pane = PaneStack()
             if created == 'true':
                 pane.append(InfoBar(message = strings.sr_created))
@@ -493,7 +493,7 @@ class FrontController(RedditController):
             return Reddit(content = Wrapped(c.site)).render()
         else:
             return self.abort404()
-
+        print pane
         return EditReddit(content = pane,
                           extension_handling = extension_handling).render()
 

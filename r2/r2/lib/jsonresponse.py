@@ -121,7 +121,7 @@ class JsonResponse(object):
     def _send_data(self, **kw):
         self._data.update(kw)
 
-
+#what the form in site_admin is
 class JQueryResponse(JsonResponse):
     """
     class which mimics the jQuery in javascript for allowing Dom

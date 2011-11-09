@@ -61,6 +61,7 @@ from datetime import datetime, timedelta
 from md5 import md5
 import urllib
 import urllib2
+import logging
 
 def reject_vote(thing):
     voteword = request.params.get('dir')
@@ -1246,19 +1247,28 @@ class ApiController(RedditController):
                    sponsor_name =VLength('sponsorship-name', max_length = 64),
                    sponsor_url = VLength('sponsorship-url', max_length = 500),
                    css_on_cname = VBoolean("css_on_cname"),
+                   link_urls_0 = VLength('link-url-0', max_length = 500),
+                   link_urls_1 = VLength('link-url-1', max_length = 500),
+                   link_urls_2 = VLength('link-url-2', max_length = 500),
+                   link_urls_3 = VLength('link-url-3', max_length = 500),
+                   link_urls_4 = VLength('link-url-4', max_length = 500),
+                 
+                   
                    )
+    
     def POST_site_admin(self, form, jquery, name, ip, sr,
                         sponsor_text, sponsor_url, sponsor_name, **kw):
         # the status button is outside the form -- have to reset by hand
+        print "site_admin"
         form.parent().set_html('.status', "")
-
         redir = False
         kw = dict((k, v) for k, v in kw.iteritems()
                   if k in ('name', 'title', 'domain', 'description', 'over_18',
                            'show_media', 'show_cname_sidebar', 'type', 'link_type', 'lang',
                            "css_on_cname", "header_title", 
-                           'allow_top'))
-
+                           'allow_top', 'link_urls_0', 'link_urls_1',
+                           'link_urls_2', 'link_urls_3', 'link_urls_4'))
+        print kw
         #if a user is banned, return rate-limit errors
         if c.user._spam:
             time = timeuntil(datetime.now(g.tz) + timedelta(seconds=600))
@@ -1310,10 +1320,9 @@ class ApiController(RedditController):
                 sr.sponsorship_text = sponsor_text or ""
                 sr.sponsorship_url = sponsor_url or None
                 sr.sponsorship_name = sponsor_name or None
-
+            
             #assume sr existed, or was just built
-            old_domain = sr.domain
-
+            old_domain = sr.domain 
             if not sr.domain:
                 del kw['css_on_cname']
             for k, v in kw.iteritems():
