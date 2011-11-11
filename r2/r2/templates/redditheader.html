@@ -56,6 +56,14 @@
     %for toolbar in thing.toolbars:
       ${toolbar}
     %endfor
+
+    <%
+        if not isinstance(c.site, FakeSubreddit):
+            link_url_1 = 'http://google.com'
+        else: link_url_1 = 'http://bing.com'
+    %>
+    ${plain_link('TEST LINK', link_url_1)}
+
   </div>
 
   <div id="header-bottom-${'left' if c.lang_rtl else 'right'}">
