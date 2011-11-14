@@ -3164,7 +3164,7 @@ class RedditTraffic(Traffic):
                 break
             slices = [("uniques",     (0, 2) if c.site.domain else (0,),
                        "FF4500"),
-                      ("impressions", (1, 3) if c.site.domain else (1,),
+                      ("pageviews", (1, 3) if c.site.domain else (1,),
                        "336699")]
             if not c.default_sr and ival == 'day':
                 slices.append(("subscriptions", (4,), "00FF00"))
