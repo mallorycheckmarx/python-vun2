@@ -205,7 +205,7 @@ class Builder(object):
                         w.link_notes.append(w.verdict)
 
             w.rowstyle = getattr(w, 'rowstyle', "")
-            w.rowstyle += ' ' + ('even' if (count % 2) else 'odd')
+            w.rowstyle += ('even' if (count % 2) else 'odd')
 
             count += 1
 
