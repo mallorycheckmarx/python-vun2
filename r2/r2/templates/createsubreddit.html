@@ -277,35 +277,65 @@
                 i=0;
             });
         </script>
-        <li>
+        <li class="left">
           <input type="text" name="link-url-0" id="link-url-0"
                  value="${thing.site.link_urls_0}"
                  />
         </li>
-        <li>
+        
+        <li class="right">
+          <input type="text" name="link-url-title-0" id="link-url-title-0"
+                 value="${thing.site.link_urls_title_0}"
+                 />
+        </li>
+        
+        <li class="left">
           <input type="text" name="link-url-1" id="link-url-1"
                  value="${thing.site.link_urls_1}"
                  />
         </li>
-        <li>
+        <li class="right">
+          <input type="text" name="link-url-title-1" id="link-url-title-1"
+                 value="${thing.site.link_urls_title_1}"
+                 />
+        </li>
+        <li class="left">
           <input type="text" name="link-url-2" id="link-url-2"
                  value="${thing.site.link_urls_2}"
                  />
         </li>
-        <li>
+         <li class="right">
+          <input type="text" name="link-url-title-2" id="link-url-title-2"
+                 value="${thing.site.link_urls_title_2}"
+                 />
+        </li>
+        <li class="left">
           <input type="text" name="link-url-3" id="link-url-3"
                  value="${thing.site.link_urls_3}"
                  />
         </li>
-        <li>
+        <li class="right">
+          <input type="text" name="link-url-title-3" id="link-url-title-3"
+                 value="${thing.site.link_urls_title_3}"
+                 />
+        </li>
+        <li class="left">
           <input type="text" name="link-url-4" id="link-url-4"
                  value="${thing.site.link_urls_4}"
                  />
         </li>
+        
+       
+        
+        <li class="right">
+          <input type="text" name="link-url-title-4" id="link-url-title-4"
+                 value="${thing.site.link_urls_title_4}"
+                 />
+        </li>
 
       </ul>
-      <button type="button" id="add-button" onclick="add()">Add link</button>
-      <button type="button" id="remove-button" onclick="remove()">Remove link</button>
+      <div class="clear"></div>
+      
     </%utils:line_field>
 
   %if c.user_is_admin:

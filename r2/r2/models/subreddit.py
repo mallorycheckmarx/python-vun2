@@ -78,6 +78,11 @@ class Subreddit(Thing, Printable):
                      link_urls_2 = None,
                      link_urls_3 = None,
                      link_urls_4 = None,
+                     link_urls_title_0 = None,
+                     link_urls_title_1 = None,
+                     link_urls_title_2 = None,
+                     link_urls_title_3 = None,
+                     link_urls_title_4 = None,
                      # do we allow self-posts, links only, or any?
                      link_type = 'any', # one of ('link', 'self', 'any')
                      flair_enabled = True,
@@ -222,6 +227,26 @@ class Subreddit(Thing, Printable):
     @property
     def link_urls_4(self):
         return self._base.link_urls_4 if self._base else ""
+    
+    @property
+    def link_urls_title_0(self):
+       return self._base.link_urls_title_0 if self._base else ""
+    
+    @property
+    def link_urls_title_1(self):
+        return self._base.link_urls_title_1 if self._base else ""
+       
+    @property
+    def link_urls_title_2(self):
+        return self._base.link_urls_title_2 if self._base else ""
+    
+    @property
+    def link_urls_title_3(self):
+        return self._base.link_urls_title_3 if self._base else ""
+    
+    @property
+    def link_urls_title_4(self):
+        return self._base.link_urls_title_4 if self._base else ""
     
     def has_custom_menu(self):
         return not (self._base.link_urls_0 == "" or

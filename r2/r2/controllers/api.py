@@ -1252,6 +1252,11 @@ class ApiController(RedditController):
                    link_urls_2 = VLength('link-url-2', max_length = 500),
                    link_urls_3 = VLength('link-url-3', max_length = 500),
                    link_urls_4 = VLength('link-url-4', max_length = 500),
+                   link_urls_title_0 = VLength('link-url-title-0', max_length = 500),
+                   link_urls_title_1 = VLength('link-url-title-1', max_length = 500),
+                   link_urls_title_2 = VLength('link-url-title-2', max_length = 500),
+                   link_urls_title_3 = VLength('link-url-title-3', max_length = 500),
+                   link_urls_title_4 = VLength('link-url-title-4', max_length = 500),
                  
                    
                    )
@@ -1267,8 +1272,10 @@ class ApiController(RedditController):
                            'show_media', 'show_cname_sidebar', 'type', 'link_type', 'lang',
                            "css_on_cname", "header_title", 
                            'allow_top', 'link_urls_0', 'link_urls_1',
-                           'link_urls_2', 'link_urls_3', 'link_urls_4'))
-        print kw
+                           'link_urls_2', 'link_urls_3', 'link_urls_4',
+                           'link_urls_title_0', 'link_urls_title_1',
+                           'link_urls_title_2', 'link_urls_title_3', 'link_urls_title_4',))
+        
         #if a user is banned, return rate-limit errors
         if c.user._spam:
             time = timeuntil(datetime.now(g.tz) + timedelta(seconds=600))

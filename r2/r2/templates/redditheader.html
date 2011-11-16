@@ -67,14 +67,23 @@
           link_url_3 = c.site.link_urls_3
         if c.site.link_urls_4:
           link_url_4 = c.site.link_urls_4
+        if c.site.link_urls_title_0:
+          link_url_title_0 = c.site.link_urls_title_0
+        if c.site.link_urls_title_1:
+          link_url_title_1 = c.site.link_urls_title_1
+        if c.site.link_urls_title_2:
+          link_url_title_2 = c.site.link_urls_title_2
+        if c.site.link_urls_title_3:
+          link_url_title_3 = c.site.link_urls_title_3
+        if c.site.link_urls_title_4:
+          link_url_title_4 = c.site.link_urls_title_4
       %>
-      %if c.site.link_urls_0:
-        <a href="${c.site.link_urls_0}">TEST LINK</a>
+      %if c.site.link_urls_0 and c.site.link_urls_title_0:
+        <a href="${c.site.link_urls_0}" title="${c.site.link_urls_title_0}">TEST LINK</a>
         %endif
-      %if c.site.link_urls_1:
-        <a href="${c.site.link_urls_1}">TEST LINK 2</a>
+      %if c.site.link_urls_1 and c.site.link_urls_title_1:
+        <a href="${c.site.link_urls_1}" title="${c.site.link_urls_title_1}">TEST LINK 2</a>
         %endif
-
       </ul>
       %endif
 
