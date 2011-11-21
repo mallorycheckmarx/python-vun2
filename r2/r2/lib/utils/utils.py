@@ -251,7 +251,7 @@ def get_title(url):
         opener = urlopen(url, timeout=15)
         text = opener.read(1024)
         opener.close()
-        bs = BeautifulSoup(text)
+        bs = BeautifulSoup(text, convertEntities=BeautifulSoup.HTML_ENTITIES)
         if not bs:
             return
 
