@@ -99,7 +99,10 @@ class Validator(object):
                 else:
                     val = self.default
                 a.append(val)
-        return self.run(*a)
+        if len(a) > 1:
+            return self.run(a)
+        else:
+            return self.run(*a)
 
 
 def build_arg_list(fn, env):
@@ -422,6 +425,27 @@ class VLength(Validator):
             self.set_error(self.length_error, {'max_length': self.max_length})
         else:
             return text
+        
+class VTest(Validator):
+    only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
+
+    def __init__(self, param, max_length,
+                 empty_error = errors.NO_TEXT,
+                 length_error = errors.TOO_LONG,
+                 **kw):
+        Validator.__init__(self, param, **kw)
+        self.max_length = max_length
+        self.length_error = length_error
+        self.empty_error = empty_error
+
+    def run(self, text, text2 = ''):
+        text = text or text2
+        for t in text:
+            if self.empty_error and (not t or self.only_whitespace.match(t)):
+                self.set_error(self.empty_error)
+            elif len(t) > self.max_length:
+                self.set_error(self.length_error, {'max_length': self.max_length})
+        return text
 
 class VPrintable(VLength):
     def run(self, text, text2 = ''):

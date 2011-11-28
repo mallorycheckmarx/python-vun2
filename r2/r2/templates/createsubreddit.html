@@ -275,65 +275,26 @@
             $(window).load(function(){
                 document.getElementById("remove-button").style.visibility = "hidden";
                 i=0;
-            });
+            });url
         </script>
-        <li class="left">
-          <input type="text" name="link-url-0" id="link-url-0"
-                 value="${thing.site.link_urls_0}"
+         %for i in range(len(thing.site.link_urls)):
+         <li class="left">
+          <input type="text" name="${'link-url-' + str(i)}" id="${'link-url-' + str(i)}"
+                 value="${thing.site.link_urls[i]}"
                  />
         </li>
         
         <li class="right">
-          <input type="text" name="link-url-title-0" id="link-url-title-0"
-                 value="${thing.site.link_urls_title_0}"
+          <input type="text" name="${'link-url-title-' + str(i)}" id="${'link-url-title-' + str(i)}"
+                 value="${thing.site.link_urls_titles[i]}"
                  />
         </li>
+         %endfor
+         
         
-        <li class="left">
-          <input type="text" name="link-url-1" id="link-url-1"
-                 value="${thing.site.link_urls_1}"
-                 />
-        </li>
-        <li class="right">
-          <input type="text" name="link-url-title-1" id="link-url-title-1"
-                 value="${thing.site.link_urls_title_1}"
-                 />
-        </li>
-        <li class="left">
-          <input type="text" name="link-url-2" id="link-url-2"
-                 value="${thing.site.link_urls_2}"
-                 />
-        </li>
-         <li class="right">
-          <input type="text" name="link-url-title-2" id="link-url-title-2"
-                 value="${thing.site.link_urls_title_2}"
-                 />
-        </li>
-        <li class="left">
-          <input type="text" name="link-url-3" id="link-url-3"
-                 value="${thing.site.link_urls_3}"
-                 />
-        </li>
-        <li class="right">
-          <input type="text" name="link-url-title-3" id="link-url-title-3"
-                 value="${thing.site.link_urls_title_3}"
-                 />
-        </li>
-        <li class="left">
-          <input type="text" name="link-url-4" id="link-url-4"
-                 value="${thing.site.link_urls_4}"
-                 />
-        </li>
-        
-       
-        
-        <li class="right">
-          <input type="text" name="link-url-title-4" id="link-url-title-4"
-                 value="${thing.site.link_urls_title_4}"
-                 />
-        </li>
-
       </ul>
+      <button type="button" id="add-button" onclick="add()">Add link</button>
+      <button type="button" id="remove-button" onclick="remove()">Remove link</button>
       <div class="clear"></div>
       
     </%utils:line_field>

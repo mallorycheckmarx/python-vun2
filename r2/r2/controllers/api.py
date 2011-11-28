@@ -1247,35 +1247,21 @@ class ApiController(RedditController):
                    sponsor_name =VLength('sponsorship-name', max_length = 64),
                    sponsor_url = VLength('sponsorship-url', max_length = 500),
                    css_on_cname = VBoolean("css_on_cname"),
-                   link_urls_0 = VLength('link-url-0', max_length = 500),
-                   link_urls_1 = VLength('link-url-1', max_length = 500),
-                   link_urls_2 = VLength('link-url-2', max_length = 500),
-                   link_urls_3 = VLength('link-url-3', max_length = 500),
-                   link_urls_4 = VLength('link-url-4', max_length = 500),
-                   link_urls_title_0 = VLength('link-url-title-0', max_length = 500),
-                   link_urls_title_1 = VLength('link-url-title-1', max_length = 500),
-                   link_urls_title_2 = VLength('link-url-title-2', max_length = 500),
-                   link_urls_title_3 = VLength('link-url-title-3', max_length = 500),
-                   link_urls_title_4 = VLength('link-url-title-4', max_length = 500),
-                 
-                   
+                   link_urls = VTest(['link-url-0','link-url-1', 'link-url-2', 'link-url-3', 'link-url-4', 'link-url-5', 'link-url-6'], max_length = 500),
+                   link_urls_titles = VTest(['link-url-title-0','link-url-title-1', 'link-url-title-2', 'link-url-title-3', 'link-url-title-4', 'link-url-title-5', 'link-url-title-6'], max_length = 500),
                    )
     
     def POST_site_admin(self, form, jquery, name, ip, sr,
                         sponsor_text, sponsor_url, sponsor_name, **kw):
         # the status button is outside the form -- have to reset by hand
-        print "site_admin"
         form.parent().set_html('.status', "")
         redir = False
         kw = dict((k, v) for k, v in kw.iteritems()
                   if k in ('name', 'title', 'domain', 'description', 'over_18',
                            'show_media', 'show_cname_sidebar', 'type', 'link_type', 'lang',
                            "css_on_cname", "header_title", 
-                           'allow_top', 'link_urls_0', 'link_urls_1',
-                           'link_urls_2', 'link_urls_3', 'link_urls_4',
-                           'link_urls_title_0', 'link_urls_title_1',
-                           'link_urls_title_2', 'link_urls_title_3', 'link_urls_title_4',))
-        
+                           'allow_top', 'link_urls', 'link_urls_titles',))
+        print kw
         #if a user is banned, return rate-limit errors
         if c.user._spam:
             time = timeuntil(datetime.now(g.tz) + timedelta(seconds=600))
