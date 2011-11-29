@@ -99,10 +99,43 @@ class Validator(object):
                 else:
                     val = self.default
                 a.append(val)
-        if len(a) > 1:
-            return self.run(a)
+        return self.run(*a)
+    
+class Validator1(object):
+    default_param = None
+    def __init__(self, param=None, default=None, post=True, get=True, url=True):
+        if param:
+            self.param = param
         else:
-            return self.run(*a)
+            self.param = self.default_param
+
+        self.default = default
+        self.post, self.get, self.url = post, get, url
+
+    def set_error(self, error, msg_params = {}, field = False):
+        """
+        Adds the provided error to c.errors and flags that it is come
+        from the validator's param
+        """
+        if field is False:
+            field = self.param
+
+        c.errors.add(error, msg_params = msg_params, field = field)
+
+    def __call__(self, url):
+        a = []
+        if self.param:
+            for p in utils.tup(self.param):
+                if self.post and request.post.get(p):
+                    val = request.post[p]
+                elif self.get and request.get.get(p):
+                    val = request.get[p]
+                elif self.url and url.get(p):
+                    val = url[p]
+                else:
+                    val = self.default
+                a.append(val)
+        return self.run(a)
 
 
 def build_arg_list(fn, env):
@@ -426,14 +459,14 @@ class VLength(Validator):
         else:
             return text
         
-class VTest(Validator):
+class VTest(Validator1):
     only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
 
     def __init__(self, param, max_length,
                  empty_error = errors.NO_TEXT,
                  length_error = errors.TOO_LONG,
                  **kw):
-        Validator.__init__(self, param, **kw)
+        Validator1.__init__(self, param, **kw)
         self.max_length = max_length
         self.length_error = length_error
         self.empty_error = empty_error
