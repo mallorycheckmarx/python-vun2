@@ -266,7 +266,7 @@ def get_title(url):
         return None
 
 valid_schemes = ('http', 'https', 'ftp', 'mailto')
-valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
+valid_dns = re.compile('\A[-a-zA-Z0-9:]+\Z')
 def sanitize_url(url, require_scheme = False):
     """Validates that the url is of the form
 
