@@ -1247,8 +1247,8 @@ class ApiController(RedditController):
                    sponsor_name =VLength('sponsorship-name', max_length = 64),
                    sponsor_url = VLength('sponsorship-url', max_length = 500),
                    css_on_cname = VBoolean("css_on_cname"),
-                   link_urls = VTest(['link-url-0','link-url-1', 'link-url-2', 'link-url-3', 'link-url-4', 'link-url-5', 'link-url-6'], max_length = 500),
-                   link_urls_titles = VTest(['link-url-title-0','link-url-title-1', 'link-url-title-2', 'link-url-title-3', 'link-url-title-4', 'link-url-title-5', 'link-url-title-6'], max_length = 500),
+                   link_urls = VList(['link-url-0','link-url-1', 'link-url-2', 'link-url-3', 'link-url-4', 'link-url-5', 'link-url-6'], max_length = 500),
+                   link_urls_titles = VList(['link-url-title-0','link-url-title-1', 'link-url-title-2', 'link-url-title-3', 'link-url-title-4', 'link-url-title-5', 'link-url-title-6'], max_length = 500),
                    )
     
     def POST_site_admin(self, form, jquery, name, ip, sr,

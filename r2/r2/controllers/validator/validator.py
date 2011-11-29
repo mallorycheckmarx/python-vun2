@@ -101,7 +101,7 @@ class Validator(object):
                 a.append(val)
         return self.run(*a)
     
-class Validator1(object):
+class ValidatorList(object):
     default_param = None
     def __init__(self, param=None, default=None, post=True, get=True, url=True):
         if param:
@@ -459,14 +459,14 @@ class VLength(Validator):
         else:
             return text
         
-class VTest(Validator1):
+class VList(ValidatorList):
     only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
 
     def __init__(self, param, max_length,
                  empty_error = errors.NO_TEXT,
                  length_error = errors.TOO_LONG,
                  **kw):
-        Validator1.__init__(self, param, **kw)
+        ValidatorList.__init__(self, param, **kw)
         self.max_length = max_length
         self.length_error = length_error
         self.empty_error = empty_error
