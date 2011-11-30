@@ -57,7 +57,7 @@
     %if True:
       <ul class="custom_menu">
       %for i in range(len(c.site.link_urls)):
-	        <li><a href="${c.site.link_urls[i]}" title="${c.site.link_urls_titles[i]}">TEST LINK</a></li>
+	        <li><a href="${c.site.link_urls[i]}" title="${c.site.link_urls_titles[i]}">${c.site.link_urls_titles[i]}</a></li>
 	      
 	  %endfor
 	  </ul>
@@ -67,8 +67,6 @@
     %for toolbar in thing.toolbars:
       ${toolbar}
     %endfor
-
-    ${c.site.header}
 
   </div>
 

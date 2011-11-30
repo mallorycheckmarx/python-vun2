@@ -242,15 +242,16 @@
 
     <%utils:line_field title="${_('custom menus')}">
       <ul class="upload" id="menu-links">
+        <li><span class="gray">(${_("all links must start with http://")})</span></li>
         <script language="javascript">
             function add() {
                 i++;
                 var li = document.createElement("li");
-                li.setAttribute("id", "link-url-"+i);
+                li.setAttribute("id", "menu-item-" + (i - 1));
 
                 var list = document.getElementById("menu-links");
 
-                li.innerHTML = "<input type=\"text\" id=\"link-url-"+i+"\" value=\"${''}\" />";
+                li.innerHTML = "<input type=\"text\" id=\"link-url-"+(i - 1)+"\" placeholder=\"link URL\" value=\"${''}\" /><input type=\"text\" id=\"link-url-title-"+(i - 1)+"\" placeholder=\"link title\" value=\"${''}\" />";
 
                 list.appendChild(li);
                 if(i >= 1){
@@ -262,39 +263,38 @@
             function remove() {
                 var d = document.getElementById("menu-links");
 
-                var olddiv = document.getElementById("link-url-" + i);
+                var olddiv = document.getElementById("menu-item-" + --i);
 
                 d.removeChild(olddiv);
-
-                i--;
                 if(i < 1){
                     document.getElementById("remove-button").style.visibility = "hidden";
                     }
                 }
 
             $(window).load(function(){
-                document.getElementById("remove-button").style.visibility = "hidden";
-                i=0;
-            });url
+                i=${len(thing.site.link_urls)};
+                if(i < 1){
+                    document.getElementById("remove-button").style.visibility = "hidden";
+                }
+            });
         </script>
          %for i in range(len(thing.site.link_urls)):
-         <li class="left">
-          <input type="text" name="${'link-url-' + str(i)}" id="${'link-url-' + str(i)}"
+         <li id="${'menu-item-' + str(i)}" name="${'menu-item-' + str(i)}">
+          <input type="text" name="${'link-url-' + str(i)}" placeholder="link URL" id="${'link-url-' + str(i)}"
                  value="${thing.site.link_urls[i]}"
                  />
-        </li>
-        
-        <li class="right">
-          <input type="text" name="${'link-url-title-' + str(i)}" id="${'link-url-title-' + str(i)}"
+
+          <input type="text" name="${'link-url-title-' + str(i)}" placeholder="link title" id="${'link-url-title-' + str(i)}"
                  value="${thing.site.link_urls_titles[i]}"
                  />
         </li>
          %endfor
-         
-        
+
       </ul>
-      <button type="button" id="add-button" onclick="add()">Add link</button>
-      <button type="button" id="remove-button" onclick="remove()">Remove link</button>
+
+          <button type="button" id="add-button" onclick="add()">Add link</button>
+          <button type="button" id="remove-button" onclick="remove()">Remove link</button> 
+
       <div class="clear"></div>
       
     </%utils:line_field>
