@@ -245,17 +245,21 @@
         <li><span class="gray">(${_("all links must start with http://")})</span></li>
         <script language="javascript">
             function add() {
-                i++;
                 var li = document.createElement("li");
-                li.setAttribute("id", "menu-item-" + (i - 1));
+                li.setAttribute("id", "menu-item-" + i);
 
                 var list = document.getElementById("menu-links");
 
-                li.innerHTML = "<input type=\"text\" id=\"link-url-"+(i - 1)+"\" placeholder=\"link URL\" value=\"${''}\" /><input type=\"text\" id=\"link-url-title-"+(i - 1)+"\" placeholder=\"link title\" value=\"${''}\" />";
+                li.innerHTML = "<input type=\"text\" id=\"link-url-"+i+"\" name=\"link-url-"+i+"\" placeholder=\"link URL\" /> " +
+                               "<input type=\"text\" id=\"link-url-title-"+i+"\" name=\"link-url-title-"+i+"\" placeholder=\"link title\" />";
 
                 list.appendChild(li);
+                i++;
                 if(i >= 1){
                     document.getElementById("remove-button").style.visibility = "visible";
+                    }
+                if(i >= 7){
+                    document.getElementById("add-button").style.visibility = "hidden";
                     }
  
                 }
@@ -279,7 +283,7 @@
             });
         </script>
          %for i in range(len(thing.site.link_urls)):
-         <li id="${'menu-item-' + str(i)}" name="${'menu-item-' + str(i)}">
+         <li id="${'menu-item-' + str(i)}">
           <input type="text" name="${'link-url-' + str(i)}" placeholder="link URL" id="${'link-url-' + str(i)}"
                  value="${thing.site.link_urls[i]}"
                  />
