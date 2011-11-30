@@ -833,7 +833,7 @@ class RedditController(MinimalController):
         if c.user_is_loggedin and not c.allow_loggedin_cache:
             return
 
-        if c.site.over_18 and not c.over18: return
+        if c.site.over_18 and not c.over18 and action == 'comments': return
         
         last_modified = utils.last_modified_date(thing, action)
         date_str = http_utils.http_date_str(last_modified)
