@@ -53,20 +53,18 @@
     ##keeps the height of the header from varying when there isnt any content
     &nbsp;
 
-    ##custom menu for subreddits
-    %if True:
-      <ul class="custom_menu">
-      %for i in range(len(c.site.link_urls)):
-	        <li><a href="${c.site.link_urls[i]}" title="${c.site.link_urls_titles[i]}">${c.site.link_urls_titles[i]}</a></li>
-	      
-	  %endfor
-	  </ul>
-	%endif
-    &nbsp;
-
     %for toolbar in thing.toolbars:
       ${toolbar}
     %endfor
+
+    ##custom menu for subreddits
+    %if not isinstance(c.site, FakeSubreddit):
+      <ul class="custom_menu">
+      %for i in range(len(c.site.link_urls)):
+	    <li><a href="${c.site.link_urls[i]}" title="${c.site.link_urls_titles[i]}">${c.site.link_urls_titles[i]}</a></li>
+	  %endfor
+	  </ul>
+	%endif
 
   </div>
 

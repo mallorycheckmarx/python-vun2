@@ -371,6 +371,27 @@ ul.flat-vert {text-align: left;}
     z-index: 100;
 }
 
+.custom_menu {
+    position: absolute;
+    top: 19px;
+    left: 188px;
+    float: left;
+    display: inline;
+    z-index: -1;
+}
+
+.custom_menu li {
+    display: inline;
+    font-weight: bold;
+    margin: 0px 3px;
+}
+
+.custom_menu li a {
+    padding: 1px 6px 2px 6px;
+    background-color: #eff7ff;
+    border: 1px solid #5f99cf;
+ }
+
 .tabpane-content { border: 1px solid #5f99cf; padding: 4px 4px 4px 4px; }
 
 #search input[type=text] {
