@@ -452,6 +452,21 @@ ul.flat-vert {text-align: left;}
     background-image: url(/static/gradient-nub-hover.png);  /* SPRITE */
 }
 
+.morelink .nub-rtl {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    height: 31px;
+    width: 24px;
+    background: white none no-repeat scroll center left;
+    background-image: url(/static/gradient-nub-rtl.png);  /* SPRITE */
+}
+
+.morelink:hover .nub-rtl, .mlhn {
+    background-image: url(/static/gradient-nub-hover-rtl.png);  /* SPRITE */
+}
+
+
 /* raised box */
 
 .raisedbox {
