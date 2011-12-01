@@ -1746,7 +1746,7 @@ class FrameToolbar(Wrapped):
 class NewLink(Templated):
     """Render the link submission form"""
     def __init__(self, captcha = None, url = '', title= '', subreddits = (),
-                 then = 'comments'):
+                 then = 'comments', resubmit=False):
 
         self.show_link = self.show_self = False
 
@@ -1776,6 +1776,8 @@ class NewLink(Templated):
             self.formtabs_menu = JsNavMenu(buttons, type = 'formtab')
 
         self.sr_searches = simplejson.dumps(popular_searches())
+
+        self.resubmit = resubmit
 
         self.on_default_sr = c.default_sr
 
