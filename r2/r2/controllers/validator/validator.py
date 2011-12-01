@@ -100,43 +100,6 @@ class Validator(object):
                     val = self.default
                 a.append(val)
         return self.run(*a)
-    
-class ValidatorList(object):
-    default_param = None
-    def __init__(self, param=None, default=None, post=True, get=True, url=True):
-        if param:
-            self.param = param
-        else:
-            self.param = self.default_param
-
-        self.default = default
-        self.post, self.get, self.url = post, get, url
-
-    def set_error(self, error, msg_params = {}, field = False):
-        """
-        Adds the provided error to c.errors and flags that it is come
-        from the validator's param
-        """
-        if field is False:
-            field = self.param
-
-        c.errors.add(error, msg_params = msg_params, field = field)
-
-    def __call__(self, url):
-        a = []
-        if self.param:
-            for p in utils.tup(self.param):
-                if self.post and request.post.get(p):
-                    val = request.post[p]
-                elif self.get and request.get.get(p):
-                    val = request.get[p]
-                elif self.url and url.get(p):
-                    val = url[p]
-                else:
-                    val = self.default
-                a.append(val)
-        return self.run(a)
-
 
 def build_arg_list(fn, env):
     """given a fn and and environment the builds a keyword argument list
@@ -459,20 +422,20 @@ class VLength(Validator):
         else:
             return text
         
-class VList(ValidatorList):
+class VCustomMenu(Validator):
     only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
 
     def __init__(self, param, max_length,
                  empty_error = errors.NO_TEXT,
                  length_error = errors.TOO_LONG,
                  **kw):
-        ValidatorList.__init__(self, param, **kw)
+        Validator.__init__(self, param, **kw)
         self.max_length = max_length
         self.length_error = length_error
         self.empty_error = empty_error
-
-    def run(self, text, text2 = ''):
-        text = text or text2
+    
+    def run(self, link1, link2, link3, link4, link5, link6, link7):
+        text = [link1,link2,link3,link4,link5,link6,link7]
         for t in text:
             if self.empty_error and (not t or self.only_whitespace.match(t)):
                 self.set_error(self.empty_error)

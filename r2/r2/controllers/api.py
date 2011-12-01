@@ -1222,7 +1222,21 @@ class ApiController(RedditController):
             c.site._commit()
             return UploadedImage(_('saved'), new_url, name, 
                                  errors=errors, form_id=form_id).render()
-
+                                 
+    #checks for mismatched fields, empty fields and removes them
+    def customMenu(self, kw):
+        if 'link_urls' in kw and 'link_urls_titles' in kw:
+            link_urls = kw['link_urls']
+            link_urls_titles = kw['link_urls_titles']
+            for i in range(len(link_urls)):
+                if not (link_urls[i] and link_urls_titles[i]):
+                    kw['link_urls'][i] = None
+                    kw['link_urls_titles'][i] = None
+            temp = filter(lambda x: x, link_urls)
+            kw['link_urls'] = temp
+            temp2 = filter(lambda x: x, link_urls_titles)
+            kw['link_urls_titles'] = temp2
+            
     @validatedForm(VUser(),
                    VModhash(),
                    VRatelimit(rate_user = True,
@@ -1246,8 +1260,8 @@ class ApiController(RedditController):
                    sponsor_name =VLength('sponsorship-name', max_length = 64),
                    sponsor_url = VLength('sponsorship-url', max_length = 500),
                    css_on_cname = VBoolean("css_on_cname"),
-                   link_urls = VList(['link-url-0','link-url-1', 'link-url-2', 'link-url-3', 'link-url-4', 'link-url-5', 'link-url-6'], max_length = 100), #add up to 7 links
-                   link_urls_titles = VList(['link-url-title-0','link-url-title-1', 'link-url-title-2', 'link-url-title-3', 'link-url-title-4', 'link-url-title-5', 'link-url-title-6'], max_length = 100),#paired with link_urls
+                   link_urls = VCustomMenu(['link-url-0','link-url-1', 'link-url-2', 'link-url-3', 'link-url-4', 'link-url-5', 'link-url-6'], max_length = 100), #add up to 7 links
+                   link_urls_titles = VCustomMenu(['link-url-title-0','link-url-title-1', 'link-url-title-2', 'link-url-title-3', 'link-url-title-4', 'link-url-title-5', 'link-url-title-6'], max_length = 100),
                    )
     
     def POST_site_admin(self, form, jquery, name, ip, sr,
@@ -1260,24 +1274,7 @@ class ApiController(RedditController):
                            'show_media', 'show_cname_sidebar', 'type', 'link_type', 'lang',
                            "css_on_cname", "header_title", 
                            'allow_top', 'link_urls', 'link_urls_titles',))
-        
-        
-        #checks for mismatched fields and empty fields and removes them
-        if 'link_urls' in kw and 'link_urls_titles' in kw:
-            link_urls = kw['link_urls']
-            link_urls_titles = kw['link_urls_titles']
-            print 'link_urls:', link_urls
-            print 'link_urls_titles:', link_urls_titles
-            for i in range(len(link_urls)):
-                print i
-                if not (link_urls[i] and link_urls_titles[i]):
-                    kw['link_urls'][i] = None
-                    kw['link_urls_titles'][i] = None
-            temp = filter(lambda x: x, link_urls)
-            kw['link_urls'] = temp
-            temp2 = filter(lambda x: x, link_urls_titles)
-            kw['link_urls_titles'] = temp2
-            
+        self.customMenu(kw)
         #if a user is banned, return rate-limit errors
         if c.user._spam:
             time = timeuntil(datetime.now(g.tz) + timedelta(seconds=600))
