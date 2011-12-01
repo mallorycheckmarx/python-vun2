@@ -373,23 +373,23 @@ ul.flat-vert {text-align: left;}
 
 .custom_menu {
     position: absolute;
-    top: 19px;
+    bottom: 29px;
     left: 188px;
-    float: left;
-    display: inline;
-    z-index: -1;
+    display: inline-block;
+    list-style-type: none;
+    white-space: nowrap;
 }
 
 .custom_menu li {
     display: inline;
     font-weight: bold;
-    margin: 0px 3px;
+    padding: 4px 3px 0px;
 }
 
 .custom_menu li a {
     padding: 1px 6px 2px 6px;
     background-color: #eff7ff;
-    border: 1px solid #5f99cf;
+
  }
 
 .tabpane-content { border: 1px solid #5f99cf; padding: 4px 4px 4px 4px; }
@@ -3009,6 +3009,8 @@ ul#image-preview-list .description pre {
     text-transform: uppercase;
     border-bottom: 1px solid gray;
     font-size: 90%;
+    position: relative;
+    z-index: 1;
  }
 
 #sr-header-area .selected a {
