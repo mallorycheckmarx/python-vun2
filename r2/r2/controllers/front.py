@@ -418,7 +418,6 @@ class FrontController(RedditController):
 
     def _edit_modcontrib_reddit(self, location, num, after, reverse, count, created):
         extension_handling = False
-
         if not c.user_is_loggedin:
             return self.abort404()
         if isinstance(c.site, ModSR):
@@ -490,7 +489,7 @@ class FrontController(RedditController):
             return Reddit(content = Wrapped(c.site)).render()
         else:
             return self.abort404()
-
+        print pane
         return EditReddit(content = pane,
                           extension_handling = extension_handling).render()
 

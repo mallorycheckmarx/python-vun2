@@ -72,6 +72,8 @@ class Subreddit(Thing, Printable):
                      sponsorship_url = None,
                      sponsorship_img = None,
                      sponsorship_name = None,
+                     link_urls = [], 
+                     link_urls_titles = [],
                      # do we allow self-posts, links only, or any?
                      link_type = 'any', # one of ('link', 'self', 'any')
                      flair_enabled = True,
@@ -196,6 +198,21 @@ class Subreddit(Thing, Printable):
     @property
     def flair(self):
         return self.flair_ids()
+
+    @property
+    def link_urls(self):
+        return self._base.link_urls if self.base else []
+    
+    @property
+    def link_urls_titles(self):
+        return self._base.link_urls_titles if self.base else []
+    
+#    def has_custom_menu(self):
+#        return not (self._base.link_urls_0 == "" or
+#                    self._base.link_urls_1 == "" or
+#                    self._base.link_urls_2 == "" or
+#                    self._base.link_urls_3 == "" or
+#                    self._base.link_urls_4 == "")
 
     def spammy(self):
         return self._spam
@@ -843,8 +860,7 @@ class DefaultSR(_DefaultSR):
     @property
     def sponsorship_img(self):
         return self._base.sponsorship_img if self._base else ""
-
-
+      
 
 class MultiReddit(_DefaultSR):
     name = 'multi'

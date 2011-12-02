@@ -26,7 +26,12 @@
   <div class="morelink">
     ${plain_link(thing.title, thing.link, _sr_path=thing.sr_path,
                  _class='login-required', nocname=thing.nocname)}
+    
+    %if c.lang_rtl:
+    <div class="nub-rtl"> </div>
+    %else:
     <div class="nub"> </div>
+    %endif:
   </div>
 
   %if thing.subtitles:
