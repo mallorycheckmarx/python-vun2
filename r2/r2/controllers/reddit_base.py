@@ -25,7 +25,7 @@ from pylons.controllers.util import abort, redirect_to
 from pylons.i18n import _
 from pylons.i18n.translation import LanguageError
 from r2.lib.base import BaseController, proxyurl
-from r2.lib import pages, utils, filters, amqp
+from r2.lib import pages, utils, filters, amqp, stats
 from r2.lib.utils import http_utils, is_subdomain, UniqueIterator, ip_and_slash16
 from r2.lib.cache import LocalCache, make_key, MemcachedError
 import random as rand
@@ -504,6 +504,10 @@ def cross_domain(origin_check=is_trusted_origin, **options):
         return cross_domain_handler
     return cross_domain_wrap
 
+def require_https():
+    if not c.secure:
+        abort(403)
+
 class MinimalController(BaseController):
 
     allow_stylesheets = False
@@ -521,6 +525,7 @@ class MinimalController(BaseController):
                         c.lang,
                         c.content_langs,
                         request.host,
+                        c.secure,
                         c.cname,
                         request.fullpath,
                         c.over18,
@@ -539,6 +544,8 @@ class MinimalController(BaseController):
 
         c.domain_prefix = request.environ.get("reddit-domain-prefix",
                                               g.domain_prefix)
+        c.secure = request.host in g.secure_domains
+
         #check if user-agent needs a dose of rate-limiting
         if not c.error_page:
             ratelimit_agents()
@@ -597,6 +604,9 @@ class MinimalController(BaseController):
             response.headers['Cache-Control'] = 'no-cache'
             response.headers['Pragma'] = 'no-cache'
 
+        if c.deny_frames:
+            response.headers["X-Frame-Options"] = "DENY"
+
         #return
         #set content cache
         if (g.page_cache_time
@@ -621,30 +631,35 @@ class MinimalController(BaseController):
                                     domain  = v.domain,
                                     expires = v.expires)
 
-        if g.usage_sampling <= 0.0:
-            return
+        end_time = datetime.now(g.tz)
 
+        if ('pylons.routes_dict' in request.environ and
+            'action' in request.environ['pylons.routes_dict']):
+            action = str(request.environ['pylons.routes_dict']['action'])
+        else:
+            action = "unknown"
+            log_text("unknown action", "no action for %r" % path_info,
+                     "warning")
         if g.usage_sampling >= 1.0 or rand.random() < g.usage_sampling:
-            if ('pylons.routes_dict' in request.environ and
-                'action' in request.environ['pylons.routes_dict']):
-                action = str(request.environ['pylons.routes_dict']['action'])
-            else:
-                action = "unknown"
-                log_text("unknown action",
-                         "no action for %r" % path_info,
-                         "warning")
-
-            amqp.add_kw("usage_q",
-                        start_time = c.start_time,
-                        end_time = datetime.now(g.tz),
-                        sampling_rate = g.usage_sampling,
-                        action = action)
+            amqp.add_kw(
+                "request_info",
+                ip=request.ip,
+                start_time=c.start_time,
+                end_time=end_time,
+                sampling_rate=g.usage_sampling,
+                action=action,
+                headers=dict(request.headers)
+            )
 
         # this thread is probably going to be reused, but it could be
         # a while before it is. So we might as well dump the cache in
         # the mean time so that we don't have dead objects hanging
         # around taking up memory
         g.reset_caches()
+
+        # push data to statsd
+        g.stats.transact('web.%s' % action,
+                         (end_time - c.start_time).total_seconds())
 
     def abort404(self):
         abort(404, "not found")
@@ -666,7 +681,7 @@ class MinimalController(BaseController):
 
         action = request.environ["pylons.routes_dict"]["action_name"]
 
-        handler = getattr(self, method + "_" + action, None)
+        handler = self._get_action_handler(action, method)
         cors = handler and getattr(handler, "cors_perms", None)
 
         if cors and cors["origin_check"](origin):
@@ -692,7 +707,6 @@ class MinimalController(BaseController):
         data = simplejson.dumps(kw)
         c.response.content = filters.websafe_json(data)
         return c.response
-
 
 
 class RedditController(MinimalController):
@@ -725,7 +739,6 @@ class RedditController(MinimalController):
                 #can't handle broken cookies
                 request.environ['HTTP_COOKIE'] = ''
 
-        c.secure = request.host in g.secure_domains
         c.firsttime = firsttime()
 
         # the user could have been logged in via one of the feeds 

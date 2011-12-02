@@ -29,7 +29,7 @@ from r2.lib.utils import TimeoutFunction, TimeoutFunctionException
 from r2.lib.db.operators import desc
 from r2.lib.scraper import make_scraper, str_to_image, image_to_str, prepare_image
 from r2.lib import amqp
-from r2.lib.contrib.nymph import optimize_png
+from r2.lib.nymph import optimize_png
 
 import Image
 
@@ -174,6 +174,7 @@ def force_thumbnail(link, image_data, never_expire=True, file_type=".jpg"):
     update_link(link, thumbnail=thumb_url, media_object=None, thumbnail_size=image.size)
 
 def run():
+    @g.stats.amqp_processor('scraper_q')
     def process_link(msg):
         def _process_link(fname):
             link = Link._by_fullname(fname, data=True)

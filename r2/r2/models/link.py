@@ -29,7 +29,7 @@ from subreddit import Subreddit
 from printable import Printable
 from r2.config import cache
 from r2.lib.memoize import memoize
-from r2.lib.filters import profanity_filter, _force_utf8
+from r2.lib.filters import _force_utf8
 from r2.lib import utils
 from r2.lib.log import log_text
 from mako.filters import url_escape
@@ -371,35 +371,28 @@ class Link(Thing, Printable):
                                 item.nsfw_str)
             item.nsfw = item.over_18 and user.pref_label_nsfw
             
-            item.rendered_thumbnail_size = (70, 50)
-            
             item.is_author = (user == item.author)
 
+            item.thumbnail_sprited = False
             # always show a promo author their own thumbnail
             if item.promoted and (user_is_admin or item.is_author) and item.has_thumbnail:
                 item.thumbnail = media.thumbnail_url(item)
-                if(hasattr(item, 'thumbnail_size')):
-                    item.rendered_thumbnail_size = item.thumbnail_size
-                else:
-                    item.rendered_thumbnail_size = None
             elif user.pref_no_profanity and item.over_18 and not c.site.over_18:
                 if show_media:
-                    item.thumbnail = "/static/nsfw2.png"
-                    item.rendered_thumbnail_size = (70, 70)
+                    item.thumbnail = "nsfw"
+                    item.thumbnail_sprited = True
                 else:
                     item.thumbnail = ""
             elif not show_media:
                 item.thumbnail = ""
             elif item.has_thumbnail:
                 item.thumbnail = media.thumbnail_url(item)
-                if hasattr(item, 'thumbnail_size'):
-                    item.rendered_thumbnail_size = item.thumbnail_size
-                else:
-                    item.rendered_thumbnail_size = None
             elif item.is_self:
-                item.thumbnail = g.self_thumb
+                item.thumbnail = "self"
+                item.thumbnail_sprited = True
             else:
-                item.thumbnail = g.default_thumb
+                item.thumbnail = "default"
+                item.thumbnail_sprited = True
 
             item.score = max(0, item.score)
 
@@ -455,9 +448,6 @@ class Link(Thing, Printable):
                 item.nofollow = True
             else:
                 item.nofollow = False
-
-            if c.user.pref_no_profanity:
-                item.title = profanity_filter(item.title)
 
             item.subreddit_path = item.subreddit.path
             if cname:
@@ -748,7 +738,7 @@ class Comment(Thing, Printable):
                 add_attr(item.attribs, 'S',
                          link = item.link.make_permalink(item.subreddit))
             if not hasattr(item, 'target'):
-                item.target = None
+                item.target = "_top" if cname else None
             if item.parent_id:
                 if item.parent_id in cids:
                     item.parent_permalink = '#' + utils.to36(item.parent_id)
@@ -843,6 +833,8 @@ class CommentSortsCache(tdb_cassandra.View):
        the candidate order"""
     _use_db = True
     _value_type = 'float'
+    _connection_pool = 'main'
+    _read_consistency_level = tdb_cassandra.CL.ONE
 
 class StarkComment(Comment):
     """Render class for the comments in the top-comments display in
@@ -1131,9 +1123,6 @@ class Message(Thing, Printable):
             elif item.sr_id is not None:
                 item.subreddit = m_subreddits[item.sr_id]
 
-            if c.user.pref_no_profanity:
-                item.subject = profanity_filter(item.subject)
-
             item.is_collapsed = None
             if not item.new:
                 if item.recipient:
@@ -1187,9 +1176,11 @@ class SimpleRelation(tdb_cassandra.Relation):
         except tdb_cassandra.NotFound:
             pass
 
+
 class CassandraSave(SimpleRelation):
     _use_db = True
     _cf_name = 'Save'
+    _connection_pool = 'main'
 
     # thing1_cls = Account
     # thing2_cls = Link
@@ -1223,6 +1214,7 @@ class CassandraHide(SimpleRelation):
     _use_db = True
     _cf_name = 'Hide'
     _ttl = 7*24*60*60
+    _connection_pool = 'main'
 
     @classmethod
     def _hide(cls, *a, **kw):
@@ -1239,6 +1231,7 @@ class CassandraClick(SimpleRelation):
 class SavesByAccount(tdb_cassandra.View):
     _use_db = True
     _cf_name = 'SavesByAccount'
+    _connection_pool = 'main'
 
 class Inbox(MultiRelation('inbox',
                           Relation(Account, Comment),

@@ -21,12 +21,12 @@
 ################################################################################
 
 <%!
-   from r2.lib.template_helpers import static, s3_https_if_secure
+   from r2.lib.template_helpers import static, s3_https_if_secure, add_sr
    from r2.models import Sub, FakeSubreddit
    from r2.models.subreddit import DefaultSR
    from r2.lib.pages import SearchForm
 %>
-<%namespace file="utils.html" import="plain_link, text_with_js, img_link, separator, logout"/>
+<%namespace file="utils.html" import="plain_link, img_link, text_with_links, separator, logout"/>
 
 <div id="header">
   <a tabindex="1" href="#content" id="jumpToContent">${_('jump to content')}</a>
@@ -39,16 +39,18 @@
             header_img = c.site.header
             header_size = c.site.header_size
         else:
-            header_size = None
             header_img = d.header
+            header_size = d.header_size
             header_title = d.header_title
-        if header_size is None and header_img == d.header:
-            header_size = (120, 40)
     %>
     
-    ${img_link(c.site.name, s3_https_if_secure(header_img),
-        '/', _id="header-img-a", img_id='header-img',
-        title=header_title, size=header_size)}
+    % if header_img != g.default_header_url:
+        ${img_link(c.site.name, s3_https_if_secure(header_img),
+            '/', _id="header-img-a", img_id='header-img',
+            title=header_title, size=header_size)}
+    % else:
+        <a href="/" id="header-img" class="default-header" title="${header_title}">${g.domain}</a>
+    % endif
     
     ##keeps the height of the header from varying when there isnt any content
     &nbsp;
@@ -72,8 +74,12 @@
     %if not c.user_is_loggedin:
       %if thing.enable_login_cover and not g.read_only_mode:
       <span class="user">
-        ${text_with_js(_("want to join? %(register)s in seconds"),
-                          register=(_("register"), "r.login.ui.popup.showRegister(); return false"))}
+        <%
+          base = g.https_endpoint if not c.cname else ""
+          login_url = add_sr(base + "/login", sr_path=False)
+        %>
+        ${text_with_links(_("want to join? %(login_or_register)s in seconds"),
+            login_or_register = dict(link_text=_("login or register"), path=login_url, _class="login-required"))}
       </span>
       ${separator("|")}
       %endif
@@ -124,27 +130,3 @@
   </div>
 </div>
 
-<div class="preload">
-## everything in here will get rendered off screen for pre-fetching purposes.
-  <div class="arrow up"></div>
-  <div class="arrow upmod"></div>
-  <div class="arrow down"></div>
-  <div class="arrow downmod"></div>
-  <div class="eb-sch"></div>
-  <div class="eb-se"></div>
-  <div class="eb-seh"></div>
-  <div class="eb-vch"></div>
-  <div class="eb-ve"></div>
-  <div class="eb-veh"></div>
-  <div class="morelink nub"></div>
-  <div class="morelink nub-rtl"></div>
-  <div class="mlh"></div>
-  <div class="mlhn"></div>
-  <div class="sidebox gold"><div class="morelink"></div></div>
-  <a class="pretty-button negative"></a>
-  <a class="pretty-button negative pressed"></a>
-  <a class="pretty-button positive"></a>
-  <a class="pretty-button positive pressed"></a>
-## Be careful when adding things here: If all users try to get the new images
-## at once, they'll crush the static servers!
-</div>

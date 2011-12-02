@@ -23,6 +23,7 @@ import cgi
 import os
 import urllib
 import re
+import snudown
 from cStringIO import StringIO
 
 from xml.sax.handler import ContentHandler
@@ -87,6 +88,9 @@ def _force_unicode(text):
     if text == None:
         return u''
 
+    if isinstance(text, unicode):
+        return text
+
     try:
         text = unicode(text, 'utf-8')
     except UnicodeDecodeError:
@@ -131,6 +135,21 @@ def edit_comment_filter(text = ''):
         text = unicode(text)
     return url_escape(text)
 
+valid_link_schemes = (
+    '/',
+    '#',
+    'http://',
+    'https://',
+    'ftp://',
+    'mailto:',
+    'steam://',
+    'irc://',
+    'ircs://',
+    'news://',
+    'mumble://',
+    'ssh://',
+)
+
 class SouptestSaxHandler(ContentHandler):
     def __init__(self, ok_tags):
         self.ok_tags = ok_tags
@@ -148,12 +167,7 @@ class SouptestSaxHandler(ContentHandler):
 
             if qname == 'a' and name == 'href':
                 lv = val.lower()
-                if not (lv.startswith('http://')
-                        or lv.startswith('https://')
-                        or lv.startswith('ftp://')
-                        or lv.startswith('mailto:')
-                        or lv.startswith('news:')
-                        or lv.startswith('/')):
+                if not any(lv.startswith(scheme) for scheme in valid_link_schemes):
                     raise ValueError('HAX: Unsupported link scheme %r' % val)
 
 markdown_ok_tags = {
@@ -176,11 +190,11 @@ markdown_xhtml_dtd_path = os.path.join(
 
 markdown_dtd = '<!DOCTYPE div- SYSTEM "file://%s">' % markdown_xhtml_dtd_path
 
-def markdown_souptest(text, nofollow=False, target=None, lang=None):
+def markdown_souptest(text, nofollow=False, target=None):
     if not text:
         return text
 
-    smd = safemarkdown(text, nofollow, target, lang)
+    smd = safemarkdown(text, nofollow=nofollow, target=target)
 
     # Prepend a DTD reference so we can load up definitions of all the standard
     # XHTML entities (&nbsp;, etc.).
@@ -196,32 +210,22 @@ def markdown_souptest(text, nofollow=False, target=None, lang=None):
 
 #TODO markdown should be looked up in batch?
 #@memoize('markdown')
-def safemarkdown(text, nofollow=False, target=None, lang=None):
-    from r2.lib.c_markdown import c_markdown
-    from r2.lib.py_markdown import py_markdown
-
-    from contrib.markdown import markdown
-
-    if c.user.pref_no_profanity:
-        text = profanity_filter(text)
-
+def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
     if not text:
         return None
 
-    if c.cname and not target:
+    # this lets us skip the c.cname lookup (which is apparently quite
+    # slow) if target was explicitly passed to this function.
+    target = kwargs.get("target", None)
+    if "target" not in kwargs and c.cname:
         target = "_top"
 
-    if lang is None:
-        lang = g.markdown_backend
+    text = snudown.markdown(_force_utf8(text), nofollow, target)
 
-    if lang == "c":
-        text = c_markdown(text, nofollow, target)
-    elif lang == "py":
-        text = py_markdown(text, nofollow, target)
+    if wrap:
+        return SC_OFF + MD_START + text + MD_END + SC_ON
     else:
-        raise ValueError("weird lang [%s]" % lang)
-
-    return SC_OFF + MD_START + text + MD_END + SC_ON
+        return text
 
 
 def keep_space(text):
@@ -233,16 +237,3 @@ def keep_space(text):
 
 def unkeep_space(text):
     return text.replace('&#32;', ' ').replace('&#10;', '\n').replace('&#09;', '\t')
-
-
-def profanity_filter(text):
-    def _profane(m):
-        x = m.group(1)
-        return ''.join(u"\u2731" for i in xrange(len(x)))
-
-    if g.profanities:
-        try:
-            return g.profanities.sub(_profane, text)
-        except UnicodeDecodeError:
-            return text
-    return text

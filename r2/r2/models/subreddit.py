@@ -43,7 +43,6 @@ import os.path
 import random
 
 class SubredditExists(Exception): pass
-class ImageExists(Exception): pass
 
 class Subreddit(Thing, Printable):
     # Note: As of 2010/03/18, nothing actually overrides the static_path
@@ -357,6 +356,7 @@ class Subreddit(Thing, Printable):
         names = ('subscriber', 'moderator', 'contributor')
         rels = (SRMember._fast_query(wrapped, [user], names) if c.user_is_loggedin else {})
         defaults = Subreddit.default_subreddits()
+        target = "_top" if c.cname else None
         for item in wrapped:
             if not user or not user.has_subscribed:
                 item.subscriber = item._id in defaults
@@ -383,7 +383,7 @@ class Subreddit(Thing, Printable):
 
             #will seem less horrible when add_props is in pages.py
             from r2.lib.pages import UserText
-            item.usertext = UserText(item, item.description)
+            item.usertext = UserText(item, item.description, target=target)
 
 
         Printable.add_props(user, wrapped)
@@ -599,15 +599,12 @@ class Subreddit(Thing, Printable):
         if max_num is not None and self.get_num_images() >= max_num:
             raise ValueError, "too many images"
         
-        if not self.images.has_key(name):
-            # copy and blank out the images list to flag as _dirty
-            l = self.images
-            self.images = None
-            # update the dictionary and rewrite to images attr
-            l[name] = url
-            self.images = l
-        else:
-            raise ImageExists, "image already exists"
+        # copy and blank out the images list to flag as _dirty
+        l = self.images
+        self.images = None
+        # update the dictionary and rewrite to images attr
+        l[name] = url
+        self.images = l
 
     def del_image(self, name):
         """
@@ -840,10 +837,13 @@ class DefaultSR(_DefaultSR):
     def header(self):
         return (self._base and self._base.header) or _DefaultSR.header
 
-
     @property
     def header_title(self):
         return (self._base and self._base.header_title) or ""
+
+    @property
+    def header_size(self):
+        return (self._base and self._base.header_size) or None
 
     @property
     def stylesheet_contents(self):
@@ -994,5 +994,5 @@ Subreddit.__bases__ += (UserRel('moderator', SRMember),
 class SubredditPopularityByLanguage(tdb_cassandra.View):
     _use_db = True
     _value_type = 'pickle'
-    _use_new_ring = True
+    _connection_pool = 'main'
     _read_consistency_level = CL_ONE

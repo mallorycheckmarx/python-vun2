@@ -37,6 +37,7 @@ try:
     from r2.models.link import Link
     from r2.lib import pages
     from r2.lib.strings import strings, rand_strings
+    from r2.lib.template_helpers import static
 except Exception, e:
     if g.debug:
         # if debug mode, let the error filter up to pylons to be handled
@@ -53,13 +54,13 @@ NUM_FAILIENS = 3
 redditbroke =  \
 '''<html>
   <head>
-    <title>Reddit broke!</title>
+    <title>reddit broke!</title>
   </head>
   <body>
     <div style="margin: auto; text-align: center">
       <p>
         <a href="/">
-          <img border="0" src="/static/youbrokeit%d.png" alt="you broke reddit" />
+          <img border="0" src="%s" alt="you broke reddit" />
         </a>
       </p>
       <p>
@@ -88,6 +89,9 @@ class ErrorController(RedditController):
     ErrorDocuments middleware in your config/middleware.py file.
     """
     allowed_render_styles = ('html', 'xml', 'js', 'embed', '', "compact", 'api')
+    # List of admins to blame (skip the first admin, "reddit")
+    # If list is empty, just blame "an admin"
+    admins = g.admins[1:] or ["an admin"]
     def __before__(self):
         try:
             c.error_page = True
@@ -163,6 +167,7 @@ class ErrorController(RedditController):
                 code = 404
             srname = request.GET.get('srname', '')
             takedown = request.GET.get('takedown', "")
+            
             if srname:
                 c.site = Subreddit._by_name(srname)
             if c.render_style not in self.allowed_render_styles:
@@ -178,7 +183,10 @@ class ErrorController(RedditController):
             elif code == 403:
                 return self.send403()
             elif code == 500:
-                return redditbroke % (rand.randint(1,NUM_FAILIENS), rand_strings.sadmessages)
+                randmin = {'admin': rand.choice(self.admins)}
+                failien_name = 'youbrokeit%d.png' % rand.randint(1, NUM_FAILIENS)
+                failien_url = static(failien_name)
+                return redditbroke % (failien_url, rand_strings.sadmessages % randmin)
             elif code == 503:
                 return self.send503()
             elif code == 304:

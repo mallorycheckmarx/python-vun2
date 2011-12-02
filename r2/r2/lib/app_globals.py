@@ -36,6 +36,7 @@ from r2.lib.db.stats import QueryStats
 from r2.lib.translation import get_active_langs
 from r2.lib.lock import make_lock_factory
 from r2.lib.manager import db_manager
+from r2.lib.stats import Stats, CacheStats
 
 class Globals(object):
 
@@ -72,6 +73,7 @@ class Globals(object):
     float_props = ['min_promote_bid',
                    'max_promote_bid',
                    'usage_sampling',
+                   'statsd_sample_rate',
                    ]
 
     bool_props = ['debug', 'translator',
@@ -95,6 +97,8 @@ class Globals(object):
                   's3_media_direct',
                   'disable_captcha',
                   'disable_ads',
+                  'static_pre_gzipped',
+                  'static_secure_pre_gzipped',
                   ]
 
     tuple_props = ['stalecaches',
@@ -206,31 +210,51 @@ class Globals(object):
                           else LocalCache)
         num_mc_clients = self.num_mc_clients
 
-        self.cache_chains = []
+        self.cache_chains = {}
 
         self.memcache = CMemcache(self.memcaches, num_clients = num_mc_clients)
         self.make_lock = make_lock_factory(self.memcache)
 
         if not self.cassandra_seeds:
             raise ValueError("cassandra_seeds not set in the .ini")
-        self.cassandra = PycassaConnectionPool('reddit',
-                                               server_list = self.cassandra_seeds,
-                                               pool_size = len(self.cassandra_seeds),
-                                               # TODO: .ini setting
-                                               timeout=15, max_retries=3,
-                                               prefill=False)
+
+
+        keyspace = "reddit"
+        self.cassandra_pools = {
+            "main":
+                PycassaConnectionPool(
+                    keyspace,
+                    logging_name="main",
+                    server_list=self.cassandra_seeds,
+                    pool_size=len(self.cassandra_seeds),
+                    timeout=2,
+                    max_retries=3,
+                    prefill=False
+                ),
+            "noretries":
+                PycassaConnectionPool(
+                    keyspace,
+                    logging_name="noretries",
+                    server_list=self.cassandra_seeds,
+                    pool_size=len(self.cassandra_seeds),
+                    timeout=.1,
+                    max_retries=0,
+                    prefill=False
+                ),
+        }
+
         perma_memcache = (CMemcache(self.permacache_memcaches, num_clients = num_mc_clients)
                           if self.permacache_memcaches
                           else None)
         self.permacache = CassandraCacheChain(localcache_cls(),
                                               CassandraCache('permacache',
-                                                             self.cassandra,
+                                                             self.cassandra_pools[self.cassandra_default_pool],
                                                              read_consistency_level = self.cassandra_rcl,
                                                              write_consistency_level = self.cassandra_wcl),
                                               memcache = perma_memcache,
                                               lock_factory = self.make_lock)
 
-        self.cache_chains.append(self.permacache)
+        self.cache_chains.update(permacache=self.permacache)
 
         # hardcache is done after the db info is loaded, and then the
         # chains are reset to use the appropriate initial entries
@@ -241,21 +265,21 @@ class Globals(object):
                                          self.memcache)
         else:
             self.cache = MemcacheChain((localcache_cls(), self.memcache))
-        self.cache_chains.append(self.cache)
+        self.cache_chains.update(cache=self.cache)
 
         self.rendercache = MemcacheChain((localcache_cls(),
                                           CMemcache(self.rendercaches,
                                                     noreply=True, no_block=True,
                                                     num_clients = num_mc_clients)))
-        self.cache_chains.append(self.rendercache)
+        self.cache_chains.update(rendercache=self.rendercache)
 
         self.servicecache = MemcacheChain((localcache_cls(),
                                            CMemcache(self.servicecaches,
                                                      num_clients = num_mc_clients)))
-        self.cache_chains.append(self.servicecache)
+        self.cache_chains.update(servicecache=self.servicecache)
 
         self.thing_cache = CacheChain((localcache_cls(),))
-        self.cache_chains.append(self.thing_cache)
+        self.cache_chains.update(thing_cache=self.thing_cache)
 
         #load the database info
         self.dbm = self.load_db_params(global_conf)
@@ -265,16 +289,20 @@ class Globals(object):
                                          self.memcache,
                                          HardCache(self)),
                                         cache_negative_results = True)
-        self.cache_chains.append(self.hardcache)
+        self.cache_chains.update(hardcache=self.hardcache)
+
+        self.stats = Stats(global_conf.get('statsd_addr'),
+                           global_conf.get('statsd_sample_rate'))
 
         # I know this sucks, but we need non-request-threads to be
         # able to reset the caches, so we need them be able to close
         # around 'cache_chains' without being able to call getattr on
         # 'g'
-        cache_chains = self.cache_chains[::]
+        cache_chains = self.cache_chains.copy()
         def reset_caches():
-            for chain in cache_chains:
+            for name, chain in cache_chains.iteritems():
                 chain.reset()
+                chain.stats = CacheStats(self.stats, name)
 
         self.reset_caches = reset_caches
         self.reset_caches()
@@ -325,16 +353,6 @@ class Globals(object):
             print ("Warning: g.media_domain == g.domain. " +
                    "This may give untrusted content access to user cookies")
 
-        self.profanities = None
-        if self.profanity_wordlist and os.path.exists(self.profanity_wordlist):
-            with open(self.profanity_wordlist, 'r') as handle:
-                words = []
-                for line in handle:
-                    words.append(line.strip(' \n\r'))
-                if words:
-                    self.profanities = re.compile(r"\b(%s)\b" % '|'.join(words),
-                                              re.I | re.U)
-
         self.reddit_host = socket.gethostname()
         self.reddit_pid  = os.getpid()
 
@@ -359,22 +377,17 @@ class Globals(object):
 
         # try to set the source control revision number
         try:
-            popen = subprocess.Popen(["git", "log", "--date=short",
-                                      "--pretty=format:%H %h", '-n1'],
-                                     stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE)
-            resp, stderrdata = popen.communicate()
-            resp = resp.strip().split(' ')
-            self.version, self.short_version = resp
-        except object, e:
+            self.version = subprocess.check_output(["git", "rev-parse", "HEAD"])
+        except subprocess.CalledProcessError, e:
             self.log.info("Couldn't read source revision (%r)" % e)
             self.version = self.short_version = '(unknown)'
+        else:
+            self.short_version = self.version[:7]
 
         if self.log_start:
             self.log.error("reddit app %s:%s started %s at %s" %
                            (self.reddit_host, self.reddit_pid,
                             self.short_version, datetime.now()))
-
 
     @staticmethod
     def to_bool(x):

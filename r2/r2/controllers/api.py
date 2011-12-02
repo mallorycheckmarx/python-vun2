@@ -40,7 +40,6 @@ from r2.lib.pages import FlairList, FlairCsv, FlairTemplateEditor, \
 from r2.lib.utils.trial_utils import indict, end_trial, trial_info
 from r2.lib.pages.things import wrap_links, default_thing_wrapper
 
-from r2.lib import spreadshirt
 from r2.lib.menus import CommentSortMenu
 from r2.lib.captcha import get_iden
 from r2.lib.strings import strings
@@ -376,20 +375,11 @@ class ApiController(RedditController):
     def POST_register(self, *args, **kwargs):
         return self._handle_register(*args, **kwargs)
 
-    @validatedForm(VDelay("login"),
-                   user = VLogin(['user', 'passwd']),
-                   username = VLength('user', max_length = 100),
-                   rem    = VBoolean('rem'))
-    def _handle_login(self, form, responder, user, username, rem):
-        if responder.has_errors('vdelay', errors.RATELIMIT):
-            return
-
-        if login_throttle(username, wrong_password = responder.has_errors("passwd",
-                                                     errors.WRONG_PASSWORD)):
-            VDelay.record_violation("login", seconds=1, growfast=True)
-            c.errors.add(errors.WRONG_PASSWORD, field = "passwd")
-
-        if not responder.has_errors("passwd", errors.WRONG_PASSWORD):
+    @validatedForm(user = VThrottledLogin(['user', 'passwd']),
+                   rem = VBoolean('rem'))
+    def _handle_login(self, form, responder, user, rem):
+        if not (responder.has_errors("vdelay", errors.RATELIMIT) or
+                responder.has_errors("passwd", errors.WRONG_PASSWORD)):
             self._login(responder, user, rem)
 
     @validatedForm(VCaptcha(),
@@ -625,19 +615,27 @@ class ApiController(RedditController):
 
     @validatedForm(VUser(),
                    VModhash(),
-                   areyousure1 = VOneOf('areyousure1', ('yes', 'no')),
-                   areyousure2 = VOneOf('areyousure2', ('yes', 'no')),
-                   areyousure3 = VOneOf('areyousure3', ('yes', 'no')))
-    def POST_delete_user(self, form, jquery,
-                         areyousure1, areyousure2, areyousure3):
+                   delete_message = VLength("delete_message", max_length=500),
+                   username = VRequired("user", errors.NOT_USER),
+                   user = VThrottledLogin(["user", "passwd"]),
+                   confirm = VBoolean("confirm"))
+    def POST_delete_user(self, form, jquery, delete_message, username, user, confirm):
         """
-        /prefs/delete.  Make sure there are three yes's.
+        /prefs/delete. Check the username/password and confirmation.
         """
-        if areyousure1 == areyousure2 == areyousure3 == 'yes':
-            c.user.delete()
-            form.redirect('/?deleted=true')
-        else:
-            form.set_html('.status', _("see? you don't really want to leave"))
+        if username != c.user.name:
+            c.errors.add(errors.NOT_USER, field="user")
+
+        if not confirm:
+            c.errors.add(errors.CONFIRM, field="confirm")
+
+        if not (form.has_errors('vdelay', errors.RATELIMIT) or
+                form.has_errors("user", errors.NOT_USER) or
+                form.has_errors("passwd", errors.WRONG_PASSWORD) or
+                form.has_errors("delete_message", errors.TOO_LONG) or
+                form.has_errors("confirm", errors.CONFIRM)):
+            c.user.delete(delete_message)
+            form.redirect("/?deleted=true")
 
     @noresponse(VUser(),
                 VModhash(),
@@ -1197,9 +1195,7 @@ class ApiController(RedditController):
                 errors['BAD_CSS_NAME'] = _("bad image name")
         
         if c.site.images and add_image_to_sr:
-            if c.site.images.has_key(name):
-                errors['IMAGE_ERROR'] = _("An image with that name already exists")
-            elif c.site.get_num_images() >= g.max_sr_images:
+            if c.site.get_num_images() >= g.max_sr_images:
                 errors['IMAGE_ERROR'] = _("too many images (you only get %d)") % g.max_sr_images
 
         if any(errors.values()):
@@ -1911,7 +1907,8 @@ class ApiController(RedditController):
 
     @validatedForm(VFlairManager(),
                    VModhash(),
-                   user = VExistingUname("name"),
+                   user = VExistingUname("name", allow_deleted=True,
+                                         prefer_existing=True),
                    text = VFlairText("text"),
                    css_class = VFlairCss("css_class"))
     def POST_flair(self, form, jquery, user, text, css_class):
@@ -1956,7 +1953,8 @@ class ApiController(RedditController):
 
     @validatedForm(VFlairManager(),
                    VModhash(),
-                   user = VExistingUname("name"))
+                   user = VExistingUname("name", allow_deleted=True,
+                                         prefer_existing=True))
     def POST_deleteflair(self, form, jquery, user):
         # Check validation.
         if form.has_errors('name', errors.USER_DOESNT_EXIST, errors.NO_USER):
@@ -1993,7 +1991,8 @@ class ApiController(RedditController):
                 line_result.error('row', 'improperly formatted row, ignoring')
                 continue
 
-            user = VExistingUname('name').run(name)
+            user = VExistingUname('name', allow_deleted=True,
+                                  prefer_existing=True).run(name)
             if not user:
                 line_result.error('user',
                                   "unable to resolve user `%s', ignoring"
@@ -2012,7 +2011,7 @@ class ApiController(RedditController):
                                  'truncating flair text to %d chars'
                                  % len(text))
 
-            if css_class and not VCssName('css_class').run(css_class):
+            if css_class and not VFlairCss('css_class').run(css_class):
                 line_result.error('css',
                                   "invalid css class `%s', ignoring"
                                   % css_class)
@@ -2057,7 +2056,8 @@ class ApiController(RedditController):
 
     @paginated_listing(max_page_size=1000)
     @validate(VFlairManager(),
-              user = VOptionalExistingUname('name'))
+              user = VOptionalExistingUname('name', allow_deleted=True,
+                                            prefer_existing=True))
     def GET_flairlist(self, num, after, reverse, count, user):
         flair = FlairList(num, after, reverse, '', user)
         return BoringPage(_("API"), content = flair).render()
@@ -2302,19 +2302,3 @@ class ApiController(RedditController):
         wrapped = wrap_links(link)
         wrapped = list(wrapped)[0]
         return websafe(spaceCompress(wrapped.link_child.content()))
-
-    @validatedForm(link = VByName('name', thing_cls = Link, multiple = False),
-                   color = VOneOf('color', spreadshirt.ShirtPane.colors),
-                   style = VOneOf('style', spreadshirt.ShirtPane.styles),
-                   size  = VOneOf("size", spreadshirt.ShirtPane.sizes),
-                   quantity = VInt("quantity", min = 1))
-    def POST_shirt(self, form, jquery, link, color, style, size, quantity):
-        if not g.spreadshirt_url:
-            return self.abort404()
-        else:
-            res = spreadshirt.shirt_request(link, color, style, size, quantity)
-            if res:
-                form.set_html(".status", _("redirecting..."))
-                jquery.redirect(res)
-            else:    
-                form.set_html(".status", _("error (sorry)"))

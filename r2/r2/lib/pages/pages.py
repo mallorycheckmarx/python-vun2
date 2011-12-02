@@ -25,6 +25,7 @@ from r2.models import FakeSubreddit, Subreddit, Ad, AdSR
 from r2.models import Friends, All, Sub, NotFound, DomainSR, Random, Mod, RandomNSFW, MultiReddit
 from r2.models import Link, Printable, Trophy, bidding, PromotionWeights, Comment
 from r2.models import Flair, FlairTemplate, FlairTemplateBySubredditIndex
+from r2.models.oauth2 import OAuth2Client
 from r2.config import cache
 from r2.lib.tracking import AdframeInfo
 from r2.lib.jsonresponse import json_respond
@@ -36,7 +37,6 @@ from pylons.controllers.util import abort
 from r2.lib import promote
 from r2.lib.traffic import load_traffic, load_summary
 from r2.lib.captcha import get_iden
-from r2.lib.contrib.markdown import markdown
 from r2.lib.filters import spaceCompress, _force_unicode, _force_utf8
 from r2.lib.filters import unsafe, websafe, SC_ON, SC_OFF, websafe_json
 from r2.lib.menus import NavButton, NamedButton, NavMenu, PageNameNav, JsButton
@@ -52,6 +52,7 @@ from r2.lib.scraper import get_media_embed
 from r2.lib.log import log_text
 from r2.lib.memoize import memoize
 from r2.lib.utils import trunc_string as _truncate
+from r2.lib.filters import safemarkdown
 
 import sys, random, datetime, locale, calendar, simplejson, re, time
 import graph, pycountry, time
@@ -653,7 +654,10 @@ class BoringPage(Reddit):
         Reddit.__init__(self, **context)
 
     def build_toolbars(self):
-        return [PageNameNav('nomenu', title = self.pagename)]
+        if not isinstance(c.site, DefaultSR) and not c.cname:
+            return [PageNameNav('subreddit', title = self.pagename)]
+        else:
+            return [PageNameNav('nomenu', title = self.pagename)]
 
 class HelpPage(BoringPage):
     def build_toolbars(self):
@@ -683,11 +687,20 @@ class LoginPage(BoringPage):
             title = _("login or register")
         BoringPage.__init__(self,  title, **context)
 
+        if self.dest:
+            u = UrlParser(self.dest)
+            # Display a preview message for OAuth2 client authorizations
+            if u.path == '/api/v1/authorize':
+                client_id = u.query_dict.get("client_id")
+                self.client = client_id and OAuth2Client.get_token(client_id)
+                self.infobar = self.client and ClientInfoBar(self.client, strings.oauth_login_msg)
+
     def content(self):
         kw = {}
         for x in ('user_login', 'user_reg'):
             kw[x] = getattr(self, x) if hasattr(self, x) else ''
-        return self.login_template(dest = self.dest, **kw)
+        login_content = self.login_template(dest = self.dest, **kw)
+        return self.content_stack((self.infobar, login_content))
 
     @classmethod
     def login_template(cls, **kw):
@@ -707,7 +720,19 @@ class Login(Templated):
 
 class Register(Login):
     pass
-    
+
+class OAuth2AuthorizationPage(BoringPage):
+    def __init__(self, client, redirect_uri, scope, state):
+        content = OAuth2Authorization(client=client,
+                                      redirect_uri=redirect_uri,
+                                      scope=scope,
+                                      state=state)
+        BoringPage.__init__(self, _("request for permission"),
+                show_sidebar=False, content=content)
+
+class OAuth2Authorization(Templated):
+    pass
+
 class SearchPage(BoringPage):
     """Search results page"""
     searchbox = False
@@ -825,7 +850,8 @@ class LinkInfoPage(Reddit):
         else:
             self.duplicates = duplicates
 
-        Reddit.__init__(self, title = title, short_description=short_description, *a, **kw)
+        robots = "noindex,nofollow" if link._deleted or link._spam else None
+        Reddit.__init__(self, title = title, short_description=short_description, robots=robots, *a, **kw)
 
     def build_toolbars(self):
         base_path = "/%s/%s/" % (self.link._id36, title_to_url(self.link.title))
@@ -945,6 +971,8 @@ class CommentPane(Templated):
                 logged_in = c.user_is_loggedin
                 try:
                     c.user = UnloggedUser([c.lang])
+                    # Preserve the viewing user's flair preference.
+                    c.user.pref_show_flair = user.pref_show_flair
                     c.user_is_loggedin = False
 
                     # render as if not logged in (but possibly with reply buttons)
@@ -1211,6 +1239,12 @@ class InfoBar(Templated):
     def __init__(self, message = '', extra_class = ''):
         Templated.__init__(self, message = message, extra_class = extra_class)
 
+class ClientInfoBar(InfoBar):
+    """Draws the message the top of a login page before OAuth2 authorization"""
+    def __init__(self, client, *args, **kwargs):
+        kwargs.setdefault("extra_class", "client-info")
+        InfoBar.__init__(self, *args, **kwargs)
+        self.client = client
 
 class RedditError(BoringPage):
     site_tracking = False
@@ -1423,9 +1457,7 @@ class Thanks(Templated):
 
         if g.lounge_reddit:
             lounge_url = "/r/" + g.lounge_reddit
-            lounge_html = (SC_OFF +
-                           markdown(strings.lounge_msg % dict(link=lounge_url))
-                           + SC_ON)
+            lounge_html = safemarkdown(strings.lounge_msg % dict(link=lounge_url))
         else:
             lounge_html = None
         Templated.__init__(self, status=status, secret=secret,
@@ -1640,10 +1672,7 @@ class SearchBar(Templated):
 class SearchFail(Templated):
     """Search failure page."""
     def __init__(self, **kw):
-        md = SC_OFF + markdown(strings.search_failed % dict(
-            link="javascript:tryagain\(\)")) + SC_ON
-
-        self.errmsg = md
+        self.errmsg = strings.search_failed
 
         Templated.__init__(self)
 
@@ -1752,12 +1781,10 @@ class NewLink(Templated):
 
         self.sr_searches = simplejson.dumps(popular_searches())
 
-        self.on_default_sr = c.default_sr
-
         if c.default_sr:
             self.default_sr = None
         else:
-            self.default_sr = c.site.name
+            self.default_sr = c.site
 
         Templated.__init__(self, captcha = captcha, url = url,
                          title = title, subreddits = subreddits,
@@ -2250,11 +2277,6 @@ class Embed(Templated):
         Templated.__init__(self, content = content)
 
 
-class Page_down(Templated):
-    def __init__(self, **kw):
-        message = kw.get('message', _("This feature is currently unavailable. Sorry"))
-        Templated.__init__(self, message = message)
-
 def wrapped_flair(user, subreddit, force_show_flair):
     if (not hasattr(subreddit, '_id')
         or not (force_show_flair or getattr(subreddit, 'flair_enabled', True))):
@@ -2551,7 +2573,7 @@ class FlairTemplateSample(Templated):
 
 class FlairPrefs(CachedTemplate):
     def __init__(self):
-        sr_flair_enabled = getattr(c.site, 'flair_enabled', True)
+        sr_flair_enabled = getattr(c.site, 'flair_enabled', False)
         user_flair_enabled = getattr(c.user, 'flair_%s_enabled' % c.site._id,
                                      True)
         sr_flair_self_assign_enabled = getattr(
@@ -2995,6 +3017,7 @@ class SelfTextChild(LinkChild):
         u = UserText(self.link, self.link.selftext,
                      editable = c.user == self.link.author,
                      nofollow = self.nofollow,
+                     target="_top" if c.cname else None,
                      expunged=self.link.expunged)
         return u.render()
 

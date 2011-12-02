@@ -78,7 +78,8 @@ def make_map(global_conf={}, app_conf={}):
 
     mc('/awards', controller='front', action='awards')
 
-    mc('/i18n', controller='feedback', action='i18n')
+    mc('/i18n', controller='redirect', action='redirect',
+       dest='http://www.reddit.com/r/i18n')
     mc('/feedback', controller='feedback', action='feedback')
     mc('/ad_inq',   controller='feedback', action='ad_inq')
 
@@ -223,6 +224,10 @@ def make_map(global_conf={}, app_conf={}):
     mc('/api/:action', controller='apiminimal',
        requirements=dict(action="new_captcha"))
     mc('/api/:action', controller='api')
+
+    mc("/api/v1/:action", controller="oauth2frontend", requirements=dict(action="authorize"))
+    mc("/api/v1/:action", controller="oauth2access", requirements=dict(action="access_token"))
+    mc("/api/v1/:action", controller="apiv1")
 
     mc("/button_info", controller="api", action="info", limit = 1)
 

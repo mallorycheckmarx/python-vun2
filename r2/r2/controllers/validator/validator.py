@@ -491,7 +491,7 @@ class VSelfText(VMarkdown):
 
     def get_max_length(self):
         if c.site.link_type == "self":
-            return self._max_length * 3
+            return self._max_length * 4
         return self._max_length
 
     max_length = property(get_max_length, set_max_length)
@@ -584,8 +584,10 @@ class VCaptcha(Validator):
     
     def run(self, iden, solution):
         if (not c.user_is_loggedin or c.user.needs_captcha()):
-            if not captcha.valid_solution(iden, solution):
+            valid_captcha = captcha.valid_solution(iden, solution)
+            if not valid_captcha:
                 self.set_error(errors.BAD_CAPTCHA)
+            g.stats.action_event_count("captcha", valid_captcha)
 
 class VUser(Validator):
     def run(self, password = None):
@@ -597,6 +599,10 @@ class VUser(Validator):
 
 class VModhash(Validator):
     default_param = 'uh'
+    def __init__(self, param=None, fatal=True, *a, **kw):
+        Validator.__init__(self, param, *a, **kw)
+        self.fatal = fatal
+
     def run(self, uh):
         pass
 
@@ -871,9 +877,29 @@ class VLogin(VRequired):
                 password = password.encode('utf8')
             user = valid_login(user_name, password)
         if not user:
-            return self.error()
+            self.error()
+            return False
         return user
 
+class VThrottledLogin(VLogin):
+    def __init__(self, *args, **kwargs):
+        VLogin.__init__(self, *args, **kwargs)
+        self.vdelay = VDelay("login")
+        self.vlength = VLength("user", max_length=100)
+        
+    def run(self, username, password):
+        username = self.vlength.run(username)
+
+        self.vdelay.run()
+        if (errors.RATELIMIT, "vdelay") in c.errors:
+            return False
+
+        user = VLogin.run(self, username, password)
+        if login_throttle(username, wrong_password=not user):
+            VDelay.record_violation("login", seconds=1, growfast=True)
+            c.errors.add(errors.WRONG_PASSWORD, field=self.param[1])
+        else:
+            return user
 
 class VSanitizedUrl(Validator):
     def run(self, url):
@@ -918,26 +944,37 @@ class VUrl(VRequired):
         return self.error(errors.BAD_URL)
 
 class VOptionalExistingUname(VRequired):
-    def __init__(self, item, allow_deleted=False, *a, **kw):
+    def __init__(self, item, allow_deleted=False, prefer_existing=False,
+                 *a, **kw):
         self.allow_deleted = allow_deleted
+        self.prefer_existing = prefer_existing
         VRequired.__init__(self, item, errors.NO_USER, *a, **kw)
 
     def run(self, name):
+        if self.prefer_existing:
+            result = self._lookup(name, False)
+            if not result and self.allow_deleted:
+                result = self._lookup(name, True)
+        else:
+            result = self._lookup(name, self.allow_deleted)
+        return result or self.error(errors.USER_DOESNT_EXIST)
+
+    def _lookup(self, name, allow_deleted):
         if name and name.startswith('~') and c.user_is_admin:
             try:
                 user_id = int(name[1:])
                 return Account._byID(user_id, True)
             except (NotFound, ValueError):
-                return self.error(errors.USER_DOESNT_EXIST)
+                return None
 
         # make sure the name satisfies our user name regexp before
         # bothering to look it up.
         name = chkuser(name)
         if name:
             try:
-                return Account._by_name(name, allow_deleted=self.allow_deleted)
+                return Account._by_name(name, allow_deleted=allow_deleted)
             except NotFound:
-                return self.error(errors.USER_DOESNT_EXIST)
+                return None
 
 class VExistingUname(VOptionalExistingUname):
     def run(self, name):

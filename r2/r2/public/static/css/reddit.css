@@ -200,6 +200,16 @@ ul.flat-vert {text-align: left;}
 
 #header-img {margin-top: 2px; margin-right: 5px;}
 
+#header-img.default-header {
+    text-indent: -9999px;
+    background-image: url(../reddit.com.header.png); /* SPRITE */
+    height: 40px;
+    width: 120px;
+    display: inline-block;
+    vertical-align: bottom;
+    margin-bottom: 3px;
+}
+
 #header-top {
     position: absolute;
     right: 5px;
@@ -231,10 +241,10 @@ ul.flat-vert {text-align: left;}
     height: 10px;
 }
 #mail.havemail {
-    background-image: url(/static/mail.png);  /* SPRITE */
+    background-image: url(../mail.png);  /* SPRITE */
 }
 #mail.nohavemail {
-    background-image: url(/static/mailgray.png);  /* SPRITE */
+    background-image: url(../mailgray.png);  /* SPRITE */
 }
 #modmail {
     position: relative;
@@ -247,10 +257,10 @@ ul.flat-vert {text-align: left;}
     margin-bottom: -6px;
 }
 #modmail.havemail {
-    background-image: url(/static/modmail.png);  /* SPRITE */
+    background-image: url(../modmail.png);  /* SPRITE */
 }
 #modmail.nohavemail {
-    background-image: url(/static/modmailgray.png);  /* SPRITE */
+    background-image: url(../modmailgray.png);  /* SPRITE */
 }
 .user {color: gray;}
 
@@ -259,8 +269,8 @@ ul.flat-vert {text-align: left;}
     font-weight: bold;
     margin-right: 1ex;
     font-variant: small-caps;
-    line-height: 100%;
     font-size: 1.2em;
+    vertical-align: bottom;
 }
 .pagename a {color: black; }
 .redditname { }
@@ -303,7 +313,7 @@ ul.flat-vert {text-align: left;}
 
 .dropdown.heavydrop .selected{
     background: white none no-repeat scroll center right;
-    background-image: url(/static/droparrow.gif);
+    background-image: url(../droparrow.gif);
     border: 1px solid gray;
     padding: 2px;
     padding-right: 23px;
@@ -314,7 +324,7 @@ ul.flat-vert {text-align: left;}
 .dropdown.lightdrop .selected {
     position: relative;
     background: transparent none no-repeat scroll center right;
-    background-image: url(/static/droparrowgray.gif);
+    background-image: url(../droparrowgray.gif);
     padding-right: 21px;
     text-decoration: underline;
     color: gray; 
@@ -328,7 +338,7 @@ ul.flat-vert {text-align: left;}
 .dropdown.tabdrop .selected {
     position: relative;
     background: white none no-repeat scroll center right;
-    background-image: url(/static/droparrowgray.gif);
+    background-image: url(../droparrowgray.gif);
     padding: 2px 21px 1px 5px;
     margin-left: 3px;
     border: 1px solid #5f99cf;
@@ -350,6 +360,7 @@ ul.flat-vert {text-align: left;}
     white-space: nowrap;
     display: inline-block;
     margin-top: 5px;
+    vertical-align: bottom;
 }
 
 .tabmenu li {
@@ -433,7 +444,7 @@ ul.flat-vert {text-align: left;}
     border: 1px solid #c4dbf1;
 
     background: white none repeat-x scroll center left;
-    background-image: url(/static/gradient-button.png);  /* SPRITE stretch-x */
+    background-image: url(../gradient-button.png);  /* SPRITE stretch-x */
 
     font-size:150%;
     font-weight:bold;
@@ -445,7 +456,7 @@ ul.flat-vert {text-align: left;}
 
 .morelink:hover, .mlh {
     border-color: #879eb4;
-    background-image: url(/static/gradient-button-hover.png);  /* SPRITE stretch-x */
+    background-image: url(../gradient-button-hover.png);  /* SPRITE stretch-x */
 }
 
 .morelink a {
@@ -465,11 +476,11 @@ ul.flat-vert {text-align: left;}
     height: 31px;
     width: 24px;
     background: white none no-repeat scroll center left;
-    background-image: url(/static/gradient-nub.png);  /* SPRITE */
+    background-image: url(../gradient-nub.png);  /* SPRITE */
 }
 
 .morelink:hover .nub, .mlhn {
-    background-image: url(/static/gradient-nub-hover.png);  /* SPRITE */
+    background-image: url(../gradient-nub-hover.png);  /* SPRITE */
 }
 
 .morelink .nub-rtl {
@@ -514,20 +525,20 @@ ul.flat-vert {text-align: left;}
     width: 40px;
 }
 
-.sidebox.create .spacer {
-    background-image: url(/static/create-a-reddit.png);  /* SPRITE */
+.sidebox.create .spacer a {
+    background-image: url(../create-a-reddit.png);  /* SPRITE */
     background-repeat:no-repeat;
 }
 
-.sidebox.gold .spacer {
-    background-image: url(/static/reddit_gold-40.png);  /* SPRITE */
+.sidebox.gold .spacer a {
+    background-image: url(../reddit_gold-40.png);  /* SPRITE */
     background-repeat:no-repeat;
 }
 
 .sidebox.gold .morelink {
     border:none;
     background-color:transparent;
-    background-image: url(/static/goldmorelink.png);  
+    background-image: url(../goldmorelink.png);  
     background-position: 0 0;
     background-repeat:no-repeat;
     height:31px;
@@ -550,8 +561,8 @@ ul.flat-vert {text-align: left;}
     display: none;
 }
 
-.sidebox.submit .spacer {
-    background-image: url(/static/submit-alien.png);  /* SPRITE */
+.sidebox.submit .spacer a {
+    background-image: url(../submit-alien.png);  /* SPRITE */
     background-repeat:no-repeat;
 }
 
@@ -638,16 +649,16 @@ ul.flat-vert {text-align: left;}
 }
 
 .arrow.upmod { 
-    background-image: url(/static/aupmod.gif);  /* SPRITE */
+    background-image: url(../aupmod.gif);  /* SPRITE */
 }
 .arrow.downmod { 
-    background-image: url(/static/adownmod.gif);  /* SPRITE */
+    background-image: url(../adownmod.gif);  /* SPRITE */
 }
 .arrow.up { 
-    background-image: url(/static/aupgray.gif);  /* SPRITE */
+    background-image: url(../aupgray.gif);  /* SPRITE */
 }
 .arrow.down { 
-    background-image: url(/static/adowngray.gif);  /* SPRITE */
+    background-image: url(../adowngray.gif);  /* SPRITE */
 }
 
 .midcol {
@@ -812,7 +823,7 @@ a.author { margin-right: 0.5em; }
 .media-button .option { color: red; }
 .media-button .option.active {
     background: transparent none no-repeat scroll right center;
-    background-image: url(/static/reddit-button-play.png);   /* SPRITE */
+    background-image: url(../reddit-button-play.png);   /* SPRITE */
     padding-right: 15px;
     color: #336699;
 }
@@ -912,10 +923,10 @@ a.author { margin-right: 0.5em; }
     text-indent: 50px;
 }
 .organic-listing .nextprev .arrow.prev {
-    background-image: url(/static/prev_organic.png); /* SPRITE */
+    background-image: url(../prev_organic.png); /* SPRITE */
 }
 .organic-listing .nextprev .arrow.next {
-    background-image: url(/static/next_organic.png); /* SPRITE */
+    background-image: url(../next_organic.png); /* SPRITE */
 }
 .organic-listing .nextprev .arrow:hover {
     cursor: pointer;
@@ -1237,11 +1248,15 @@ a.star { text-decoration: none; color: #ff8b60 }
 
 textarea.gray { color: gray; }
 
-.deepthread {
-    padding-right: 30px;
-    background: transparent none no-repeat scroll center right;
-    background-image: url(/static/continue-thread.png);  
+.deepthread:after {
+    background-image: url(../continue-thread.png);  /* SPRITE */
+    content: " ";
+    display: inline-block;
+    width: 25px;
+    height: 9px;
+    margin: 5px 0 0 5px;
 }
+
 .deepthread a { font-size: larger; color: #336699 }
 .deepthread a:hover { text-decoration: underline}
 
@@ -1432,7 +1447,7 @@ textarea.gray { color: gray; }
 
 .clippy-bubble ul {
     list-style-type: disc;
-    list-style-image: url(/static/clippy-bullet.png);
+    list-style-image: url(../clippy-bullet.png);
     padding-left: 15px;
 }
 
@@ -1467,10 +1482,10 @@ textarea.gray { color: gray; }
 }
 
 .fancy-toggle-button .remove { 
-    background-image: url(/static/bg-button-remove.png);
+    background-image: url(../bg-button-remove.png); /* SPRITE stretch-x */
 }
 .fancy-toggle-button .add { 
-    background-image: url(/static/bg-button-add.png);
+    background-image: url(../bg-button-add.png); /* SPRITE stretch-x */
 }
 .fancy-toggle-button .banned {
     background-color: #666;
@@ -1636,7 +1651,7 @@ textarea.gray { color: gray; }
 .throbber {
     display: none;
     margin: 0 2px;
-    background: url(/static/throbber.gif) no-repeat;
+    background: url(../throbber.gif) no-repeat;
     width: 18px;
     height: 18px;
 }
@@ -2382,12 +2397,12 @@ label + #moresearchinfo {
 
 .self-service.instructions li.done { 
     text-decoration: line-through;
-    list-style-image:url(/static/green-check.png);
+    list-style-image:url(../green-check.png);
 }
 
 .self-service.instructions li.unfinished { 
     font-weight:bold;
-    list-style-image:url(/static/red-arrow.png);
+    list-style-image:url(../red-arrow.png);
 }
 
 
@@ -2399,10 +2414,14 @@ label + #moresearchinfo {
     margin-top: 10px; 
 }
 
-.feedback.instructions dd { 
-    background: transparent none no-repeat scroll bottom left;
-    background-image: url(/static/red-arrow.png);
-    padding-left: 35px; 
+.feedback.instructions dd:before { 
+    background-image: url(../red-arrow.png); /* SPRITE */
+    height: 15px;
+    width: 30px;
+    display: block;
+    content: " ";
+    float: left;
+    margin: 2px 5px 0 0;
 }
 
 
@@ -2543,16 +2562,16 @@ label + #moresearchinfo {
 }
 
 .toolbar .arrow.upmod   { 
-    background-image: url(/static/aminiupmod.gif); 
+    background-image: url(../aminiupmod.gif); 
 }
 .toolbar .arrow.downmod { 
-    background-image: url(/static/aminidownmod.gif); 
+    background-image: url(../aminidownmod.gif); 
 }
 .toolbar .arrow.up      { 
-    background-image: url(/static/aminiupgray.gif); 
+    background-image: url(../aminiupgray.gif); 
 }
 .toolbar .arrow.down    { 
-    background-image: url(/static/aminidowngray.gif); 
+    background-image: url(../aminidowngray.gif); 
 }
 
 .toolbar-status-bar {
@@ -2564,7 +2583,7 @@ label + #moresearchinfo {
 }
 .toolbar-status-bar .login-arrow-left {
     overflow: auto;
-    background-image: url(/static/tb-loginarrow-left.png);
+    background-image: url(../tb-loginarrow-left.png);
     background-position: top right;
 }
 .toolbar-status-bar .login-arrow-right {
@@ -2669,7 +2688,7 @@ form input[type=radio] {margin: 2px .5em 0 0; }
 
 
 /* delete page */
-.delete-field {
+.white-field, .delete-field {
     background-color: white;
     padding: 10px;
 }
@@ -2680,6 +2699,29 @@ form input[type=radio] {margin: 2px .5em 0 0; }
 
 .pretty-form .delete-field {
     background: transparent;
+}
+
+#pref-delete textarea#delete-message {
+    font-size: smaller;
+    height: 5em;
+}
+
+#pref-delete .md ul {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+#pref-delete .md ul li {
+    margin: .5em 0;
+}
+
+#pref-delete .credentials input {
+    margin: .2em 0;
+}
+
+#pref-delete .credentials .error,
+#pref-delete .error.RATELIMIT {
+    margin-left: 5px;
 }
 
 /*pref page boxes*/
@@ -2798,6 +2840,21 @@ form input[type=radio] {margin: 2px .5em 0 0; }
     width: 70px; 
 }
 
+.thumbnail.nsfw {
+    height: 70px;
+    background-image: url(../nsfw2.png); /* SPRITE */
+}
+
+.thumbnail.self {
+    height: 50px;
+    background-image: url(../self_default2.png); /* SPRITE */
+}
+
+.thumbnail.default {
+    height: 50px;
+    background-image: url(../noimage.png); /* SPRITE */
+}
+
 
 /* CSS customisation page */
 
@@ -2913,92 +2970,14 @@ ul#image-preview-list .description pre {
 }
 
 .private-feeds.instructions .feedlink.rss-link {
-    background-image: url(/static/rss.png);
+    background-image: url(../rss.png);
 }
 
 .private-feeds.instructions .feedlink.json-link {
     background-color: #DDDDDD;
-    background-image: url(/static/json.png);
+    background-image: url(../json.png);
     color: black; 
 }
-
-/* Socialite */
-.socialite.instructions ul {
-    margin: 10px;
-    max-width: 60em;
-}
-
-.socialite.instructions ul > li {
-    list-style-type: disc;
-    list-style-position: inside;
-}
-
-.socialite.instructions hr {
-    color: #C6C6C6;
-    border: none;
-    border-top: 1px solid #C6C6C6;
-    margin: 20px 0px 20px 0px;
-    max-width: 60em;
-}
-
-.socialite.instructions p.screenshot {
-    text-align: center;
-}
-  
-.socialite.instructions .logotext {
-    line-height: 32px;
-}
-
-.socialite.instructions .logotext .logo {
-    float: left;
-    margin-right: 10px;
-}
-  
-.socialite.instructions .logoclear {
-    clear: left;
-}
-
-.socialite.instructions .features {
-    padding-left: 15px;
-    max-width: 60em;
-}
-
-/* From http://www.oscaralexander.com/tutorials/how-to-make-sexy-buttons-with-css.html */
-.socialite .buttonclear {
-    overflow: hidden;
-    float: right;
-    margin-right: 20px;
-    
-}
-
-.socialite a.installbutton {
-    background: transparent none no-repeat scroll top right;
-    background-image: url(/static/socialite/installbutton-end.png);   /* SPRITE */
-    color: #FFF;
-    display: block;
-    float: left;
-    font: bold 18px "Trebuchet MS",Helvetica,"Helvetica Neue",Arial,sans-serif;
-    height: 50px;
-    margin-right: 6px;
-    padding-right: 48px; /* sliding doors padding */
-    text-decoration: none;
-}
-
-.socialite a.installbutton span {
-    background: transparent none no-repeat;
-    background-image: url(/static/socialite/installbutton.png);   /* SPRITE */
-    display: block;
-    line-height: 30px;
-    padding: 10px 0 10px 17px;
-}
-
-.socialite a.installbutton:hover {
-    background-position: bottom right;
-}
-
-.socialite a.installbutton:hover span {
-    background-position: bottom left;
-} 
 
 #sr-header-area {
     padding: 3px 0px 3px 5px;
@@ -3018,7 +2997,7 @@ ul#image-preview-list .description pre {
 
 .dropdown.srdrop .selected {
     background: transparent none no-repeat scroll center right;
-    background-image: url(/static/droparrowgray.gif); 
+    background-image: url(../droparrowgray.gif); 
     display: inline-block;
     vertical-align: bottom;
     padding-right: 21px;
@@ -3117,7 +3096,7 @@ ul#image-preview-list .description pre {
 #sr-list-cover {
     position: absolute;
     background: gray none no-repeat scroll center center;
-    background-color: url(/static/throbber.gif); 
+    background-color: url(../throbber.gif); 
     height: 100%;
     width: 100%;
     opacity: .7;
@@ -3152,7 +3131,7 @@ ul#image-preview-list .description pre {
 
 .sr-row.sr-selected {
     background: #EFF7FF none no-repeat scroll 0px 5px;
-    background-image: url(/static/rightarrow.png);    /* SPRITE */
+    background-image: url(../rightarrow.png);    /* SPRITE */
 }
 
 .sr-arrow {
@@ -3268,32 +3247,32 @@ ul.tabmenu.formtab {
 }
 
 .expando-button.selftext.collapsed {
-    background-image: url(/static/blog-collapsed.png); /* SPRITE */
+    background-image: url(../blog-collapsed.png); /* SPRITE */
 }
 .expando-button.selftext.collapsed:hover, .eb-sch {
-    background-image: url(/static/blog-collapsed-hover.png); /* SPRITE */
+    background-image: url(../blog-collapsed-hover.png); /* SPRITE */
 }
 .expando-button.selftext.expanded, .eb-se {
     margin-bottom: 5px;
-    background-image: url(/static/blog-expanded.png); /* SPRITE */
+    background-image: url(../blog-expanded.png); /* SPRITE */
 }
 .expando-button.selftext.expanded:hover, .eb-seh {
-    background-image: url(/static/blog-expanded-hover.png); /* SPRITE */
+    background-image: url(../blog-expanded-hover.png); /* SPRITE */
 }
 
 .expando-button.video.collapsed {
-    background-image: url(/static/vid-collapsed.png); /* SPRITE */
+    background-image: url(../vid-collapsed.png); /* SPRITE */
 }
 
 .expando-button.video.collapsed:hover, .eb-vch {
-    background-image: url(/static/vid-collapsed-hover.png); /* SPRITE */
+    background-image: url(../vid-collapsed-hover.png); /* SPRITE */
 }
 
 .expando-button.video.expanded, .eb-ve {
-    background-image: url(/static/vid-expanded.png); /* SPRITE */
+    background-image: url(../vid-expanded.png); /* SPRITE */
 }
 .expando-button.video.expanded:hover, .eb-veh {
-    background-image: url(/static/vid-expanded-hover.png); /* SPRITE */
+    background-image: url(../vid-expanded-hover.png); /* SPRITE */
 }
 
 
@@ -3537,7 +3516,7 @@ ul.tabmenu.formtab {
 }
 
 .existing-campaigns td.bid.paid { 
-    background-image: url(/static/green-check.png);  
+    background-image: url(../green-check.png);  
 }
 
 .existing-campaigns td.bid .info{ 
@@ -4292,17 +4271,39 @@ dd { margin-left: 20px;  }
 
 .titlebox form.toggle {
     margin: 0;
-    padding: 5px 0px 5px 20px;
+    padding: 5px 0px;
     font-size: smaller;
     color: gray;
     background: white none no-repeat scroll center left;
 }
 
-.titlebox form.leavemoderator-button {
-    background-image: url(/static/shield.png); /* SPRITE */
+.titlebox form.leavemoderator-button:before,
+.titlebox form.leavecontributor-button:before,
+.icon-menu .reddit-edit:before,
+.icon-menu .reddit-traffic:before,
+.icon-menu .reddit-reported:before,
+.icon-menu .reddit-spam:before,
+.icon-menu .reddit-ban:before,
+.icon-menu .reddit-flair:before,
+.icon-menu .reddit-moderators:before,
+.icon-menu .moderator-mail:before,
+.icon-menu .reddit-contributors:before,
+.giftgold a:before,
+.gold-form h1.goldgift:before {
+    height: 16px;
+    width: 16px;
+    display: block;
+    content: " ";
+    float: left;
+    margin-right: 5px;
 }
-.titlebox form.leavecontributor-button {
-    background-image: url(/static/pencil.png); /* SPRITE */
+
+.titlebox form.leavemoderator-button:before {
+    background-image: url(../shield.png); /* SPRITE */
+}
+
+.titlebox form.leavecontributor-button:before {
+    background-image: url(../pencil.png); /* SPRITE */
 }
 
 .titlebox form.flairtoggle {
@@ -4314,40 +4315,42 @@ dd { margin-left: 20px;  }
 }
 
 .icon-menu a {
-    padding-left: 20px;
     background: white none no-repeat scroll center left;
 } 
 .icon-menu li {margin: 5px 0;}
 
-.icon-menu .reddit-edit {
-    background-image: url(/static/reddit_edit.png); /* SPRITE */
+.icon-menu .reddit-edit:before {
+    background-image: url(../reddit_edit.png); /* SPRITE */
 }
-.icon-menu .reddit-traffic {
-    background-image: url(/static/reddit_traffic.png); /* SPRITE */
+.icon-menu .reddit-traffic:before {
+    background-image: url(../reddit_traffic.png); /* SPRITE */
 }
-.icon-menu .reddit-reported {
-    background-image: url(/static/reddit_reported.png); /* SPRITE */
+.icon-menu .reddit-reported:before {
+    background-image: url(../reddit_reported.png); /* SPRITE */
 }
-.icon-menu .reddit-spam {
-    background-image: url(/static/reddit_spam.png); /* SPRITE */
+.icon-menu .reddit-spam:before {
+    background-image: url(../reddit_spam.png); /* SPRITE */
 }
-.icon-menu .reddit-ban {
-    background-image: url(/static/reddit_ban.png); /* SPRITE */
+.icon-menu .reddit-ban:before {
+    background-image: url(../reddit_ban.png); /* SPRITE */
 }
-.icon-menu .reddit-flair {
-    background-image: url(/static/reddit_flair.png); /* SPRITE */
+.icon-menu .reddit-flair:before {
+    background-image: url(../reddit_flair.png); /* SPRITE */
     /* Work around a centering difference between this icon and reddit_ban.png */
     margin-left: 1px;
-    padding-left: 19px;
 }
-.icon-menu .reddit-moderators {
-    background-image: url(/static/shield.png); /* SPRITE */
+.icon-menu .reddit-moderators:before {
+    background-image: url(../shield.png); /* SPRITE */
 }
-.icon-menu .moderator-mail {
-    background-image: url(/static/mailgray.png); /* SPRITE */
+.icon-menu .moderator-mail:before {
+    background-image: url(../mailgray.png); /* SPRITE */
+    width: 15px;
+    height: 10px;
+    margin-top: 4px;
+    margin-left: 1px;
 }
-.icon-menu .reddit-contributors {
-    background-image: url(/static/pencil.png); /* SPRITE */
+.icon-menu .reddit-contributors:before {
+    background-image: url(../pencil.png); /* SPRITE */
 }
 
 .linkinfo {
@@ -4530,22 +4533,22 @@ a.pretty-button:hover { text-decoration: none !important }
 
 a.pretty-button.negative {
     color: black;
-    background-image: url(/static/bg-button-negative-unpressed.png);
+    background-image: url(../bg-button-negative-unpressed.png); /* SPRITE stretch-x */
 }
 
 a.pretty-button.negative.pressed {
     color: white;
-    background-image: url(/static/bg-button-negative-pressed.png);
+    background-image: url(../bg-button-negative-pressed.png); /* SPRITE stretch-x */
 }
 
 a.pretty-button.positive {
     color: black;
-    background-image: url(/static/bg-button-positive-unpressed.png);
+    background-image: url(../bg-button-positive-unpressed.png); /* SPRITE stretch-x */
 }
 
 a.pretty-button.positive.pressed {
     color: white;
-    background-image: url(/static/bg-button-positive-pressed.png);
+    background-image: url(../bg-button-positive-pressed.png); /* SPRITE stretch-x */
 }
 
 
@@ -4687,11 +4690,16 @@ tr.gold-accent + tr > td {
     margin-bottom: 5px;
 }
 .giftgold a {
-    padding-left: 20px;
     color: #9a7d2e;
     font-weight: bold;
-    background-image: url(/static/giftgold.png);
-    background-repeat:no-repeat;
+}
+.giftgold a:before,
+.gold-form h1.goldgift:before {
+    background-image: url(../giftgold.png); /* SPRITE */
+}
+
+.gold-form h1:before {
+    margin-top: 3px;
 }
 
 .tiny {
@@ -4807,3 +4815,140 @@ tr.gold-accent + tr > td {
     box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
 }
 
+.infobar.client-info {
+    position: relative;
+    margin: 10px 2%;
+    width: 94%;
+    height: 48px;
+}
+
+.infobar.client-info .icon img {
+    position: absolute;
+    left: 10px;
+    width: 48px;
+    height: 48px;
+}
+
+.infobar.client-info .md {
+    line-height: 48px;
+    margin-left: 56px;
+}
+
+.infobar.client-info .md p {
+    margin: 0;
+}
+
+.oauth2-authorize {
+    position: relative;
+    background: url(../snoo-tray.png) no-repeat;
+    width: 415px;
+    height: 235px;
+    margin: 40px auto 0;
+    padding-left: 280px;
+    padding-top: 18px;
+}
+
+.oauth2-authorize h1 a {
+    display: block;
+    font-weight: bold;
+    font-size: 1.5em;
+    letter-spacing: -.04em;
+}
+
+.oauth2-authorize .icon {
+    position: absolute;
+    left: 160px;
+    top: 77px;
+}
+
+.oauth2-authorize .access,
+.infobar.client-info {
+    background: #f7f7f7;
+    border: 1px solid #b3b3b3;
+}
+
+.oauth2-authorize .access {
+    position: relative;
+    margin: 0 -12px;
+    padding: 10px 15px;
+    font-size: 1.5em;
+    line-height: 1.5em;
+}
+
+.oauth2-authorize .access:before {
+    position: absolute;
+    display: block;
+    content: '';
+    border-width: 9px;
+    border-style: solid solid outset; /* mitigates firefox drawing a thicker arrow */
+    border-color: transparent #b3b3b3 transparent transparent;
+    left: -19px;
+    top: 13px;
+}
+
+.oauth2-authorize .access:after {
+    position: absolute;
+    display: block;
+    content: '';
+    border: 9px solid;
+    border-color: transparent #f7f7f7 transparent transparent;
+    left: -18px;
+    top: 13px;
+}
+
+.oauth2-authorize h2 {
+    font-size: 1em;
+    font-weight: normal;
+    color: black;
+}
+
+.oauth2-authorize ul {
+    list-style-type: disc;
+    padding-left: 25px;
+}
+
+.oauth2-authorize .notice {
+    color: #333;
+    font-size: .85em;
+    margin: .5em 0;
+}
+
+.oauth2-authorize .fancybutton {
+    margin: 0;
+    margin-right: 1em;
+    cursor: pointer;
+}
+
+.oauth2-authorize .fancybutton.allow {
+    color: white;
+    background: #ff4500;
+    border-color: #541700;
+    box-shadow: inset 0px 1px 0px rgba(255, 255, 255, .25);
+    text-shadow: 0px 1px 0px rgba(0, 0, 0, .7);
+}
+
+.oauth2-authorize .fancybutton.allow:hover {
+    background: #ff571a;
+}
+
+.oauth2-authorize .fancybutton.allow:active {
+    background: #eb3f00;
+    box-shadow: inset 0px -1px 0px rgba(255, 255, 255, .25);
+}
+
+.oauth2-authorize .fancybutton.decline {
+    color: black;
+    background: #eee;
+    border-color: #555;
+    box-shadow: inset 0px 1px 0px rgba(255, 255, 255, .5);
+    text-shadow: 0px 1px 0px rgba(255, 255, 255, .7);
+}
+
+.oauth2-authorize .fancybutton.decline:hover {
+    background: #f7f7f7;
+}
+
+.oauth2-authorize .fancybutton.decline:active {
+    background: #e4e4e4;
+    box-shadow: inset 0px -1px 0px white;
+}

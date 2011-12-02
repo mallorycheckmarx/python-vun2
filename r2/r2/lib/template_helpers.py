@@ -21,7 +21,7 @@
 ################################################################################
 from r2.models import *
 from filters import unsafe, websafe
-from r2.lib.utils import vote_hash, UrlParser, timesince
+from r2.lib.utils import vote_hash, UrlParser, timesince, is_subdomain
 
 from r2.lib.media import s3_direct_url
 
@@ -30,10 +30,17 @@ import simplejson
 import os.path
 from copy import copy
 import random
+import urlparse
 from pylons import g, c
 from pylons.i18n import _, ungettext
+from paste.util.mimeparse import desired_matches
 
-def static(path):
+def is_encoding_acceptable(encoding_to_check):
+    "Check if a content encoding is acceptable to the user agent."
+    header = request.headers.get('Accept-Encoding', '')
+    return 'gzip' in desired_matches(['gzip'], header)
+
+def static(path, allow_gzip=True):
     """
     Simple static file maintainer which automatically paths and
     versions files being served out of static.
@@ -42,29 +49,56 @@ def static(path):
     version of the file is set to be random to prevent caching and it
     mangles the path to point to the uncompressed versions.
     """
-    
-    dirname, fname = os.path.split(path)
-    fname = fname.split('?')[0]
-    query = ""
+    dirname, filename = os.path.split(path)
+    extension = os.path.splitext(filename)[1]
+    is_text = extension in ('.js', '.css')
+    can_gzip = is_text and is_encoding_acceptable('gzip')
+    should_gzip = allow_gzip and can_gzip
 
-    # if uncompressed, randomize a url query to bust caches
-    if g.uncompressedJS:
-        query = "?v=" + str(random.random()).split(".")[-1]
+    path_components = []
+    actual_filename = None
+
+    if not c.secure and g.static_domain:
+        scheme = 'http'
+        domain = g.static_domain
+        query = None
+        suffix = '.gzip' if should_gzip and g.static_pre_gzipped else ''
+    elif c.secure and g.static_secure_domain:
+        scheme = 'https'
+        domain = g.static_secure_domain
+        query = None
+        suffix = '.gzip' if should_gzip and g.static_secure_pre_gzipped else ''
     else:
-        if fname in g.static_names:
-            fname = g.static_names[fname]
-            path = os.path.join(dirname, fname)
+        path_components.append(c.site.static_path)
+        query = None
 
-    # don't mangle paths
-    if dirname:
-        return path + query
+        if g.uncompressedJS:
+            query = 'v=' + str(random.randint(1, 1000000))
 
-    if g.uncompressedJS:
-        extension = path.split(".")[1:]
-        if extension and extension[-1] in ("js", "css"):
-            return os.path.join(c.site.static_path, extension[-1], path) + query
+            # unminified static files are in type-specific subdirectories
+            if not dirname and is_text:
+                path_components.append(extension[1:])
 
-    return os.path.join(c.site.static_path, path) + query
+            actual_filename = filename
+
+        scheme = None
+        domain = None
+        suffix = ''
+
+    path_components.append(dirname)
+    if not actual_filename:
+        actual_filename = g.static_names.get(filename, filename)
+    path_components.append(actual_filename + suffix)
+
+    actual_path = os.path.join(*path_components)
+    return urlparse.urlunsplit((
+        scheme,
+        domain,
+        actual_path,
+        query,
+        None
+    ))
+
 
 def s3_https_if_secure(url):
     # In the event that more media sources (other than s3) are added, this function should be corrected
@@ -74,6 +108,43 @@ def s3_https_if_secure(url):
     if not url.startswith("http://%s" % s3_direct_url):
          replace = "https://%s/" % s3_direct_url
     return url.replace("http://", replace)
+
+def js_config():
+    config = {
+        # is the user logged in?
+        "logged": c.user_is_loggedin and c.user.name,
+        # the subreddit's name (for posts)
+        "post_site": c.site.name if not c.default_sr else "",
+        # are we in an iframe?
+        "cnameframe": bool(c.cname and not c.authorized_cname),
+        # this page's referer
+        "referer": request.referer or "",
+        # the user's voting hash
+        "modhash": c.modhash or False,
+        # the current rendering style
+        "renderstyle": c.render_style,
+        # current domain
+        "cur_domain": get_domain(cname=c.frameless_cname, subreddit=False, no_www=True),
+        # where do ajax requests go?
+        "ajax_domain": get_domain(cname=c.authorized_cname, subreddit=False),
+        "extension": c.extension,
+        "https_endpoint": is_subdomain(request.host, g.domain) and g.https_endpoint,
+        # debugging?
+        "debug": g.debug,
+        "vl": {},
+        "sr": {},
+        "status_msg": {
+          "fetching": _("fetching title..."),
+          "submitting": _("submitting..."),
+          "loading": _("loading...")
+        },
+        "is_fake": isinstance(c.site, FakeSubreddit),
+        "tracking_domain": g.tracking_domain,
+        "adtracker_url": g.adtracker_url,
+        "clicktracker_url": g.clicktracker_url,
+        "static_root": static(''),
+    }
+    return config
 
 def generateurl(context, path, **kw):
     if kw:
@@ -302,8 +373,14 @@ def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_e
         u.path_add_subreddit(c.site)
 
     if not u.hostname or force_hostname:
-        u.hostname = get_domain(cname = (c.cname and not nocname),
-                                subreddit = False)
+        if c.secure:
+            u.hostname = request.host
+        else:
+            u.hostname = get_domain(cname = (c.cname and not nocname),
+                                    subreddit = False)
+    
+    if c.secure:
+        u.scheme = "https"
 
     if retain_extension:
         if c.render_style == 'mobile':

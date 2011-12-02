@@ -26,7 +26,7 @@ from pylons import g
 
 from pycassa import ColumnFamily
 from pycassa.cassandra.ttypes import ConsistencyLevel, NotFoundException
-from pycassa.system_manager import SystemManager, UTF8_TYPE
+from pycassa.system_manager import SystemManager, UTF8_TYPE, COUNTER_COLUMN_TYPE
 
 from r2.lib.utils import tup, Storage
 from r2.lib.db.sorts import epoch_seconds
@@ -35,10 +35,11 @@ from uuid import uuid1
 from itertools import chain
 import cPickle as pickle
 
-cassandra = g.cassandra
-thing_cache = g.thing_cache
-seeds = g.cassandra_seeds
+connection_pools = g.cassandra_pools
+default_connection_pool = g.cassandra_default_pool
+
 keyspace = 'reddit'
+thing_cache = g.thing_cache
 disallow_db_writes = g.disallow_db_writes
 tz = g.tz
 log = g.log
@@ -93,7 +94,7 @@ def will_write(fn):
         return fn(*a, **kw)
     return _fn
 
-def get_manager():
+def get_manager(seeds):
     # n.b. does not retry against multiple servers
     server = seeds[0]
     return SystemManager(server)
@@ -125,8 +126,12 @@ class ThingMeta(type):
             if not getattr(cls, "_write_consistency_level", None):
                 cls._write_consistency_level = write_consistency_level
 
+            pool_name = getattr(cls, "_connection_pool", default_connection_pool)
+            connection_pool = connection_pools[pool_name]
+            cassandra_seeds = connection_pool.server_list
+
             try:
-                cls._cf = ColumnFamily(cassandra,
+                cls._cf = ColumnFamily(connection_pool,
                                        cf_name,
                                        read_consistency_level = cls._read_consistency_level,
                                        write_consistency_level = cls._write_consistency_level)
@@ -134,16 +139,20 @@ class ThingMeta(type):
                 if not db_create_tables:
                     raise
 
-                manager = get_manager()
+                manager = get_manager(cassandra_seeds)
+
+                extra_creation_arguments = getattr(cls, "_extra_schema_creation_args", {})
 
                 log.warning("Creating Cassandra Column Family %s" % (cf_name,))
                 with make_lock('cassandra_schema'):
                     manager.create_column_family(keyspace, cf_name,
-                                                 comparator_type = cls._compare_with)
+                                                 comparator_type = cls._compare_with,
+                                                 **extra_creation_arguments
+                                                 )
                 log.warning("Created Cassandra Column Family %s" % (cf_name,))
 
                 # try again to look it up
-                cls._cf = ColumnFamily(cassandra,
+                cls._cf = ColumnFamily(connection_pool,
                                        cf_name,
                                        read_consistency_level = cls._read_consistency_level,
                                        write_consistency_level = cls._write_consistency_level)
@@ -152,6 +161,30 @@ class ThingMeta(type):
 
     def __repr__(cls):
         return '<thing: %s>' % cls.__name__
+
+class Counter(object):
+    __metaclass__ = ThingMeta
+
+    _use_db = False
+    _connection_pool = 'noretries'
+    _extra_schema_creation_args = {
+        'default_validation_class': COUNTER_COLUMN_TYPE,
+        'replicate_on_write': True
+    }
+
+    _type_prefix = None
+    _cf_name = None
+    _compare_with = UTF8_TYPE
+
+    @classmethod
+    def _byID(cls, key):
+        return cls._cf.get(key)
+
+    @classmethod
+    @will_write
+    def _incr(cls, key, column, delta=1):
+        cls._cf.add(key, column, delta)
+
 
 class ThingBase(object):
     # base class for Thing and Relation
@@ -201,6 +234,7 @@ class ThingBase(object):
     # updated columns will be present.) This is an expected convention
     # and is not enforced.
     _ttl = None
+    _warn_on_partial_ttl = True
 
     # A per-class dictionary of default TTLs that new columns of this
     # class should have
@@ -463,7 +497,7 @@ class ThingBase(object):
         if self._id is None:
             raise TdbException("Can't commit %r without an ID" % (self,))
 
-        if self._committed and self._ttl:
+        if self._committed and self._ttl and self._warn_on_partial_ttl:
             log.warning("Using a full-TTL object %r in a mutable fashion"
                         % (self,))
 

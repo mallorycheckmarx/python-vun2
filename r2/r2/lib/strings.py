@@ -27,7 +27,7 @@ random strings which can be different in each language, though the
 hooks to the UI are the same.
 """
 
-import helpers as h
+import r2.lib.helpers as h
 from pylons import g
 from pylons.i18n import _, ungettext
 import random, locale
@@ -72,6 +72,8 @@ string_dict = dict(
 
     cover_msg      = _("you'll need to login or register to do that"),
     cover_disclaim = _("(don't worry, it only takes a few seconds)"),
+
+    oauth_login_msg = _("Log in or register to connect your reddit account with [%(app_name)s](%(app_about_url)s)."),
 
     legal = _("I understand and agree that registration on or use of this site constitutes agreement to its %(user_agreement)s and %(privacy_policy)s."),
 
@@ -134,7 +136,7 @@ string_dict = dict(
     verify_email_submit = _("you'll be able to submit more frequently once you verify your email address"),
     email_verified =  _("your email address has been verfied"),
     email_verify_failed = _("Verification failed.  Please try that again"),
-    search_failed = _("Our search machines are under too much load to handle your request right now. :( Sorry for the inconvenience. [Try again](%(link)s) in a little bit -- but please don't mash reload; that only makes the problem worse."),
+    search_failed = _("Our search machines are under too much load to handle your request right now. :( Sorry for the inconvenience. Try again in a little bit -- but please don't mash reload; that only makes the problem worse."),
     invalid_search_query = _("I couldn't understand your query, so I simplified it and searched for \"%(clean_query)s\" instead."),
     completely_invalid_search_query = _("I couldn't understand your search query. Please try again."),
     generic_quota_msg = _("You've submitted too many links recently. Please try again in an hour."),
@@ -377,3 +379,9 @@ rand_strings = RandomStringManager()
 
 rand_strings.add('sadmessages',   "Funny 500 page message", 10)
 rand_strings.add('create_reddit', "Reason to create a reddit", 20)
+
+
+def print_rand_strings():
+    for name, rand_string in rand_strings:
+        for string in rand_string:
+            print "_('" + string + "')"
