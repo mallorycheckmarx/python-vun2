@@ -437,7 +437,7 @@ class RedditFooter(CachedTemplate):
                     OffsiteButton(_("reddit.tv"), "http://reddit.tv"),
                     OffsiteButton(_("radio reddit"), "http://radioreddit.com"),
                 ],
-                title = _("3>") if c.lang_rtl else _("<3"),
+                title = _("<3"),
                 type = "flat_vert",
                 separator = "")
         ]
