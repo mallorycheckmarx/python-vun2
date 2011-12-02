@@ -101,7 +101,6 @@ class Validator(object):
                 a.append(val)
         return self.run(*a)
 
-
 def build_arg_list(fn, env):
     """given a fn and and environment the builds a keyword argument list
     for fn"""
@@ -422,6 +421,27 @@ class VLength(Validator):
             self.set_error(self.length_error, {'max_length': self.max_length})
         else:
             return text
+        
+class VCustomMenu(Validator):
+    only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
+
+    def __init__(self, param, max_length,
+                 empty_error = errors.NO_TEXT,
+                 length_error = errors.TOO_LONG,
+                 **kw):
+        Validator.__init__(self, param, **kw)
+        self.max_length = max_length
+        self.length_error = length_error
+        self.empty_error = empty_error
+    
+    def run(self, link1, link2, link3, link4, link5, link6, link7):
+        text = [link1,link2,link3,link4,link5,link6,link7]
+        for t in text:
+            if self.empty_error and (not t or self.only_whitespace.match(t)):
+                self.set_error(self.empty_error)
+            elif len(t) > self.max_length:
+                self.set_error(self.length_error, {'max_length': self.max_length})
+        return text
 
 class VPrintable(VLength):
     def run(self, text, text2 = ''):
