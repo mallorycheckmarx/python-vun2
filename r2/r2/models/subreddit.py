@@ -206,13 +206,6 @@ class Subreddit(Thing, Printable):
     @property
     def link_urls_titles(self):
         return self._base.link_urls_titles if self.base else []
-    
-#    def has_custom_menu(self):
-#        return not (self._base.link_urls_0 == "" or
-#                    self._base.link_urls_1 == "" or
-#                    self._base.link_urls_2 == "" or
-#                    self._base.link_urls_3 == "" or
-#                    self._base.link_urls_4 == "")
 
     def spammy(self):
         return self._spam
