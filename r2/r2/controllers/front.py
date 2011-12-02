@@ -489,7 +489,7 @@ class FrontController(RedditController):
             return Reddit(content = Wrapped(c.site)).render()
         else:
             return self.abort404()
-        print pane
+
         return EditReddit(content = pane,
                           extension_handling = extension_handling).render()
 
