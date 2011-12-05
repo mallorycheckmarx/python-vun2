@@ -885,6 +885,7 @@ function show_edit_usertext(form) {
         var new_width = Math.max(body_width - 5, textarea.width());
         textarea.width(new_width);
         edit.width(new_width);
+        edit.parent("form").width(new_width);
 
         var new_height = Math.max(body_height, textarea.height());
         textarea.height(new_height);
