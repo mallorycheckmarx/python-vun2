@@ -58,8 +58,18 @@
     %for toolbar in thing.toolbars:
       ${toolbar}
     %endfor
-  </div>
 
+    ##custom menu for subreddits
+    %if not isinstance(c.site, FakeSubreddit):
+      <ul class="custom_menu">
+      %for i in range(len(c.site.link_urls)):
+	    <li><a href="${c.site.link_urls[i]}" title="${c.site.link_urls_titles[i]}">${c.site.link_urls_titles[i]}</a></li>
+	  %endfor
+	  </ul>
+	%endif
+
+  </div>
+	
   <div id="header-bottom-${'left' if c.lang_rtl else 'right'}">
     %if not c.user_is_loggedin:
       %if thing.enable_login_cover and not g.read_only_mode:
@@ -119,3 +129,4 @@
     %endif
   </div>
 </div>
+

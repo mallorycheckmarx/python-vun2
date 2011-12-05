@@ -240,6 +240,69 @@
       </ul>
     </%utils:line_field>
 
+    <%utils:line_field title="${_('custom menus')}">
+      <ul class="upload" id="menu-links">
+        <li><span class="gray">(${_("all links must start with http://")})</span></li>
+        <script language="javascript">
+            function add() {
+                var li = document.createElement("li");
+                li.setAttribute("id", "menu-item-" + i);
+
+                var list = document.getElementById("menu-links");
+
+                li.innerHTML = "<input type=\"text\" id=\"link-url-"+i+"\" name=\"link-url-"+i+"\" placeholder=\"link URL\" /> " +
+                               "<input type=\"text\" id=\"link-url-title-"+i+"\" name=\"link-url-title-"+i+"\" placeholder=\"link title\" />";
+
+                list.appendChild(li);
+                i++;
+                if(i >= 1){
+                    document.getElementById("remove-button").style.visibility = "visible";
+                    }
+                if(i >= 7){
+                    document.getElementById("add-button").style.visibility = "hidden";
+                    }
+ 
+                }
+
+            function remove() {
+                var d = document.getElementById("menu-links");
+
+                var olddiv = document.getElementById("menu-item-" + --i);
+
+                d.removeChild(olddiv);
+                if(i < 1){
+                    document.getElementById("remove-button").style.visibility = "hidden";
+                    }
+                }
+
+            $(window).load(function(){
+                i=${len(thing.site.link_urls)};
+                if(i < 1){
+                    document.getElementById("remove-button").style.visibility = "hidden";
+                }
+            });
+        </script>
+         %for i in range(len(thing.site.link_urls)):
+         <li id="${'menu-item-' + str(i)}">
+          <input type="text" name="${'link-url-' + str(i)}" placeholder="link URL" id="${'link-url-' + str(i)}"
+                 value="${thing.site.link_urls[i]}"
+                 />
+
+          <input type="text" name="${'link-url-title-' + str(i)}" placeholder="link title" id="${'link-url-title-' + str(i)}"
+                 value="${thing.site.link_urls_titles[i]}"
+                 />
+        </li>
+         %endfor
+
+      </ul>
+
+          <button type="button" id="add-button" onclick="add()">Add link</button>
+          <button type="button" id="remove-button" onclick="remove()">Remove link</button> 
+
+      <div class="clear"></div>
+      
+    </%utils:line_field>
+
   %if c.user_is_admin:
     <%utils:line_field title="${_('sponsorship')}">
       <ul class="upload">
