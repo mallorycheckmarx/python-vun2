@@ -528,6 +528,9 @@ class ApiController(RedditController):
         if type in ("moderator", "contributor"):
             Subreddit.special_reddits(friend, type, _update=True)
 
+        if request.params.get('api_type') == 'json':
+            return
+
         cls = dict(friend=FriendList,
                    moderator=ModList,
                    contributor=ContributorList,
