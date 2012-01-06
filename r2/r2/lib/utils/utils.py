@@ -1372,3 +1372,31 @@ def constant_time_compare(actual, expected):
             result |= ord(actual[i]) ^ ord(expected[i % expected_len])
     return result == 0
 
+def url_join(*parts):
+    """
+    Join one or more URL components. Slashes are added between each two
+    components. Extra slashes are removed.
+    """
+    path = []
+    for p in parts:
+        if p == '': continue
+
+        if p[0] == '/':
+            # remove leading slashes
+            i = 1
+            while i < len(p) and p[i] == '/': i+=1
+            p = p[i:]
+
+        if p == '': continue
+
+        if p[-1] == '/':
+            # remove trailing slashes
+            i = len(p)-2
+            while i >= 0 and p[i] == '/': i-=1
+            p = p[:i+1]
+
+        if p == '': continue
+
+        path.append(p)
+
+    return '/'.join(path)

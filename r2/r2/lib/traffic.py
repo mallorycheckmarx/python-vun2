@@ -22,7 +22,7 @@
 from httplib import HTTPConnection
 from urlparse import urlparse
 from cPickle import loads
-from utils import query_string
+from utils import query_string, url_join
 import os, socket, time, datetime
 from pylons import g
 from r2.lib.memoize import memoize
@@ -43,7 +43,7 @@ def load_traffic_uncached(interval, what, iden,
                 d = d.astimezone(g.tz)
         return ":".join(map(str, d.timetuple()[:6]))
     
-    traffic_url = os.path.join(g.traffic_url, interval, what, iden)
+    traffic_url = url_join(g.traffic_url, interval, what, iden)
     args = {}
     if what == 'thing' and interval == 'hour':
         if start_time:
