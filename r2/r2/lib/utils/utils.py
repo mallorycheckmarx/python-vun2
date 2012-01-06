@@ -1379,24 +1379,8 @@ def url_join(*parts):
     """
     path = []
     for p in parts:
+        p = p.strip('/')
         if p == '': continue
-
-        if p[0] == '/':
-            # remove leading slashes
-            i = 1
-            while i < len(p) and p[i] == '/': i+=1
-            p = p[i:]
-
-        if p == '': continue
-
-        if p[-1] == '/':
-            # remove trailing slashes
-            i = len(p)-2
-            while i >= 0 and p[i] == '/': i-=1
-            p = p[:i+1]
-
-        if p == '': continue
-
         path.append(p)
 
     return '/'.join(path)
