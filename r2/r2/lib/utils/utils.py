@@ -1375,12 +1375,27 @@ def constant_time_compare(actual, expected):
 def url_join(*parts):
     """
     Join one or more URL components. Slashes are added between each two
-    components. Extra slashes are removed.
+    components. Extra slashes are removed. If any of the components is
+    an absolute path, ignore all components in front of it.
     """
-    path = []
-    for p in parts:
-        p = p.strip('/')
-        if p == '': continue
-        path.append(p)
 
-    return '/'.join(path)
+    #remove empty parts
+    parts = filter(None, parts)
+
+    if len(parts) == 0: return ''
+
+    path = []
+    if parts[0].startswith('/'): path = ['/']
+    path.append(parts[0].strip('/'))
+    if parts[0].endswith('/'): path.append('/')
+
+    for p in parts[1:]:
+        if p.startswith('/'):
+            path = ['/']
+        elif not path[-1].endswith('/'): path.append('/')
+        stripped = p.strip('/')
+        if stripped:
+            path.append(stripped)
+            if p.endswith('/'): path.append('/')
+
+    return ''.join(path)
