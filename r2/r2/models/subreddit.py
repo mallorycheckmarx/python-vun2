@@ -76,6 +76,7 @@ class Subreddit(Thing, Printable):
                      flair_enabled = True,
                      flair_position = 'right', # one of ('left', 'right')
                      flair_self_assign_enabled = False,
+                     public_traffic = False,
                      )
     _essentials = ('type', 'name', 'lang')
     _data_int_props = Thing._data_int_props + ('mod_actions', 'reported')

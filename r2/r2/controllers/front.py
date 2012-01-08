@@ -533,7 +533,7 @@ class FrontController(RedditController):
             pane = self._make_spamlisting(location, num, after, reverse, count)
             if c.user.pref_private_feeds:
                 extension_handling = "private"
-        elif is_moderator and location == 'traffic':
+        elif (c.site.public_traffic or is_moderator) and location == 'traffic':
             pane = RedditTraffic()
         elif is_moderator and location == 'flair':
             pane = FlairPane(num, after, reverse, name, user)
