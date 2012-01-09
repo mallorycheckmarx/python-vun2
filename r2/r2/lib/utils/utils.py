@@ -1379,23 +1379,18 @@ def url_join(*parts):
     an absolute path, ignore all components in front of it.
     """
 
-    #remove empty parts
-    parts = filter(None, parts)
-
-    if len(parts) == 0: return ''
-
     path = []
-    if parts[0].startswith('/'): path = ['/']
-    path.append(parts[0].strip('/'))
-    if parts[0].endswith('/'): path.append('/')
 
-    for p in parts[1:]:
+    for p in parts:
+        if p == '': continue
         if p.startswith('/'):
             path = ['/']
-        elif not path[-1].endswith('/'): path.append('/')
+        if len(path) != 0 and not path[-1].endswith('/'):
+            path.append('/')
         stripped = p.strip('/')
         if stripped:
             path.append(stripped)
-            if p.endswith('/'): path.append('/')
+            if p.endswith('/'):
+                path.append('/')
 
     return ''.join(path)
