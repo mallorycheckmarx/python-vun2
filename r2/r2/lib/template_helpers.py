@@ -391,20 +391,6 @@ def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_e
 
     return u.unparse()
 
-def join_urls(*urls):
-    """joins a series of urls together without doubles slashes"""
-    if not urls:
-        return
-    
-    url = urls[0]
-    for u in urls[1:]:
-        if not url.endswith('/'):
-            url += '/'
-        while u.startswith('/'):
-            u = utils.lstrips(u, '/')
-        url += u
-    return url
-
 def style_line(button_width = None, bgcolor = "", bordercolor = ""):
     style_line = ''
     bordercolor = c.bordercolor or bordercolor
