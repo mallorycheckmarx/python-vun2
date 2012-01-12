@@ -82,7 +82,9 @@ class ApiminimalController(MinimalController):
 
     @validatedForm()
     def POST_new_captcha(self, form, jquery, *a, **kw):
-        jquery("body").captcha(get_iden())
+        iden = get_iden()
+        jquery("body").captcha(iden)
+        form._send_data(iden = iden) 
 
 
 class ApiController(RedditController):
@@ -293,6 +295,7 @@ class ApiController(RedditController):
 
                 md = safemarkdown(msg)
                 form.set_html(".status", md)
+                form.send_failure(errors.QUOTA_FILLED)
                 return
 
         # well, nothing left to do but submit it
@@ -334,6 +337,9 @@ class ApiController(RedditController):
         if extension:
             path += ".%s" % extension
         form.redirect(path)
+        form._send_data(url = path)
+        form._send_data(id = l._id36)
+        form._send_data(name = l._fullname)
 
     @validatedForm(VRatelimit(rate_ip = True,
                               rate_user = True,
@@ -1747,7 +1753,7 @@ class ApiController(RedditController):
     @noresponse(VUser(),
                 VModhash(),
                 action = VOneOf('action', ('sub', 'unsub')),
-                sr = VByName('sr'))
+                sr = VSubscribeSR('sr', 'sr_name'))
     def POST_subscribe(self, action, sr):
         # only users who can make edits are allowed to subscribe.
         # Anyone can leave.
