@@ -460,11 +460,11 @@ class ByIDController(ListingController):
     def query(self):
         return self.names
 
-    @validate(links = VByName("names", thing_cls = Link, multiple = True))
-    def GET_listing(self, links, **env):
-        if not links:
+    @validate(things = VByName("names", thing_cls = (Link, Subreddit), multiple = True))
+    def GET_listing(self, things, **env):
+        if not things:
             return self.abort404()
-        self.names = [l._fullname for l in links]
+        self.names = [t._fullname for t in things]
         return ListingController.GET_listing(self, **env)
 
 

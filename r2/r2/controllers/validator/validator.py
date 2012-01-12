@@ -529,7 +529,8 @@ class VAccountByName(VRequired):
 def fullname_regex(thing_cls = None, multiple = False):
     pattern = "[%s%s]" % (Relation._type_prefix, Thing._type_prefix)
     if thing_cls:
-        pattern += utils.to36(thing_cls._type_id)
+        type_ids = [utils.to36(c._type_id) for c in utils.tup(thing_cls)] 
+        pattern += '(%s)' % '|'.join(type_ids)
     else:
         pattern += r"[0-9a-z]+"
     pattern += r"_[0-9a-z]+"
