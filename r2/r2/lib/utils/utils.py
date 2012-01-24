@@ -250,7 +250,7 @@ def get_title(url):
         # if we don't find it in the first kb of the resource, we
         # probably won't find it
         opener = urlopen(url, timeout=15)
-        text = opener.read(1024)
+        text = opener.read(4096)
         opener.close()
         bs = BeautifulSoup(text, convertEntities=BeautifulSoup.HTML_ENTITIES)
         if not bs:
