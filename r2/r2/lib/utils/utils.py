@@ -255,7 +255,7 @@ def get_title(url):
         
         # Title not found in the first kb, try searching an additional 2kb
         if not title:
-			data += opener.read(2048)
+            data += opener.read(2048)
             title = extract_title(data)
         
         opener.close()
