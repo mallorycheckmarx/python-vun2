@@ -248,16 +248,13 @@ def get_title(url):
 
     try:
         # if we don't find it in the first kb of the resource, we
-        # probably won't find it
-        opener = urlopen(url, timeout=15)
-        text = opener.read(1024)
-        opener.close()
-        bs = BeautifulSoup(text, convertEntities=BeautifulSoup.HTML_ENTITIES)
-        if not bs:
-            return
+        # then attempt to find it in the next 4
+        
+        title_bs = fetch_url_content(url, 1024);
 
-        title_bs = bs.html.head.title
-
+        if not title_bs or not title_bs.string:
+            title_bs = fetch_url_content(url, 4096);
+            
         if not title_bs or not title_bs.string:
             return
 
@@ -265,6 +262,22 @@ def get_title(url):
 
     except:
         return None
+
+def fetch_url_content(url, size):
+    """ Fetches remote url content"""
+    
+    opener = urlopen(url, timeout=15)
+    text = opener.read(size)
+    opener.close()
+
+    bs = BeautifulSoup(text, convertEntities=BeautifulSoup.HTML_ENTITIES)
+    
+    if not bs:
+        return
+    
+    return bs.html.head.title
+
+
 
 valid_schemes = ('http', 'https', 'ftp', 'mailto')
 valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
