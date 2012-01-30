@@ -63,6 +63,7 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
                      'type': _('type'),
                      'link_type': _('link type'),
                      'over_18': _('toggle viewers must be over 18'),
+                     'allow_spoilers': _('toggle allow spoiler posts'),
                      'allow_top': _('toggle allow in default set'),
                      'show_media': _('toggle show thumbnail images of content'),
                      'domain': _('domain'),

@@ -163,6 +163,14 @@
             ${_("show thumbnail images of content")}
           </label>
         </li>
+        <li>
+          <input class="nomargin" type="checkbox" 
+                 name="allow_spoilers" id="allow_spoilers"
+                 ${thing.site and thing.site.allow_spoilers and "checked='checked'" or ""}/>
+          <label for="allow spoilers">
+            ${_("allow posts to be tagged as spoilers")}
+          </label>
+        </li>
       </ul>
     </div>
   </%utils:line_field>

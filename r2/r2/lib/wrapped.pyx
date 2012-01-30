@@ -460,11 +460,14 @@ class CachedTemplate(Templated):
                 getattr(c.user, "gold", False),
                 template_hash]
 
-        # if viewing a single subreddit, take flair settings into account.
+        # if viewing a single subreddit, take flair and spoilers settings into account.
         if c.user and hasattr(c.site, '_id'):
             keys.extend([
                 c.site.flair_enabled, c.site.flair_position,
                 c.user.flair_enabled_in_sr(c.site._id),
+                c.user.pref_show_flair,
+                c.site.allow_spoilers,
+                c.user.spoilers_enabled_in_sr(c.site._id),
                 c.user.pref_show_flair])
         keys = [make_cachable(x, *a) for x in keys]
 

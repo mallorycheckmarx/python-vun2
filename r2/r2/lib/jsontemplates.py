@@ -252,6 +252,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
                                                 clicked      = "clicked",
                                                 hidden       = "hidden",
                                                 over_18      = "over_18",
+                                                spoiler      = "spoiler",
                                                 likes        = "likes",
                                                 domain       = "domain",
                                                 title        = "title",

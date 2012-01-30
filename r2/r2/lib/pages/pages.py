@@ -504,6 +504,11 @@ class SubredditInfoBar(CachedTemplate):
             self.flair_prefs = FlairPrefs()
         else:
             self.flair_prefs = None
+            
+        if c.user_is_loggedin and c.site.allow_spoilers:
+            self.spoilers_prefs = SpoilersPrefs()
+        else:
+            self.spoilers_prefs = None
 
         CachedTemplate.__init__(self)
 
@@ -2629,6 +2634,20 @@ class FlairSelector(CachedTemplate):
                            matching_template=matching_template,
                            wrapped_user=wrapped_user)
 
+class SpoilersPrefs(CachedTemplate):
+    def __init__(self):
+        sr_spoilers_enabled = getattr(c.site, 'allow_spoilers', False)
+        user_spoilers_enabled = getattr(c.user, 'allow_spoilers_%s' % c.site._id,
+                                     True)
+        
+        wrapped_user = WrappedUser(c.user, subreddit=c.site,
+                                   force_show_flair=True,
+                                   include_flair_selector=True)
+        CachedTemplate.__init__(
+            self,
+            sr_spoilers_enabled=sr_spoilers_enabled,
+            user_spoilers_enabled=user_spoilers_enabled,
+            wrapped_user=wrapped_user)
 
 class FriendList(UserList):
     """Friend list on /pref/friends"""

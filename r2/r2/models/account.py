@@ -543,6 +543,9 @@ class Account(Thing):
 
     def flair_enabled_in_sr(self, sr_id):
         return getattr(self, 'flair_%d_enabled' % sr_id, True)
+        
+    def spoilers_enabled_in_sr(self, sr_id):
+        return getattr(self, 'allow_spoilers_%d' % sr_id, True)
 
 class FakeAccount(Account):
     _nodb = True
