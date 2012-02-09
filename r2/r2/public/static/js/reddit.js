@@ -1236,6 +1236,25 @@ $(function() {
             $(this).select();
         });
         
+        /* Load fuzzy time i18n strings */
+        $.timeago.settings.strings = {
+            prefixAgo: r.strings.ago,
+            prefixFromNow: "todo",
+            suffixAgo: null,
+            suffixFromNow: null,
+            seconds: "todo",
+            minute: "todo",
+            minutes: "todo",
+            hour: "todo",
+            hours: "todo",
+            day: "todo",
+            days: "todo",
+            month: "todo",
+            months: "todo",
+            year: "todo",
+            years: "todo"
+		};
+        
         /* Init fuzzy time on time elements */
         $("time.fuzzy-time").timeago();
     });
