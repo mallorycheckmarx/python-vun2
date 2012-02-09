@@ -26,13 +26,15 @@
   var $t = $.timeago;
 
   $.extend($.timeago, {
+    //these will be overwritten in ../reddit.js (jquery document ready function)
+    //based on i18n settings
     settings: {
       refreshMillis: 60000,
       allowFuture: false,
       strings: {
         prefixAgo: null,
         prefixFromNow: null,
-        suffixAgo: r.strings["ago"],
+        suffixAgo: "ago",
         suffixFromNow: "from now",
         seconds: "less than a minute",
         minute: "about a minute",
