@@ -124,10 +124,12 @@
     element = $(element);
     if (!element.data("timeago")) {
       element.data("timeago", { datetime: $t.datetime(element) });
+      /* Stops the title being overridden 
       var text = $.trim(element.text());
       if (text.length > 0) {
         element.attr("title", text);
       }
+      */
     }
     return element.data("timeago");
   }
