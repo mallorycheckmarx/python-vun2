@@ -1235,6 +1235,9 @@ $(function() {
         $("#shortlink-text").click(function() {
             $(this).select();
         });
+        
+        /* Init fuzzy time on time elements */
+        $("time.fuzzy-time").timeago();
     });
 
 function show_friend(account_fullname) {
