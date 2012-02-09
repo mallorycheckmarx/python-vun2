@@ -40,6 +40,9 @@ __all__ = ['StringHandler', 'strings', 'PluralManager', 'plurals',
 # dictionary is not used directly but rather is managed by the single
 # StringHandler instance strings
 string_dict = dict(
+           
+
+    ago = "1111 ago_testing 2222",
 
     banned_by = "removed by %s",
     banned    = "removed",
