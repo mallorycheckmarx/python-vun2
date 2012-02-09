@@ -32,7 +32,7 @@
       strings: {
         prefixAgo: null,
         prefixFromNow: null,
-        suffixAgo: "ago",
+        suffixAgo: r.strings["ago"],
         suffixFromNow: "from now",
         seconds: "less than a minute",
         minute: "about a minute",
