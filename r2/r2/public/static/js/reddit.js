@@ -1238,9 +1238,9 @@ $(function() {
         
         /* Load fuzzy time i18n strings */
         $.timeago.settings.strings = {
-            prefixAgo: r.strings.ta_ago,
-            prefixFromNow: r.strings.ta_prefixFromNow,
-            suffixAgo: r.strings.ta_suffixAgo,
+            prefixAgo: null,
+            prefixFromNow: null,
+            suffixAgo: r.strings.ta_ago,
             suffixFromNow: r.strings.ta_suffixFromNow,
             seconds: r.strings.ta_seconds,
             minute: r.strings.ta_minute,
