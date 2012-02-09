@@ -104,7 +104,7 @@ ${parent.collapsed()}
     %if show:
        ${unsafe(self.score(thing, likes = thing.likes))}&#32;
     %endif
-    ${thing_timestamp(thing, thing.timesince)}&#32;${_("ago")}
+    ${thing_timestamp(thing, thing.timesince)}&#32;
     %if thing.editted:
       <em>*</em>&nbsp;
     %endif
