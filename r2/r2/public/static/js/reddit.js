@@ -1238,22 +1238,22 @@ $(function() {
         
         /* Load fuzzy time i18n strings */
         $.timeago.settings.strings = {
-            prefixAgo: r.strings.ago,
-            prefixFromNow: "todo",
-            suffixAgo: null,
-            suffixFromNow: null,
-            seconds: "todo",
-            minute: "todo",
-            minutes: "todo",
-            hour: "todo",
-            hours: "todo",
-            day: "todo",
-            days: "todo",
-            month: "todo",
-            months: "todo",
-            year: "todo",
-            years: "todo"
-		};
+            prefixAgo: r.strings.ta_ago,
+            prefixFromNow: r.strings.ta_prefixFromNow,
+            suffixAgo: r.strings.ta_suffixAgo,
+            suffixFromNow: r.strings.ta_suffixFromNow,
+            seconds: r.strings.ta_seconds,
+            minute: r.strings.ta_minute,
+            minutes: r.strings.ta_minutes,
+            hour: r.strings.ta_hour,
+            hours: r.strings.ta_hours,
+            day: r.strings.ta_day,
+            days: r.strings.ta_days,
+            month: r.strings.ta_month,
+            months: r.strings.ta_months,
+            year: r.strings.ta_year,
+            years: r.strings.ta_years
+        };
         
         /* Init fuzzy time on time elements */
         $("time.fuzzy-time").timeago();
