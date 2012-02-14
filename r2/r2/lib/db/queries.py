@@ -711,33 +711,38 @@ def new_message(message, inbox_rels):
     from_user = Account._byID(message.author_id)
     for inbox_rel in tup(inbox_rels):
         to = inbox_rel._thing1
+        add_queries([get_sent(from_user)], insert_items = message)
+
         # moderator message
         if isinstance(inbox_rel, ModeratorInbox):
             add_queries([get_subreddit_messages(to)],
                         insert_items = inbox_rel)
         # personal message
         else:
-            add_queries([get_sent(from_user)], insert_items = message)
             add_queries([get_inbox_messages(to)],
                         insert_items = inbox_rel)
         set_unread(message, to, True)
 
     add_message(message)
 
-def set_unread(message, to, unread):
+def set_unread(messages, to, unread):
+    # Maintain backwards compatability
+    messages = tup(messages)
+
     if isinstance(to, Subreddit):
-        for i in ModeratorInbox.set_unread(message, unread):
+        for i in ModeratorInbox.set_unread(messages, unread):
             kw = dict(insert_items = i) if unread else dict(delete_items = i)
             add_queries([get_unread_subreddit_messages(i._thing1)], **kw)
     else:
-        for i in Inbox.set_unread(message, unread, to = to):
+        # All messages should be of the same type
+        for i in Inbox.set_unread(messages, unread, to=to):
             kw = dict(insert_items = i) if unread else dict(delete_items = i)
-            if isinstance(message, Comment) and not unread:
+            if isinstance(messages[0], Comment) and not unread:
                 add_queries([get_unread_comments(i._thing1)], **kw)
                 add_queries([get_unread_selfreply(i._thing1)], **kw)
             elif i._name == 'selfreply':
                 add_queries([get_unread_selfreply(i._thing1)], **kw)
-            elif isinstance(message, Comment):
+            elif isinstance(messages[0], Comment):
                 add_queries([get_unread_comments(i._thing1)], **kw)
             else:
                 add_queries([get_unread_messages(i._thing1)], **kw)
