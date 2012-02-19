@@ -390,6 +390,27 @@ function helpoff(elem) {
     $(elem).parents(".usertext-edit:first").children(".markhelp:first").hide();
 };
 
+/* Comment Preview Support */
+function previewon(elem) {
+	var user_text = $(elem).parents(".usertext-edit:first");
+	var text_area = user_text.find("textarea[name=text]");
+	if (text_area.val() != "") {
+		var preview_div = user_text.children(".markpreview:first");
+		var form = preview_div.parents("form:first");
+		post_form($(form), "comment_preview");
+		preview_div.show();
+	}
+};
+
+function previewoff(elem) {
+	var user_text = $(elem).parents(".usertext-edit:first");
+	var text_area = user_text.find("textarea[name=text]");
+	var preview_div = user_text.children(".markpreview:first");
+	preview_div.html('');
+	preview_div.hide();
+};
+/* Comment Preview Support End */
+
 function show_all_messages(elem) {
     var m = $(elem).parents(".message");
     var ids = [];

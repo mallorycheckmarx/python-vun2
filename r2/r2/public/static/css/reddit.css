@@ -4688,6 +4688,10 @@ tr.gold-accent + tr > td {
 .friend-note.edited button[type=submit] { display: inline-block; }
 .friend-note.edited input[type=text] { width: 250px; margin-right: 0px; }
 
+.usertext .preview-toggle {
+    font-size: smaller;
+    margin-top: 5px;
+}
 
 .gold-accent h1,
 .gold-accent th {

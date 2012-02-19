@@ -1192,6 +1192,13 @@ class ApiController(RedditController):
         """
         return "nothing to see here."
 
+    @validatedForm(VUser(),
+                   VModhash(),
+                   ip = ValidIP(),
+                   comment = VMarkdown(['text', 'comment']))
+    def POST_comment_preview(self, form, jquery, comment, ip): 
+	form.set_html('.markpreview', safemarkdown(comment))
+
     @validate(VSrModerator(),
               VModhash(),
               file = VLength('file', max_length=1024*500),
