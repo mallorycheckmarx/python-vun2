@@ -599,6 +599,22 @@ class SoundcloudScraper(MediaScraper):
                           </object>"""
     video_id_rx = re.compile('^http://soundcloud.com/[a-zA-Z0-9_-]+/([a-zA-Z0-9_-]+)')
 
+
+class GogoyokoScraper(MediaScraper):
+    """gogoyoko.com"""
+    domains = ['gogoyoko.com']
+    height = 100
+    width  = 460
+    media_template = """<object width="400" height="100">
+		<param name="movie" value="http://www.gogoyoko.com/object/widget_player.swf?songId=$video_id"></param>
+		<param name="allowscriptaccess" value="always"></param>
+		<embed src="http://www.gogoyoko.com/object/widget_player.swf?songId=$video_id" type="application/x-shockwave-flash" allowscriptaccess="always" allowfullscreen="true" width="400" height="100">
+		</embed>
+		</object>"""
+    video_id_rx = re.compile('^http://www.gogoyoko.com/?#?/song/([a-zA-Z0-9_-]+)')
+
+
+
 class CraigslistScraper(MediaScraper):
     domains = ['craigslist.org']
     height = 480
@@ -1391,6 +1407,7 @@ for scraper in [ EmbedlyOEmbed,
                  EscapistScraper,
                  JustintvScraper,
                  SoundcloudScraper,
+                 GogoyokoScraper,
                  CraigslistScraper,
                  GenericScraper,
                  ]:
@@ -1759,6 +1776,7 @@ test_urls = [
     'http://revver.com/video/263817/happy-easter/',
     'http://www.revver.com/video/1574939/easter-bunny-house/',
     'http://revver.com/video/771140/easter-08/',
+    'http://www.gogoyoko.com/song/457'
     ]
 
 def submit_all():
