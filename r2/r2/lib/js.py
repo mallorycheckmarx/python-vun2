@@ -246,6 +246,7 @@ module["reddit"] = LocalizedModule("reddit.js",
     "flair.js",
     "reddit.js",
     "utils.js",
+    "timeago.js",
 )
 
 module["mobile"] = LocalizedModule("mobile.js",
