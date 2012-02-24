@@ -165,7 +165,7 @@ $(function() {
             options.dataType = "json";
         } else {
             var secure = 'https:' == document.location.protocol;
-            var prefix = secure ? "https://pay.reddit.com" : "http://buttons.reddit.com";
+            var prefix = secure ? "https://ssl.reddit.com" : "http://buttons.reddit.com";
             options.url = prefix + infoTarget;
             options.dataType = options.jsonp = "jsonp";
             options.jsonpCallback = "buttonInfoCb";
