@@ -447,11 +447,16 @@ class LimitUploadSize(object):
     def __call__(self, environ, start_response):
         cl_key = 'CONTENT_LENGTH'
         if environ['REQUEST_METHOD'] == 'POST':
-            if ((cl_key not in environ)
-                or int(environ[cl_key]) > self.max_size):
+            if ((cl_key not in environ) 
+                or not environ[cl_key]):
                 r = Response()
-                r.status_code = 500
-                r.content = '<html><head></head><body><script type="text/javascript">parent.too_big();</script>request too big</body></html>'
+                r.status_code = 411
+                r.content = '<html><head></head><body>length required</body></html>'
+                return r(environ, start_response)
+            if int(environ[cl_key]) > self.max_size:
+                r = Response()
+        	r.status_code =	413
+                r.content = '<html><head></head><body><script type="text/javascript">parent.too_big();</script>request entity too large</body></html>'
                 return r(environ, start_response)
 
         return self.app(environ, start_response)
