@@ -452,16 +452,19 @@ class LimitUploadSize(object):
                 r.status_code = 411
                 r.content = '<html><head></head><body>length required</body></html>'
                 return r(environ, start_response)
+
             try:
-                if int(environ[cl_key]) > self.max_size:
-                    r = Response()
-                    r.status_code = 413
-                    r.content = '<html><head></head><body><script type="text/javascript">parent.too_big();</script>request entity too large</body></html>'
-                    return r(environ, start_response)
+                cl_int = int(environ[cl_key])
             except ValueError:
                 r = Response()
                 r.status_code = 400
                 r.content = '<html><head></head><body>bad request</body></html>'
+                return r(environ, start_response)
+
+            if cl_int > self.max_size:
+                r = Response()
+                r.status_code = 413
+                r.content = '<html><head></head><body><script type="text/javascript">parent.too_big();</script>request entity too large</body></html>'
                 return r(environ, start_response)
 
         return self.app(environ, start_response)
