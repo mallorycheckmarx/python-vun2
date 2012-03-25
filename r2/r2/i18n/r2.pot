@@ -3613,8 +3613,7 @@ msgstr ""
 
 #: r2/templates/prefoptions.html:139
 msgid ""
-"(it shows new and promoted links, and gives you a say in what's spam and what"
-" isn't.)"
+"(it shows new and promoted links.)"
 msgstr ""
 
 #: r2/templates/prefoptions.html:143
