@@ -21,7 +21,7 @@
 ################################################################################
 from r2.models import *
 from filters import unsafe, websafe, _force_unicode
-from r2.lib.utils import vote_hash, UrlParser, timesince, is_subdomain
+from r2.lib.utils import vote_hash, UrlParser, timesince, is_subdomain, url_join
 
 from r2.lib.media import s3_direct_url
 
@@ -90,7 +90,7 @@ def static(path, allow_gzip=True):
         actual_filename = g.static_names.get(filename, filename)
     path_components.append(actual_filename + suffix)
 
-    actual_path = os.path.join(*path_components)
+    actual_path = url_join(*path_components)
     return urlparse.urlunsplit((
         scheme,
         domain,
@@ -395,20 +395,6 @@ def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_e
             u.set_extension('compact')
 
     return u.unparse()
-
-def join_urls(*urls):
-    """joins a series of urls together without doubles slashes"""
-    if not urls:
-        return
-    
-    url = urls[0]
-    for u in urls[1:]:
-        if not url.endswith('/'):
-            url += '/'
-        while u.startswith('/'):
-            u = utils.lstrips(u, '/')
-        url += u
-    return url
 
 def style_line(button_width = None, bgcolor = "", bordercolor = ""):
     style_line = ''

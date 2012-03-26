@@ -21,12 +21,13 @@
 ################################################################################
 
 <%! 
-   from r2.lib.template_helpers import add_sr, static, join_urls, class_dict, get_domain
+   from r2.lib.template_helpers import add_sr, static, class_dict, get_domain
    from r2.lib.filters import unsafe
    from r2.lib.pages import SearchForm, ClickGadget, SideContentBox
    from r2.lib import tracking
    from pylons import request
    from r2.lib.strings import strings
+   from r2.lib.utils import url_join
    from r2.models import make_feedurl, Sub
 %>
 <%namespace file="login.html" import="login_panel, login_form"/>
@@ -93,7 +94,7 @@
 
   %if thing.extension_handling:
     <%
-       rss= add_sr(join_urls(request.path,'.rss'))
+       rss= add_sr(url_join(request.path,'.rss'))
        if thing.extension_handling == "private":
           rss = make_feedurl(c.user, rss)
      %>

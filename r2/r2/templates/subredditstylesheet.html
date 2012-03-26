@@ -23,6 +23,7 @@
   from r2.lib.filters import keep_space
   from r2.lib.template_helpers import add_sr, static
   from r2.lib.media import s3_direct_url
+  from r2.lib.utils import url_join
   import os
 
 %>
@@ -165,7 +166,7 @@
         function showDefaultStylesheet(btn) {
             var default_stylesheet = $('#default_stylesheet');
             /* make sure to load the default stylesheet contents from the local domain so it doesn't get caught by cross-domain rules. */
-            var stylesheet_url = '${add_sr(os.path.join(c.site.static_path, g.static_names.get("reddit.css", "reddit.css")), nocname=True, sr_path=False)}';
+            var stylesheet_url = '${add_sr(url_join(c.site.static_path, g.static_names.get("reddit.css", "reddit.css")), nocname=True, sr_path=False)}';
 
             if (!default_stylesheet.data('loaded')) {
               default_stylesheet.text('loading...');
