@@ -42,7 +42,7 @@ import hashlib
 
 import mimetypes
 
-s3_direct_url = "s3.amazonaws.com"
+s3_direct_url = g.s3_media_base_url
 
 threads = 20
 log = g.log
