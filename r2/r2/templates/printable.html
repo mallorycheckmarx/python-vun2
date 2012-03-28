@@ -76,7 +76,8 @@ ${self.RenderPrintable()}
      rowclass += " hidden"
  %>
 <div class="${self.thing_css_class(thing)} ${rowclass} ${unsafe(cls)} ${selflink}"
-    ${thing.display} data-fullname="${thing._fullname}" onclick="click_thing(this)">
+    ${thing.display} data-fullname="${thing._fullname}" onclick="click_thing(this)"
+    ups="${thing._ups}" downs="${thing._downs}">
   <p class="parent">
     ${self.ParentDiv()}
   </p>
