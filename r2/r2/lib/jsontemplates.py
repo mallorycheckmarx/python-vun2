@@ -215,7 +215,8 @@ class SubredditJsonTemplate(ThingJsonTemplate):
                                                 display_name = "name",
                                                 header_img   = "header",
                                                 header_size  = "header_size",
-                                                header_title = "header_title")
+                                                header_title = "header_title",
+                                                subscriber   = "subscriber")
 
     def thing_attr(self, thing, attr):
         # Don't reveal revenue information via /r/lounge's subscribers
@@ -236,7 +237,8 @@ class AccountJsonTemplate(IdentityJsonTemplate):
     _data_attrs_ = IdentityJsonTemplate.data_attrs(has_mail = "has_mail",
                                                   has_mod_mail = "has_mod_mail",
                                                   is_mod = "is_mod",
-                                                  )
+                                                  friends = "friends",
+                                                  enemies = "enemies")
 
     def thing_attr(self, thing, attr):
         from r2.models import Subreddit
@@ -250,6 +252,10 @@ class AccountJsonTemplate(IdentityJsonTemplate):
             return None
         if attr == "is_mod":
             return bool(Subreddit.reverse_moderator_ids(thing))
+        if attr == "friends":
+            return bool(thing._id in c.user.friends)
+        if attr == "enemies":
+            return bool(thing._id in c.user.enemies)
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def raw_data(self, thing):
