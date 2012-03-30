@@ -315,7 +315,9 @@ def get_spam_comments(sr):
 def get_spam(sr):
     if isinstance(sr, ModContribSR):
         srs = Subreddit._byID(sr.sr_ids, return_dict=False)
-        results = [ get_spam_links(sr) for sr in srs ]
+        results = []
+        results.extend(get_spam_links(sr) for sr in srs)
+        results.extend(get_spam_comments(sr) for sr in srs)
         return merge_results(*results)
     else:
         return merge_results(get_spam_links(sr),
