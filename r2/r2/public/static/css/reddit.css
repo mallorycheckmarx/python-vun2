@@ -2781,6 +2781,21 @@ form input[type=radio] {margin: 2px .5em 0 0; }
     border-radius: 3px;
 }
 
+.entry .buttons li.spoiler-stamp {
+    font-size: x-small;
+}
+
+.spoiler-stamp acronym {
+    color: #336699;
+    font-size: x-small;
+    text-decoration: none;
+    padding: 0 2px;
+    border: 1px solid #5f99cf !important;
+    -moz-border-radius: 3px;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+}
+
 .entry .buttons li.trial-stamp, .entry .buttons li.reported-stamp {
     border: 1px solid black !important;
     padding: 0 4px;
@@ -2852,6 +2867,11 @@ form input[type=radio] {margin: 2px .5em 0 0; }
 .thumbnail.nsfw {
     height: 70px;
     background-image: url(../nsfw2.png); /* SPRITE */
+}
+
+.thumbnail.spoiler {
+    height: 70px;
+    background-image: url(../spoiler2.png); /* SPRITE */
 }
 
 .thumbnail.self {

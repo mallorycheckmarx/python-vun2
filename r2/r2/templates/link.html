@@ -73,6 +73,13 @@
        </acronym>
      </li>
     %endif
+    %if thing.spoiler:
+     <li class="rounded spoiler-stamp stamp">
+       <acronym title="${_('Spoiler content')}">
+         ${_("SPOILER")}
+       </acronym>
+     </li>
+    %endif
     ${self.buttons()}
     ${self.admintagline()}
   </ul>
@@ -153,7 +160,7 @@
 </%def>
 
 <%def name="thing_css_class(what)" buffered="True">
-${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""}
+${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${"spoiler" if thing.spoiler else ""}
 </%def>
 
 <%def name="thing_data_attributes(what)" buffered="True">

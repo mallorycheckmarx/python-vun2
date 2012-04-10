@@ -818,6 +818,28 @@ class ApiController(RedditController):
 
         # flag search indexer that something has changed
         changed(thing)
+        
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanAlter('id'),
+                thing = VByName('id'))
+    def POST_markspoiler(self, thing):
+        thing.spoiler = True
+        thing._commit()
+
+        # flag search indexer that something has changed
+        changed(thing)
+
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanAlter('id'),
+                thing = VByName('id'))
+    def POST_unmarkspoiler(self, thing):
+        thing.spoiler = False
+        thing._commit()
+
+        # flag search indexer that something has changed
+        changed(thing)
 
     @noresponse(VUser(), VModhash(),
                 thing = VByName('id'))
@@ -1373,6 +1395,7 @@ class ApiController(RedditController):
                    over_18 = VBoolean('over_18'),
                    allow_top = VBoolean('allow_top'),
                    show_media = VBoolean('show_media'),
+                   allow_spoilers = VBoolean('allow_spoilers'),
                    show_cname_sidebar = VBoolean('show_cname_sidebar'),
                    type = VOneOf('type', ('public', 'private', 'restricted', 'archived')),
                    link_type = VOneOf('link_type', ('any', 'link', 'self')),
@@ -1391,8 +1414,8 @@ class ApiController(RedditController):
         redir = False
         kw = dict((k, v) for k, v in kw.iteritems()
                   if k in ('name', 'title', 'domain', 'description', 'over_18',
-                           'show_media', 'show_cname_sidebar', 'type', 'link_type', 'lang',
-                           "css_on_cname", "header_title", 
+                           'show_media', 'allow_spoilers', 'show_cname_sidebar', 'type', 'link_type', 
+                           'lang', "css_on_cname", "header_title", 
                            'allow_top'))
 
         #if a user is banned, return rate-limit errors
@@ -2267,6 +2290,14 @@ class ApiController(RedditController):
     @api_doc(api_section.flair)
     def POST_setflairenabled(self, form, jquery, flair_enabled):
         setattr(c.user, 'flair_%s_enabled' % c.site._id, flair_enabled)
+        c.user._commit()
+        jquery.refresh()
+        
+    @validatedForm(VUser(),
+                   VModhash(),
+                   spoilers_enabled = VBoolean("spoilers_enabled"))
+    def POST_setspoilersenabled(self, form, jquery, spoilers_enabled):
+        setattr(c.user, 'allow_spoilers_%d' % c.site._id, spoilers_enabled)
         c.user._commit()
         jquery.refresh()
 

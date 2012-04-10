@@ -52,6 +52,7 @@ class Link(Thing, Printable):
     _defaults = dict(is_self = False,
                      over_18 = False,
                      nsfw_str = False,
+                     spoiler = False,
                      reported = 0, num_comments = 0,
                      moderator_banned = False,
                      banned_before_moderator = False,
@@ -232,6 +233,14 @@ class Link(Thing, Printable):
             if is_nsfw or is_from_nsfw_sr:
                 return False
                 
+        # hide spoilered links if the user doesn't want to see them
+        if(c.user_is_loggedin):
+            is_spoiler = bool(wrapped.spoiler)
+            show_spoilers = getattr(user, 'allow_spoilers_%d' % wrapped.subreddit._id, True)
+            
+            if(is_spoiler and not show_spoilers):
+                    return False
+                
         return True
 
     # none of these things will change over a link's lifetime
@@ -364,8 +373,10 @@ class Link(Thing, Printable):
             item.over_18 = bool(item.over_18 or item.subreddit.over_18 or
                                 item.nsfw_str)
             item.nsfw = item.over_18 and user.pref_label_nsfw
-            
             item.is_author = (user == item.author)
+
+            if item.spoiler and not getattr(item.subreddit, "allow_spoilers", False):
+                item.spoiler = False
 
             item.thumbnail_sprited = False
             # always show a promo author their own thumbnail
@@ -374,6 +385,12 @@ class Link(Thing, Printable):
             elif user.pref_no_profanity and item.over_18 and not c.site.over_18:
                 if show_media:
                     item.thumbnail = "nsfw"
+                    item.thumbnail_sprited = True
+                else:
+                    item.thumbnail = ""
+            elif item.spoiler:
+                if show_media:
+                    item.thumbnail = "spoiler"
                     item.thumbnail_sprited = True
                 else:
                     item.thumbnail = ""

@@ -66,6 +66,12 @@
   %if thing.show_unmarknsfw:
     <li>${ynbutton(_("un-nsfw"), _("unmarked"), "unmarknsfw")}</li>
   %endif
+  %if thing.show_markspoiler:
+    <li>${ynbutton(_("spoiler"), _("spoilered"), "markspoiler")}</li>
+  %endif
+  %if thing.show_unmarkspoiler:
+    <li>${ynbutton(_("un-spoiler"), _("unspoilered"), "unmarkspoiler")}</li>
+  %endif
 </%def>
 
 <%def name="distinguish_setter(name, value=None)">

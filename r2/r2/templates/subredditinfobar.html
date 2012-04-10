@@ -63,6 +63,10 @@
   %if thing.flair_prefs:
     ${thing.flair_prefs}
   %endif
+  
+  %if thing.spoilers_prefs:
+    ${thing.spoilers_prefs}
+  %endif
 
   %if thing.sr.description:
     ${thing.sr.usertext}
