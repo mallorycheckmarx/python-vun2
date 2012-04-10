@@ -236,7 +236,8 @@ class AccountJsonTemplate(IdentityJsonTemplate):
     _data_attrs_ = IdentityJsonTemplate.data_attrs(has_mail = "has_mail",
                                                   has_mod_mail = "has_mod_mail",
                                                   is_mod = "is_mod",
-                                                  )
+                                                  is_friend = "is_friend",
+                                                  is_enemy = "is_enemy")
 
     def thing_attr(self, thing, attr):
         from r2.models import Subreddit
@@ -250,6 +251,10 @@ class AccountJsonTemplate(IdentityJsonTemplate):
             return None
         if attr == "is_mod":
             return bool(Subreddit.reverse_moderator_ids(thing))
+        if attr == "is_friend":
+            return bool(c.user_is_loggedin and thing._id in c.user.friends)
+        if attr == "is_enemy":
+            return bool(c.user_is_loggedin and thing._id in c.user.enemies)
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def raw_data(self, thing):
