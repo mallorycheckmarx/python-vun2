@@ -366,6 +366,8 @@ class FrontController(RedditController):
                                 must_revalidate=False)
             c.response_content_type = 'text/css'
             c.response.content =  c.site.stylesheet_contents
+            if c.site.type == 'private':
+                c.response.headers['X-Private-Subreddit'] = 'private'
             return c.response
         else:
             return self.abort404()
@@ -398,11 +400,8 @@ class FrontController(RedditController):
         if not c.user_is_loggedin:
             return self.abort404()
 
-        if isinstance(c.site, ModSR) or isinstance(c.site, MultiReddit):
-            if isinstance(c.site, ModSR):
-                srs = Subreddit._byID(c.site.sr_ids(), return_dict=False)
-            else:
-                srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
+        if isinstance(c.site, (MultiReddit, ModSR)):
+            srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
 
             # check that user is mod on all requested srs
             if not Subreddit.user_mods_all(c.user, srs) and not c.user_is_admin:

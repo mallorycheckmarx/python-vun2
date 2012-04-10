@@ -2,7 +2,9 @@ import re
 from collections import defaultdict
 from itertools import chain
 import inspect
+from os.path import abspath, relpath
 
+from pylons import g
 from pylons.i18n import _
 from reddit_base import RedditController
 from r2.lib.utils import Storage
@@ -57,6 +59,13 @@ def api_doc(section, **kwargs):
             kwargs['extends'] = kwargs['extends']._api_doc
         doc.update(kwargs)
         doc['section'] = section
+        doc['lineno'] = api_function.func_code.co_firstlineno
+
+        file_path = abspath(api_function.func_code.co_filename)
+        root_dir = g.paths['root']
+        if file_path.startswith(root_dir):
+            doc['relfilepath'] = relpath(file_path, root_dir)
+
         return api_function
     return add_metadata
 
