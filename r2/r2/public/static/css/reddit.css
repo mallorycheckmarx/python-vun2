@@ -941,7 +941,7 @@ a.author { margin-right: 0.5em; }
 }
 
 .organic-listing .sponsored-tagline {
-    right: 6.8em;
+    right: 6.4em;
 }
 
 .sponsored-tagline {
@@ -2901,7 +2901,7 @@ ul#image-preview-list .description pre {
     border-color: lightgray;
     padding: 5px; 
     margin: 5px; 
-    width: 900px;
+    width: 100%;
 }
 
 #preview-table > table > tbody > tr { padding-bottom: 10px;  }
@@ -4254,7 +4254,6 @@ dd { margin-left: 20px;  }
 .icon-menu .reddit-moderators:before,
 .icon-menu .moderator-mail:before,
 .icon-menu .reddit-contributors:before,
-.icon-menu .reddit-modqueue:before,
 .giftgold a:before,
 .gold-form h1.goldgift:before {
     height: 16px;
@@ -4322,9 +4321,6 @@ dd { margin-left: 20px;  }
 }
 .icon-menu .reddit-contributors:before {
     background-image: url(../pencil.png); /* SPRITE */
-}
-.icon-menu .reddit-modqueue:before {
-    background-image: url(../reddit_modqueue.png); /* SPRITE */
 }
 
 .linkinfo {
@@ -5060,6 +5056,7 @@ tr.gold-accent + tr > td {
     background-image: url(../modactions_editflair.png); /* SPRITE */
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 .modactions.distinguish {
     background-image: url(../modactions_distinguish.png); /* SPRITE */
@@ -5257,3 +5254,5 @@ tr.gold-accent + tr > td {
     width: 50%;
 }
 >>>>>>> upstream/master
+=======
+>>>>>>> 92ca5e5ee6b7502bfd92e55accaa12f42123d655

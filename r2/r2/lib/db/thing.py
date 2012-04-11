@@ -34,7 +34,6 @@ from .. utils import iters, Results, tup, to36, Storage, thing_utils, timefromno
 from r2.config import cache
 from r2.lib.cache import sgm
 from r2.lib.log import log_text
-from r2.lib import stats
 from pylons import g
 
 
@@ -271,7 +270,7 @@ class DataThing(object):
             self._cache_myself()
 
     @classmethod
-    def _load_multi(cls, need):
+    def _load_multi(cls, need, check_essentials=True):
         need = tup(need)
         need_ids = [n._id for n in need]
         datas = cls._get_data(cls._type_id, need_ids)
@@ -286,9 +285,13 @@ class DataThing(object):
             i._t.update(datas.get(i._id, i._t))
             i._loaded = True
 
-            for attr in essentials:
-                if attr not in i._t:
-                    print "Warning: %s is missing %s" % (i._fullname, attr)
+            for essential in essentials:
+                if essential not in i._t:
+                    if check_essentials:
+                        raise AttributeError("Refusing to cache %s; it's missing %s"
+                                             % (i._fullname, essential))
+                    else:
+                        print "Warning: %s is missing %s" % (i._fullname, essential)
             i._asked_for_data = True
             to_save[i._id] = i
 
@@ -297,8 +300,8 @@ class DataThing(object):
         #write the data to the cache
         cache.set_multi(to_save, prefix=prefix)
 
-    def _load(self):
-        self._load_multi(self)
+    def _load(self, check_essentials=True):
+        self._load_multi(self, check_essentials)
 
     def _safe_load(self):
         if not self._loaded:
@@ -349,20 +352,12 @@ class DataThing(object):
     #TODO error when something isn't found?
     @classmethod
     def _byID(cls, ids, data=False, return_dict=True, extra_props=None,
-              stale=False):
+              stale=False, check_essentials=True):
         ids, single = tup(ids, True)
         prefix = thing_prefix(cls.__name__)
 
         if not all(x <= tdb.MAX_THING_ID for x in ids):
             raise NotFound('huge thing_id in %r' % ids)
-
-        def count_found(ret, still_need):
-            cache.stats.cache_report(
-                hits=len(ret), misses=len(still_need),
-                cache_name='sgm.%s' % cls.__name__)
-
-        if not cache.stats:
-            count_found = None
 
         def items_db(ids):
             items = cls._get_item(cls._type_id, ids)
@@ -371,8 +366,7 @@ class DataThing(object):
 
             return items
 
-        bases = sgm(cache, ids, items_db, prefix, stale=stale,
-                    found_fn=count_found)
+        bases = sgm(cache, ids, items_db, prefix, stale=stale)
 
         #check to see if we found everything we asked for
         for i in ids:
@@ -393,7 +387,7 @@ class DataThing(object):
                 if not v._loaded:
                     need.append(v)
             if need:
-                cls._load_multi(need)
+                cls._load_multi(need, check_essentials)
 ### The following is really handy for debugging who's forgetting data=True:
 #       else:
 #           for v in bases.itervalues():
