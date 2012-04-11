@@ -26,7 +26,7 @@ $(function() {
             }
         }
         function submit_url(url, sr, title) {
-            var submit = "http://www.populr.de";
+            var submit = "http://www.reddit.com";
             if (sr) {
                 submit += "/r/" + sr;
             }
@@ -87,7 +87,7 @@ $(function() {
             };
             /* add the thing's id */
             $(".thing").addClass("id-" + data.name);
-            $(".bling a, a.bling").attr("href", "http://www.populr.de"+data.permalink);
+            $(".bling a, a.bling").attr("href", "http://www.reddit.com"+data.permalink);
             if(data.likes) {
                 real_state = 1;
                 transition_score(function() {

@@ -62,7 +62,7 @@ string_dict = dict(
     # this is for Japanese which treats people counts differently
     person_label = _("<span class='number'>%(num)s</span>&#32;<span class='word'>%(persons)s</span>"),
 
-    firsttext = _("reddit is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!"),
+    firsttext = _("populr is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!"),
 
     already_submitted = _("that link has already been submitted, but you can try to [submit it again](%s)."),
 
@@ -73,11 +73,11 @@ string_dict = dict(
     cover_msg      = _("you'll need to login or register to do that"),
     cover_disclaim = _("(don't worry, it only takes a few seconds)"),
 
-    oauth_login_msg = _("Log in or register to connect your reddit account with [%(app_name)s](%(app_about_url)s)."),
+    oauth_login_msg = _("Log in or register to connect your populr account with [%(app_name)s](%(app_about_url)s)."),
 
     legal = _("I understand and agree that registration on or use of this site constitutes agreement to its %(user_agreement)s and %(privacy_policy)s."),
 
-    friends = _('to view reddit with only submissions from your friends, use [reddit.com/r/friends](%s)'),
+    friends = _('to view populr with only submissions from your friends, use [populr.de/r/friends](%s)'),
 
     sr_created = _('your reddit has been created'),
 
@@ -133,7 +133,7 @@ string_dict = dict(
 
     submit_link = _("""You are submitting a link. The key to a successful submission is interesting content and a descriptive title."""),
     submit_text = _("""You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Beginning your title with "vote up if" is violation of intergalactic law."""),
-    iphone_first = _("You should consider using [reddit's mobile interface](http://i.reddit.com/)."),
+    iphone_first = _("You should consider using [populr's mobile interface](http://i.populr.de/)."),
     verify_email = _("we're going to need to verify your email address for you to proceed."),
     verify_email_submit = _("you'll be able to submit more frequently once you verify your email address"),
     email_verified =  _("your email address has been verfied"),
@@ -144,22 +144,22 @@ string_dict = dict(
     generic_quota_msg = _("You've submitted too many links recently. Please try again in an hour."),
     verified_quota_msg = _("Looks like you're either a brand new user or your posts have not been doing well recently. You may have to wait a bit to post again. In the meantime feel free to [check out the reddiquette](%(reddiquette)s) or join the conversation in a different thread."),
     unverified_quota_msg = _("Looks like you're either a brand new user or your posts have not been doing well recently. You may have to wait a bit to post again. In the meantime feel free to [check out the reddiquette](%(reddiquette)s), join the conversation in a different thread, or [verify your email address](%(verify)s)."),
-    read_only_msg = _("reddit is in \"emergency read-only mode\" right now. :( you won't be able to log in. we're sorry, and are working frantically to fix the problem."),
+    read_only_msg = _("populr is in \"emergency read-only mode\" right now. :( you won't be able to log in. we're sorry, and are working frantically to fix the problem."),
     heavy_load_msg = _("this page is temporarily in read-only mode due to heavy traffic."),
     lounge_msg = _("Please grab a drink and join us in [the lounge](%(link)s)."),
     postcard_msg = _("You sent us a postcard! (Or something similar.) When we run out of room on our refrigerator, we might one day auction off the stuff that people sent in. Is it okay if we include your thing?"),
-    over_comment_limit = _("Sorry, the maximum number of comments is %(max)d. (However, if you subscribe to reddit gold, it goes up to %(goldmax)d.)"),
+    over_comment_limit = _("Sorry, the maximum number of comments is %(max)d. (However, if you subscribe to populr gold, it goes up to %(goldmax)d.)"),
     over_comment_limit_gold = _("Sorry, the maximum number of comments is %d."),
-    youve_got_gold = _("%(sender)s just sent you %(amount)s of reddit gold! Wasn't that nice?"),
+    youve_got_gold = _("%(sender)s just sent you %(amount)s of populr gold! Wasn't that nice?"),
     giftgold_note = _("Here's a note that was included:\n\n----\n\n"),
-    gold_summary_autorenew = _("You're about to set up an ongoing, autorenewing subscription to reddit gold for yourself (%(user)s)."),
-    gold_summary_onetime = _("You're about to make a one-time purchase of %(amount)s of reddit gold for yourself (%(user)s)."),
-    gold_summary_creddits = _("You're about to purchase %(amount)s of reddit gold creddits. They work like gift certificates: each creddit you have will allow you to give one month of reddit gold to someone else."),
-    gold_summary_signed_gift = _("You're about to give %(amount)s of reddit gold to %(recipient)s, who will be told that it came from you."),
-    gold_summary_anonymous_gift = _("You're about to give %(amount)s of reddit gold to %(recipient)s. It will be an anonymous gift."),
+    gold_summary_autorenew = _("You're about to set up an ongoing, autorenewing subscription to populr gold for yourself (%(user)s)."),
+    gold_summary_onetime = _("You're about to make a one-time purchase of %(amount)s of populr gold for yourself (%(user)s)."),
+    gold_summary_creddits = _("You're about to purchase %(amount)s of populr gold creddits. They work like gift certificates: each creddit you have will allow you to give one month of populr gold to someone else."),
+    gold_summary_signed_gift = _("You're about to give %(amount)s of populr gold to %(recipient)s, who will be told that it came from you."),
+    gold_summary_anonymous_gift = _("You're about to give %(amount)s of populr gold to %(recipient)s. It will be an anonymous gift."),
     unvotable_message = _("sorry, this has been archived and can no longer be voted on"),
     account_activity_blurb = _("This page shows a history of recent activity on your account. If you notice unusual activity, you should change your password immediately. Location information is guessed from your computer's IP address and may be wildly wrong, especially for visits from mobile devices."),
-    your_current_ip_is = _("You are currently accessing reddit from this IP address: %(address)s."),
+    your_current_ip_is = _("You are currently accessing populr from this IP address: %(address)s."),
 
 )
 

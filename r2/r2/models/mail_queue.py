@@ -305,23 +305,23 @@ class Email(object):
                 )
 
     subjects = {
-        Kind.SHARE : _("[reddit] %(user)s has shared a link with you"),
+        Kind.SHARE : _("[populr] %(user)s has shared a link with you"),
         Kind.FEEDBACK : _("[feedback] feedback from '%(user)s'"),
         Kind.ADVERTISE :  _("[ad_inq] feedback from '%(user)s'"),
-        Kind.OPTOUT : _("[reddit] email removal notice"),
-        Kind.OPTIN  : _("[reddit] email addition notice"),
-        Kind.RESET_PASSWORD : _("[reddit] reset your password"),
-        Kind.VERIFY_EMAIL : _("[reddit] verify your email address"),
-        Kind.BID_PROMO : _("[reddit] your bid has been accepted"),
-        Kind.ACCEPT_PROMO : _("[reddit] your promotion has been accepted"),
-        Kind.REJECT_PROMO : _("[reddit] your promotion has been rejected"),
-        Kind.QUEUED_PROMO : _("[reddit] your promotion has been charged"),
-        Kind.LIVE_PROMO   : _("[reddit] your promotion is now live"),
-        Kind.FINISHED_PROMO : _("[reddit] your promotion has finished"),
-        Kind.NEW_PROMO : _("[reddit] your promotion has been created"),
+        Kind.OPTOUT : _("[populr] email removal notice"),
+        Kind.OPTIN  : _("[populr] email addition notice"),
+        Kind.RESET_PASSWORD : _("[populr] reset your password"),
+        Kind.VERIFY_EMAIL : _("[populr] verify your email address"),
+        Kind.BID_PROMO : _("[populr] your bid has been accepted"),
+        Kind.ACCEPT_PROMO : _("[populr] your promotion has been accepted"),
+        Kind.REJECT_PROMO : _("[populr] your promotion has been rejected"),
+        Kind.QUEUED_PROMO : _("[populr] your promotion has been charged"),
+        Kind.LIVE_PROMO   : _("[populr] your promotion is now live"),
+        Kind.FINISHED_PROMO : _("[populr] your promotion has finished"),
+        Kind.NEW_PROMO : _("[populr] your promotion has been created"),
         Kind.HELP_TRANSLATE : _("[i18n] translation offer from '%(user)s'"),
-        Kind.NERDMAIL : _("[reddit] hey, nerd!"),
-        Kind.GOLDMAIL : _("[reddit] reddit gold activation link")
+        Kind.NERDMAIL : _("[populr] hey, nerd!"),
+        Kind.GOLDMAIL : _("[populr] reddit gold activation link")
         }
 
     def __init__(self, user, thing, email, from_name, date, ip, banned_ip,

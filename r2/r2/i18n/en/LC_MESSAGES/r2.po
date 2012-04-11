@@ -204,8 +204,8 @@ msgid "description is too long"
 msgstr "description is too long"
 
 #: r2/controllers/feedback.py:10
-msgid "inquire about advertising on reddit"
-msgstr "inquire about advertising on reddit"
+msgid "inquire about advertising on populr"
+msgstr "inquire about advertising on populr"
 
 #: r2/controllers/feedback.py:17 r2/lib/menus.py:75
 msgid "advertise"
@@ -595,9 +595,9 @@ msgstr "%(num)d %(persons)s"
 
 #: r2/lib/strings.py:35
 msgid ""
-"reddit is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!"
+"populr.de is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!"
 msgstr ""
-"reddit is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!"
+"populr.de is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!"
 
 #: r2/lib/strings.py:37
 #, python-format
@@ -637,9 +637,9 @@ msgstr ""
 #: r2/lib/strings.py:48
 #, python-format
 msgid ""
-"to view reddit with only submissions from your friends, use [reddit.com/r/friends](%s)"
+"to view populr with only submissions from your friends, use [populr.de/r/friends](%s)"
 msgstr ""
-"to view reddit with only submissions from your friends, use [reddit.com/r/friends](%s)"
+"to view populr with only submissions from your friends, use [populr.de/r/friends](%s)"
 
 #: r2/lib/strings.py:52
 #, python-format
@@ -874,8 +874,8 @@ msgid "ago"
 msgstr "ago"
 
 #: r2/models/subreddit.py:333
-msgid "reddit.com: what's new online!"
-msgstr "reddit.com: what's new online!"
+msgid "populr.de: what's new online!"
+msgstr "populr.de: what's new online!"
 
 #: r2/templates/admintranslations.html:40
 msgid "disable"
@@ -965,21 +965,21 @@ msgstr ""
 
 #: r2/templates/buttondemopanel.html:23
 msgid ""
-"if the site has not been submitted yet, clicking on the button      will take the user to a reddit submit page, otherwise it takes      them to the comments page."
+"if the site has not been submitted yet, clicking on the button      will take the user to a populr submit page, otherwise it takes      them to the comments page."
 msgstr ""
-"if the site has not been submitted yet, clicking on the button      will take the user to a reddit submit page, otherwise it takes      them to the comments page."
+"if the site has not been submitted yet, clicking on the button      will take the user to a populr submit page, otherwise it takes      them to the comments page."
 
 #: r2/templates/buttondemopanel.html:27
 msgid ""
-"if you want to specify the URL that should be submitted to      reddit, include the reddit_url line.  if you don't include that      line, then the current page's URL will be used."
+"if you want to specify the URL that should be submitted to      populr, include the reddit_url line.  if you don't include that      line, then the current page's URL will be used."
 msgstr ""
-"if you want to specify the URL that should be submitted to      reddit, include the reddit_url line.  if you don't include that      line, then the current page's URL will be used."
+"if you want to specify the URL that should be submitted to      populr, include the reddit_url line.  if you don't include that      line, then the current page's URL will be used."
 
 #: r2/templates/buttondemopanel.html:31
 msgid ""
-"if you want to specify the title that should be submitted to      reddit, include the reddit_title line.  if you don't include that      line, then the user will have to specify a title when they      submit."
+"if you want to specify the title that should be submitted to      populr, include the reddit_title line.  if you don't include that      line, then the user will have to specify a title when they      submit."
 msgstr ""
-"if you want to specify the title that should be submitted to      reddit, include the reddit_title line.  if you don't include that      line, then the user will have to specify a title when they      submit."
+"if you want to specify the title that should be submitted to      populr, include the reddit_title line.  if you don't include that      line, then the user will have to specify a title when they      submit."
 
 #: r2/templates/buttondemopanel.html:42
 #, python-format
@@ -1447,12 +1447,12 @@ msgstr "enter a title, or click submit to find one automatically."
 
 #: r2/templates/newlink.html:82
 #, python-format
-msgid "use reddit from your toolbar with the %(bookmarklets)s"
-msgstr "use reddit from your toolbar with the %(bookmarklets)s"
+msgid "use populr from your toolbar with the %(bookmarklets)s"
+msgstr "use populr from your toolbar with the %(bookmarklets)s"
 
 #: r2/templates/newlink.html:83
-msgid "reddit bookmarklets"
-msgstr "reddit bookmarklets"
+msgid "populr bookmarklets"
+msgstr "populr bookmarklets"
 
 #: r2/templates/organiclisting.html:23
 msgid ""
@@ -1493,8 +1493,8 @@ msgid "see the above comments"
 msgstr "see the above comments"
 
 #: r2/templates/prefdelete.html:15
-msgid "delete your reddit account? hope you have a good reason."
-msgstr "delete your reddit account? hope you have a good reason."
+msgid "delete your populr account? hope you have a good reason."
+msgstr "delete your populr account? hope you have a good reason."
 
 #: r2/templates/prefdelete.html:18
 msgid "deleting..."
@@ -1525,8 +1525,8 @@ msgid "clicking options"
 msgstr "clicking options"
 
 #: r2/templates/prefoptions.html:54
-msgid "display links with a reddit toolbar"
-msgstr "display links with a reddit toolbar"
+msgid "display links with a populr toolbar"
+msgstr "display links with a populr toolbar"
 
 #: r2/templates/prefoptions.html:56
 msgid "open links in a new window"
@@ -1900,7 +1900,7 @@ msgstr "you know what they say, you get what you pay for..."
 #: randomstring:sadmessages
 msgid "Funny 500 page message 4"
 msgstr ""
-"Can you fix this? <a href='mailto:jobs@reddit.com'>jobs@reddit.com</a>."
+"Can you fix this? <a href='mailto:jobs@populr.de'>jobs@populr.de</a>."
 
 #: randomstring:sadmessages
 msgid "Funny 500 page message 5"

@@ -53,22 +53,36 @@
   <p><a href="http://www.populr.de/help/search" id="search_showmore">${_('advanced search: by author, community...')}</a></p>
 </%def>
 
-<div id="cse" style="width: 100%;">Loading</div>
-<script src="http://www.google.com/jsapi" type="text/javascript"></script>
-<script type="text/javascript"> 
-  google.load('search', '1', {language : 'de', style : google.loader.themes.V2_DEFAULT});
-  google.setOnLoadCallback(function() {
-    var customSearchOptions = {};
-    var googleAnalyticsOptions = {};
-    googleAnalyticsOptions['queryParameter'] = 'search';
-    googleAnalyticsOptions['categoryParameter'] = '';
-    customSearchOptions['googleAnalyticsOptions'] = googleAnalyticsOptions;  var customSearchControl = new google.search.CustomSearchControl(
-      '014171900623846629857:pqear-nfrhe', customSearchOptions);
-    customSearchControl.setResultSetSize(google.search.Search.FILTERED_CSE_RESULTSET);
-    var options = new google.search.DrawOptions();
-    options.setAutoComplete(true);
-    customSearchControl.setAutoCompletionId('014171900623846629857:pqear-nfrhe+qptype:1');
-    customSearchControl.draw('cse', options);
-  }, true);
-</script>
+<form action="${add_sr('/search')}" id="search">
+  <input type="text" 
+         %if thing.prev_search:
+           value="${thing.prev_search}" style="color:black"
+         %endif
+         name="q" placeholder="${_('search populr')}" />
+  %if thing.subreddit_search:
+    
+  %elif thing.simple:
+  <div id="searchexpando" class="infobar">
+      % if not isinstance(c.site, DefaultSR):
+      <label><input type="checkbox" name="restrict_sr" />${_('limit my search to %(path)s') % dict(path=c.site.path.rstrip('/'))}</label>
+      % endif
 
+      ${search_faq()}
+
+  </div>
+  %else:
+    %if not thing.site or isinstance(thing.site, DefaultSR):
+      <input type="hidden" name="restrict_sr" value="off" />
+    %else:
+      <br /><br />
+      <label><input type="checkbox" ${'checked="checked"' if thing.restrict_sr else ''} name="restrict_sr" />
+      ${_('limit my search to %(path)s') % dict(path=thing.site.path.rstrip('/'))}</label>
+    %endif
+    ${search_faq()}
+    <input type="submit" />
+  %endif
+
+  %for k, v in thing.search_params.iteritems():
+    <input type="hidden" name="${k}" value="${v}" />
+  %endfor
+</form>

@@ -129,7 +129,7 @@ class ButtonsController(RedditController):
         <head>
         </head>
         <body style='border:1px solid #336699;text-align:center;margin:0px'>
-           <a href='http://www.reddit.com/upgradebuttons' target='_top' style='color:red'>upgrade</a>
+           <a href='http://www.populr.de/upgradebuttons' target='_top' style='color:red'>upgrade</a>
         </body>
         </html>
         """
@@ -197,7 +197,7 @@ class ButtonsController(RedditController):
         # no buttons for domain listings -> redirect to top level
         if isinstance(c.site, DomainSR):
             return self.redirect('/buttons')
-        return BoringPage(_("reddit buttons"),
+        return BoringPage(_("populr buttons"),
                           show_sidebar = False, 
                           content=ButtonDemoPanel()).render()
 
@@ -205,13 +205,13 @@ class ButtonsController(RedditController):
         # no buttons for domain listings -> redirect to top level
         if isinstance(c.site, DomainSR):
             return self.redirect('/buttons')
-        return BoringPage(_("reddit buttons"),
+        return BoringPage(_("populr buttons"),
                           show_sidebar = False, 
                           content=UpgradeButtons()).render()
 
 
     def GET_widget_demo_page(self):
-        return BoringPage(_("reddit widget"),
+        return BoringPage(_("populr widget"),
                           show_sidebar = False, 
                           content=WidgetDemoPanel()).render()
 
@@ -222,7 +222,7 @@ class ButtonsController(RedditController):
 
     def GET_iphonebookmarklets(self):
         return BoringPage(_("submit"),
-                          title = "submit to reddit",
+                          title = "submit to populr",
                           show_sidebar = False, 
                           content=Bookmarklets()).render()
 

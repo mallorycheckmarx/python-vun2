@@ -98,7 +98,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      mobile       = _("mobile"), 
                      store        = _("store"),  
                      ad_inq       = _("advertise"),
-                     gold         = _('reddit gold'),
+                     gold         = _('populr gold'),
                      reddits      = _('subreddits'),
 
                      #preferences

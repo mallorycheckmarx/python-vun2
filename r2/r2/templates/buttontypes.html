@@ -56,7 +56,7 @@
                  width="${choose_width(thing, thing.width)}">
   <div class="headimgcell">
     <a href="${submiturl(thing.url, thing.title)}" target="${thing.target}">
-      <img src="http://www.reddit.com/static/blog_head.png" alt=""/>
+      <img src="http://www.populr.de/static/blog_head.png" alt=""/>
     </a>
   </div>
   %if thing._fullname:
@@ -89,7 +89,7 @@
         &nbsp;<br />
       %endif
     %else:
-      <img src="http://www.reddit.com/static/blog_head.png" alt=""/>
+      <img src="http://www.populr.de/static/blog_head.png" alt=""/>
       ${submitlink(thing.url, thing.title, 'submit to')}
     %endif
       %if thing.bgcolor:
@@ -97,7 +97,7 @@
       %else:
       <div class="bottomreddit">
       %endif
-      <a href="${submiturl(thing.url, thing.title)}" target="${thing.target}">reddit</a>
+      <a href="${submiturl(thing.url, thing.title)}" target="${thing.target}">populr.de</a>
     </div>
 </%self:class_def>
 </%def>
@@ -142,7 +142,7 @@
       &nbsp;<br />
       %endif
     %else:
-      <img src="http://www.reddit.com/static/blog_head.png" alt=""/>
+      <img src="http://www.populr.de/static/blog_head.png" alt=""/>
       ${submitlink(thing.url, thing.title, 'submit to')}
     %endif
 </%self:class_def>
@@ -214,9 +214,9 @@
       <li>
         <a href="${link}" target="_new">
           %if thing._fullname:
-            ${_("Discuss at the %(name)s reddit") % dict(name = c.site.name)}
+            ${_("Discuss at the %(name)s populr") % dict(name = c.site.name)}
           %else:
-            ${_("Submit to the %(name)s reddit") % dict(name = c.site.name)}
+            ${_("Submit to the %(name)s populr") % dict(name = c.site.name)}
           %endif
         </a>
       </li>

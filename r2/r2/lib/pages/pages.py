@@ -451,7 +451,7 @@ class RedditFooter(CachedTemplate):
                 separator = ""),
 
             NavMenu([
-                    OffsiteButton("mobile", "http://i.reddit.com"),
+                    OffsiteButton("mobile", "http://i.populr.de"),
                     NamedButton("socialite", False),
                     OffsiteButton(_("chrome extension"), "https://chrome.google.com/webstore/detail/algjnflpgoopkdijmkalfcifomdhmcbe"),
                     NamedButton("buttons", True),

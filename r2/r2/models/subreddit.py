@@ -798,7 +798,7 @@ class AllSR(FakeSubreddit):
 
 class _DefaultSR(FakeSubreddit):
     #notice the space before reddit.com
-    name = ' reddit.com'
+    name = ' populr.de'
     path = '/'
     header = g.default_header_url
 
@@ -974,7 +974,7 @@ class DomainSR(FakeSubreddit):
         FakeSubreddit.__init__(self)
         self.domain = domain
         self.name = domain 
-        self.title = domain + ' ' + _('on reddit.com')
+        self.title = domain + ' ' + _('on populr.de')
 
     def get_links(self, sort, time):
         from r2.lib.db import queries

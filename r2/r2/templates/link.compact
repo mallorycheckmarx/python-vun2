@@ -106,8 +106,8 @@
   </div>
   <div class="clear options_expando hidden">
     <% 
-       subject = "[reddit] I wanted to share this link with you"
-       body = """%(user)s shared a link with you from reddit (http://www.reddit.com/):
+       subject = "[populr] I wanted to share this link with you"
+       body = """%(user)s shared a link with you from populr (http://www.populr.de/):
 
 %(link)s
 
@@ -116,11 +116,11 @@
 there's also a discussion going on here:
 
 %(permalink)s
-""" % dict(user = c.user.name if c.user_is_Loggedin else "A reddit user",
+""" % dict(user = c.user.name if c.user_is_Loggedin else "A populr user",
        link = _force_unicode(thing.url),
        title = _force_unicode(thing.title),
        permalink = add_sr(thing.permalink, sr_path = False, force_hostname = True, retain_extension=False))
-       url = "http://reddit.com/%s" % thing._id36
+       url = "http://populr.de/%s" % thing._id36
        title = _force_unicode(thing.title)
        tweet = "%s %s" % (title[0:(139-len(url))], url)
        %>

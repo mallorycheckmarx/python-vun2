@@ -35,6 +35,10 @@ elif not c.default_sr:
 
 %>
 
+<iframe id="ad-frame" frameborder="0" scrolling="no" name="ad-frame"
+        src="${g.ad_domain}/ads/${name}">
+</iframe>
+
 <script type="text/javascript"><!--
 google_ad_client = "ca-pub-8998561852600187";
 /* Populr.de BigSquare */
@@ -42,7 +46,20 @@ google_ad_slot = "7815534697";
 google_ad_width = 300;
 google_ad_height = 250;
 //-->
-</script>
+ </script>
 <script type="text/javascript"
 src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
+</script>
+
+<script type="text/javascript">
+    <% 
+      tracker_url = AdframeInfo.gen_url(fullname = "adblock", ip = request.ip)
+     %>
+    $(function() {
+      var ad = $("#ad-frame");
+      if(!ad.length || ad.height() == 0 || ad.width() == 0 || ad.offset().left == 0) {
+        $(".footer").append("<img alt='' src='${unsafe(tracker_url)}&random=" +
+                                    Math.random()*10000000000000000 + "'/>");
+      }
+    });
 </script>

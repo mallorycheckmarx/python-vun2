@@ -80,7 +80,7 @@ def make_map(global_conf={}, app_conf={}):
     mc('/awards', controller='front', action='awards')
 
     mc('/i18n', controller='redirect', action='redirect',
-       dest='http://www.reddit.com/r/i18n')
+       dest='http://www.populr.de/r/i18n')
     mc('/feedback', controller='feedback', action='feedback')
     mc('/ad_inq',   controller='feedback', action='ad_inq')
 
@@ -239,7 +239,7 @@ def make_map(global_conf={}, app_conf={}):
        dest='http://github.com/reddit/')
 
     mc('/mobile', controller='redirect', action='redirect',
-       dest='http://m.reddit.com/')
+       dest='http://m.populr.de/')
 
     mc('/authorize_embed', controller = 'front', action = 'authorize_embed')
 

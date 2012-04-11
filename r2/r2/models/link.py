@@ -44,6 +44,9 @@ from hashlib import md5
 
 import random, re
 
+log = g.log
+
+
 class LinkExists(Exception): pass
 
 # defining types

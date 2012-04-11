@@ -42,12 +42,28 @@ import hashlib
 
 import mimetypes
 
+#s3_direct_url = "s3.amazonaws.com"
 s3_direct_url = g.s3_media_base_url
 
 threads = 20
 log = g.log
 
 MEDIA_FILENAME_LENGTH = 12
+
+def create_thumbnail_url(bucket,file_name,file_type):
+
+    if g.s3_old_thumb_bucket:
+      bucket = g.s3_old_thumb_bucket
+      baseurl = "http://%s" % (bucket)
+
+    if g.s3_media_direct:
+      baseurl = "http://%s/%s" % (s3_direct_url, bucket)
+
+    if g.s3_media_bucket_prefix:
+      baseurl = "http://%s.%s" %(bucket,s3_direct_url)
+
+    res = '%s/%s%s' % (baseurl,file_name,file_type)
+    return res
 
 def thumbnail_url(link):
     """Given a link, returns the url for its thumbnail based on its fullname"""
@@ -76,10 +92,7 @@ def s3_upload_media(data, file_name, file_type, mime_type, never_expire):
                        never_expire=never_expire,
                        replace = False,
                        reduced_redundancy=True)
-    if g.s3_media_direct:
-        return "http://%s/%s/%s%s" % (s3_direct_url, bucket, file_name, file_type)
-    else:
-        return "http://%s/%s%s" % (bucket, file_name, file_type)
+    return create_thumbnail_url(bucket,file_name,file_type)
 
 def get_filename_from_content(contents):
     sha = hashlib.sha1(contents).digest()
@@ -127,11 +140,10 @@ def upload_media(image, never_expire=True, file_type='.jpg'):
 def update_link(link, thumbnail, media_object, thumbnail_size=None):
     """Sets the link's has_thumbnail and media_object attributes iin the
     database."""
-
     if thumbnail:
         link.thumbnail_url = thumbnail
         link.thumbnail_size = thumbnail_size
-        g.log.info("Updated link with thumbnail: %s" % link.thumbnail_url)
+        g.log.debug("Updated link with thumbnail: %s" % link.thumbnail_url)
         
     if media_object:
         link.media_object = media_object
@@ -140,8 +152,6 @@ def update_link(link, thumbnail, media_object, thumbnail_size=None):
 
 
 def set_media(link, force = False):
-
-
     if link.is_self:
         return
     if not force and link.promoted:

@@ -228,7 +228,7 @@ def look_for_verdicts():
 
     print "checking all trials for verdicts..."
     for defendant in Trial.all_defendants():
-        print "Looking at reddit.com/comments/%s/x" % defendant._id36
+        print "Looking at populr.de/comments/%s/x" % defendant._id36
         v = Trial(defendant).check_verdict()
         print "Verdict: %r" % v
 
