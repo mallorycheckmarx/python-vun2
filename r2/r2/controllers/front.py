@@ -46,7 +46,6 @@ from r2.lib import sup
 import r2.lib.db.thing as thing
 from errors import errors
 from listingcontroller import ListingController
-from api_docs import api_doc, api_section
 from pylons import c, request, request, Response
 
 import string
@@ -87,7 +86,6 @@ class FrontController(RedditController):
             # redirect should be smarter and handle extensions, etc.
             return self.redirect(new_url, code=301)
 
-    @api_doc(api_section.listings)
     def GET_random(self):
         """The Serendipity button"""
         sort = rand.choice(('new','hot'))
@@ -181,9 +179,6 @@ class FrontController(RedditController):
               sort         = VMenu('controller', CommentSortMenu),
               limit        = VInt('limit'),
               depth        = VInt('depth'))
-    @api_doc(api_section.listings,
-             uri='/comments/{article}',
-             extensions=['json', 'xml'])
     def GET_comments(self, article, comment, context, sort, limit, depth):
         """Comment page for a given 'article'."""
         if comment and comment.link_id != article._id:
@@ -366,8 +361,6 @@ class FrontController(RedditController):
                                 must_revalidate=False)
             c.response_content_type = 'text/css'
             c.response.content =  c.site.stylesheet_contents
-            if c.site.type == 'private':
-                c.response.headers['X-Private-Subreddit'] = 'private'
             return c.response
         else:
             return self.abort404()
@@ -395,13 +388,15 @@ class FrontController(RedditController):
     @paginated_listing(max_page_size=500, backend='cassandra')
     @validate(mod=VAccountByName('mod'),
               action=VOneOf('type', ModAction.actions))
-    @api_doc(api_section.moderation)
     def GET_moderationlog(self, num, after, reverse, count, mod, action):
         if not c.user_is_loggedin:
             return self.abort404()
 
-        if isinstance(c.site, (MultiReddit, ModSR)):
-            srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
+        if isinstance(c.site, ModSR) or isinstance(c.site, MultiReddit):
+            if isinstance(c.site, ModSR):
+                srs = Subreddit._byID(c.site.sr_ids(), return_dict=False)
+            else:
+                srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
 
             # check that user is mod on all requested srs
             if not Subreddit.user_mods_all(c.user, srs) and not c.user_is_admin:
@@ -576,8 +571,8 @@ class FrontController(RedditController):
             pane = FlairPane(num, after, reverse, name, user)
         elif c.user_is_sponsor and location == 'ads':
             pane = RedditAds()
-        elif (location == "about") and is_api():
-            return self.redirect(add_sr('about.json'), code=301)
+        elif (not location or location == "about") and is_api():
+            return Reddit(content = Wrapped(c.site)).render()
         else:
             return self.abort404()
 
@@ -611,14 +606,6 @@ class FrontController(RedditController):
             return self._edit_normal_reddit(location, num, after, reverse,
                                             count, created, name, user)
 
-    @api_doc(api_section.subreddits, uri='/r/{subreddit}/about', extensions=['json'])
-    def GET_about(self):
-        """Return information about the subreddit.
-
-        Data includes the subscriber count, description, and header image."""
-        if not is_api() or isinstance(c.site, FakeSubreddit):
-            return self.abort404()
-        return Reddit(content = Wrapped(c.site)).render()
 
     def GET_awards(self):
         """The awards page."""
@@ -676,7 +663,6 @@ class FrontController(RedditController):
 
     @base_listing
     @validate(query = nop('q'))
-    @api_doc(api_section.subreddits, uri='/reddits/search', extensions=['json', 'xml'])
     def GET_search_reddits(self, query, reverse, after,  count, num):
         """Search reddits by title and description."""
         q = SubredditSearchQuery(query)
@@ -699,7 +685,6 @@ class FrontController(RedditController):
     @validate(query = VLength('q', max_length=512),
               sort = VMenu('sort', SearchSortMenu, remember=False),
               restrict_sr = VBoolean('restrict_sr', default=False))
-    @api_doc(api_section.search, extensions=['json', 'xml'])
     def GET_search(self, query, num, reverse, after, count, sort, restrict_sr):
         """Search links page."""
         if query and '.' in query:

@@ -44,7 +44,6 @@ from datetime import datetime, timedelta
 from curses.ascii import isprint
 import re, inspect
 import pycountry
-from itertools import chain
 
 def visible_promo(article):
     is_promo = getattr(article, "promoted", None) is not None
@@ -86,12 +85,6 @@ class Validator(object):
             field = self.param
 
         c.errors.add(error, msg_params = msg_params, field = field)
-
-    def param_docs(self):
-        param_info = {}
-        for param in filter(None, tup(self.param)):
-            param_info[param] = None
-        return param_info
 
     def __call__(self, url):
         a = []
@@ -136,16 +129,8 @@ def _make_validated_kw(fn, simple_vals, param_vals, env):
         kw[var] = validator(env)
     return kw
 
-def set_api_docs(fn, simple_vals, param_vals):
-    doc = fn._api_doc = getattr(fn, '_api_doc', {})
-    param_info = doc.get('parameters', {})
-    for validator in chain(simple_vals, param_vals.itervalues()):
-        param_info.update(validator.param_docs())
-    doc['parameters'] = param_info
-
 def validate(*simple_vals, **param_vals):
     def val(fn):
-        @utils.wraps_api(fn)
         def newfn(self, *a, **env):
             try:
                 kw = _make_validated_kw(fn, simple_vals, param_vals, env)
@@ -154,8 +139,6 @@ def validate(*simple_vals, **param_vals):
                 return self.intermediate_redirect('/login')
             except VerifiedUserRequiredException:
                 return self.intermediate_redirect('/verify')
-
-        set_api_docs(newfn, simple_vals, param_vals)
         return newfn
     return val
 
@@ -171,7 +154,6 @@ def api_validate(response_type=None):
     def wrap(response_function):
         def _api_validate(*simple_vals, **param_vals):
             def val(fn):
-                @utils.wraps_api(fn)
                 def newfn(self, *a, **env):
                     renderstyle = request.params.get("renderstyle")
                     if renderstyle:
@@ -201,13 +183,11 @@ def api_validate(response_type=None):
                     except VerifiedUserRequiredException:
                         responder.send_failure(errors.VERIFIED_USER_REQUIRED)
                         return self.api_wrapper(responder.make_response())
-
-                set_api_docs(newfn, simple_vals, param_vals)
                 return newfn
             return val
         return _api_validate
     return wrap
-
+    
 
 @api_validate("html")
 def noresponse(self, self_method, responder, simple_vals, param_vals, *a, **kw):
@@ -237,17 +217,11 @@ def validatedForm(self, self_method, responder, simple_vals, param_vals,
     # clear out the status line as a courtesy
     form.set_html(".status", "")
 
-    # handle specific errors
-    if c.errors.errors:
-        handled_captcha = handled_ratelimit = False
-        for v in simple_vals:
-            if not handled_captcha and isinstance(v, VCaptcha):
-                form.has_errors('captcha', errors.BAD_CAPTCHA)
-                form.new_captcha()
-                handled_captcha = True
-            elif not handled_ratelimit and isinstance(v, VRatelimit):
-                form.ratelimit(v.seconds)
-                handled_ratelimit = True
+    # auto-refresh the captcha if there are errors.
+    if (c.errors.errors and
+        any(isinstance(v, VCaptcha) for v in simple_vals)):
+        form.has_errors('captcha', errors.BAD_CAPTCHA)
+        form.new_captcha()
     
     # do the actual work
     val = self_method(self, form, responder, *a, **kw)
@@ -606,11 +580,6 @@ class VByName(Validator):
 
         return self.set_error(self._error)
 
-    def param_docs(self):
-        return {
-            self.param: _('an existing thing id')
-        }
-
 class VByNameIfAuthor(VByName):
     def run(self, fullname):
         thing = VByName.run(self, fullname)
@@ -647,11 +616,6 @@ class VModhash(Validator):
     def run(self, uh):
         pass
 
-    def param_docs(self):
-        return {
-            self.param: _('a modhash')
-        }
-
 class VVotehash(Validator):
     def run(self, vh, thing_name):
         return True
@@ -680,7 +644,7 @@ class VGold(VUser):
     def run(self):
         VUser.run(self)
         if not c.user.gold:
-            abort(403, 'forbidden')
+            raise GoldRequiredException
 
 class VSponsorAdmin(VVerifiedUser):
     """
@@ -831,11 +795,6 @@ class VSubmitParent(VByName):
                     return parent
         #else
         abort(403, "forbidden")
-
-    def param_docs(self):
-        return {
-            self.param[0]: _('id of parent thing')
-        }
 
 class VSubmitSR(Validator):
     def __init__(self, srname_param, linktype_param=None, promotion=False):
@@ -1018,16 +977,6 @@ class VUrl(VRequired):
                 return url
         return self.error(errors.BAD_URL)
 
-    def param_docs(self):
-        params = {}
-        try:
-            params[self.param[0]] = _('a valid URL')
-            params[self.param[1]] = _('a subreddit')
-            params[self.param[2]] = _('boolean value')
-        except IndexError:
-            pass
-        return params
-
 class VOptionalExistingUname(VRequired):
     def __init__(self, item, allow_deleted=False, prefer_existing=False,
                  *a, **kw):
@@ -1067,11 +1016,6 @@ class VExistingUname(VOptionalExistingUname):
         if not user:
             self.error()
         return user
-
-    def param_docs(self):
-        return {
-            self.param: _('the name of an existing user')
-        }
 
 class VMessageRecipient(VExistingUname):
     def run(self, name):
@@ -1115,11 +1059,6 @@ class VBoolean(Validator):
         if lv == 'off' or lv == '' or lv[0] in ("f", "n"):
             return False
         return bool(val)
-
-    def param_docs(self):
-        return {
-            self.param: _('boolean value')
-        }
 
 class VNumber(Validator):
     def __init__(self, param, min=None, max=None, coerce = True,
@@ -1249,18 +1188,11 @@ class VRatelimit(Validator):
         self.rate_ip = rate_ip
         self.prefix = prefix
         self.error = error
-        self.seconds = None
         Validator.__init__(self, *a, **kw)
 
     def run (self):
-        from r2.models.admintools import admin_ratelimit
-
         if g.disable_ratelimit:
             return
-
-        if c.user_is_loggedin and not admin_ratelimit(c.user):
-            return
-
         to_check = []
         if self.rate_user and c.user_is_loggedin:
             to_check.append('user' + str(c.user._id36))
@@ -1277,11 +1209,6 @@ class VRatelimit(Validator):
             # when errors have associated field parameters, we'll need
             # to add that here
             if self.error == errors.RATELIMIT:
-                from datetime import datetime
-                delta = expire_time - datetime.now(g.tz)
-                self.seconds = delta.total_seconds()
-                if self.seconds < 3:  # Don't ratelimit within three seconds
-                    return
                 self.set_error(errors.RATELIMIT, {'time': time},
                                field = 'ratelimit')
             else:
@@ -1406,11 +1333,6 @@ class VOneOf(Validator):
             return self.default
         else:
             return val
-
-    def param_docs(self):
-        return {
-            self.param: _('one of (%s)') % ', '.join(self.options)
-        }
 
 class VImageType(Validator):
     def run(self, img_type):
@@ -1596,11 +1518,6 @@ class VDestination(Validator):
                  "info")
 
         return "/"
-
-    def param_docs(self):
-        return {
-            self.param: _('destination url (must be same-domain)')
-        }
 
 class ValidAddress(Validator):
     def __init__(self, param, allowed_countries = ["United States"]):

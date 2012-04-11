@@ -798,7 +798,7 @@ class AllSR(FakeSubreddit):
 
 class _DefaultSR(FakeSubreddit):
     #notice the space before reddit.com
-    name = ' reddit.com'
+    name = ' populr.de'
     path = '/'
     header = g.default_header_url
 
@@ -926,7 +926,6 @@ class ModContribSR(_DefaultSR):
     def path(self):
         return '/r/' + self.real_path
 
-    @property
     def sr_ids(self):
         if c.user_is_loggedin:
             return Subreddit.special_reddits(c.user, self.query_param)
@@ -934,7 +933,7 @@ class ModContribSR(_DefaultSR):
             return []
 
     def get_links(self, sort, time):
-        return self.get_links_sr_ids(self.sr_ids, sort, time)
+        return self.get_links_sr_ids(self.sr_ids(), sort, time)
 
 class ModSR(ModContribSR):
     name  = "communities you moderate"
@@ -975,7 +974,7 @@ class DomainSR(FakeSubreddit):
         FakeSubreddit.__init__(self)
         self.domain = domain
         self.name = domain 
-        self.title = domain + ' ' + _('on reddit.com')
+        self.title = domain + ' ' + _('on populr.de')
 
     def get_links(self, sort, time):
         from r2.lib.db import queries

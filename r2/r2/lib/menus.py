@@ -98,7 +98,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      mobile       = _("mobile"), 
                      store        = _("store"),  
                      ad_inq       = _("advertise"),
-                     gold         = _('reddit gold'),
+                     gold         = _('populr gold'),
                      reddits      = _('subreddits'),
 
                      #preferences
@@ -132,7 +132,6 @@ menu =   MenuHandler(hot          = _('hot'),
                      banusers     = _("ban users"),
                      flair        = _("edit user flair"),
                      log          = _("moderation log"),
-                     modqueue     = _("moderation queue"),
 
                      popular      = _("popular"),
                      create       = _("create"),

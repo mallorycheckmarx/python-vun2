@@ -1,5 +1,5 @@
 (function() {
-  var prefix = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.reddit.com';
+  var prefix = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.populr.de';
 
   var write_string="<iframe src=\"" + prefix + "/static/button/button2.html?width=51&url=";
 

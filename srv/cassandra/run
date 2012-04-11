@@ -1,5 +1,9 @@
 #!/bin/sh
 
+#PATH=/home/reddit/deamons/apache-cassandra-1.0.7/bin:$PATH
+PATH=/home/reddit/deamons/cassandra/bin:$PATH
+export PATH
+
 ulimit -n 32768
 
 exec 2>&1

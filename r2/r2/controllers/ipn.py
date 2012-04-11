@@ -133,7 +133,7 @@ def existing_subscription(subscr_id, paying_id):
 
         if should_set_subscriber:
             if hasattr(account, "gold_subscr_id") and account.gold_subscr_id:
-                g.log.warning("Attempted to set subscr_id (%s) for account (%d) "
+                g.log.warning("Attempted to set subscr_id (%s) for account (%d) " +
                               "that already has one." % (subscr_id, account_id))
                 return None
 
@@ -168,7 +168,7 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage):
     else:
         amount = "%d months" % months
 
-    subject = sender + " just sent you reddit gold!"
+    subject = sender + " just sent you populr gold!"
     message = strings.youve_got_gold % dict(sender=md_sender, amount=amount)
 
     if giftmessage and giftmessage.strip():
@@ -446,7 +446,7 @@ class IpnController(RedditController):
         if payment_blob['goldtype'] in ('autorenew', 'onetime'):
             admintools.engolden(buyer, days)
 
-            subject = _("thanks for buying reddit gold!")
+            subject = _("thanks for buying populr gold!")
 
             if g.lounge_reddit:
                 lounge_url = "/r/" + g.lounge_reddit
@@ -470,7 +470,7 @@ class IpnController(RedditController):
             giftmessage = payment_blob.get("giftmessage", False)
             send_gift(buyer, recipient, months, days, signed, giftmessage)
             instagift = True
-            subject = _("thanks for giving reddit gold!")
+            subject = _("thanks for giving populr gold!")
             message = _("Your gift to %s has been delivered." % recipient.name)
         else:
             dump_parameters(parameters)

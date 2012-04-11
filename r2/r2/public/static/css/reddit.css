@@ -176,10 +176,10 @@ ul.flat-vert {text-align: left;}
 
 #header {
 
-    border-bottom: 1px solid #5f99cf;
+    border-bottom: 1px solid #4C4C4C;
 
     position: relative;
-    background-color: #cee3f8;
+    background-color: #003366;
     z-index: 99;
 }
 
@@ -208,7 +208,7 @@ ul.flat-vert {text-align: left;}
     position: absolute;
     right: 0px;
     bottom: 0px;
-    background-color: #EFF7FF;
+    background-color: #E6E6E6;
     padding: 4px;
     line-height: 12px;
     -moz-border-radius-topleft: 7px;
@@ -247,7 +247,7 @@ ul.flat-vert {text-align: left;}
 #modmail.nohavemail {
     background-image: url(../modmailgray.png);  /* SPRITE */
 }
-.user {color: gray;}
+.user {color: grey;}
 
 
 .pagename {
@@ -257,7 +257,7 @@ ul.flat-vert {text-align: left;}
     font-size: 1.2em;
     vertical-align: bottom;
 }
-.pagename a {color: black; }
+.pagename a {color: white; }
 .redditname { }
 
 .newpagelink {
@@ -356,13 +356,13 @@ ul.flat-vert {text-align: left;}
 
 .tabmenu li a {
     padding: 2px 6px 0 6px;
-    background-color: #eff7ff;
+    background-color: #E6E6E6;
  }
 
 .tabmenu li.selected a{
     color: orangered;
     background-color: white;
-    border: 1px solid #5f99cf;
+    border: 1px solid #7F7F7F;
     border-bottom: 1px solid white;
     z-index: 100;
 }
@@ -941,7 +941,7 @@ a.author { margin-right: 0.5em; }
 }
 
 .organic-listing .sponsored-tagline {
-    right: 6.8em;
+    right: 6.4em;
 }
 
 .sponsored-tagline {
@@ -1102,11 +1102,6 @@ a.star { text-decoration: none; color: #ff8b60 }
 }
 
 .entry .buttons a:hover {text-decoration: underline}
-
-.entry .buttons .status-msg {
-    display: none;
-    margin-right: .5em;
-}
 
 /* links */
 
@@ -1864,42 +1859,6 @@ label + #moresearchinfo {
 .usertable td, .usertable th { padding: 0 .7em }
 .usertable { white-space: nowrap }
 
-.usertable .remove-self {
-    display: inline-block;
-    margin: 1em 0 .5em;
-    padding: 11px 15px;
-    border: 1px solid #bbb;
-    border-radius: 2px;
-}
-
-.usertable .moderator.remove-self {
-    background: #fdffe8;
-}
-
-.usertable .remove-self .option.main:before {
-    margin-right: 7px;
-}
-
-.usertable .remove-self .option {
-    display: inline;
-}
-
-.usertable .remove-self .togglebutton, .usertable .remove-self .error {
-    display: none;
-    font-size: inherit;
-    border-left: 1px solid #bbb;
-    padding: 4px 15px;
-    padding-right: 0;
-    margin-left: 10px;
-}
-
-.usertable .remove-self .active .togglebutton {
-    display: inline;
-}
-
-.usertable .remove-self .error.active {
-    display: inline;
-}
 
 .aboutpage {  margin-right: 320px; }
 .aboutpage p { margin: 5px; }
@@ -2942,7 +2901,7 @@ ul#image-preview-list .description pre {
     border-color: lightgray;
     padding: 5px; 
     margin: 5px; 
-    width: 900px;
+    width: 100%;
 }
 
 #preview-table > table > tbody > tr { padding-bottom: 10px;  }
@@ -2989,37 +2948,17 @@ ul#image-preview-list .description pre {
 }
 
 #sr-header-area {
+    padding: 3px 0px 3px 5px;
     background-color: #f0f0f0;
     white-space: nowrap;
+    overflow: hidden;
     text-transform: uppercase;
     border-bottom: 1px solid gray;
     font-size: 90%;
-    height: 18px;
-    line-height: 18px;
  }
-
-#sr-header-area .width-clip {
-    position: absolute;
-    left: 0;
-    right: 0;
-}
 
 #sr-header-area .selected a {
     color: orangered;
-}
-
-#sr-header-area .sr-list {
-    overflow: hidden;
-}
-
-#sr-header-area .dropdown.srdrop {
-    float: left;
-    padding-left: 5px;
-}
-
-#sr-header-area .drop-choices.srdrop {
-    margin-top: 0;
-    margin-left: 5px;
 }
 
 .dropdown.srdrop .selected {
@@ -3056,8 +2995,8 @@ ul#image-preview-list .description pre {
     color: black;
     background-color: #f0f0f0;
     position: absolute;
-    right: 0;
-    top: 0;
+    right: 0px;
+    top: 3px;
     padding: 0 5px 0 15px;
     font-weight: bold;
     margin: 0;
@@ -4295,7 +4234,7 @@ dd { margin-left: 20px;  }
     font-size: 130%;
 }
 
-.titlebox form.toggle, .leavemoderator {
+.titlebox form.toggle {
     margin: 0;
     padding: 5px 0px;
     font-size: smaller;
@@ -4303,8 +4242,7 @@ dd { margin-left: 20px;  }
     background: white none no-repeat scroll center left;
 }
 
-.usertable .remove-self .main:before,
-.titlebox .leavemoderator:before,
+.titlebox form.leavemoderator-button:before,
 .titlebox form.leavecontributor-button:before,
 .icon-menu .reddit-edit:before,
 .icon-menu .reddit-traffic:before,
@@ -4316,7 +4254,6 @@ dd { margin-left: 20px;  }
 .icon-menu .reddit-moderators:before,
 .icon-menu .moderator-mail:before,
 .icon-menu .reddit-contributors:before,
-.icon-menu .reddit-modqueue:before,
 .giftgold a:before,
 .gold-form h1.goldgift:before {
     height: 16px;
@@ -4327,7 +4264,7 @@ dd { margin-left: 20px;  }
     margin-right: 5px;
 }
 
-.titlebox .leavemoderator:before, .moderator.remove-self .main:before {
+.titlebox form.leavemoderator-button:before {
     background-image: url(../shield.png); /* SPRITE */
 }
 
@@ -4384,9 +4321,6 @@ dd { margin-left: 20px;  }
 }
 .icon-menu .reddit-contributors:before {
     background-image: url(../pencil.png); /* SPRITE */
-}
-.icon-menu .reddit-modqueue:before {
-    background-image: url(../reddit_modqueue.png); /* SPRITE */
 }
 
 .linkinfo {
@@ -4567,35 +4501,23 @@ a.pretty-button:hover { text-decoration: none !important }
     outline-style: none;
 }
 
-a.pretty-button {
-    color: black;
-}
-
-a.pretty-button.pressed {
-    color: white;
-}
-
 a.pretty-button.negative {
+    color: black;
     background-image: url(../bg-button-negative-unpressed.png); /* SPRITE stretch-x */
 }
 
 a.pretty-button.negative.pressed {
+    color: white;
     background-image: url(../bg-button-negative-pressed.png); /* SPRITE stretch-x */
 }
 
-a.pretty-button.neutral {
-    background-image: url(../bg-button-neutral-unpressed.png); /* SPRITE stretch-x */
-}
-
-a.pretty-button.neutral.pressed {
-    background-image: url(../bg-button-neutral-pressed.png); /* SPRITE stretch-x */
-}
-
 a.pretty-button.positive {
+    color: black;
     background-image: url(../bg-button-positive-unpressed.png); /* SPRITE stretch-x */
 }
 
 a.pretty-button.positive.pressed {
+    color: white;
     background-image: url(../bg-button-positive-pressed.png); /* SPRITE stretch-x */
 }
 
@@ -5055,11 +4977,13 @@ tr.gold-accent + tr > td {
 }
 
 .modactionlisting table {
-    margin: 0 5px;
+    margin: 0 15px;
 }
 
-.modactionlisting td.timestamp, .modactionlisting td.subreddit {
+.modactionlisting td.timestamp {
     white-space: nowrap;
+    padding-left: 0;
+    padding-right: 1.5em;
 }
 
 .modactionlisting td.button {
@@ -5074,7 +4998,7 @@ tr.gold-accent + tr > td {
 .modactions td {
     font-size: small;
     text-align: left;
-    padding: 2px 10px;
+    padding: 2px; 
 }
 .modactions.banuser,
 .modactions.unbanuser,
@@ -5087,9 +5011,7 @@ tr.gold-accent + tr > td {
 .modactions.addcontributor,
 .modactions.removecontributor,
 .modactions.editsettings,
-.modactions.editflair,
-.modactions.distinguish,
-.modactions.marknsfw {
+.modactions.editflair {
     height: 16px;
     width: 16px;
     display: block;
@@ -5133,6 +5055,9 @@ tr.gold-accent + tr > td {
 .modactions.editflair {
     background-image: url(../modactions_editflair.png); /* SPRITE */
 }
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
 .modactions.distinguish {
     background-image: url(../modactions_distinguish.png); /* SPRITE */
 }
@@ -5328,3 +5253,6 @@ tr.gold-accent + tr > td {
     font-family: 'Courier New', monospace;
     width: 50%;
 }
+>>>>>>> upstream/master
+=======
+>>>>>>> 92ca5e5ee6b7502bfd92e55accaa12f42123d655

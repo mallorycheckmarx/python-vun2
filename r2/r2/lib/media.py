@@ -42,13 +42,12 @@ import hashlib
 
 import mimetypes
 
-s3_direct_url = "s3.amazonaws.com"
+s3_direct_url = g.s3_media_base_url
 
 threads = 20
 log = g.log
 
 MEDIA_FILENAME_LENGTH = 12
-
 
 def thumbnail_url(link):
     """Given a link, returns the url for its thumbnail based on its fullname"""
@@ -128,10 +127,11 @@ def upload_media(image, never_expire=True, file_type='.jpg'):
 def update_link(link, thumbnail, media_object, thumbnail_size=None):
     """Sets the link's has_thumbnail and media_object attributes iin the
     database."""
+
     if thumbnail:
         link.thumbnail_url = thumbnail
         link.thumbnail_size = thumbnail_size
-        g.log.debug("Updated link with thumbnail: %s" % link.thumbnail_url)
+        g.log.info("Updated link with thumbnail: %s" % link.thumbnail_url)
         
     if media_object:
         link.media_object = media_object
@@ -140,6 +140,8 @@ def update_link(link, thumbnail, media_object, thumbnail_size=None):
 
 
 def set_media(link, force = False):
+
+
     if link.is_self:
         return
     if not force and link.promoted:

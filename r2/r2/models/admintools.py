@@ -77,7 +77,6 @@ class AdminTools(object):
             self.set_last_sr_ban(new_things)
 
         queries.ban(new_things)
-        queries.new_spam_filtered(all_things)
 
     def unspam(self, things, unbanner=None, train_spam=True, insert=True):
         from r2.lib.db import queries
@@ -110,7 +109,6 @@ class AdminTools(object):
 
         if insert:
             queries.unban(things)
-        queries.new_spam_filtered(things)
 
     def author_spammer(self, things, spam):
         """incr/decr the 'spammer' field for the author of every
@@ -279,8 +277,8 @@ def update_gold_users(verbose=False):
             if verbose:
                 print "%s just expired" % account.name
             admintools.degolden(account)
-            send_system_message(account, "Your reddit gold subscription has expired. :(",
-               "Your subscription to reddit gold has expired. [Click here for details on how to renew, or to set up an automatically-renewing subscription.](http://www.reddit.com/gold) Or, if you don't want to, please write to us at 912@reddit.com and tell us where we let you down, so we can work on fixing the problem.")
+            send_system_message(account, "Your populr gold subscription has expired. :(",
+               "Your subscription to populr gold has expired. [Click here for details on how to renew, or to set up an automatically-renewing subscription.](http://www.populr.de/gold) Or, if you don't want to, please write to us at 912@populr.de and tell us where we let you down, so we can work on fixing the problem.")
             continue
 
         count += 1
@@ -305,8 +303,8 @@ def update_gold_users(verbose=False):
                 if verbose:
                     print "Sending notice to %s" % account.name
                 g.hardcache.set(hc_key, True, 86400 * 10)
-                send_system_message(account, "Your reddit gold subscription is about to expire!",
-                                    "Your subscription to reddit gold will be expiring soon. [Click here for details on how to renew, or to set up an automatically-renewing subscription.](http://www.reddit.com/gold) Or, if you think we suck, just let your subscription lapse and go back to being a regular user.\n\nIf you have any questions, please write to 912@reddit.com.")
+                send_system_message(account, "Your populr gold subscription is about to expire!",
+                                    "Your subscription to populr gold will be expiring soon. [Click here for details on how to renew, or to set up an automatically-renewing subscription.](http://www.populr.de/gold) Or, if you think we suck, just let your subscription lapse and go back to being a regular user.\n\nIf you have any questions, please write to 912@populr.de.")
 
     if verbose:
         for exp_date in sorted(expiration_dates.keys()):
@@ -318,9 +316,6 @@ def update_gold_users(verbose=False):
         else:
             delta, account = minimum
             print "Next expiration is %s, in %d days" % (account.name, delta.days)
-
-def admin_ratelimit(user):
-    return True
 
 def is_banned_IP(ip):
     return False

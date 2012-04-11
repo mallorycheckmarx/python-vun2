@@ -20,42 +20,46 @@
 ## CondeNet, Inc. All Rights Reserved.
 ################################################################################
 <%!
-   from r2.lib.template_helpers import add_sr
-   from r2.lib.utils import UrlParser
+   from r2.lib.template_helpers import get_domain, static
+   from r2.lib.tracking import AdframeInfo
    import random
-%>
-
-<%namespace file="utils.html" import="error_field"/>
+ %>
 
 <%
-  op = "login-main"
-  base = g.https_endpoint if not thing.cname else ''
+
+name = ''
+if c.custom_dart_keyword:
+    name = "r/%s/%s" % (c.site.name, c.custom_dart_keyword)
+elif not c.default_sr:
+    name = "r/%s/" % c.site.name
+
 %>
-<form method="post"
-      action="${add_sr(base + '/post/login', nocname=not thing.auth_cname)}"
-      id="login_${op}"
-      class="login-form login-form-side">
-  %if thing.cname:
-    <input type="hidden" name="${UrlParser.cname_get}" 
-           value="${random.random()}" />
-  %endif
-  <input type="hidden" name="op" value="${op}" />
-  <input name="user" placeholder="${_('username')}" type="text" maxlength="20" tabindex="1"/>
-  <input name="passwd" placeholder="${_('password')}" type="password" tabindex="1"/>
 
-  <div class="status"></div>
+<iframe id="ad-frame" frameborder="0" scrolling="no" name="ad-frame"
+        src="${g.ad_domain}/ads/${name}">
+</iframe>
 
-  <div id="remember-me">
-    <input type="checkbox" name="rem" id="rem-${op}" tabindex="1" />
-    <label for="rem-${op}">${_("remember me")}</label>
-    <a class="recover-password" href="/password">${_("reset password")}</a>
-  </div>
+<script type="text/javascript"><!--
+google_ad_client = "ca-pub-8998561852600187";
+/* Populr.de BigSquare */
+google_ad_slot = "7815534697";
+google_ad_width = 300;
+google_ad_height = 250;
+//-->
+ </script>
+<script type="text/javascript"
+src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
+</script>
 
-  <div class="submit">
-    <span class="throbber"></span>
-    <button class="btn" type="submit" tabindex="1">${_("login")}</button>
-  </div>
-  
-  <div class="clear"></div>
-</form>
-
+<script type="text/javascript">
+    <% 
+      tracker_url = AdframeInfo.gen_url(fullname = "adblock", ip = request.ip)
+     %>
+    $(function() {
+      var ad = $("#ad-frame");
+      if(!ad.length || ad.height() == 0 || ad.width() == 0 || ad.offset().left == 0) {
+        $(".footer").append("<img alt='' src='${unsafe(tracker_url)}&random=" +
+                                    Math.random()*10000000000000000 + "'/>");
+      }
+    });
+</script>

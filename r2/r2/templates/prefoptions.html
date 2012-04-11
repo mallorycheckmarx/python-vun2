@@ -104,7 +104,7 @@
   <tr>
     <th>${_("clicking options")}</th>
     <td class="prefright">
-      ${checkbox(_("display links with a reddit toolbar"), "frame")}
+      ${checkbox(_("display links with a populr toolbar"), "frame")}
       <br/>
       ${checkbox(_("open links in a new window"), "newwindow")}
     </td>
@@ -115,7 +115,7 @@
       %if not c.user.pref_compress:
       ${media_radio("on", _("show thumbnails next to links"))}
       ${media_radio("off", _("don't show thumbnails next to links"))}
-      ${media_radio("subreddit", _("show thumbnails based on that reddit's media preferences"))}
+      ${media_radio("subreddit", _("show thumbnails based on that populr's media preferences"))}
      ${checkbox(_("make safe(r) for work "), "no_profanity", disabled = not c.user.pref_over_18, disabled_text = "(requires over 18)")}
       &#32;
       <span class="little gray">
@@ -268,7 +268,7 @@
       &#32;
       <span class="little gray">
        (
-         <a href="http://www.reddit.com/r/redditdev/comments/dtg4j/want_to_help_reddit_build_a_recommender_a_public/">
+         <a href="http://www.populr.de/r/redditdev/comments/dtg4j/want_to_help_reddit_build_a_recommender_a_public/">
            ${_("details")}
          </a>
        )
@@ -278,15 +278,15 @@
       &#32;
       <span class="little gray">
         (
-        <a href="http://www.reddit.com/help/noindex">${_("details")}</a>
+        <a href="http://www.populr.de/help/noindex">${_("details")}</a>
         )
       </span>
       <br />
-      ${checkbox(_("load core JS libraries from reddit servers"), "local_js")}
+      ${checkbox(_("load core JS libraries from populr servers"), "local_js")}
       &#32;
       <span class="little gray">
        (
-         <a href="http://www.reddit.com/help/localjs">
+         <a href="http://www.populr.de/help/localjs">
            ${_("details")}
          </a>
        )
@@ -299,7 +299,7 @@
     <th>${_("gold options")}</th>
     <td class="prefright">
         ${checkbox(_("show the right sidebar ad box"), "show_adbox")}
-        &#32;<span class="little gray">(${_("the attractive 300x250 one that usually only has reddit t-shirts in it")})</span>
+        &#32;<span class="little gray">(${_("the attractive 300x250 one that usually only has populr t-shirts in it")})</span>
         <br/>
         ${checkbox(_("show sponsored links"), "show_sponsors")}
         &#32;<span class="little gray">(${_("the blue advertisements that sometimes appear on the top of the page")})</span>

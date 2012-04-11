@@ -45,7 +45,8 @@ logging.getLogger('scgi-wsgi').setLevel(logging.CRITICAL)
 
 def is_local_address(ip):
     # TODO: support the /20 and /24 private networks? make this configurable?
-    return ip.startswith('10.')
+    #return ip.startswith('10.')
+    return ip.startswith('127.')
 
 
 class BaseController(WSGIController):

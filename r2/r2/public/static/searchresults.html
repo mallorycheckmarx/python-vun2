@@ -1,0 +1,1141 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" 
+      xml:lang="en" >
+  <head>
+    <title>
+    populr.de - Social News und Bookmarking
+</title>
+    
+    <meta name="keywords" content="
+populaer, populr.de, social bookmarking, abstimmen, social news, kommentare, webnews
+" />
+    <meta name="title" content="
+    populr.de - Social News und Bookmarking
+" />
+    <meta name="description" content="populr.de - Social News und Bookmarking" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=1024" />
+    
+
+    
+    
+    <link rel="stylesheet" href="/static/css/reddit.css?v=245583" 
+          type="text/css" />
+
+
+
+  <link rel='shortcut icon' href="/static/favicon.ico?v=531744" type="image/x-icon" />
+  <link rel='apple-touch-icon-precomposed' href="/static/icon-touch.png?v=301748" />
+
+    
+    <link rel="alternate" type="application/rss+xml" title="RSS"
+          href="http://populr.de/.rss" />
+
+  <!--[if lt IE 7]>
+    <link rel="stylesheet" href="/static/css/reddit-ie6-hax.css?v=761932"" 
+          type="text/css" />
+  <![endif]-->
+
+  <!--[if lt IE 8]>
+    <link rel="stylesheet" href="/static/css/reddit-ie7-hax.css?v=351585"" 
+          type="text/css" />
+  <![endif]-->
+
+    
+  
+  <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.js"></script>
+
+<script type="text/javascript" src="/static/js/lib/json2.js?v=587016"></script>
+<script type="text/javascript" src="/static/js/lib/jquery.cookie.js?v=972900"></script>
+<script type="text/javascript" src="/static/js/lib/jquery.url.js?v=465420"></script>
+<script type="text/javascript" src="/static/js/jquery.reddit.js?v=157986"></script>
+<script type="text/javascript" src="/static/js/base.js?v=101449"></script>
+<script type="text/javascript" src="/static/js/ui.js?v=735853"></script>
+<script type="text/javascript" src="/static/js/login.js?v=212085"></script>
+<script type="text/javascript" src="/static/js/analytics.js?v=627420"></script>
+<script type="text/javascript" src="/static/js/flair.js?v=929667"></script>
+<script type="text/javascript" src="/static/js/reddit.js?v=591973"></script>
+<script type="text/javascript" src="/static/js/utils.js?v=832131"></script>
+<script type="text/javascript">r.strings = {"multiple_submitted": "that link has been submitted to multiple reddits. you can try to [submit it again](%s).", "sr_created": "your reddit has been created", "unverified_quota_msg": "Looks like you're either a brand new user or your posts have not been doing well recently. You may have to wait a bit to post again. In the meantime feel free to [check out the reddiquette](%(reddiquette)s), join the conversation in a different thread, or [verify your email address](%(verify)s).", "email_verify_failed": "Verification failed.  Please try that again", "banned_by": "removed by %s", "banned_subreddit": "**this reddit has been banned**\n\nmost likely this was done automatically by our spam filtering program. the program is still learning, and may even have some bugs, so if you feel the ban was a mistake, please submit a link to our [request a reddit listing](%(link)s) and be sure to include the **exact name of the reddit**.", "comments_panel_text": "The following is a sample of what Reddit users had to say about this page. The full discussion is available [here](%(fd_link)s); you can also get there by clicking the link's title (in the middle of the toolbar, to the right of the comments button).", "gold_summary_autorenew": "You're about to set up an ongoing, autorenewing subscription to populr gold for yourself (%(user)s).", "gold_summary_creddits": "You're about to purchase %(amount)s of populr gold creddits. They work like gift certificates: each creddit you have will allow you to give one month of populr gold to someone else.", "firsttext": "populr is a source for what's new and popular online. vote on links that you like or dislike and help decide what's popular, or submit your own!", "sr_messages": {"moderator": "below are the reddits that you have moderator access to.", "contributor": "below are the reddits that you are an approved submitter on.", "empty": "you have not subscribed to any reddits.", "subscriber": "below are the reddits you have subscribed to"}, "verify_email": "we're going to need to verify your email address for you to proceed.", "permalink_title": "%(author)s comments on %(title)s", "gold_summary_anonymous_gift": "You're about to give %(amount)s of populr gold to %(recipient)s. It will be an anonymous gift.", "link_info_title": "%(title)s : %(site)s", "submit_text": "You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Beginning your title with \"vote up if\" is violation of intergalactic law.", "postcard_msg": "You sent us a postcard! (Or something similar.) When we run out of room on our refrigerator, we might one day auction off the stuff that people sent in. Is it okay if we include your thing?", "finished_trials": "it's too late to change your vote on these things (the verdict has been issued):", "already_submitted": "that link has already been submitted, but you can try to [submit it again](%s).", "legal": "I understand and agree that registration on or use of this site constitutes agreement to its %(user_agreement)s and %(privacy_policy)s.", "gold_summary_onetime": "You're about to make a one-time purchase of %(amount)s of populr gold for yourself (%(user)s).", "searching_a_reddit": "you're searching within the [%(reddit_name)s](%(reddit_link)s) reddit. you can also search within [all reddits](%(all_reddits_link)s)", "your_current_ip_is": "You are currently accessing populr from this IP address: %(address)s.", "unvotable_message": "sorry, this has been archived and can no longer be voted on", "read_only_msg": "populr is in \"emergency read-only mode\" right now. :( you won't be able to log in. we're sorry, and are working frantically to fix the problem.", "youve_got_gold": "%(sender)s just sent you %(amount)s of populr gold! Wasn't that nice?", "invalid_search_query": "I couldn't understand your query, so I simplified it and searched for \"%(clean_query)s\" instead.", "giftgold_note": "Here's a note that was included:\n\n----\n\n", "submit_box_text": "to anything interesting: news article, blog entry, video, picture...", "person_label": "<span class='number'>%(num)s</span>&#32;<span class='word'>%(persons)s</span>", "account_activity_blurb": "This page shows a history of recent activity on your account. If you notice unusual activity, you should change your password immediately. Location information is guessed from your computer's IP address and may be wildly wrong, especially for visits from mobile devices.", "submit_box_restricted_text": "submission in this subreddit is restricted to approved submitters.", "banned": "removed", "more_info_link": "visit [%(link)s](%(link)s) for more information", "over_comment_limit": "Sorry, the maximum number of comments is %(max)d. (However, if you subscribe to populr gold, it goes up to %(goldmax)d.)", "time_label": "%(num)d %(time)s", "gold_summary_signed_gift": "You're about to give %(amount)s of populr gold to %(recipient)s, who will be told that it came from you.", "heavy_load_msg": "this page is temporarily in read-only mode due to heavy traffic.", "float_label": "%(num)5.3f %(thing)s", "user_deleted": "your account has been deleted, but we won't judge you for it.", "lounge_msg": "Please grab a drink and join us in [the lounge](%(link)s).", "submit_box_archived_text": "this subreddit is archived and no longer accepting submissions.", "friends": "to view populr with only submissions from your friends, use [populr.de/r/friends](%s)", "verified_quota_msg": "Looks like you're either a brand new user or your posts have not been doing well recently. You may have to wait a bit to post again. In the meantime feel free to [check out the reddiquette](%(reddiquette)s) or join the conversation in a different thread.", "over_comment_limit_gold": "Sorry, the maximum number of comments is %d.", "iphone_first": "You should consider using [populr's mobile interface](http://i.populr.de/).", "verify_email_submit": "you'll be able to submit more frequently once you verify your email address", "oauth_login_msg": "Log in or register to connect your populr account with [%(app_name)s](%(app_about_url)s).", "css_validator_messages": {"syntax_error": "syntax error: \"%(syntaxerror)s\"", "invalid_val_for_prop": "\"%(cssvalue)s\" is not a valid value for CSS property \"%(cssprop)s\"", "too_big": "too big. keep it under %(max_size)dkb", "unknown_rule_type": "unknown CSS rule type \"%(ruletype)s\"", "invalid_property_list": "invalid CSS property list \"%(proplist)s\"", "no_imports": "@imports are not allowed", "broken_url": "\"%(brokenurl)s\" is not a valid URL", "invalid_property": "\"%(cssprop)s\" is not a valid CSS property"}, "msg_add_friend": {"contributor": "you have been added as an approved submitter to [%(title)s](%(url)s).", "moderator": "you have been added as a moderator to [%(title)s](%(url)s).", "banned": "you have been banned from posting to [%(title)s](%(url)s).", "traffic": "you have been added to the list of users able to see [traffic for the sponsored link \"%(title)s\"](%(traffic_url)s).", "friend": "None"}, "cover_disclaim": "(don't worry, it only takes a few seconds)", "subj_add_friend": {"contributor": "you are an approved submitter", "moderator": "you are a moderator", "banned": "you've been banned", "traffic": "you can view traffic on a promoted link", "friend": "None"}, "number_label": "%(num)d %(thing)s", "reports": "reports: %d", "completely_invalid_search_query": "I couldn't understand your search query. Please try again.", "active_trials": "we haven't yet decided whether these things are spam, so you have a chance to change your vote:", "sr_subscribe": "click the `subscribe` or `unsubscribe` buttons to choose which reddits appear on your front page.", "submitting": "submitting...", "email_verified": "your email address has been verfied", "submit_link": "You are submitting a link. The key to a successful submission is interesting content and a descriptive title.", "points_label": "%(num)d %(point)s", "search_failed": "Our search machines are under too much load to handle your request right now. :( Sorry for the inconvenience. Try again in a little bit -- but please don't mash reload; that only makes the problem worse.", "generic_quota_msg": "You've submitted too many links recently. Please try again in an hour.", "cover_msg": "you'll need to login or register to do that"}
+</script>
+
+
+    
+  <script type="text/javascript" id="config">
+    r.setup({"ajax_domain": "populr.de", "https_endpoint": "", "post_site": "", "extension": "", "renderstyle": "html", "status_msg": {"fetching": "fetching title...", "loading": "loading...", "submitting": "submitting..."}, "modhash": "alpop", "logged": "alpop", "is_fake": true, "clicktracker_url": "/static/pixel.png", "cur_domain": "populr.de", "referer": "", "sr": {}, "debug": false, "static_root": "/static/?v=418952", "vl": {}, "cnameframe": false, "adtracker_url": "/static/pixel.png", "tracking_domain": "populr.de"})
+  </script>
+
+    
+    <script type="text/javascript">
+      
+   reddit.cur_site = "t5_6";
+
+    </script>
+    <style type="text/css">
+      /* Custom css: use this block to insert special translation-dependent css in the page header */
+    </style>
+
+    
+<script type="text/javascript">
+    (function() {
+        var url = '/static/pixel.png?v=mcnpOkm803WxEyodLlJ18tl%2BrrZQlo%2BM2WHHc0nxo6zhOmoKcPYpivWC072bmuBloxYJcNHvn5guqb%2BPkFsf9mnj9EfNO6Wc';
+        var cachebuster = Math.round(Math.random() * 2147483647);
+        var cachebusted_url = url + "&r=" + cachebuster;
+        var img = new Image();
+        img.src = cachebusted_url;
+    })();
+</script>
+
+
+  <script type="text/javascript">
+
+    var _gaq = _gaq || [];
+    _gaq.push(
+        ['_setAccount', 'UA-28507914-1'],
+        ['_setCustomVar', 1, 'site', ' populr.de', 3],
+        ['_setCustomVar', 2, 'srpath', ' populr.de-GET_listing', 3],
+        ['_setCustomVar', 3, 'usertype', 'loggedin', 2],
+        ['_setCustomVar', 4, 'uitype', 'web', 3],
+        ['_trackPageview']
+    );
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+
+  </script>
+
+
+  </head>
+  
+  
+  <body 
+    class="listing-page loggedin" >
+    
+
+
+
+<div id="header">
+  <a tabindex="1" href="#content" id="jumpToContent">jump to content</a>
+  
+
+
+<div id="sr-header-area">
+  <div class="width-clip">
+
+    <div class="sr-list">
+        
+  
+    <ul class="flat-list sr-bar hover"
+        >
+
+
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/all/" >all</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/random/" >random</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/mod" >mod</a>
+
+
+
+        </li>
+    </ul>
+
+        <span class="separator">&nbsp;|&nbsp;</span>
+        
+  
+    <ul class="flat-list sr-bar hover"
+        >
+
+
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Technik/" >Technik</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Internet/" >Internet</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Wirtschaft/" >Wirtschaft</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Politik/" >Politik</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Kultur/" >Kultur</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Hardware/" >Hardware</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Mobile/" >Mobile</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Applikationen/" >Applikationen</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Medien/" >Medien</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Wordpress/" >Wordpress</a>
+
+
+
+        </li>
+        
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Sport/" >Sport</a>
+
+
+
+        </li>
+    </ul>
+
+        <span class="separator">&nbsp;&ndash;&nbsp;</span>
+        
+  
+    <ul class="flat-list sr-bar hover"
+        id='sr-bar'>
+
+
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Hackintosh/" >Hackintosh</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Linux/" >Linux</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Youtube/" >Youtube</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Gadgets/" >Gadgets</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Networld/" >Networld</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Foto/" >Foto</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Domaining/" >Domaining</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/WHS/" >WHS</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Anonymous/" >Anonymous</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Startup/" >Startup</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Fun/" >Fun</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Social/" >Social</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/apple/" >apple</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">-</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/r/Gaming/" >Gaming</a>
+
+
+
+        </li>
+    </ul>
+
+
+      
+    </div>
+
+    
+  
+
+  
+<a 
+    href="http://populr.de/reddits/"     id="sr-more-link" >edit &raquo;</a>
+
+
+  </div>
+</div>
+
+  <div id="header-bottom-left">
+    
+    
+        <a href="/" id="header-img" class="default-header" title="">populr.de</a>
+    
+    &nbsp;
+
+      
+    
+    <ul class="tabmenu  "
+        >
+        
+        <li class='selected'>
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/" >what's hot</a>
+
+
+
+        </li>
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/new/" >new</a>
+
+
+
+        </li>
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/controversial/" >controversial</a>
+
+
+
+        </li>
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/top/" >top</a>
+
+
+
+        </li>
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/saved/" >saved</a>
+
+
+
+        </li>
+    </ul>
+
+  </div>
+
+  <div id="header-bottom-right">
+      <span class="user">
+         
+  
+
+  
+<a 
+    href="http://populr.de/user/alpop/" >alpop</a>
+
+
+         &nbsp;(<b>117</b>)
+      </span>
+
+      
+  <span class="separator">|</span>
+
+
+      
+      
+  
+
+  
+<a 
+    title="new mail!"     href="http://populr.de/message/unread/"     class="havemail"     id="mail" >messages</a>
+
+
+      
+  <span class="separator">|</span>
+
+         
+         
+  
+
+  
+<a 
+    title="no new mod mail"     href="http://populr.de/message/moderator/"     class="nohavemail"     id="modmail" >mod messages</a>
+
+
+         
+  <span class="separator">|</span>
+
+    
+  
+    <ul class="flat-list  hover"
+        >
+
+
+        
+        <li >
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/adminon/"     target="_self" >turn admin on</a>
+
+
+
+        </li>
+        
+        <li >
+            
+  <span class="separator">|</span>
+
+          
+  
+  
+
+  
+<a 
+    href="http://populr.de/prefs/"     class="pref-lang" >preferences</a>
+
+
+
+        </li>
+    </ul>
+
+      
+  <span class="separator">|</span>
+
+      
+  <form method="post" action="/logout" class="logout hover"
+    >
+    <input type="hidden" name="uh" value="alpop"/>
+    <input type="hidden" name="top" value="off"/>
+    
+    <a href="javascript:void(0)" onclick="$(this).parent().submit()"
+    >
+      logout
+    </a>
+  </form>
+
+  </div>
+</div>
+
+  
+      <div class="side">
+        
+  
+    <div 
+         class='spacer'>
+
+
+  
+
+
+
+
+<div id="cse-search-form" style="width: 100%;">Loading</div>
+<script src="http://www.google.com/jsapi" type="text/javascript"></script>
+<script type="text/javascript"> 
+  google.load('search', '1', {language : 'de', style : google.loader.themes.V2_DEFAULT});
+  google.setOnLoadCallback(function() {
+    var customSearchOptions = {};  var customSearchControl = new google.search.CustomSearchControl(
+      '014171900623846629857:pqear-nfrhe', customSearchOptions);
+    customSearchControl.setResultSetSize(google.search.Search.FILTERED_CSE_RESULTSET);
+    var options = new google.search.DrawOptions();
+    options.setAutoComplete(true);
+    customSearchControl.setAutoCompletionId('014171900623846629857:pqear-nfrhe+qptype:1');
+    options.enableSearchboxOnly("http://populr.de/static/searchresults.html");
+    customSearchControl.draw('cse-search-form', options);
+  }, true);
+</script>
+
+
+
+    </div>
+    <div 
+         class='spacer'>
+
+
+  
+
+
+    </div>
+    <div 
+         class='spacer'>
+
+
+  
+
+
+<div class="sidebox submit">
+  <div class="morelink">
+    
+  
+
+  
+<a 
+    href="http://populr.de/submit"     class="login-required" >Submit a link</a>
+
+
+    <div class="nub"> </div>
+  </div>
+
+    <div class="spacer">
+      
+  
+
+  
+<a 
+    href="http://populr.de/submit"     class="login-required" ></a>
+
+
+        <div class="subtitle">to anything interesting: news article, blog entry, video, picture...</div>
+    </div>
+</div>
+
+
+    </div>
+    <div 
+         class='spacer'>
+
+
+  
+
+
+<div class="sidebox create">
+  <div class="morelink">
+    
+  
+
+  
+<a 
+    href="http://populr.de/reddits/create"     class="login-required" >Create your own community</a>
+
+
+    <div class="nub"> </div>
+  </div>
+
+    <div class="spacer">
+      
+  
+
+  
+<a 
+    href="http://populr.de/reddits/create"     class="login-required" ></a>
+
+
+        <div class="subtitle">...do it for the children.</div>
+        <div class="subtitle">...for your community.</div>
+    </div>
+</div>
+
+
+    </div>
+    <div 
+         class='spacer'>
+
+
+  
+
+
+
+<script type="text/javascript"><!--
+google_ad_client = "ca-pub-8998561852600187";
+/* Populr.de BigSquare */
+google_ad_slot = "7815534697";
+google_ad_width = 300;
+google_ad_height = 250;
+//-->
+</script>
+<script type="text/javascript"
+src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
+</script>
+
+    </div>
+    <div 
+         class='spacer'>
+
+
+  
+<div class="account-activity-box">
+    <p><a href="/account-activity">account activity</a></p>
+</div>
+
+
+    </div>
+
+
+      </div>
+    
+      <a name="content"></a>
+      <div class="content">
+        
+
+
+  
+
+
+<div class="infobar ">
+  <!-- SC_OFF --><div class="md"><p>Achtung: populr.de ist derzeit noch im Betatest, mach mit und registriere dich jetzt!</p>
+</div><!-- SC_ON -->
+</div>
+
+
+
+
+  
+
+
+  
+
+
+<form onsubmit="return post_form(this, 'share')" method="post"
+      id="sharelink_"
+      class="pretty-form sharelink" action="/post/share"
+     style='display:none'>
+  <div class="clearleft"><!--IEsux--></div>
+    
+  
+  <span class="error RATELIMIT field-ratelimit" 
+  style="display:none">
+  </span>
+
+    <input type="hidden" name="parent" value=""/>
+    <table class="sharetable preftable">
+      <tr class="">
+        <th>
+          <label for="share_to_">
+            send this link to
+          </label>
+        </th>
+        <td>
+          <textarea id="share_to_" 
+                    name="share_to" rows="4" cols="40">
+            al-pop1@none.at
+          </textarea>
+        </td>
+        <td class="share-to-errors">
+          
+  
+  <span class="error BAD_EMAILS field-share_to" 
+  style="display:none">
+  </span>
+
+          
+  
+  <span class="error TOO_MANY_EMAILS field-share_to" 
+  style="display:none">
+  </span>
+
+          
+  
+  <span class="error NO_EMAILS field-share_to" 
+  style="display:none">
+  </span>
+
+        </td>
+      </tr>
+      <tr>
+        <th>
+          <label for="share_from_">
+            your name
+          </label>&nbsp;
+          <span class="little gray">
+            (optional)
+          </span>
+        </th>
+        <td>
+          <input class="real-name" value="alpop"
+                 type="text" id="share_from_" 
+                 name="share_from" />
+        </td>
+        <td class="share-from-errors">
+          
+  
+  <span class="error TOO_LONG field-share_from" 
+  style="display:none">
+  </span>
+
+        </td>
+      </tr>
+      <tr>
+        <th>
+          <label for="replyto_">
+            your email
+          </label>&nbsp;
+          <span class="little gray">
+            (optional)
+          </span>
+        </th>
+        <td>
+          <input name="replyto" type="text" size="30"
+                 id="replyto_"
+                 value="al-pop@none.at"/>
+        </td>
+        <td class="reply-to-errors">
+          
+  
+  <span class="error BAD_EMAILS field-replyto" 
+  style="display:none">
+  </span>
+
+          
+  
+  <span class="error TOO_MANY_EMAILS field-replyto" 
+  style="display:none">
+  </span>
+
+        </td>
+      </tr>
+      <tr>
+        <th>
+          <label for="message_">
+            message
+          </label>&nbsp;
+          <span class="little gray">
+            (optional)
+          </span>
+        </th>
+        <td>
+          <textarea id="message_" 
+                    name="message" rows="4" cols="40">
+            alpop from http://populr.de/ has shared a link with you.
+          </textarea>
+        </td>
+        <td class="message-errors">
+          
+  
+  <span class="error TOO_LONG field-message" 
+  style="display:none">
+  </span>
+
+        </td>
+      </tr>
+      <tr>
+        <td>
+        </td>
+        <td>
+          <button type="submit" class="btn">
+            share
+          </button>
+          <button class="btn" 
+                  onclick="return cancelShare(this);">
+            cancel
+          </button>
+          <span class="status error"></span>
+        </td>
+        <td>
+        </td>
+      </tr>
+    </table>
+</form>
+
+
+
+
+  
+    <div 
+         class='spacer'>
+
+<div id="cse" style="width: 100%;">Loading</div>
+<script src="http://www.google.com/jsapi" type="text/javascript"></script>
+<script type="text/javascript"> 
+  google.load('search', '1', {language : 'de', style : google.loader.themes.V2_DEFAULT});
+  google.setOnLoadCallback(function() {
+    var customSearchOptions = {};
+    var googleAnalyticsOptions = {};
+    googleAnalyticsOptions['queryParameter'] = 'search';
+    googleAnalyticsOptions['categoryParameter'] = '';
+    customSearchOptions['googleAnalyticsOptions'] = googleAnalyticsOptions;  var customSearchControl = new google.search.CustomSearchControl(
+      '014171900623846629857:pqear-nfrhe', customSearchOptions);
+    customSearchControl.setResultSetSize(google.search.Search.FILTERED_CSE_RESULTSET);
+    var options = new google.search.DrawOptions();
+    options.setAutoComplete(true);
+    customSearchControl.setAutoCompletionId('014171900623846629857:pqear-nfrhe+qptype:1');
+    customSearchControl.draw('cse', options);
+    function parseParamsFromUrl() {
+      var params = {};
+      var parts = window.location.search.substr(1).split('\x26');
+      for (var i = 0; i < parts.length; i++) {
+        var keyValuePair = parts[i].split('=');
+        var key = decodeURIComponent(keyValuePair[0]);
+        params[key] = keyValuePair[1] ?
+            decodeURIComponent(keyValuePair[1].replace(/\+/g, ' ')) :
+            keyValuePair[1];
+      }
+      return params;
+    }
+
+    var urlParams = parseParamsFromUrl();
+    var queryParamName = "q";
+    if (urlParams[queryParamName]) {
+      customSearchControl.execute(urlParams[queryParamName]);
+    }
+  }, true);
+</script>
+</div>
