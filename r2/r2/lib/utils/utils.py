@@ -32,6 +32,7 @@ from BeautifulSoup import BeautifulSoup
 
 from time import sleep
 from datetime import datetime, timedelta
+from functools import wraps, partial, WRAPPER_ASSIGNMENTS
 from pylons import g
 from pylons.i18n import ungettext, _
 from r2.lib.filters import _force_unicode
@@ -247,25 +248,37 @@ def get_title(url):
         return None
 
     try:
-        # if we don't find it in the first kb of the resource, we
-        # probably won't find it
         opener = urlopen(url, timeout=15)
-        text = opener.read(1024)
+        
+        # Attempt to find the title in the first 1kb
+        data = opener.read(1024)
+        title = extract_title(data)
+        
+        # Title not found in the first kb, try searching an additional 2kb
+        if not title:
+            data += opener.read(2048)
+            title = extract_title(data)
+        
         opener.close()
-        bs = BeautifulSoup(text, convertEntities=BeautifulSoup.HTML_ENTITIES)
-        if not bs:
-            return
-
-        title_bs = bs.html.head.title
-
-        if not title_bs or not title_bs.string:
-            return
-
-        return title_bs.string.encode('utf-8').strip()
+        
+        return title
 
     except:
         return None
 
+def extract_title(data):
+    """Tries to extract the value of the title element from a string of HTML"""
+    bs = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
+    if not bs:
+        return
+    
+    title_bs = bs.html.head.title
+
+    if not title_bs or not title_bs.string:
+        return
+
+    return title_bs.string.encode('utf-8').strip()
+    
 valid_schemes = ('http', 'https', 'ftp', 'mailto')
 valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
 def sanitize_url(url, require_scheme = False):
@@ -811,7 +824,7 @@ def fix_if_broken(thing, delete = True, fudge_links = False):
 
             if not tried_loading:
                 tried_loading = True
-                thing._load(check_essentials=False)
+                thing._load()
 
             try:
                 getattr(thing, attr)
@@ -1114,6 +1127,7 @@ def ip_and_slash16(req):
 
     if ip is None:
         raise ValueError("request.ip is None")
+    ip = ip.strip()
 
     m = r_subnet.match(ip)
     if m is None:
@@ -1372,3 +1386,8 @@ def constant_time_compare(actual, expected):
             result |= ord(actual[i]) ^ ord(expected[i % expected_len])
     return result == 0
 
+def wraps_api(f):
+    # work around issue where wraps() requires attributes to exist
+    if not hasattr(f, '_api_doc'):
+        f._api_doc = {}
+    return wraps(f, assigned=WRAPPER_ASSIGNMENTS+('_api_doc',))

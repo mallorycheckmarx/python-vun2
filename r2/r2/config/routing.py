@@ -51,6 +51,7 @@ def make_map(global_conf={}, app_conf={}):
 
     mc('/about/message/:where', controller='message', action='listing')
     mc('/about/log', controller='front', action='moderationlog')
+    mc('/about', controller='front', action='about')
     mc('/about/:location', controller='front', 
        action='editreddit', location = 'about')
 
@@ -104,6 +105,11 @@ def make_map(global_conf={}, app_conf={}):
     mc('/user/:username/:where', controller='user', action='listing',
        where='overview')
     mc('/u/:username', controller='redirect', action='user_redirect')
+
+    # preserve timereddit URLs from 4/1/2012
+    mc('/t/:timereddit', controller='redirect', action='timereddit_redirect')
+    mc('/t/:timereddit/*rest', controller='redirect',
+       action='timereddit_redirect')
 
     mc('/prefs/:location', controller='forms',
        action='prefs', location='options')
@@ -204,6 +210,7 @@ def make_map(global_conf={}, app_conf={}):
     mc('/post/:action', controller='post',
        requirements=dict(action="options|over18|unlogged_options|optout|optin|login|reg"))
 
+    mc('/api', controller='redirect', action='redirect', dest='/dev/api')
     mc('/api/distinguish/:how', controller='api', action="distinguish")
     # wherever this is, google has to agree.
     mc('/api/gcheckout', controller='ipn', action='gcheckout')
@@ -223,6 +230,9 @@ def make_map(global_conf={}, app_conf={}):
     mc("/api/v1/:action", controller="oauth2frontend", requirements=dict(action="authorize"))
     mc("/api/v1/:action", controller="oauth2access", requirements=dict(action="access_token"))
     mc("/api/v1/:action", controller="apiv1")
+
+    mc('/dev', controller='redirect', action='redirect', dest='/dev/api')
+    mc('/dev/api', controller='apidocs', action='docs')
 
     mc("/button_info", controller="api", action="info", limit = 1)
 
