@@ -27,12 +27,12 @@
 
 <div class="instructions">
   <h1>${_("put %(site)s buttons on your site") % dict(site=c.site.name)}</h1>
-    <p>${_('the reddit button is the smart way to get your content submitted to\
-      and discussed on reddit.  pick the button you like from below, and then\
+    <p>${_('the populr button is the smart way to get your content submitted to\
+      and discussed on populr.  pick the button you like from below, and then\
       copy/paste the code into your HTML editor.')}</p>
 
     <h2>${_("commonly used buttons")}</h2>
-    <p>${_('use one of these buttons to quickly add reddit links to your site, or \
+    <p>${_('use one of these buttons to quickly add populr links to your site, or \
       see below for more options.')}</p>
     <ul class="buttons">
       ${demo(capture(drawbadge, 1))}
@@ -149,7 +149,7 @@ $(function() {
   <a href="http://${domain}/submit" 
     onclick="window.location = 'http://${domain}/submit?url=' + encodeURIComponent(window.location); return false">
    <img src="http://${get_domain(subreddit=False)}/static/spreddit${image}.gif" 
-        alt="submit to reddit" border="0" />
+        alt="submit to populr" border="0" />
    </a>
 </%def>
 

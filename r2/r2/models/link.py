@@ -27,7 +27,7 @@ from r2.lib.utils.trial_utils import trial_info
 from account import Account, DeletedUser
 from subreddit import Subreddit
 from printable import Printable
-from r2.config import cache, extensions
+from r2.config import cache
 from r2.lib.memoize import memoize
 from r2.lib.filters import _force_utf8
 from r2.lib import utils
@@ -43,6 +43,9 @@ from datetime import datetime
 from hashlib import md5
 
 import random, re
+
+log = g.log
+
 
 class LinkExists(Exception): pass
 
@@ -216,10 +219,6 @@ class Link(Thing, Printable):
 
             if wrapped.hidden:
                 return False
-
-        # Don't hide from API users
-        if c.render_style in extensions.API_TYPES:
-            return True
 
         # hide NSFW links from non-logged users and under 18 logged users 
         # if they're not explicitly visiting an NSFW subreddit or a multireddit

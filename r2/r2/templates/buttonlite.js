@@ -36,7 +36,7 @@
        
     var styled_submit = '<a style="color: #369; text-decoration: none;" href="${path}" target="${thing.target}">';
     var unstyled_submit = '<a href="${submiturl(thing.url)}" target="${path}">';
-    var write_string='<span class="reddit_button" style="';
+    var write_string='<span class="populr_button" style="';
 %if thing.styled:    
     write_string += 'color: grey;';
 %endif
@@ -47,9 +47,9 @@
 %if thing._fullname:
     write_string += '${Score.safepoints(thing.score)}';
     %if thing.styled:  
-        write_string += ' on ' + styled_submit + 'reddit</a>';
+        write_string += ' on ' + styled_submit + 'populr</a>';
     %else:
-        write_string += ' on ' + unstyled_submit + 'reddit</a>';
+        write_string += ' on ' + unstyled_submit + 'populr</a>';
     %endif
 %else:
     %if thing.styled:
@@ -60,7 +60,7 @@
     %if thing.image > 0:
     write_string += '</a>';
     %else:
-    write_string += ' to reddit</a>';
+    write_string += ' to populr</a>';
     %endif
 %endif
     write_string += '</span>';
