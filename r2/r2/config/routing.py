@@ -26,7 +26,9 @@ import os
 from routes import Mapper
 import admin_routes
 
-def make_map(global_conf={}, app_conf={}):
+def make_map(global_conf=None, app_conf=None):
+    global_conf = global_conf or {}
+    app_conf = app_conf or {}
     map = Mapper()
     mc = map.connect
 
