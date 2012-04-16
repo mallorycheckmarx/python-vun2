@@ -163,6 +163,14 @@
             ${_("show thumbnail images of content")}
           </label>
         </li>
+        <li>
+          <input class="nomargin" type="checkbox"
+                 name="public_traffic" id="public_traffic"
+                 ${thing.site and thing.site.public_traffic and "checked='checked'" or ""}/>
+          <label for="public_traffic">
+            ${_("make the traffic stats page available to everyone")}
+          </label>
+        </li>
       </ul>
     </div>
   </%utils:line_field>
