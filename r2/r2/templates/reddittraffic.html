@@ -47,14 +47,14 @@ ${unsafe(js.use('flot'))}
         </tr><tr>
           <th>${_("date")}</th>
           <th>${_("uniques")}</th>
-          <th>${_("impressions")}</th>
+          <th>${_("pageviews")}</th>
           <th>${_("uniques")}</th>
-          <th>${_("impressions")}</th>
+          <th>${_("pageviews")}</th>
           <th>${_("subscriptions")}</th>
         %else:
           <th>${_("date")}</th>
           <th>${_("uniques")}</th>
-          <th>${_("impressions")}</th>
+          <th>${_("pageviews")}</th>
           %if not c.default_sr:
             <th>${_("subscriptions")}</th>
           %endif
@@ -85,7 +85,7 @@ ${unsafe(js.use('flot'))}
       <tr>
         <th>${_("date")}</th>
         <th>${_("uniques")}</th>
-        <th>${_("impressions")}</th>
+        <th>${_("pageviews")}</th>
       </tr>
       <%
          dow = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
@@ -184,7 +184,7 @@ ${unsafe(js.use('flot'))}
         <tr>
           <th>${_("date")}</th>
           <th>${_("uniques")}</th>
-          <th>${_("impressions")}</th>
+          <th>${_("pageviews")}</th>
         </tr>
         %for i, d in enumerate(reversed(data)):
           <tr class="${'odd' if i % 2 else 'even'}">
@@ -203,9 +203,9 @@ ${unsafe(js.use('flot'))}
         <tr>
           <th>${_("date")}</th>
           <th>${_("uniques")}</th>
-          <th>${_("impressions")}</th>
+          <th>${_("pageviews")}</th>
           <th>${_("uniques")}</th>
-          <th>${_("impressions")}</th>
+          <th>${_("pageviews")}</th>
           <th>${_("cname")}</th>
         </tr>
         %for i, (sr, d) in enumerate(thing.reddits_summary()):
