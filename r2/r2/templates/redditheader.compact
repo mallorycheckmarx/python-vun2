@@ -20,6 +20,7 @@
 ## CondeNet, Inc. All Rights Reserved.
 ################################################################################
 <%!
+   import locale
    from r2.lib.template_helpers import static, s3_https_if_secure
    from r2.models.subreddit import DefaultSR
    
@@ -86,7 +87,7 @@
     %if c.user_is_loggedin:
     <div class="menuitem">
       ${plain_link(c.user.name, "/user/%s/" % c.user.name, _sr_path=False)}
-      &nbsp;(<b>${c.user.safe_karma}</b>)
+      &nbsp;(<b>${locale.format("%d", c.user.safe_karma, True)}</b> / <b>${locale.format("%d", c.user.comment_karma, True)}</b>)
     </div>
     <div class="menuitem">
       ${plain_link("reddits", "/reddits/mine", _sr_path=False)}

@@ -21,6 +21,7 @@
 ################################################################################
 
 <%!
+   import locale
    from r2.lib.template_helpers import static, s3_https_if_secure, add_sr
    from r2.models import Sub, FakeSubreddit
    from r2.models.subreddit import DefaultSR
@@ -76,7 +77,7 @@
     %else:
       <span class="user">
          ${plain_link(c.user.name, "/user/%s/" % c.user.name, _sr_path=False)}
-         &nbsp;(<b>${c.user.safe_karma}</b>)
+         &nbsp;(<b>${locale.format("%d", c.user.safe_karma, True)}</b> / <b>${locale.format("%d", c.user.comment_karma, True)}</b>)
       </span>
 
       ${separator("|")}
