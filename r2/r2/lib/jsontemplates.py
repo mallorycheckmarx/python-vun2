@@ -560,3 +560,42 @@ class FlairListJsonTemplate(JsonTemplate):
 class FlairCsvJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
         return ObjectTemplate([l.__dict__ for l in thing.results_by_line])
+
+
+class ModActionListingJsonTemplate(ListingJsonTemplate):
+    def kind(self, wrapped):
+        return "ModActionListing"
+
+
+class ModActionJsonTemplate(ThingJsonTemplate):
+    _data_attrs_ = dict(date="date",
+                        moderator="moderator",
+                        subreddit="subreddit",
+                        action="action",
+                        target="target",
+                        details="details",
+                        description="description")
+
+    def thing_attr(self, thing, attr):
+        from r2.models.account import Account
+        from r2.models.subreddit import Subreddit
+
+        if attr == "moderator":
+            return Account._byID36(thing.mod_id36).name
+        elif attr == "subreddit":
+            return Subreddit._byID36(thing.sr_id36).name
+        elif attr == "date":
+            return time.mktime(thing.date.timetuple())
+        elif attr == "target":
+            result = dict((key, getattr(thing.target, key, None))
+                                for key in ["_fullname", "name", "url", "author", "title"])
+            result["author"] = getattr(thing, "target_author", None)
+            return result
+
+        return ThingJsonTemplate.thing_attr(self, thing, attr)
+
+    def rendered_data(self, thing):
+        return self.thing_attr(thing, "things")
+
+    def kind(self, wrapped):
+        return "ModAction"
