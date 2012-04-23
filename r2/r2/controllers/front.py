@@ -400,7 +400,7 @@ class FrontController(RedditController):
         if not c.user_is_loggedin:
             return self.abort404()
 
-        if isinstance(c.site, (MultiReddit, ModSR)):
+        if isinstance(c.site, (ModSR, MultiReddit)):
             srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
 
             # check that user is mod on all requested srs
@@ -507,7 +507,7 @@ class FrontController(RedditController):
 
         if not c.user_is_loggedin:
             return self.abort404()
-        if isinstance(c.site, ModSR):
+        if isinstance(c.site, (ModSR, MultiReddit)):
             level = 'mod'
         elif isinstance(c.site, ContribSR):
             level = 'contrib'
@@ -600,6 +600,12 @@ class FrontController(RedditController):
             except NotFound:
                 c.errors.add(errors.USER_DOESNT_EXIST, field='name')
         if isinstance(c.site, ModContribSR):
+            return self._edit_modcontrib_reddit(location, num, after, reverse,
+                                                count, created)
+        elif isinstance(c.site, MultiReddit):
+            srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
+            if not Subreddit.user_mods_all(c.user, srs) and not c.user_is_admin:
+                return abort(403, "forbidden")
             return self._edit_modcontrib_reddit(location, num, after, reverse,
                                                 count, created)
         elif isinstance(c.site, AllSR) and c.user_is_admin:
