@@ -800,7 +800,7 @@ class MessageController(ListingController):
         if isinstance(c.site, MultiReddit):
             srs = Subreddit._byID(c.site.sr_ids, data = False, return_dict = False)
             if not (c.user_is_admin or Subreddit.user_mods_all(c.user, srs)):
-                return abort(403, "forbidden")
+                self.abort403()
             self.where = "multi"
             self.srs = srs
         elif not c.default_sr:
