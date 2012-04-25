@@ -553,3 +553,11 @@ ${unsafe(txt)}
        ${label}
   </a>
 </%def>
+
+<%def name="edited(thing)">
+  %if thing.editted == True:
+    <em>*</em>
+  %elif thing.editted:
+    <time class="edited-timestamp" title="${_('last edited ' + timesince(thing.editted) + ' ago')}" datetime="${thing.editted.isoformat()}">*</time>
+  %endif
+</%def>

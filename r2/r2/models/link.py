@@ -533,6 +533,8 @@ class Link(Thing, Printable):
             if item.is_self:
                 item.expunged = Link._should_expunge_selftext(item)
 
+            item.editted = getattr(item, "editted", False)
+
         if user_is_loggedin:
             incr_counts(wrapped)
 
