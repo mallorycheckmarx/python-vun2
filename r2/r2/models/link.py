@@ -497,6 +497,7 @@ class Link(Thing, Printable):
             item.commentcls = CachedVariable("commentcls")
             item.midcolmargin = CachedVariable("midcolmargin")
             item.comment_label = CachedVariable("numcomments")
+            item.lastedited = CachedVariable("lastedited")
 
             item.as_deleted = False
             if item.deleted and not c.user_is_admin:
@@ -834,6 +835,9 @@ class Comment(Thing, Printable):
                                      nofollow = item.nofollow,
                                      target = item.target,
                                      extra_css = extra_css)
+                                     
+            item.lastedited = CachedVariable("lastedited")
+
         # Run this last
         Printable.add_props(user, wrapped)
 

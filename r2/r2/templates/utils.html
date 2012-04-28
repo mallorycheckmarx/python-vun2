@@ -27,6 +27,7 @@
    from r2.lib.template_helpers import add_sr, js_config, static
    from r2.lib.utils import cols, long_datetime, timesince
    from r2.lib.tracking import UserInfo
+   from datetime import datetime
 %>
 <%def name="tags(**kw)">
 %for k, v in kw.iteritems():
@@ -554,10 +555,10 @@ ${unsafe(txt)}
   </a>
 </%def>
 
-<%def name="edited(thing)">
-  %if thing.editted == True:
-    <em>*</em>
+<%def name="edited(thing, lastedited=None)">
+  %if isinstance(thing.editted, datetime):
+    <time class="edited-timestamp" title="${_('last edited')} ${unsafe(lastedited or timesince(thing.editted))} ${_('ago')}" datetime="${thing.editted.isoformat()}">*</time>
   %elif thing.editted:
-    <time class="edited-timestamp" title="${_('last edited ' + timesince(thing.editted) + ' ago')}" datetime="${thing.editted.isoformat()}">*</time>
+    <em>*</em>
   %endif
 </%def>
