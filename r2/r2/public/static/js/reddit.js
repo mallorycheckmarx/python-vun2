@@ -216,7 +216,9 @@ function click_thing(elem) {
 
 function hide_thing(elem) {
     $(elem).thing().fadeOut(function(elem) { 
-            $(this).toggleClass("hidden") });
+            $(this).toggleClass("hidden");
+            unexpando_child(elem);
+    });
 };
 
 function toggle_label (elem, callback, cancelback) {
