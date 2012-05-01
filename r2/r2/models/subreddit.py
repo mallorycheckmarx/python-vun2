@@ -892,16 +892,22 @@ class DefaultSR(_DefaultSR):
 class MultiReddit(_DefaultSR):
     name = 'multi'
     header = ""
-
+    
+    @property
+    def over_18(self):
+        return self._over_18
+    
     def __init__(self, sr_ids, path):
         _DefaultSR.__init__(self)
         self.real_path = path
         self.sr_ids = sr_ids
-
+        self._over_18 = False
         self.srs = Subreddit._byID(self.sr_ids, return_dict=False)
         self.banned_sr_ids = []
         self.kept_sr_ids = []
         for sr in self.srs:
+            if sr.over_18:
+                self._over_18 = True
             if sr._spam:
                 self.banned_sr_ids.append(sr._id)
             else:
