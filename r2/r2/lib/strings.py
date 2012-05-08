@@ -40,6 +40,23 @@ __all__ = ['StringHandler', 'strings', 'PluralManager', 'plurals',
 # dictionary is not used directly but rather is managed by the single
 # StringHandler instance strings
 string_dict = dict(
+           
+
+    # time ago values (jquery.timeago.js)
+    ta_ago = "ago",
+    ta_suffixFromNow = "from now",
+    ta_seconds =  "less than a minute",
+    ta_minute =  "about a minute",
+    ta_minutes =  "%d minutes",
+    ta_hour =  "about an hour",
+    ta_hours =  "about %d hours",
+    ta_day = "a day",
+    ta_days =  "%d days",
+    ta_month =  "about a month",
+    ta_months =  "%d months",
+    ta_year =  "about a year",
+    ta_years =  "%d years",
+
 
     banned_by = "removed by %s",
     banned    = "removed",
