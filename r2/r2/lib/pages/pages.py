@@ -427,12 +427,13 @@ class Reddit(Templated):
             if not isinstance(c.site, FakeSubreddit):
                 if c.site.is_subscriber(c.user):
                     classes.add('subscriber')
-                if c.site.is_moderator(c.user):
-                    classes.add('moderator')
                 if c.site.is_contributor(c.user):
                     classes.add('contributor')
                 if c.cname:
                     classes.add('cname')
+            if c.user_is_admin or c.site.is_moderator(c.user):
+                classes.add('moderator')
+
         if isinstance(c.site, MultiReddit):
             classes.add('multi-page')
 
