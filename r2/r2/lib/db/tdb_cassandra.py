@@ -50,6 +50,14 @@ debug = g.debug
 make_lock = g.make_lock
 db_create_tables = g.db_create_tables
 
+# if cjson is installed, use it. it's faster.
+try:
+    import cjson as json
+except ImportError:
+    import json
+else:
+    json.dumps, json.loads = json.encode, json.decode
+
 thing_types = {}
 
 # The available consistency levels
@@ -585,6 +593,8 @@ class ThingBase(object):
 
         if not self._committed:
             self._on_create()
+        else:
+            self._on_commit()
 
         self._committed = True
 
@@ -698,6 +708,10 @@ class ThingBase(object):
         """A hook executed on creation, good for creation of static
            Views. Subclasses should call their parents' hook(s) as
            well"""
+        pass
+
+    def _on_commit(self):
+        """Executed on _commit other than creation."""
         pass
 
     @classmethod
@@ -1246,6 +1260,59 @@ class View(ThingBase):
 
         # can we be smarter here?
         thing_cache.delete(cls._cache_key_id(row_key))
+    
+    @classmethod
+    @will_write
+    def _remove(cls, key, columns):
+        cls._cf.remove(key, columns)
+        thing_cache.delete(cls._cache_key_id(key))
+
+class DenormalizedView(View):
+    """Store the entire underlying object inside the View column."""
+
+    # Do we need to check for _dirty?
+
+    @classmethod
+    def _thing_dumper(cls, thing):
+        serialize_fn = cls._view_of._serialize_column
+        serialized_columns = dict((attr, serialize_fn(attr, val)) for
+            (attr, val) in thing._orig.iteritems())
+        dump = json.dumps(serialized_columns)
+        return dump
+
+    @classmethod
+    def _thing_loader(cls, _id, dump):
+        serialized_columns = json.loads(dump)
+        obj = cls._view_of._from_serialized_columns(_id, serialized_columns)
+        return obj
+
+    @classmethod
+    def _obj_to_column(cls, objs):
+        objs = tup(objs)
+        columns = []
+        for o in objs:
+            _id = o._id
+            dump = cls._thing_dumper(o)
+            columns.append({_id: dump})
+
+        if len(columns) == 1:
+            return columns[0]
+        else:
+            return columns
+
+    @classmethod
+    def _column_to_obj(cls, columns):
+        columns = tup(columns)
+        objs = []
+        for column in columns:
+            _id, dump = column.items()[0]
+            obj = cls._thing_loader(_id, dump)
+            objs.append(obj)
+
+        if len(objs) == 1:
+            return objs[0]
+        else:
+            return objs
 
 def schema_report():
     manager = get_manager()
