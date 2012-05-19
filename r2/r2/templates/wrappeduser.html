@@ -58,8 +58,8 @@
       <div class="flairselector drop-choices"></div>
       <form><input type="hidden" name="name" value="${thing.name}"></form>
     %endif
-    <span class="userattrs">
     %if thing.attribs:
+    <span class="userattrs">
       [
       %for priority, abbv, css_class, label, attr_link, img in thing.attribs:
         %if attr_link:
@@ -84,8 +84,8 @@
         %endif
       %endfor
       ]
-    %endif
     </span>
+    %endif
   %endif
 %endif
 
