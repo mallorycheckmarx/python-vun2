@@ -1407,6 +1407,10 @@ textarea.gray { color: gray; }
     padding:2px 5px; 
 }
 
+.message .correspondent a.author {
+    margin-right: 0;
+}
+
 .message .subject .title { 
     font-weight: normal;
     font-style: italic;
