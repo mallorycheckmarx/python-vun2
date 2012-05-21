@@ -37,7 +37,9 @@ import r2.config as reddit_config
 
 from r2.templates import tmpl_dirs
 
-def load_environment(global_conf={}, app_conf={}, setup_globals=True):
+def load_environment(global_conf=None, app_conf=None, setup_globals=True):
+    global_conf = global_conf or {}
+    app_conf = app_conf or {}
     map = make_map(global_conf, app_conf)
     # Setup our paths
     root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
