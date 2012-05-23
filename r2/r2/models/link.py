@@ -219,8 +219,10 @@ class Link(Thing, Printable):
             if wrapped.hidden:
                 return False
 
-        # Don't hide from API users
-        if c.render_style in extensions.API_TYPES:
+        # Always show NSFW to API users unless obey_over18=true in querystring
+        is_api = c.render_style in extensions.API_TYPES
+        is_obey_over18 = request.GET.get("obey_over18", "false") == "true"
+        if is_api and not is_obey_over18:
             return True
 
         # hide NSFW links from non-logged users and under 18 logged users 
