@@ -36,7 +36,7 @@
       ${_("this post was submitted on")}
       &#32;
     </span>
-    <time datetime="${thing.a._date.isoformat()}">
+    <time datetime="${thing.a._date.isoformat()}" data-original="${thing.a._date}">
       ${thing.a._date.strftime(thing.datefmt)}
     </time>
   </div>
