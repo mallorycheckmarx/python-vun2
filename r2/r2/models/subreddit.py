@@ -971,6 +971,12 @@ class ModContribSR(_DefaultSR):
 
     def get_links(self, sort, time):
         return self.get_links_sr_ids(self.sr_ids, sort, time)
+        
+    def get_all_comments(self):
+        from r2.lib.db.queries import get_sr_comments, merge_results
+        srs = Subreddit._byID(self.sr_ids, return_dict=False)
+        results = [get_sr_comments(sr) for sr in srs]
+        return merge_results(*results)
 
 class ModSR(ModContribSR):
     name  = "subreddits you moderate"
