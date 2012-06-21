@@ -4970,6 +4970,7 @@ tr.gold-accent + tr > td {
     background-color: #e5efff;
     border: solid 1px #cddaf3;
     margin: -1px 0;
+    padding-left: 5px;
 }
 
 .role {
