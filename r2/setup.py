@@ -73,7 +73,7 @@ setup(
         "chardet",
         "psycopg2",
         "pycountry",
-        "pycassa>=1.7.0",
+        "pycassa>=1.6.0",
         "PIL",
         "pycaptcha",
         "amqplib",
