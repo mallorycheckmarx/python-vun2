@@ -79,8 +79,9 @@ custom_values = {
     'border-radius-topleft': r'{border-radius-part}',
 }
 
-cssutils.profile.addProfile("Reddit compat", custom_values, custom_macros)
-cssutils.profile.defaultProfiles.append("Reddit compat")
+reddit_profile = "reddit compat"
+cssutils.profile.addProfile(reddit_profile, custom_values, custom_macros)
+cssutils.profile.defaultProfiles.append(reddit_profile)
 
 def _build_regex_prefix(prefixes):
     return re.compile("|".join("^-"+p+"-" for p in prefixes))
