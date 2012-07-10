@@ -82,7 +82,7 @@ setup(
         "cython>=0.14",
         "SQLAlchemy==0.7.4",
         "BeautifulSoup",
-        "cssutils==0.9.5.1",
+        "cssutils",
         "chardet",
         "psycopg2",
         "pycountry",
