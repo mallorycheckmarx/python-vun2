@@ -202,8 +202,10 @@ def valid_url(prop,value,report):
 
 
 def strip_browser_prefix(prop):
+    if prop[0] != "-":
+        return prop     #avoid regexp if we can
     t = prefix_regex.split(prop, maxsplit=1)
-    return t[len(t) - 1]
+    return t[1]
 
 error_message_extract_re = re.compile('.*\\[([0-9]+):[0-9]*:.*\\]\Z')
 only_whitespace          = re.compile('\A\s*\Z')
