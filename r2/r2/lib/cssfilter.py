@@ -31,8 +31,6 @@ from pylons import g, c
 from pylons.i18n import _
 from mako import filters
 
-#import os
-#import tempfile
 from r2.lib import s3cp
 
 from r2.lib.media import upload_media
