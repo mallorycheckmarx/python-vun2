@@ -67,13 +67,13 @@ custom_macros = {
     'color': '{x11color}|{csscolor}',
 
     'bg-gradient': r'none|{color}|[a-z-]*-gradient\(.*\)',
-    'bg-gradients': r'{bg-gradient}(?:,\s*{bg-gradient})*',
+    'bg-gradients': r'({bg-gradient}{w},{w})*{bg-gradient}',
 
-    'border-radius': r'(({length}|{percentage}){w}){1,2}',
+    'border-radius': r'(({length}|{percentage}){w}/?{w})?({length}|{percentage})',
     
     'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
 
-    'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
+    'box-shadow-pos': r'{length}{w}{length}({w}{length})?',
 }
 
 custom_values = {
@@ -88,7 +88,7 @@ custom_values = {
     'background': r'{bg-gradients}',
     'background-image': r'{bg-gradients}',
     'background-color': r'{color}',
-    'background-position': r'(({percentage}|{length}){0,3})?\s*(top|center|left)?\s*(left|center|right)?',
+    'background-position': r'(({percentage}|{length}){w}(left|top|center|right|bottom)?{w}){0,2}',
     
     # http://www.w3.org/TR/css3-background/#border-top-right-radius
     'border-radius': r'{border-radius}',
