@@ -31,8 +31,6 @@ from pylons import g, c
 from pylons.i18n import _
 from mako import filters
 
-import os
-import tempfile
 from r2.lib import s3cp
 
 from r2.lib.media import upload_media
@@ -45,9 +43,6 @@ from urlparse import urlparse
 import cssutils
 from cssutils import CSSParser
 from cssutils.css import CSSStyleRule
-from cssutils.css import CSSValue, CSSValueList
-from cssutils.css import CSSPrimitiveValue
-from cssutils.css import cssproperties
 from xml.dom import DOMException
 
 msgs = string_dict['css_validator_messages']
@@ -55,83 +50,55 @@ msgs = string_dict['css_validator_messages']
 browser_prefixes = ['o','moz','webkit','ms','khtml','apple','xv']
 
 custom_macros = {
-    'num': r'[-]?\d+|[-]?\d*\.\d+',
-    'percentage': r'{num}%',
-    'length': r'0|{num}(em|ex|px|in|cm|mm|pt|pc)',
-    'int': r'[-]?\d+',
-    'w': r'\s*',
-    
-    # From: http://www.w3.org/TR/2008/WD-css3-color-20080721/#svg-color
-    'x11color': r'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen',
-    'csscolor': r'(maroon|red|orange|yellow|olive|purple|fuchsia|white|lime|green|navy|blue|aqua|teal|black|silver|gray|ActiveBorder|ActiveCaption|AppWorkspace|Background|ButtonFace|ButtonHighlight|ButtonShadow|ButtonText|CaptionText|GrayText|Highlight|HighlightText|InactiveBorder|InactiveCaption|InactiveCaptionText|InfoBackground|InfoText|Menu|MenuText|Scrollbar|ThreeDDarkShadow|ThreeDFace|ThreeDHighlight|ThreeDLightShadow|ThreeDShadow|Window|WindowFrame|WindowText)|#[0-9a-f]{3}|#[0-9a-f]{6}|rgb\({w}{int}{w},{w}{int}{w},{w}{int}{w}\)|rgb\({w}{num}%{w},{w}{num}%{w},{w}{num}%{w}\)',
-    'color': '{x11color}|{csscolor}',
-
-    'bg-gradient': r'none|{color}|[a-z-]*-gradient\(.*\)',
+    'bg-gradient': r'none|{color}|[a-z-]*-gradient\([^;]*\)',
     'bg-gradients': r'{bg-gradient}(?:,\s*{bg-gradient})*',
 
-    'border-radius': r'(({length}|{percentage}){w}){1,2}',
-    
     'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
-
     'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
 }
+
+custom_macros = dict(   #re-use macros from the library
+    custom_macros.items() +
+    cssutils.profile._TOKEN_MACROS.items() +
+    cssutils.profile._MACROS.items() +
+    cssutils.profiles.macros[cssutils.profile.CSS3_BACKGROUNDS_AND_BORDERS].items() +
+    cssutils.profiles.macros[cssutils.profile.CSS3_COLOR].items()
+)
 
 custom_values = {
     '_height': r'{length}|{percentage}|auto|inherit',
     '_width': r'{length}|{percentage}|auto|inherit',
     '_overflow': r'visible|hidden|scroll|auto|inherit',
-    'color': r'{color}',
-    'border-color': r'{color}',
-    'opacity': r'^0?\.?[0-9]*|1\.0*|1|0',
+
     'filter': r'alpha\(opacity={num}\)',
     
     'background': r'{bg-gradients}',
     'background-image': r'{bg-gradients}',
-    'background-color': r'{color}',
-    'background-position': r'(({percentage}|{length}){0,3})?\s*(top|center|left)?\s*(left|center|right)?',
-    
-    # http://www.w3.org/TR/css3-background/#border-top-right-radius
-    'border-radius': r'{border-radius}',
-    'border-top-right-radius': r'{border-radius}',
-    'border-bottom-right-radius': r'{border-radius}',
-    'border-bottom-left-radius': r'{border-radius}',
-    'border-top-left-radius': r'{border-radius}',
 
-    # old mozilla style (for compatibility with existing stylesheets)
-    'border-radius-topright': r'{border-radius}',
-    'border-radius-bottomright': r'{border-radius}',
-    'border-radius-bottomleft': r'{border-radius}',
-    'border-radius-topleft': r'{border-radius}',
-    
     # http://www.w3.org/TR/css3-text/#text-shadow
-    'text-shadow': r'none|({single-text-shadow}{w},{w})*{single-text-shadow}',
+    'text-shadow': r'none|inherit|({single-text-shadow}{w},{w})*{single-text-shadow}',
     
     # http://www.w3.org/TR/css3-background/#the-box-shadow
     # (This description doesn't support multiple shadows)
-    'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
+    'box-shadow': 'none|inherit|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
+    
+    # old mozilla style (for compatibility with existing stylesheets)
+    'border-radius-topright': r'{border-radius-part}',
+    'border-radius-bottomright': r'{border-radius-part}',
+    'border-radius-bottomleft': r'{border-radius-part}',
+    'border-radius-topleft': r'{border-radius-part}',
 }
+
+reddit_profile = "reddit compat"
+cssutils.profile.addProfile(reddit_profile, custom_values, custom_macros)
+cssutils.profile.defaultProfiles.append(reddit_profile)
 
 def _build_regex_prefix(prefixes):
     return re.compile("|".join("^-"+p+"-" for p in prefixes))
 
 prefix_regex = _build_regex_prefix(browser_prefixes)
 
-def _expand_macros(tokdict,macrodict):
-    """ Expand macros in token dictionary """
-    def macro_value(m):
-        return '(?:%s)' % macrodict[m.groupdict()['macro']]
-    for key, value in tokdict.items():
-        while re.search(r'{[a-z][a-z0-9-]*}', value):
-            value = re.sub(r'{(?P<macro>[a-z][a-z0-9-]*)}',
-                           macro_value, value)
-        tokdict[key] = value
-    return tokdict
-def _compile_regexes(tokdict):
-    """ Compile all regular expressions into callable objects """
-    for key, value in tokdict.items():
-        tokdict[key] = re.compile('\A(?:%s)\Z' % value, re.I).match
-    return tokdict
-_compile_regexes(_expand_macros(custom_values,custom_macros))
+cssutils.profile._compile_regexes(cssutils.profile._expand_macros(custom_values,custom_macros))
 
 class ValidationReport(object):
     def __init__(self, original_text=''):
@@ -190,9 +157,8 @@ def valid_url(prop,value,report):
      * image labels %%..%% for images uploaded on /about/stylesheet
      * urls with domains in g.allowed_css_linked_domains
     """
-    try:
-        url = value.getStringValue()
-    except IndexError:
+    url = value.uri
+    if url == "":
         g.log.error("Problem validating [%r]" % value)
         raise
     # local urls are allowed
@@ -245,45 +211,10 @@ def valid_url(prop,value,report):
 
 
 def strip_browser_prefix(prop):
+    if prop[0] != "-":
+        return prop     #avoid regexp if we can
     t = prefix_regex.split(prop, maxsplit=1)
-    return t[len(t) - 1]
-
-def valid_value(prop,value,report):
-    prop_name = strip_browser_prefix(prop.name) # Remove browser-specific prefixes eg: -moz-border-radius becomes border-radius
-    if not (value.valid and value.wellformed):
-        if (value.wellformed
-            and prop_name in cssproperties.cssvalues
-            and cssproperties.cssvalues[prop_name](prop.value)):
-            # it's actually valid. cssutils bug.
-            pass
-        elif (not value.valid
-              and value.wellformed
-              and prop_name in custom_values
-              and custom_values[prop_name](prop.value)):
-            # we're allowing it via our own custom validator
-            value.valid = True
-
-            # see if this suddenly validates the entire property
-            prop.valid = True
-            prop.cssValue.valid = True
-            if prop.cssValue.cssValueType == CSSValue.CSS_VALUE_LIST:
-                for i in range(prop.cssValue.length):
-                    if not prop.cssValue.item(i).valid:
-                        prop.cssValue.valid = False
-                        prop.valid = False
-                        break
-        elif not (prop_name in cssproperties.cssvalues or prop_name in custom_values):
-            error = (msgs['invalid_property']
-                     % dict(cssprop = prop.name))
-            report.append(ValidationError(error,value))
-        else:
-            error = (msgs['invalid_val_for_prop']
-                     % dict(cssvalue = value.cssText,
-                            cssprop  = prop.name))
-            report.append(ValidationError(error,value))
-
-    if value.primitiveType == CSSPrimitiveValue.CSS_URI:
-        valid_url(prop,value,report)
+    return t[1]
 
 error_message_extract_re = re.compile('.*\\[([0-9]+):[0-9]*:.*\\]\Z')
 only_whitespace          = re.compile('\A\s*\Z')
@@ -312,13 +243,13 @@ def validate_css(string):
         # directly, so we have to parse its error message string to
         # get it
         line = None
-        line_match = error_message_extract_re.match(e.message)
+        line_match = error_message_extract_re.match(e.args[0])
         if line_match:
             line = line_match.group(1)
             if line:
                 line = int(line)
         error_message=  (msgs['syntax_error']
-                         % dict(syntaxerror = e.message))
+                         % dict(syntaxerror = e.args[0]))
         report.append(ValidationError(error_message,e,line))
         return (None,report)
 
@@ -331,31 +262,23 @@ def validate_css(string):
             style = rule.style
             for prop in style.getProperties():
 
-                if prop.cssValue.cssValueType == CSSValue.CSS_VALUE_LIST:
-                    for i in range(prop.cssValue.length):
-                        valid_value(prop,prop.cssValue.item(i),report)
-                    if not (prop.cssValue.valid and prop.cssValue.wellformed):
-                        report.append(ValidationError(msgs['invalid_property_list']
-                                                      % dict(proplist = prop.cssText),
-                                                      prop.cssValue))
-                elif prop.cssValue.cssValueType == CSSValue.CSS_PRIMITIVE_VALUE:
-                    valid_value(prop,prop.cssValue,report)
+                prop.name = strip_browser_prefix(prop.name)
+                # check property name
+                if not prop.name in cssutils.profile.propertiesByProfile(cssutils.profile.defaultProfiles): #TODO would populating an array at module init be faster?
+                    report.append(ValidationError('invalid property',prop))
+                    continue
 
-                # cssutils bug: because valid values might be marked
-                # as invalid, we can't trust cssutils to properly
-                # label valid properties, so we're going to rely on
-                # the value validation (which will fail if the
-                # property is invalid anyway). If this bug is fixed,
-                # we should uncomment this 'if'
+                # check property values
+                # note that validateWithProfile can take a string with multiple values (eg "5px 10px"). No need to iterate.
+                if not cssutils.profile.validateWithProfile(prop.name, prop.propertyValue.value)[0]:
+                    error = (msgs['invalid_val_for_prop'] % dict(cssvalue = prop.propertyValue.cssText, cssprop = prop.name))
+                    report.append(ValidationError(error, prop.propertyValue))
 
-                # a property is not valid if any of its values are
-                # invalid, or if it is itself invalid. To get the
-                # best-quality error messages, we only report on
-                # whether the property is valid after we've checked
-                # the values
-                #if not (prop.valid and prop.wellformed):
-                #    report.append(ValidationError(_('invalid property'),prop))
-            
+                # Unlike above, we need to iterate over every value in the line
+                for v in prop.propertyValue:
+                    if v.type == cssutils.css.Value.URI:
+                        valid_url(prop,v,report)
+
         else:
             report.append(ValidationError(msgs['unknown_rule_type']
                                           % dict(ruletype = rule.cssText),
