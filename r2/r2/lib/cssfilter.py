@@ -52,6 +52,9 @@ browser_prefixes = ['o','moz','webkit','ms','khtml','apple','xv']
 custom_macros = {
     'bg-gradient': r'none|{color}|[a-z-]*-gradient\([^;]*\)',
     'bg-gradients': r'{bg-gradient}(?:,\s*{bg-gradient})*',
+
+    'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
+    'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
 }
 
 custom_macros = dict(   #re-use macros from the library
@@ -71,6 +74,13 @@ custom_values = {
     
     'background': r'{bg-gradients}',
     'background-image': r'{bg-gradients}',
+
+    # http://www.w3.org/TR/css3-text/#text-shadow
+    'text-shadow': r'none|inherit|({single-text-shadow}{w},{w})*{single-text-shadow}',
+    
+    # http://www.w3.org/TR/css3-background/#the-box-shadow
+    # (This description doesn't support multiple shadows)
+    'box-shadow': 'none|inherit|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
     
     # old mozilla style (for compatibility with existing stylesheets)
     'border-radius-topright': r'{border-radius-part}',
