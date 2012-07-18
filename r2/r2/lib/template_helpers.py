@@ -235,7 +235,7 @@ def replace_render(listing, item, render_func):
                 elif mid_margin == 1:
                     mid_margin = "15px"
                 else:
-                    mid_margin = "%dex" % (mid_margin+1)
+                    mid_margin = "%.1fex" % (mid_margin+1.1)
 
                 replacements["midcolmargin"] = mid_margin
 
