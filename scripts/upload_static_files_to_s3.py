@@ -47,7 +47,7 @@ def upload(config_file):
     bucket = s3.get_bucket(bucket_name)
 
     # build a list of files already in the bucket
-    remote_files = {key.name : key.etag.strip('"') for key in bucket.list()]}
+    remote_files = {key.name : key.etag.strip('"') for key in bucket.list()}
 
     # upload local files not already in the bucket
     for root, dirs, files in os.walk(static_root):
