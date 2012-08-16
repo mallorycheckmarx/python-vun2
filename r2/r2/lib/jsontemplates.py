@@ -178,10 +178,12 @@ class ThingJsonTemplate(JsonTemplate):
         elif attr == "child":
             return CachedVariable("childlisting")
 
-        if attr in ["num_reports", "banned_by", "approved_by"]:
+        if attr in ["num_reports", "author_banned", "banned_by", "approved_by"]:
             if c.user_is_loggedin and thing.subreddit.is_moderator(c.user):
                 if attr == "num_reports":
                     return thing.reported
+                elif attr == "author_banned":
+                    return thing.show_spam == "author"
                 ban_info = getattr(thing, "ban_info", {})
                 if attr == "banned_by":
                     return ban_info.get("banner") if ban_info.get('moderator_banned') else True
@@ -266,6 +268,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
                                                 title        = "title",
                                                 url          = "url",
                                                 author       = "author",
+                                                author_banned= "author_banned",
                                                 author_flair_text =
                                                     "author_flair_text",
                                                 author_flair_css_class =
@@ -339,6 +342,7 @@ class CommentJsonTemplate(ThingJsonTemplate):
                                                 body_html    = "body_html",
                                                 likes        = "likes",
                                                 author       = "author", 
+                                                author_banned= "author_banned",
                                                 author_flair_text =
                                                     "author_flair_text",
                                                 author_flair_css_class =
