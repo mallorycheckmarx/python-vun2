@@ -202,6 +202,7 @@ class ThingJsonTemplate(JsonTemplate):
 
 class SubredditJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(subscribers  = "_ups",
+                                                users_online = "accounts_active",
                                                 title        = "title",
                                                 url          = "path",
                                                 over18       = "over_18",
@@ -217,6 +218,9 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         if (attr == "_ups" and g.lounge_reddit
             and thing.name == g.lounge_reddit):
             return 0
+        elif (attr == "accounts_active" and thing.accounts_active < 100
+            and not c.user_is_admin):
+            return None
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
