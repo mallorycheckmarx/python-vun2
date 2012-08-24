@@ -96,7 +96,7 @@ def main():
         ini_file_name = sys.argv[1]
     except IndexError:
         print >> sys.stderr, "USAGE: %s INI" % progname
-        return 1
+        return True
 
     config = ConfigParser.RawConfigParser()
     try:
@@ -104,7 +104,7 @@ def main():
             config.readfp(ini_file)
     except (IOError, ConfigParser.Error), e:
         print >> sys.stderr, "%s: %s: %s" % (progname, ini_file_name, e)
-        return 1
+        return True
 
     try:
         plugin_config = config.get("DEFAULT", "plugins")
@@ -113,11 +113,11 @@ def main():
         live = extract_live_config(config, plugins)
     except ValueError as e:
         print >> sys.stderr, "%s: %s" % (progname, e)
-        return 1
+        return True
     else:
         if not confirm_config(live):
             print "Oh, well, never mind then. Bye :("
-            return 0
+            return False
 
     password = getpass.getpass("Password: ")
 
@@ -127,7 +127,7 @@ def main():
 
     print "Succesfully updated live config!"
 
-    return 0
+    return False
 
 
 if __name__ == "__main__":
