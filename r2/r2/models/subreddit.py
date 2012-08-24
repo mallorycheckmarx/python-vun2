@@ -69,6 +69,9 @@ class Subreddit(Thing, Printable):
                      show_cname_sidebar = False,
                      css_on_cname = True,
                      domain = None,
+                     wikimode = "disabled",
+                     wiki_edit_karma = 100,
+                     wiki_edit_age = 0,
                      over_18 = False,
                      mod_actions = 0,
                      sponsorship_text = "this reddit is sponsored by",
@@ -208,6 +211,18 @@ class Subreddit(Thing, Printable):
     @property
     def banned(self):
         return self.banned_ids()
+    
+    @property
+    def wikibanned(self):
+        return self.wikibanned_ids()
+    
+    @property
+    def wikicontributor(self):
+        return self.wikicontributor_ids()
+    
+    @property
+    def _should_wiki(self):
+        return True
 
     @property
     def subscribers(self):
@@ -284,6 +299,31 @@ class Subreddit(Thing, Printable):
             return c.user_is_admin or self.is_moderator(user)
         else:
             return False
+    
+    def parse_css(self, content, verify=True):
+        from r2.lib import cssfilter
+        if g.css_killswitch or (verify and not self.can_change_stylesheet(c.user)):
+            return (None, None)
+    
+        parsed, report = cssfilter.validate_css(content)
+        parsed = parsed.cssText if parsed else ''
+        return (report, parsed)
+
+    def change_css(self, content, parsed, prev=None, reason=None, author=None, force=False):
+        from r2.models import ModAction
+        author = author if author else c.user.name
+        if content is None:
+            content = ''
+        try:
+            wiki = WikiPage.get(self.name, 'config/stylesheet')
+        except tdb_cassandra.NotFound:
+            wiki = WikiPage.create(self.name, 'config/stylesheet')
+        wiki.revise(content, previous=prev, author=author, reason=reason, force=force)
+        self.stylesheet_contents = parsed
+        self.stylesheet_hash = md5(parsed).hexdigest()
+        set_last_modified(self, 'stylesheet_contents')
+        c.site._commit()
+        ModAction.create(self, c.user, action='wikirevise', details='Updated subreddit stylesheet')
 
     def is_special(self, user):
         return (user
@@ -717,6 +757,10 @@ class FakeSubreddit(Subreddit):
         self.title = ''
         self.link_flair_position = 'right'
 
+    @property
+    def _should_wiki(self):
+        return False
+
     def is_moderator(self, user):
         return c.user_is_loggedin and c.user_is_admin
 
@@ -906,7 +950,25 @@ class DefaultSR(_DefaultSR):
             self._base = Subreddit._by_name(g.default_sr, stale=True)
         except NotFound:
             self._base = None
-
+    
+    @property
+    def _should_wiki(self):
+        return True
+    
+    @property
+    def wikimode(self):
+        return self._base.wikimode
+    
+    @property
+    def wiki_edit_karma(self):
+        return self._base.wiki_edit_karma
+    
+    def is_wikibanned(self, user):
+        return self._base.is_banned(user)
+    
+    def is_wikicreate(self, user):
+        return self._base.is_wikicreate(user)
+    
     @property
     def _fullname(self):
         return "t5_6"
@@ -1087,7 +1149,9 @@ class SRMember(Relation(Subreddit, Account)): pass
 Subreddit.__bases__ += (UserRel('moderator', SRMember),
                         UserRel('contributor', SRMember),
                         UserRel('subscriber', SRMember, disable_ids_fn = True),
-                        UserRel('banned', SRMember))
+                        UserRel('banned', SRMember),
+                        UserRel('wikibanned', SRMember),
+                        UserRel('wikicontributor', SRMember))
 
 class SubredditPopularityByLanguage(tdb_cassandra.View):
     _use_db = True

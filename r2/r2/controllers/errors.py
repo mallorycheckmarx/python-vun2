@@ -98,6 +98,7 @@ error_list = dict((
         ('OAUTH2_INVALID_SCOPE', _('invalid scope requested')),
         ('OAUTH2_ACCESS_DENIED', _('access denied by the user')),
         ('CONFIRM', _("please confirm the form")),
+        ('CONFLICT', _("conflict error while saving")),
         ('NO_API', _('cannot perform this action via the API')),
         ('DOMAIN_BANNED', _('%(domain)s is not allowed on reddit: %(reason)s')),
         ('NO_OTP_SECRET', _('you must enable two-factor authentication')),
