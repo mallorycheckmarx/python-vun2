@@ -185,21 +185,21 @@ def make_map():
     mc('/:action', controller='embed',
        requirements=dict(action="help|blog|faq"))
     
-    mc('/wiki/create/*page', controller='wiki', action='wikiCreate')
-    mc('/wiki/edit/*page', controller='wiki', action='wikiRevise')
-    mc('/wiki/revisions/*page', controller='wiki', action='wikiRevisions')
-    mc('/wiki/settings/*page', controller='wiki', action='wikiSettings')
-    mc('/wiki/discussions/*page', controller='wiki', action='wikiDiscussions')
-    mc('/wiki/revisions', controller='wiki', action='wikiRecent')
-    mc('/wiki/pages', controller='wiki', action='wikiListing')
+    mc('/wiki/create/*page', controller='wiki', action='wiki_create')
+    mc('/wiki/edit/*page', controller='wiki', action='wiki_revise')
+    mc('/wiki/revisions/*page', controller='wiki', action='wiki_revisions')
+    mc('/wiki/settings/*page', controller='wiki', action='wiki_settings')
+    mc('/wiki/discussions/*page', controller='wiki', action='wiki_discussions')
+    mc('/wiki/revisions', controller='wiki', action='wiki_recent')
+    mc('/wiki/pages', controller='wiki', action='wiki_listing')
     
-    mc('/wiki/api/edit/*page', controller='wikiapi', action='wikiEdit')
-    mc('/wiki/api/hide/:revision/*page', controller='wikiapi', action='wikiRevisionHide')
-    mc('/wiki/api/revert/:revision/*page', controller='wikiapi', action='wikiRevisionRevert')
-    mc('/wiki/api/alloweditor/:act/:user/*page', controller='wikiapi', action='wikiAllowEditor')
+    mc('/wiki/api/edit/*page', controller='wikiapi', action='wiki_edit')
+    mc('/wiki/api/hide/:revision/*page', controller='wikiapi', action='wiki_revision_hide')
+    mc('/wiki/api/revert/:revision/*page', controller='wikiapi', action='wiki_revision_revert')
+    mc('/wiki/api/alloweditor/:act/:user/*page', controller='wikiapi', action='wiki_allow_editor')
     
-    mc('/wiki/*page', controller='wiki', action='wikiPage')
-    mc('/wiki/', controller='wiki', action='wikiPage')
+    mc('/wiki/*page', controller='wiki', action='wiki_page')
+    mc('/wiki/', controller='wiki', action='wiki_page')
     
     mc('/w/*page', controller='wiki', action='wiki_redirect')
     

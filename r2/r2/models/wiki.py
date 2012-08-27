@@ -1,3 +1,25 @@
+# The contents of this file are subject to the Common Public Attribution
+# License Version 1.0. (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License at
+# http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
+# License Version 1.1, but Sections 14 and 15 have been added to cover use of
+# software over a computer network and provide for limited attribution for the
+# Original Developer. In addition, Exhibit A has been modified to be consistent
+# with Exhibit B.
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+# the specific language governing rights and limitations under the License.
+#
+# The Original Code is reddit.
+#
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
+#
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from datetime import datetime
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import NotFound
@@ -238,11 +260,14 @@ class WikiPage(tdb_cassandra.Thing):
                 
         return page_tree
     
-    def get_editors(self):
+    def get_editors(self, properties=None):
         try:
-            return WikiPageEditors._byID(self._id)._values() or []
+            return WikiPageEditors._byID(self._id, properties=properties)._values() or []
         except tdb_cassandra.NotFoundException:
             return []
+    
+    def has_editor(self, editor):
+        return bool(self.get_editors(properties=editor))
     
     def revise(self, content, previous = None, author=None, force=False, reason=None):
         if self.content == content:
@@ -260,7 +285,7 @@ class WikiPage(tdb_cassandra.Thing):
             else:
                 origcontent = ''
             try:
-                content = threeWayMerge(origcontent, content, self.content)
+                content = threewaymerge(origcontent, content, self.content)
             except ConflictException as e:
                 e.new_id = revision
                 raise e

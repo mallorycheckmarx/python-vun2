@@ -152,7 +152,7 @@
     <div class="delete-field">
       <table>
         ${utils.radio_type('wikimode', "disabled", _("disabled"),
-                           _("Wiki is disabled for all users execept mods"),
+                           _("Wiki is disabled for all users except mods"),
                            (not thing.site or thing.site.wikimode == 'disabled'))}
         ${utils.radio_type('wikimode', "modonly", _("mod editing"),
                            _("Only mods or those on a pages edit list may edit"),

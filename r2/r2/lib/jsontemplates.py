@@ -566,20 +566,20 @@ class WikiJsonTemplate(JsonTemplate):
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
         edit_date = time.mktime(thing.edit_date.timetuple())
-        return ObjectTemplate({"content_md": thing.page_content_md,
-                               "content_html": thing.page_content,
-                               "revision_by": thing.edit_by,
-                               "revision_date": edit_date,
-                               "may_revise": thing.may_revise})
+        return ObjectTemplate(dict(content_md=thing.page_content_md,
+                                   content_html=thing.page_content,
+                                   revision_by=thing.edit_by,
+                                   revision_date=edit_date,
+                                   may_revise=thing.may_revise))
 
 class WikiRevisionJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
         timestamp = time.mktime(thing.date.timetuple())
-        return ObjectTemplate({"author":thing._get('author'),
-                               "id": str(thing._id),
-                               "timestamp": timestamp,
-                               "reason": thing._get('reason'),
-                               "page": thing.page})
+        return ObjectTemplate(dict(author=thing._get('author'),
+                                   id=str(thing._id),
+                                   timestamp=timestamp,
+                                   reason=thing._get('reason'),
+                                   page=thing.page))
 
 class FlairListJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
