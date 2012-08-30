@@ -1,7 +1,7 @@
 r.wiki = {
     baseUrl: function() {
         base_url = '/wiki'
-        if(!r.config.is_fake) {
+        if (!r.config.is_fake) {
             base_url = '/r/' + r.config.post_site + base_url
         }
         return base_url
@@ -25,7 +25,7 @@ r.wiki = {
                 $this_parent.toggleClass('hidden')
             },
             success: function(data) {
-                if(!data.status) {
+                if (!data.status) {
                     $this_parent.removeClass('hidden')
                 } else {
                     $this_parent.addClass('hidden')
@@ -102,7 +102,7 @@ r.wiki = {
         v1 = $('input:radio[name=v1]:checked').val()
         v2 = $('input:radio[name=v2]:checked').val()
         url = base + '/' + page + '?v=' + v1
-        if(v2 != v1) {
+        if (v2 != v1) {
             url += '&v2=' + v2
         }
         window.location = url
