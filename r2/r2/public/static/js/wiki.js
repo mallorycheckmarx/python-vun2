@@ -1,16 +1,20 @@
-$(function() {
-    function WikiBaseUrl() {
+r.wiki = {
+    baseUrl: function() {
         base_url = '/wiki'
         if(!r.config.is_fake) {
             base_url = '/r/' + r.config.post_site + base_url
         }
         return base_url
-    }
+    },
 
-    function WikiToggleHide(event) {
+    init: function() {
+        $("body").delegate(".wiki .revision_hide", "click", this.toggleHide)
+    },
+
+    toggleHide: function(event) {
         event.preventDefault()
         var $this = $(this),
-            url = WikiBaseUrl() + "/api/hide/" + $this.data("revision") + "/" + $this.data("page"),
+            url = r.wiki.baseUrl() + "/api/hide/" + $this.data("revision") + "/" + $this.data("page"),
             $this_parent = $this.parents(".revision")
         $this_parent.toggleClass("hidden")
         $.ajax({
@@ -28,13 +32,30 @@ $(function() {
                 }
             }
         })
-    }
-    $("body").delegate(".wiki .revision_hide", "click", WikiToggleHide)
+    },
 
-    function WikiSubmitEdit(event) {
+    addUser: function(event) {
         event.preventDefault()
-        var $this = $(this),
-            url = WikiBaseUrl() + "/api/edit/" + $this.data("page"),
+        $('#usereditallowerror').hide()
+        var $this = $(event.target),
+            url = r.wiki.baseUrl() + "/api/alloweditor/add/" + $this.find('[name="username"]').val() + "/" + $this.data("page")
+        $.ajax({
+            url: url,
+            type: "POST",
+            dataType: "json",
+            error: function() {
+                $('#usereditallowerror').show()
+            },
+            success: function(data) {
+                location.reload()
+            }
+        })
+    },
+
+    submitEdit: function(event) {
+        event.preventDefault()
+        var $this = $(event.target),
+            url = r.wiki.baseUrl() + "/api/edit/" + $this.data("page"),
             conflict = $(".wiki #conflict"),
             special = $(".wiki #special")
         conflict.hide()
@@ -45,7 +66,7 @@ $(function() {
             dataType: "json",
             data: $this.serialize(),
             success: function() {
-                window.location = WikiBaseUrl() + "/" + $this.data("page")
+                window.location = r.wiki.baseUrl() + "/" + $this.data("page")
             },
             statusCode: {
                 409: function(xhr) {
@@ -75,39 +96,15 @@ $(function() {
                 }
             }
         })
+    },
+
+    goCompare: function(page, base) {
+        v1 = $('input:radio[name=v1]:checked').val()
+        v2 = $('input:radio[name=v2]:checked').val()
+        url = base + '/' + page + '?v=' + v1
+        if(v2 != v1) {
+            url += '&v2=' + v2
+        }
+        window.location = url
     }
-
-    $("body").delegate(".wiki #editform", "submit", WikiSubmitEdit)
-
-    function WikiAllowEditor(event) {
-        event.preventDefault()
-        $('#usereditallowerror').hide()
-        var $this = $(this),
-            url = WikiBaseUrl() + "/api/alloweditor/add/" + $this.find("#username").val() + "/" + $this.data("page")
-        $.ajax({
-            url: url,
-            type: "POST",
-            dataType: "json",
-            error: function() {
-                $('#usereditallowerror').show()
-            },
-            success: function(data) {
-                ReloadPage()
-            }
-        })
-
-    }
-    $("body").delegate("#WikiAllowEditor", "submit", WikiAllowEditor)
-})
-
-function ReloadPage() {location.reload()}
-
-function WikiRevCompare(page, base) {
-    v1 = $('input:radio[name=v1]:checked').val()
-    v2 = $('input:radio[name=v2]:checked').val()
-    url = base + '/' + page + '?v=' + v1
-    if(v2 != v1) {
-        url += '&v2=' + v2
-    }
-    window.location = url
 }
