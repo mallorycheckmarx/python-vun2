@@ -6,12 +6,12 @@ $(function() {
         }
         return base_url
     }
-    
+
     function WikiToggleHide(event) {
         event.preventDefault()
-        var $this = $(this)
-            ,url = WikiBaseUrl() + "/api/hide/" + $this.data("revision") + "/" + $this.data("page")
-            ,$this_parent = $this.parents(".revision");
+        var $this = $(this),
+            url = WikiBaseUrl() + "/api/hide/" + $this.data("revision") + "/" + $this.data("page"),
+            $this_parent = $this.parents(".revision")
         $this_parent.toggleClass("hidden")
         $.ajax({
             url: url,
@@ -30,13 +30,13 @@ $(function() {
         })
     }
     $("body").delegate(".wiki .revision_hide", "click", WikiToggleHide)
-    
+
     function WikiSubmitEdit(event) {
         event.preventDefault()
-        var $this = $(this)
-            ,url = WikiBaseUrl() + "/api/edit/" + $this.data("page")
-            ,conflict = $(".wiki #conflict")
-            ,special = $(".wiki #special")
+        var $this = $(this),
+            url = WikiBaseUrl() + "/api/edit/" + $this.data("page"),
+            conflict = $(".wiki #conflict"),
+            special = $(".wiki #special")
         conflict.hide()
         special.hide()
         $.ajax({
@@ -76,14 +76,14 @@ $(function() {
             }
         })
     }
-    
+
     $("body").delegate(".wiki #editform", "submit", WikiSubmitEdit)
-    
+
     function WikiAllowEditor(event) {
         event.preventDefault()
         $('#usereditallowerror').hide()
-        var $this = $(this)
-                    ,url = WikiBaseUrl() + "/api/alloweditor/add/" + $this.find("#username").val() + "/" + $this.data("page")
+        var $this = $(this),
+            url = WikiBaseUrl() + "/api/alloweditor/add/" + $this.find("#username").val() + "/" + $this.data("page")
         $.ajax({
             url: url,
             type: "POST",
@@ -95,7 +95,7 @@ $(function() {
                 ReloadPage()
             }
         })
-        
+
     }
     $("body").delegate("#WikiAllowEditor", "submit", WikiAllowEditor)
 })
