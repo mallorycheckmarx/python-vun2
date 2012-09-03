@@ -101,7 +101,7 @@ class Account(Thing):
                      has_subscribed = False,
                      pref_media = 'subreddit',
                      share = {},
-                     wiki_override = None,
+                     wiki_override = False,
                      email = "",
                      email_verified = False,
                      ignorereports = False,
@@ -173,8 +173,10 @@ class Account(Thing):
         return max(karma, 1) if karma > -1000 else karma
 
     def can_wiki(self):
-        return self.wiki_override if self.wiki_override is False else True
-        
+        if self.wiki_override is None:
+            # Legacy, None means user may wiki
+            return True
+        return self.wiki_override
     
     def jury_betatester(self):
         if g.cache.get("jury-killswitch"):

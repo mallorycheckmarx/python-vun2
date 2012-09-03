@@ -20,18 +20,20 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from validator import Validator
-from pylons import c, g, request
 from os.path import normpath
-from r2.lib.db import tdb_cassandra
-from r2.models.wiki import WikiPage, WikiRevision
-from pylons.controllers.util import abort, redirect_to
 import datetime
 import json
 
+from pylons.controllers.util import abort, redirect_to
+from pylons import c, g, request
+
+from r2.models.wiki import WikiPage, WikiRevision
+from r2.controllers.validator import Validator
+from r2.lib.db import tdb_cassandra
+
 MAX_PAGE_NAME_LENGTH = g.wiki_max_page_name_length
 
-MAX_SEPERATORS = g.wiki_max_page_seperators
+MAX_SEPARATORS = g.wiki_max_page_separators
 
 def jsonAbort(code, reason=None, **data):
     data['code'] = code
@@ -137,7 +139,7 @@ def normalize_page(page):
     page = normpath(page)
     
     # Chop off initial "/", just in case it exists
-    page = page[1:] if page.startswith('/') else page
+    page = page.lstrip('/')
     
     return page
 
@@ -155,7 +157,7 @@ class VWikiPage(Validator):
         try:
             page = str(page)
         except UnicodeEncodeError:
-            jsonAbort(403, 'INVALID_PAGE_NAME')
+            jsonAbort(400, 'INVALID_PAGE_NAME')
         
         if ' ' in page:
             new_name = page.replace(' ', '_')
@@ -230,8 +232,8 @@ class VWikiPageCreate(Validator):
         if c.is_mod and WikiPage.is_special(page):
             c.error = {'reason': 'PAGE_CREATED_ELSEWHERE'}
             return False
-        if page.count('/') > MAX_SEPERATORS:
-            c.error = {'reason': 'PAGE_NAME_MAX_SEPERATORS', 'max_seperators': MAX_SEPERATORS}
+        if page.count('/') > MAX_SEPARATORS:
+            c.error = {'reason': 'PAGE_NAME_MAX_SEPARATORS', 'max_separators': MAX_SEPERATORS}
             return False
         try:
             if not len(page) > MAX_PAGE_NAME_LENGTH:

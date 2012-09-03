@@ -36,9 +36,9 @@ from r2.lib.utils import get_title, sanitize_url, timeuntil, set_last_modified
 from r2.lib.utils import query_string, timefromnow, randstr
 from r2.lib.utils import timeago, tup, filter_links
 from r2.lib.pages import (EnemyList, FriendList, ContributorList, ModList,
-    BannedList, WikiBannedList, WikiMayContributeList,
-    BoringPage, FormPage, CssError, UploadedImage, ClickGadget,
-    UrlParser, WrappedUser)
+                          BannedList, WikiBannedList, WikiMayContributeList,
+                          BoringPage, FormPage, CssError, UploadedImage,
+                          ClickGadget, UrlParser, WrappedUser)
 from r2.lib.pages import FlairList, FlairCsv, FlairTemplateEditor, \
     FlairSelector
 from r2.lib.pages import PrefApps
@@ -65,8 +65,7 @@ from r2.controllers.api_docs import api_doc, api_section
 from r2.lib.search import SearchQuery
 from r2.controllers.oauth2 import OAuth2ResourceController, require_oauth2_scope
 
-from r2.models.wiki import WikiPage
-from r2.controllers.wiki import wiki_modactions
+from r2.models import wiki
 from r2.lib.merge import ConflictException
 
 import csv
@@ -534,8 +533,9 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         # Log this action
         if new and type in sr_types:
-            action = dict(banned='unbanuser', wikicontributor='removewikicontributor',
-                          wikibanned='wikiunbanned', moderator='removemoderator',
+            action = dict(banned='unbanuser', moderator='removemoderator',
+                          wikicontributor='removewikicontributor',
+                          wikibanned='wikiunbanned',
                           contributor='removecontributor').get(type, None)
             ModAction.create(container, c.user, action, target=victim)
 
@@ -560,7 +560,8 @@ class ApiController(RedditController, OAuth2ResourceController):
         Complement to POST_unfriend: handles friending as well as
         privilege changes on subreddits.
         """
-        sr_types = ('moderator', 'contributor', 'banned', 'wikicontributor', 'wikibanned')
+        sr_types = ('moderator', 'contributor', 'banned',
+                    'wikicontributor', 'wikibanned')
         if type in sr_types:
             container = c.site
         else:
@@ -600,7 +601,8 @@ class ApiController(RedditController, OAuth2ResourceController):
         if new and type in sr_types:
             action = dict(banned='banuser', moderator='addmoderator',
                           wikicontributor='wikicontributor',
-                          contributor='addcontributor', wikibanned='wikibanned').get(type, None)
+                          contributor='addcontributor',
+                          wikibanned='wikibanned').get(type, None)
             ModAction.create(container, c.user, action, target=friend)
 
         if type == "friend" and c.user.gold:
@@ -617,7 +619,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                    moderator=ModList,
                    contributor=ContributorList,
                    wikicontributor=WikiMayContributeList,
-                   banned=BannedList,wikibanned=WikiBannedList).get(type)
+                   banned=BannedList, wikibanned=WikiBannedList).get(type)
         form.set_inputs(name = "")
         form.set_html(".status:first", _("added"))
         if new and cls:
@@ -1200,7 +1202,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                    VModhash(),
                    # nop is safe: handled after auth checks below
                    stylesheet_contents = nop('stylesheet_contents'),
-                   prevstyle = VLength('prevstyle', max_length = 256),
+                   prevstyle = VLength('prevstyle', max_length=256),
                    op = VOneOf('op',['save','preview']))
     @api_doc(api_section.subreddits)
     def POST_subreddit_stylesheet(self, form, jquery,
@@ -1223,7 +1225,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             form.find('#conflict_box').hide()
             form.set_html(".errors ul", '')
 
-        stylesheet_contents_parsed = parsed if parsed else ''
+        stylesheet_contents_parsed = parsed or ''
         if op == 'save':
             c.site.stylesheet_contents = stylesheet_contents_parsed
             try:
@@ -1232,12 +1234,14 @@ class ApiController(RedditController, OAuth2ResourceController):
                 form.find('.errors').hide()
                 form.set_html(".status", _('saved'))
                 form.set_html(".errors ul", "")
-              #  ModAction.create(c.site, c.user, 'wikirevise', description=wiki_modactions.get('config/stylesheet'))
+                description = wiki.modactions.get('config/stylesheet')
+                ModAction.create(c.site, c.user, 'wikirevise', description)
             except ConflictException as e:
                 form.set_html(".status", _('conflict error'))
                 form.set_html(".errors ul", _('There was a conflict while editing the stylesheet'))
                 form.find('#conflict_box').show()
-                form.set_inputs(conflict_old = e.your, prevstyle=e.new_id, stylesheet_contents = e.new)
+                form.set_inputs(conflict_old=e.your,
+                                prevstyle=e.new_id, stylesheet_contents=e.new)
                 form.set_html('#conflict_diff', e.htmldiff)
                 form.find('.errors').show()
                 return
@@ -1437,13 +1441,12 @@ class ApiController(RedditController, OAuth2ResourceController):
         
         def apply_wikid_field(sr, form, pagename, value, prev, field, error):
             try:
-                wiki = WikiPage.get(sr.name, pagename)
+                wiki = wiki.WikiPage.get(sr.name, pagename)
             except tdb_cassandra.NotFound:
-                wiki = WikiPage.create(sr.name, pagename)
+                wiki = wiki.WikiPage.create(sr.name, pagename)
             try:
                 if wiki.revise(value, previous=prev, author=c.user.name):
-                    pass
-              #      ModAction.create(c.site, c.user, 'wikirevise', details=wiki_modactions.get(pagename))
+                    ModAction.create(c.site, c.user, 'wikirevise', details=wiki.modactions.get(pagename))
                 return True
             except ConflictException as e:
                 c.errors.add(errors.CONFLICT, field = field)

@@ -23,16 +23,16 @@
 <% from r2.models.wiki import WikiPage %>
 
 <%def name="listing(pages)">
-    %for k, v in pages.iteritems():
+    %for name, page_info in pages.iteritems():
         <ul>
         <li>
-        %if v[0]:
-            <a href="${c.wiki_base_url}/${v[0].name}" target="_blank">${k}</a></li>
+        %if page_info[0]:
+            <a href="${c.wiki_base_url}/${page_info[0].name}" target="_blank">${name}</a></li>
         %else:
-            ${k}
+            ${name}
         </li>
          %endif
-        ${listing(v[1])}
+        ${listing(page_info[1])}
         </ul>
     %endfor
 </%def>

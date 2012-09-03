@@ -25,7 +25,8 @@ from pylons.controllers.util import redirect_to
 from reddit_base import RedditController
 from r2.lib.utils import url_links
 from reddit_base import paginated_listing
-from r2.models.wiki import WikiPage, WikiRevision, ContentLengthError
+from r2.models.wiki import (WikiPage, WikiRevision, ContentLengthError,
+                            modactions)
 from r2.models.subreddit import Subreddit
 from r2.models.modaction import ModAction
 from r2.models.builder import WikiRevisionBuilder, WikiRecentRevisionBuilder
@@ -62,14 +63,12 @@ import json
 page_descriptions = {'config/stylesheet':_("This page is the subreddit stylesheet, changes here apply to the subreddit css"),
                      'config/sidebar':_("The contents of this page appear on the subreddit sidebar")}
 
-wiki_modactions = {'config/sidebar': "Updated subreddit sidebar"}
-
-WIKI_EDIT_RATELIMIT_SECONDS = g.wiki_edit_ratelimit_seconds
+EDIT_RATELIMIT_SECONDS = g.wiki_edit_ratelimit_seconds
 
 class WikiController(RedditController):
     allow_stylesheets = True
     
-    @validate(pv = VWikiPageAndVersion(('page', 'v', 'v2'), restricted=False))
+    @validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), restricted=False))
     def GET_wiki_page(self, pv):
         page, version, version2 = pv
         message = None
@@ -77,19 +76,12 @@ class WikiController(RedditController):
         if not page:
             return self.GET_wiki_create(page=c.page, view=True)
         
-        kw = {}
-        
         if version:
             edit_by = version.author_name()
             edit_date = version.date
         else:
             edit_by = page.author_name()
             edit_date = page._get('last_edit_date')
-        
-        if edit_by:
-            kw['edit_by'] = edit_by
-        if edit_date:
-            kw['edit_date'] = edit_date
         
         diffcontent = None
         if not version:
@@ -108,10 +100,11 @@ class WikiController(RedditController):
                 message = _("viewing revision from %s ago") % timesince(version.date)
                 content = version.content
         
-        return WikiPageView(content, alert=message, v=version, diff=diffcontent, **kw).render()
+        return WikiPageView(content, alert=message, v=version, diff=diffcontent,
+                            edit_by=edit_by, edit_date=edit_date).render()
     
     @paginated_listing(max_page_size=100, backend='cassandra')
-    @validate(page = VWikiPage(('page'), restricted=False))
+    @validate(page=VWikiPage(('page'), restricted=False))
     def GET_wiki_revisions(self, num, after, reverse, count, page):
         if not page:
             return self.GET_wiki_create(page=c.page, view=True)
@@ -131,11 +124,11 @@ class WikiController(RedditController):
                     self.handle_error(404, 'PAGE_NOT_FOUND', may_create=may_create)
             error = ''
             if c.error['reason'] == 'PAGE_NAME_LENGTH':
-                error = _("this wiki cannot handle page names of that magnitude!  Please select a page name shorter than %d characters") % c.error['max_length']
+                error = _("this wiki cannot handle page names of that magnitude!  please select a page name shorter than %d characters") % c.error['max_length']
             elif c.error['reason'] == 'PAGE_CREATED_ELSEWHERE':
                 error = _("this page is a special page, please go into the subreddit settings and save the field once to create this special page")
             elif c.error['reason'] == 'PAGE_NAME_MAX_SEPERATORS':
-                error = _('a max of %d separators "/" are allowed in a wiki page name.') % c.error['max_seperators']
+                error = _('a max of %d separators "/" are allowed in a wiki page name.') % c.error['max_separator']
             return BoringPage(_("Wiki error"), infotext=error).render()
         if view:
             return WikiNotFound().render()
@@ -145,7 +138,7 @@ class WikiController(RedditController):
             return self.redirect(url)
         return self.GET_wikiPage(page=page)
     
-    @validate(page = VWikiPageRevise('page', restricted=True))
+    @validate(page=VWikiPageRevise('page', restricted=True))
     def GET_wiki_revise(self, page, message=None, **kw):
         page = page[0]
         previous = kw.get('previous', page._get('revision'))
@@ -157,7 +150,10 @@ class WikiController(RedditController):
     @paginated_listing(max_page_size=100, backend='cassandra')
     def GET_wiki_recent(self, num, after, reverse, count):
         revisions = WikiRevision.get_recent(c.wiki_id)
-        builder = WikiRecentRevisionBuilder(revisions,  num=num, reverse=reverse, count=count, after=after, skip=not c.is_mod, wrap=default_thing_wrapper())
+        builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
+                                            reverse=reverse, after=after,
+                                            wrap=default_thing_wrapper(),
+                                            skip=not c.is_mod)
         listing = WikiRevisionListing(builder).listing()
         return WikiRecent(listing).render()
     
@@ -179,14 +175,14 @@ class WikiController(RedditController):
         listing = LinkListing(builder).listing()
         return WikiDiscussions(listing).render()
     
-    @validate(page = VWikiPage('page', restricted=True, modonly=True))
+    @validate(page=VWikiPage('page', restricted=True, modonly=True))
     def GET_wiki_settings(self, page):
         settings = {'permlevel': page._get('permlevel', 0)}
         mayedit = page.get_editors()
         return WikiSettings(settings, mayedit, show_settings=not page.special).render()
     
-    @validate(page = VWikiPage('page', restricted=True, modonly=True),\
-              permlevel = VInt('permlevel'))
+    @validate(page=VWikiPage('page', restricted=True, modonly=True),\
+              permlevel=VInt('permlevel'))
     def POST_wiki_settings(self, page, permlevel):
         oldpermlevel = page.permlevel
         try:
@@ -243,15 +239,15 @@ class WikiApiController(WikiController):
                 except ContentLengthError as e:
                     self.handle_error(403, 'CONTENT_LENGTH_ERROR', max_length = e.max_length)
                 if page.special or c.is_mod:
-                    description = wiki_modactions.get(page.name, 'Page %s edited' % page.name)
+                    description = modactions.get(page.name, 'Page %s edited' % page.name)
                  #   ModAction.create(c.site, c.user, 'wikirevise', details=description)
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         if not c.is_mod:
-            VRatelimit.ratelimit(rate_user = True, rate_ip = True, prefix = "rate_wiki_", seconds=WIKI_EDIT_RATELIMIT_SECONDS)
+            VRatelimit.ratelimit(rate_user = True, rate_ip = True, prefix = "rate_wiki_", seconds=EDIT_RATELIMIT_SECONDS)
         return json.dumps({})
     
-    @validate(page = VWikiPage('page'), user = VExistingUname('user'))
+    @validate(page=VWikiPage('page'), user=VExistingUname('user'))
     def POST_wiki_allow_editor(self, act, page, user):
         if not page:
             self.handle_error(404, 'UNKNOWN_PAGE')
@@ -265,14 +261,14 @@ class WikiApiController(WikiController):
             page.add_editor(user.name)
         return json.dumps({})
     
-    @validate(pv = VWikiPageAndVersion(('page', 'revision')))
+    @validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_hide(self, pv, page, revision):
         if not c.is_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
         return json.dumps({'status': revision.toggle_hide()})
    
-    @validate(pv = VWikiPageAndVersion(('page', 'revision')))
+    @validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_revert(self, pv, page, revision):
         if not c.is_mod:
             self.handle_error(403, 'MOD_REQUIRED')

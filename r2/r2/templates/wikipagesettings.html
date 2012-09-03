@@ -36,7 +36,7 @@
                 %if thing.permlevel == 1:
                     checked
                 %endif
-                /><label for="permlevel1">${_('only mods or those allowed may edit')}</label><br/>
+                /><label for="permlevel1">${_('only approved wiki contributors may edit')}</label><br/>
                 <input type="radio" name="permlevel" id="permlevel2" value="2"
                 %if thing.permlevel == 2:
                     checked
@@ -66,5 +66,5 @@
     </%utils:line_field>
     %endif
 
-    <input type="submit" onclick="$('#pagesettings').submit();" value="${_('save settings')}" />
+    <input type="submit" onclick="$('#pagesettings').submit()" value="${_('save settings')}" />
 </div>

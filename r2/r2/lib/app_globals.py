@@ -110,7 +110,7 @@ class Globals(object):
             'wiki_max_page_length_bytes',
             'wiki_edit_ratelimit_seconds',
             'wiki_max_page_name_length',
-            'wiki_max_page_seperators',
+            'wiki_max_page_separators',
         ],
 
         ConfigValue.float: [

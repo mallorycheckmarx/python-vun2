@@ -50,6 +50,8 @@ special_pages = ('config/stylesheet', 'config/sidebar', 'config/description')
 # Pages which have a special length restrictions (In bytes)
 special_length_restrictions_bytes = {'config/stylesheet': 128*1024, 'config/sidebar': 5120, 'config/description': 500}
 
+modactions = {'config/sidebar': "Updated subreddit sidebar"}
+
 # Page "index" in the subreddit "reddit.com" and a seperator of "\t" becomes:
 #   "reddit.com\tindex"
 def wiki_id(sr, page):
@@ -88,7 +90,7 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
     cache_ignore = set(['subreddit'] + list(_str_props)).union(Printable.cache_ignore)
     
     def author_name(self):
-        return get_author_name(self._get('author'))
+        return get_author_name(getattr(self, 'author'))
     
     @classmethod
     def add_props(cls, user, wrapped):
@@ -132,7 +134,7 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
     
     @property
     def is_hidden(self):
-        return bool(self._get('hidden', False))
+        return bool(getattr(self, 'hidden', False))
     
     @property
     def info(self, sep=PAGE_ID_SEP):
@@ -168,7 +170,7 @@ class WikiPage(tdb_cassandra.Thing):
     _bool_props = ('listed_')
     
     def author_name(self):
-        return get_author_name(self._get('last_edit_by'))
+        return get_author_name(getattr(self, 'last_edit_by'))
     
     @classmethod
     def get(cls, sr, name):
@@ -205,13 +207,6 @@ class WikiPage(tdb_cassandra.Thing):
     
     def _on_create(self):
         self.add_to_listing()
-        self._committed = True # Prevent infinite loop
-        self._commit()
-    
-    def _on_commit(self):
-        if not self._get('listed_'):
-            self.add_to_listing()
-            self._commit()
     
     def remove_editor(self, user):
         WikiPageEditors._remove(self._id, [user])
@@ -223,9 +218,9 @@ class WikiPage(tdb_cassandra.Thing):
     def get_pages(cls, sr, after=None):
         NUM_AT_A_TIME = 1000
         pages = WikiPagesBySR.query([sr], after=after, count=NUM_AT_A_TIME)
-        pages = [p for p in pages]
-        if len(pages) == NUM_AT_A_TIME:
-            return pages + self.get_pages(sr, after=pages[-1])
+        pages = list(pages)
+        if len(pages) >= NUM_AT_A_TIME:
+            return pages + cls.get_pages(sr, after=pages[-1])
         return pages
     
     @classmethod
@@ -275,10 +270,9 @@ class WikiPage(tdb_cassandra.Thing):
         max_length = special_length_restrictions_bytes.get(self.name, MAX_PAGE_LENGTH_BYTES)
         if len(content) > max_length:
             raise ContentLengthError(max_length)
-        try:
-            revision = self.revision
-        except:
-            revision = None
+        
+        revision = getattr(self, 'revision', None)
+        
         if not force and (revision and previous != revision):
             if previous:
                 origcontent = WikiRevision.get(previous, pageid=self._id).content
@@ -299,9 +293,10 @@ class WikiPage(tdb_cassandra.Thing):
         return wr
     
     def change_permlevel(self, permlevel, force=False):
+        NUM_PERMLEVELS = 3
         if permlevel == self.permlevel:
             return
-        if not force and int(permlevel) not in range(3):
+        if not force and int(permlevel) not in range(NUM_PERMLEVELS):
             raise ValueError('Permlevel not valid')
         self.permlevel = permlevel
         self._commit()
