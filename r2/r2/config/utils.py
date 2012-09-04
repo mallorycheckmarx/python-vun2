@@ -20,6 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import re
+
 iters = (list, tuple, set)
 
 def tup(item, ret_is_single=False):
@@ -101,11 +103,11 @@ def storify(mapping, *requireds, **defaults):
         {}
     
     """
-    def getvalue(x):
-        if hasattr(x, 'value'):
-            return x.value
+    def getvalue(name):
+        if hasattr(name, 'value'):
+            return name.value
         else:
-            return x
+            return name
     
     stor = Storage()
     for key in requireds + tuple(mapping.keys()):
@@ -172,39 +174,39 @@ def strips(text, remove):
     return rstrips(lstrips(text, remove), remove)
 
 class Results():
-    def __init__(self, sa_ResultProxy, build_fn, do_batch=False):
-        self.rp = sa_ResultProxy
-        self.fn = build_fn
+    def __init__(self, sa_result_proxy, build_fn, do_batch=False):
+        self.result_proxy = sa_result_proxy
+        self.func = build_fn
         self.do_batch = do_batch
 
     @property
     def rowcount(self):
-        return self.rp.rowcount
+        return self.result_proxy.rowcount
 
     def _fetch(self, res):
         if self.do_batch:
-            return self.fn(res)
+            return self.func(res)
         else:
-            return [self.fn(row) for row in res]
+            return [self.func(row) for row in res]
 
     def fetchall(self):
-        return self._fetch(self.rp.fetchall())
+        return self._fetch(self.result_proxy.fetchall())
 
-    def fetchmany(self, n):
-        rows = self._fetch(self.rp.fetchmany(n))
+    def fetchmany(self, count):
+        rows = self._fetch(self.result_proxy.fetchmany(count))
         if rows:
             return rows
         else:
             raise StopIteration
 
     def fetchone(self):
-        row = self.rp.fetchone()
+        row = self.result_proxy.fetchone()
         if row:
-            return self.fn(row)
+            return self.func(row)
         else:
             raise StopIteration
 
-def string2js(s):
+def string2js(convert_str):
     """adapted from http://svn.red-bean.com/bob/simplejson/trunk/simplejson/encoder.py"""
     ESCAPE = re.compile(r'[\x00-\x19\\"\b\f\n\r\t]')
     ESCAPE_ASCII = re.compile(r'([\\"/]|[^\ -~])')
@@ -224,4 +226,4 @@ def string2js(s):
 
     def replace(match):
         return ESCAPE_DCT[match.group(0)]
-    return '"' + ESCAPE.sub(replace, s) + '"'
+    return '"' + ESCAPE.sub(replace, convert_str) + '"'

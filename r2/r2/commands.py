@@ -26,7 +26,6 @@ from paste.registry import RegistryManager
 from paste.script import command
 from paste.deploy import appconfig        
 from r2.config.environment import load_environment
-from paste.script.pluginlib import find_egg_info_dir
 from pylons.wsgiapp import PylonsApp
 
 #from pylons.commands import ShellCommand, ControllerCommand, \
