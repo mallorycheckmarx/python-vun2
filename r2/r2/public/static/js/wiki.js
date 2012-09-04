@@ -8,7 +8,7 @@ r.wiki = {
     },
 
     init: function() {
-        $('body').delegate('.wiki .revision_hide', 'click', this.toggleHide)
+        $('body').delegate('.wiki-page .revision_hide', 'click', this.toggleHide)
     },
 
     toggleHide: function(event) {
@@ -56,8 +56,8 @@ r.wiki = {
         event.preventDefault()
         var $this = $(event.target),
             url = r.wiki.baseUrl() + '/api/edit/' + $this.data('page'),
-            conflict = $('.wiki #conflict'),
-            special = $('.wiki #special')
+            conflict = $('#wiki_edit_conflict'),
+            special = $('#wiki_special_error')
         conflict.hide()
         special.hide()
         $.ajax({

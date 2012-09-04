@@ -24,7 +24,7 @@
   from r2.lib.filters import keep_space
 %>
 
-<div style="display: none;" id="conflict">
+<div style="display: none;" id="wiki_edit_conflict">
     <h2 class="error">there was a conflict editing</h2>
     <h1>${_("your edit")}</h1>
     <em>${_("this edit is for you to resolve the conflict, any text in the box below will not save.")}</em><br/>
@@ -33,7 +33,7 @@
     <h1>${_("current edit")}</h1>
 </div>
 
-<div style="display: none;" id="special">
+<div style="display: none;" id="wiki_special_error">
     <h1>Errors: </h1>
     <span id="specials" class="error"></span>
 </div>
