@@ -86,7 +86,7 @@ class WikiController(RedditController):
         diffcontent = None
         if not version:
             content = page.content
-            if c.is_mod and page.name in page_descriptions:
+            if c.is_wiki_mod and page.name in page_descriptions:
                 message = page_descriptions[page.name]
         else:
             message = _("viewing revision from %s") % timesince(version.date)
@@ -109,7 +109,7 @@ class WikiController(RedditController):
         if not page:
             return self.GET_wiki_create(page=c.page, view=True)
         revisions = page.get_revisions()
-        builder = WikiRevisionBuilder(revisions, num=num, reverse=reverse, count=count, after=after, skip=not c.is_mod, wrap=default_thing_wrapper())
+        builder = WikiRevisionBuilder(revisions, num=num, reverse=reverse, count=count, after=after, skip=not c.is_wiki_mod, wrap=default_thing_wrapper())
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing).render()
     
@@ -153,7 +153,7 @@ class WikiController(RedditController):
         builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
                                             reverse=reverse, after=after,
                                             wrap=default_thing_wrapper(),
-                                            skip=not c.is_mod)
+                                            skip=not c.is_wiki_mod)
         listing = WikiRevisionListing(builder).listing()
         return WikiRecent(listing).render()
     
@@ -206,12 +206,12 @@ class WikiController(RedditController):
         c.page = None
         c.show_wiki_actions = True
         self.editconflict = False
-        c.is_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
+        c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
         c.wikidisabled = False
         
         mode = c.site.wikimode
         if not mode or mode == 'disabled':
-            if not c.is_mod:
+            if not c.is_wiki_mod:
                 self.handle_error(403, 'WIKI_DISABLED')
             else:
                 c.wikidisabled = True
@@ -239,12 +239,12 @@ class WikiApiController(WikiController):
                     page.revise(content, previous, c.user.name, reason=request.POST['reason'])
                 except ContentLengthError as e:
                     self.handle_error(403, 'CONTENT_LENGTH_ERROR', max_length = e.max_length)
-                if page.special or c.is_mod:
+                if page.special or c.is_wiki_mod:
                     description = modactions.get(page.name, 'Page %s edited' % page.name)
                  #   ModAction.create(c.site, c.user, 'wikirevise', details=description)
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
-        if not c.is_mod:
+        if not c.is_wiki_mod:
             VRatelimit.ratelimit(rate_user = True, rate_ip = True, prefix = "rate_wiki_", seconds=EDIT_RATELIMIT_SECONDS)
         return json.dumps({})
     
@@ -252,7 +252,7 @@ class WikiApiController(WikiController):
     def POST_wiki_allow_editor(self, act, page, user):
         if not page:
             self.handle_error(404, 'UNKNOWN_PAGE')
-        if not c.is_mod:
+        if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         if act == 'del':
             page.remove_editor(c.user)
@@ -264,14 +264,14 @@ class WikiApiController(WikiController):
     
     @validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_hide(self, pv, page, revision):
-        if not c.is_mod:
+        if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
         return json.dumps({'status': revision.toggle_hide()})
    
     @validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_revert(self, pv, page, revision):
-        if not c.is_mod:
+        if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
         content = revision.content
