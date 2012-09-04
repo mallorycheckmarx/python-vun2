@@ -63,7 +63,7 @@
             <a href="#" class="revision_hide" data-revision="${thing._id}" data-page="${thing.page}">hide</a>
         </td>
         <td class="wiki_revert" style="white-space: nowrap;">
-            ${ynbutton(_("revert here"), _("done"), "../r/%s/wiki/api/revert/%s/%s" % (thing.sr, thing._id, thing.page), block='true', callback="$.refresh")}
+            ${ynbutton(_("revert here"), _("done"), "../r/%s/wiki/api/revert/%s/%s" % (thing.sr, thing._id, thing.page), callback="$.refresh")}
         </td>
     %endif
 
