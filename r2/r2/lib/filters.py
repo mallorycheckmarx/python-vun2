@@ -254,16 +254,19 @@ def wikimarkdown(text):
     text = snudown.markdown(_force_utf8(text), nofollow, target,
                             renderer=snudown.RENDERER_WIKI, enable_toc=True)
     
+    # TODO: We should test how much of a load this adds to the app
     soup = BeautifulSoup(text)
     images = soup.img
     
     if images:
         if len(images) == 0:
+            # Silly beautifulsoup
             img_swap(images)
         else:
             for i in images:
                 img_swap(i)
-        text = str(soup.contents[0])
+        # Make sure we return a string and not soup
+        text = ''.join([str(s) for s in soup.contents])
     
     return SC_OFF + WIKI_MD_START + text + WIKI_MD_END + SC_ON
 
