@@ -68,7 +68,8 @@ EDIT_RATELIMIT_SECONDS = g.wiki_edit_ratelimit_seconds
 class WikiController(RedditController):
     allow_stylesheets = True
     
-    @validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), restricted=False))
+    @validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), required=False, 
+                                                          restricted=False))
     def GET_wiki_page(self, pv):
         page, version, version2 = pv
         message = None
@@ -106,8 +107,6 @@ class WikiController(RedditController):
     @paginated_listing(max_page_size=100, backend='cassandra')
     @validate(page=VWikiPage(('page'), restricted=False))
     def GET_wiki_revisions(self, num, after, reverse, count, page):
-        if not page:
-            return self.GET_wiki_create(page=c.page, view=True)
         revisions = page.get_revisions()
         builder = WikiRevisionBuilder(revisions, num=num, reverse=reverse, count=count, after=after, skip=not c.is_wiki_mod, wrap=default_thing_wrapper())
         listing = WikiRevisionListing(builder).listing()
@@ -241,7 +240,7 @@ class WikiApiController(WikiController):
                     self.handle_error(403, 'CONTENT_LENGTH_ERROR', max_length = e.max_length)
                 if page.special or c.is_wiki_mod:
                     description = modactions.get(page.name, 'Page %s edited' % page.name)
-                 #   ModAction.create(c.site, c.user, 'wikirevise', details=description)
+                    ModAction.create(c.site, c.user, 'wikirevise', details=description)
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         if not c.is_wiki_mod:
@@ -250,8 +249,6 @@ class WikiApiController(WikiController):
     
     @validate(page=VWikiPage('page'), user=VExistingUname('user'))
     def POST_wiki_allow_editor(self, act, page, user):
-        if not page:
-            self.handle_error(404, 'UNKNOWN_PAGE')
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         if act == 'del':

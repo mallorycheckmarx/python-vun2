@@ -145,9 +145,10 @@ def normalize_page(page):
     return page
 
 class VWikiPage(Validator):
-    def __init__(self, param, restricted=True, modonly=False, **kw):
+    def __init__(self, param, required=True, restricted=True, modonly=False, **kw):
         self.restricted = restricted
         self.modonly = modonly
+        self.required = required
         Validator.__init__(self, param, **kw)
     
     def run(self, page):
@@ -188,8 +189,10 @@ class VWikiPage(Validator):
                 jsonAbort(403, 'MAY_NOT_VIEW')
             return wp
         except tdb_cassandra.NotFound:
+            if self.required:
+                jsonAbort(404, 'PAGE_NOT_FOUND')
             if not c.user_is_loggedin:
-                jsonAbort(404, 'LOGIN_REQUIRED')
+                jsonAbort(403, 'LOGIN_REQUIRED')
             if c.user_is_admin:
                 return # admins may always create
             if WikiPage.is_restricted(page):
@@ -220,7 +223,7 @@ class VWikiPageRevise(VWikiPage):
         wp = VWikiPage.run(self, page)
         if not wp:
             jsonAbort(404, 'INVALID_PAGE')
-        if not c.user_is_admin and not may_revise(wp, c.site, c.user):
+        if not c.user_is_admin and not may_revise(c.site, c.user, page):
             jsonAbort(403, 'MAY_NOT_REVISE')
         if previous:
             prev = self.ValidVersion(previous, wp._id)
@@ -244,7 +247,7 @@ class VWikiPageCreate(Validator):
             return False
         except tdb_cassandra.NotFound:
             if c.user_is_admin:
-                return
+                return True
             if not may_revise(c.site, c.user):
                 jsonAbort(403, 'MAY_NOT_CREATE')
             else:

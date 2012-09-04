@@ -1441,11 +1441,11 @@ class ApiController(RedditController, OAuth2ResourceController):
         
         def apply_wikid_field(sr, form, pagename, value, prev, field, error):
             try:
-                wiki = wiki.WikiPage.get(sr.name, pagename)
+                wikipage = wiki.WikiPage.get(sr.name, pagename)
             except tdb_cassandra.NotFound:
-                wiki = wiki.WikiPage.create(sr.name, pagename)
+                wikipage = wiki.WikiPage.create(sr.name, pagename)
             try:
-                if wiki.revise(value, previous=prev, author=c.user.name):
+                if wikipage.revise(value, previous=prev, author=c.user.name):
                     ModAction.create(c.site, c.user, 'wikirevise', details=wiki.modactions.get(pagename))
                 return True
             except ConflictException as e:
