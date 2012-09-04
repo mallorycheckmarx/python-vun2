@@ -556,6 +556,11 @@ class SubredditInfoBar(CachedTemplate):
 
     def __init__(self, site = None):
         site = site or c.site
+        
+        if c.show_wiki_actions:
+            self.wiki_actions = "PANTS"
+        else:
+            self.wiki_actions = None
 
         # hackity hack. do i need to add all the others props?
         self.sr = list(wrap_links(site))[0]

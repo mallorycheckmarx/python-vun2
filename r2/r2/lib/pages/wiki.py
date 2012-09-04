@@ -49,9 +49,8 @@ class WikiPageDiscussions(Templated):
         Templated.__init__(self)
 
 class WikiBasePage(Templated):
-    def __init__(self, content, action, pageactions, globalactions, showtitle=True, description=None, **context):
+    def __init__(self, content, action, pageactions, showtitle=True, description=None, **context):
         self.pageactions = pageactions
-        self.globalactions = globalactions
         self.base_url = c.wiki_base_url
         self.action = action
         self.description = description
@@ -84,7 +83,7 @@ class WikiBase(Reddit):
             context['infotext'] = alert
         elif c.wikidisabled:
             context['infotext'] = _("this wiki is currently disabled, only mods may interact with this wiki")
-        context['content'] = WikiBasePage(content, action, pageactions, globalactions, **context)
+        context['content'] = WikiBasePage(content, action, pageactions, **context)
         Reddit.__init__(self, **context)
 
 class WikiPageView(WikiBase):

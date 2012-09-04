@@ -65,6 +65,10 @@
   %if thing.flair_prefs:
     ${thing.flair_prefs}
   %endif
+  
+  %if thing.wiki_actions:
+    ${thing.wiki_actions}
+  %endif
 
   %if thing.sr.description:
     ${thing.sr.description_usertext}

@@ -204,6 +204,7 @@ class WikiController(RedditController):
         c.wiki_base_url = '/wiki' if frontpage else '/r/%s/wiki' % c.site.name
         c.wiki_id = g.default_sr if frontpage else c.site.name
         c.page = None
+        c.show_wiki_actions = True
         self.editconflict = False
         c.is_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
         c.wikidisabled = False
