@@ -190,8 +190,8 @@ class WikiController(RedditController):
         except ValueError:
             self.handle_error(403, 'INVALID_PERMLEVEL')
         description = 'Page: %s, Changed from %s to %s' % (page.name, oldpermlevel, permlevel)
-       # ModAction.create(c.site, c.user, 'wikipermlevel', description=description)
-        return self.GET_wikiSettings(page=page.name)
+        ModAction.create(c.site, c.user, 'wikipermlevel', description=description)
+        return self.GET_wiki_settings(page=page.name)
     
     def handle_error(self, code, error=None, **kw):
         jsonAbort(code, error, **kw)

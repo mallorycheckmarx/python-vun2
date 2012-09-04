@@ -90,7 +90,7 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
     cache_ignore = set(['subreddit'] + list(_str_props)).union(Printable.cache_ignore)
     
     def author_name(self):
-        return get_author_name(getattr(self, 'author'))
+        return get_author_name(getattr(self, 'author', None))
     
     @classmethod
     def add_props(cls, user, wrapped):
@@ -170,7 +170,7 @@ class WikiPage(tdb_cassandra.Thing):
     _bool_props = ('listed_')
     
     def author_name(self):
-        return get_author_name(getattr(self, 'last_edit_by'))
+        return get_author_name(getattr(self, 'last_edit_by', None))
     
     @classmethod
     def get(cls, sr, name):

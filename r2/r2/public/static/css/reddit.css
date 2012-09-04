@@ -954,8 +954,12 @@ a.author { margin-right: 0.5em; }
     margin: 5px;
 }
 
-.wikipage {
+.wiki-page-content {
     margin: 15px;
+}
+
+.wikirevisionlisting .generic-table {
+    width: 100%;
 }
 
 .wikititle strong {
@@ -966,32 +970,23 @@ a.author { margin-right: 0.5em; }
     color: #666;
 }
 
-
-.wiki {
-    margin-top: 15px;
-}
-
-.wiki #noresults {
-    margin-right: 0px;
-}
-
-.wiki.md {
+.wiki-page .md {
     word-wrap: break-word;
     max-width: none;
 }
 
-.wiki .fancy-settings .toggle {
+.wiki-page .fancy-settings .toggle {
     display: inline-block;
     padding-right: 15px;
 }
 
-.wiki input {
+.wiki-page input {
     margin: 5px;
     padding: 2px;
     margin-left: 0;
 }
 
-#content.wiki {
+.wiki-page-content {
     margin-right: 315px;
 }
 .discussionlink {
@@ -1008,13 +1003,13 @@ a.author { margin-right: 0.5em; }
     padding-right: 15px;
 }
 
-.wiki .pagelisting ul {
+.wiki-page .pagelisting ul {
     list-style: disc;
     padding: 2px;
     padding-left: 10px;
 }
 
-.wiki .revision {
+.wiki-page .revision {
     transition: opacity 500ms;
     -o-transition: opacity 500ms;
     -ms-transition: opacity 500ms;
@@ -1022,7 +1017,7 @@ a.author { margin-right: 0.5em; }
     -webkit-transition: opacity 500ms;
 }
 
-.wiki .revision.hidden {
+.wiki-page .revision.hidden {
     opacity: .5;
 }
 
@@ -1033,19 +1028,20 @@ a.author { margin-right: 0.5em; }
     vertical-align: middle;
 }
 
-.wikiactions .wikiaction {
-    background: None center left no-repeat;
+#wikiactions {
+    font-weight: normal;
+    font-size: x-small;
 }
 
-.wikiactions .wikiaction-index {
-    background-image: url(../house.png); /* SPRITE */
+#wikiactions h1 {
+    font-weight: normal;
 }
 
-.wikiactions .wikiaction-revisions {
+.wikiaction-revisions::before {
     background-image: url(../report.png); /* SPRITE */
 }
 
-.wikiactions .wikiaction-pages {
+.wikiaction-pages::before {
     background-image: url(../page_white_copy.png); /* SPRITE */
 }
 
@@ -4771,6 +4767,8 @@ dd { margin-left: 20px;  }
 .icon-menu .reddit-traffic:before,
 .icon-menu .reddit-reported:before,
 .icon-menu .reddit-spam:before,
+.icon-menu .wikiaction-pages:before,
+.icon-menu .wikiaction-revisions:before,
 .icon-menu .reddit-ban:before,
 .icon-menu .reddit-flair:before,
 .icon-menu .reddit-moderationlog:before,

@@ -49,7 +49,7 @@ class WikiPageDiscussions(Templated):
         Templated.__init__(self)
 
 class WikiBasePage(Templated):
-    def __init__(self, content, action, pageactions, showtitle=True, description=None, **context):
+    def __init__(self, content, action, pageactions, showtitle=False, description=None, **context):
         self.pageactions = pageactions
         self.base_url = c.wiki_base_url
         self.action = action
@@ -62,9 +62,11 @@ class WikiBasePage(Templated):
         Templated.__init__(self)
 
 class WikiBase(Reddit):
+    extra_page_classes = ['wiki-page']
+    
     def __init__(self, content, actionless=False, alert=None, **context):
         pageactions = []
-        globalactions = []
+        
         if not actionless and c.page:
             pageactions += [(c.page, _("view"), False)]
             if may_revise(c.page_obj):
@@ -73,9 +75,7 @@ class WikiBase(Reddit):
             pageactions += [('discussions', _("talk"), True)]
             if c.is_mod:
                 pageactions += [('settings', _("settings"), True)]
-        globalactions += [('index', _("wiki home"), False),
-                          ('revisions', _("view recent revisions"), False),
-                          ('pages', _("list of pages"), False)]
+
         action = context.get('wikiaction', (c.page, 'wiki'))
         
         context['title'] = c.site.name
@@ -122,18 +122,20 @@ class WikiRevisions(WikiBase):
 class WikiRecent(WikiBase):
     def __init__(self, revisions, **context):
         content = WikiPageRevisions(revisions)
-        context['wikiaction'] = ('revisions', _("Viewing recent revisions for subreddit"))
-        WikiBase.__init__(self, content, **context)
+        context['wikiaction'] = ('revisions', _("Viewing recent revisions for /r/%s") % c.wiki_id)
+        WikiBase.__init__(self, content, showtitle=True, **context)
 
 class WikiListing(WikiBase):
     def __init__(self, pages, **context):
         content = WikiPageListing(pages)
-        context['wikiaction'] = ('pages', _("Viewing pages for subreddit"))
-        WikiBase.__init__(self, content, **context)
+        context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % c.wiki_id)
+        WikiBase.__init__(self, content, showtitle=True, **context)
 
 class WikiDiscussions(WikiBase):
     def __init__(self, listing, **context):
         content = WikiPageDiscussions(listing)
         context['wikiaction'] = ('discussions', _("discussions"))
-        WikiBase.__init__(self, content, **context)
+        description = _("Discussions are site-wide links to this wiki page.<br/>\
+        Submit a link to this wiki page or see other discussions about this wiki page.")
+        WikiBase.__init__(self, content, description=description, **context)
 
