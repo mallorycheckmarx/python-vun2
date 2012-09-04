@@ -184,7 +184,7 @@ markdown_boring_tags =  ('p', 'em', 'strong', 'br', 'ol', 'ul', 'hr', 'li',
                          'pre', 'code', 'blockquote', 'center',
                           'sup', 'del', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',)
 
-markdown_user_tags = ('table', 'th', 'tr', 'td', 'tbody',
+markdown_user_tags = ('table', 'th', 'tr', 'td', 'tbody', 'img',
                      'tbody', 'thead', 'tr', 'tfoot', 'caption')
 
 for bt in markdown_boring_tags:
