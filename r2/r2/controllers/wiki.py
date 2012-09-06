@@ -37,7 +37,7 @@ from r2.lib.template_helpers import join_urls
 from validator import validate, VMarkdown
 
 from validator.wiki import (jsonAbort, VWikiPage, VWikiPageAndVersion,
-                           VWikiPageRevise, VWikiPageCreate)
+                           VWikiPageRevise, VWikiPageCreate, this_may_view)
 
 from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
                               WikiEdit, WikiSettings, WikiRecent,
@@ -159,7 +159,10 @@ class WikiController(RedditController):
         return WikiRecent(listing).render()
     
     def GET_wiki_listing(self):
-        pages = WikiPage.get_listing(c.wiki_id)
+        def check_hidden(page):
+            g.log.debug("Got here %s" % str(this_may_view(page)))
+            return this_may_view(page)
+        pages = WikiPage.get_listing(c.wiki_id, filter_check=check_hidden)
         return WikiListing(pages).render()
     
     def GET_wiki_redirect(self, page):

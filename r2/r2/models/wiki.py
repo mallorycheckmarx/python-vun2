@@ -203,10 +203,12 @@ class WikiPage(tdb_cassandra.Thing):
     
     def add_to_listing(self):
         WikiPagesBySR.add_object(self)
-        self.listed_ = True
     
     def _on_create(self):
         self.add_to_listing()
+    
+    def _on_commit(self):
+         self.add_to_listing()
     
     def remove_editor(self, user):
         WikiPageEditors._remove(self._id, [user])
@@ -224,12 +226,14 @@ class WikiPage(tdb_cassandra.Thing):
         return pages
     
     @classmethod
-    def get_listing(cls, sr):
+    def get_listing(cls, sr, filter_check=None):
         """
             Create a tree of pages from their path.
         """
         page_tree = OrderedDict()
-        pages = sorted(cls.get_pages(sr), key=lambda page: page.name)
+        pages = cls.get_pages(sr)
+        pages = filter(filter_check, pages)
+        pages = sorted(pages, key=lambda page: page.name)
         for page in pages:
             p = page.name.split('/')
             cur_node = page_tree
