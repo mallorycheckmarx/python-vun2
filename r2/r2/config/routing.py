@@ -34,7 +34,7 @@ def make_map():
     for plugin in config['r2.plugins']:
         plugin.add_routes(connect)
 
-    admin_routes.add(connect)
+    connect('/admin/', controller='awards')
 
     connect('/login', controller='forms', action='login')
     connect('/register', controller='forms', action='register')
@@ -52,27 +52,25 @@ def make_map():
     connect('/rules', controller='front', action='rules')
     connect('/sup', controller='front', action='sup')
     connect('/traffic', controller='front', action='site_traffic')
-    connect('/traffic/languages/:langcode', controller='front', 
-            action='lang_traffic', langcode='')
-    connect('/traffic/adverts/:code', controller='front', 
-            action='advert_traffic', code='')
+    connect('/traffic/languages/:langcode', controller='front', action='lang_traffic', langcode='')
+    connect('/traffic/adverts/:code', controller='front', action='advert_traffic', code='')
     connect('/account-activity', controller='front', action='account_activity')
 
     connect('/about/message/:where', controller='message', action='listing')
     connect('/about/log', controller='front', action='moderationlog')
     connect('/about', controller='front', action='about')
     connect('/about/:location', controller='front', action='editreddit',
-            location='about')
+       location='about')
 
     connect('/reddits/create', controller='front', action='newreddit')
     connect('/reddits/search', controller='front', action='search_reddits')
     connect('/reddits/login', controller='forms', action='login')
     connect('/reddits/:where', controller='reddits', action='listing',
-            where='popular', requirements=dict(where="popular|new|banned"))
+       where='popular', requirements=dict(where="popular|new|banned"))
 
     connect('/reddits/mine/:where', controller='myreddits', action='listing',
-            where='subscriber',
-            requirements=dict(where='subscriber|contributor|moderator'))
+       where='subscriber',
+       requirements=dict(where='subscriber|contributor|moderator'))
 
     connect('/buttons', controller='buttons', action='button_demo_page')
 
@@ -103,12 +101,10 @@ def make_map():
 
     connect('/admin/errors', controller='errorlog')
 
-    connect('/admin/:action', controller='admin')
-
     connect('/user/:username/about', controller='user', action='about',
-            where='overview')
+       where='overview')
     connect('/user/:username/:where', controller='user', action='listing',
-            where='overview')
+       where='overview')
     connect('/u/:username', controller='redirect', action='user_redirect')
 
     # preserve timereddit URLs from 4/1/2012
