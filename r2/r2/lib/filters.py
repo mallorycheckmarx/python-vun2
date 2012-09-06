@@ -259,7 +259,7 @@ def wikimarkdown(text):
     images = soup.findAll('img')
     
     if images:
-        [image.extract() for image in images]
+        [img_swap(image) for image in images]
         text = str(soup)
     
     return SC_OFF + WIKI_MD_START + text + WIKI_MD_END + SC_ON
