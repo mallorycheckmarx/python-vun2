@@ -220,8 +220,9 @@ class WikiApiController(WikiController):
               pageandprevious = VWikiPageRevise(('page', 'previous'), restricted=True),
               content = VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
-        if (errors.RATELIMIT, 'ratelimit') in c.errors:
-            self.handle_error(429, 'WIKI_EDIT_RATELIMIT')
+        if errors.RATELIMIT in c.errors:
+            ratelimit = c.errors[errors.RATELIMIT]
+            self.handle_error(429, 'WIKI_EDIT_RATELIMIT', message=ratelimit.message, time=ratelimit.msg_params['time'])
         page, previous = pageandprevious
         previous = previous._id if previous else None
         try:

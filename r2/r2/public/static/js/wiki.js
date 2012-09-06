@@ -89,9 +89,7 @@ r.wiki = {
                 },
                 429: function(xhr) {
                     specials.empty()
-                    for(i in errors) {
-                        specials.text('You are doing that too much, please try again in X seconds.')
-                    }
+                    specials.text('You are doing that too much, please try again shortly.')
                     special.fadeIn('slow')
                 }
             }

@@ -2,7 +2,7 @@ from r2.lib.pages.pages import Reddit
 from pylons import c
 from r2.lib.wrapped import Templated
 from r2.lib.menus import PageNameNav
-from r2.controllers.validator.wiki import may_revise
+from r2.controllers.validator.wiki import this_may_revise
 from r2.lib.filters import wikimarkdown
 from pylons.i18n import _
 
@@ -14,7 +14,7 @@ class WikiView(Templated):
         self.edit_by = edit_by
         self.edit_date = edit_date
         self.base_url = c.wiki_base_url
-        self.may_revise = c.user_is_admin or may_revise(c.site, c.user, c.page_obj)
+        self.may_revise = this_may_revise(c.page_obj)
         Templated.__init__(self)
 
 class WikiPageListing(Templated):
@@ -69,7 +69,7 @@ class WikiBase(Reddit):
         
         if not actionless and c.page:
             pageactions += [(c.page, _("view"), False)]
-            if c.user_is_admin or may_revise(c.site, c.user, c.page_obj):
+            if this_may_revise(c.page_obj):
                 pageactions += [('edit', _("edit"), True)]
             pageactions += [('revisions/%s' % c.page, _("history"), False)]
             pageactions += [('discussions', _("talk"), True)]
@@ -89,7 +89,7 @@ class WikiBase(Reddit):
 class WikiPageView(WikiBase):
     def __init__(self, content, diff=None, **context):
         if not content and not context.get('alert'):
-            if c.user_is_admin or may_revise(c.site, c.user, c.page_obj):
+            if this_may_revise(c.page_obj):
                 context['alert'] = _("this page is empty, edit it to add some content.")
         content = WikiView(content, context.get('edit_by'), context.get('edit_date'), diff=diff)
         WikiBase.__init__(self, content, **context)

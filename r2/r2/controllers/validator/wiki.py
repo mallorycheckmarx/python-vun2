@@ -42,11 +42,20 @@ def jsonAbort(code, reason=None, **data):
         request.environ['usable_error_content'] = json.dumps(data)
     abort(code)
 
-def may_revise(sr, user, page=None):
+def this_may_revise(page=None):
     if not c.user_is_loggedin:
-        # Users who are not logged in may not contribute
         return False
     
+    if c.user_is_admin:
+        return True
+    
+    return may_revise(c.site, c.user, page)
+
+def this_may_view(page):
+    user = c.user if c.user_is_loggedin else None
+    return may_view(c.site, user, page)
+
+def may_revise(sr, user, page=None):    
     if sr.is_moderator(user):
         # Mods may always contribute
         return True
@@ -107,7 +116,9 @@ def may_revise(sr, user, page=None):
     return True
 
 def may_view(sr, user, page):
-    mod = sr.is_moderator(user)
+    # User being None means not logged in
+    mod = sr.is_moderator(user) if user else False
+    
     if mod:
         # Mods may always view
         return True
@@ -185,7 +196,7 @@ class VWikiPage(Validator):
             if self.restricted and wp.restricted:
                 if not wp.special:
                     jsonAbort(403, 'RESTRICTED_PAGE')
-            if not c.user_is_admin and not may_view(c.site, c.user, wp):
+            if not this_may_view(wp):
                 jsonAbort(403, 'MAY_NOT_VIEW')
             return wp
         except tdb_cassandra.NotFound:
@@ -223,7 +234,7 @@ class VWikiPageRevise(VWikiPage):
         wp = VWikiPage.run(self, page)
         if not wp:
             jsonAbort(404, 'INVALID_PAGE')
-        if not c.user_is_admin and not may_revise(c.site, c.user, page):
+        if not this_may_revise(page):
             jsonAbort(403, 'MAY_NOT_REVISE')
         if previous:
             prev = self.ValidVersion(previous, wp._id)
@@ -248,7 +259,7 @@ class VWikiPageCreate(Validator):
         except tdb_cassandra.NotFound:
             if c.user_is_admin:
                 return True
-            if not may_revise(c.site, c.user):
+            if not this_may_revise():
                 jsonAbort(403, 'MAY_NOT_CREATE')
             else:
                 return True
