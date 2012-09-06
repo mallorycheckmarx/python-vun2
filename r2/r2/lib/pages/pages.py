@@ -203,7 +203,7 @@ class Reddit(Templated):
                            css_class="wikiaction-pages",
                            dest="pages"))
                            
-        return SideContentBox(_('wiki actions'),
+        return SideContentBox(_('wiki tools'),
                       [NavMenu(buttons,
                                type="flat_vert",
                                base_path="/wiki/",
