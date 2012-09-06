@@ -34,10 +34,11 @@ from r2.models.builder import WikiRevisionBuilder, WikiRecentRevisionBuilder
 from r2.lib.template_helpers import join_urls
 
 
-from validator import validate, VMarkdown
+from r2.controllers.validator import validate, VMarkdown
 
-from validator.wiki import (VWikiPage, VWikiPageAndVersion,
-                           VWikiPageRevise, VWikiPageCreate, this_may_view)
+from r2.controllers.validator.wiki import (VWikiPage, VWikiPageAndVersion,
+                                           VWikiPageRevise, VWikiPageCreate,
+                                           this_may_view)
 
 from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
                               WikiEdit, WikiSettings, WikiRecent,
@@ -57,7 +58,7 @@ from r2.lib.merge import ConflictException, make_htmldiff
 from pylons.i18n import _
 from r2.lib.pages import PaneStack
 from r2.lib.utils import timesince
-from r2.lib.base import jsonabort
+from r2.controllers.validator.wiki import apiabort
 
 import json
 
@@ -202,7 +203,7 @@ class WikiController(RedditController):
         return self.GET_wiki_settings(page=page.name)
     
     def handle_error(self, code, error=None, **kw):
-        jsonabort(code, error, **kw)
+        apiabort(code, error, **kw)
     
     def pre(self):
         RedditController.pre(self)

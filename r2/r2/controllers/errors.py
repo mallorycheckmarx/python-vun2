@@ -20,8 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from paste.httpexceptions import HTTPForbidden
+from paste.httpexceptions import HTTPForbidden, HTTPError
 from r2.lib.utils import Storage, tup
+from pylons import request
 from pylons.i18n import _
 from copy import copy
 
@@ -163,6 +164,13 @@ class ErrorSet(object):
         from the errors list."""
         if self.errors.has_key(pair):
             del self.errors[pair]
+
+class WikiError(HTTPError):
+    def __init__(self, code, reason=None, **data):
+        self.code = code
+        data['reason'] = self.explanation = reason or 'UNKNOWN_ERROR'
+        self.error_data = data
+        HTTPError.__init__(self)
 
 class ForbiddenError(HTTPForbidden):
     def __init__(self, error):
