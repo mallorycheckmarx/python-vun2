@@ -283,7 +283,7 @@ class WikiApiController(WikiController):
         page, revision = pv
         content = revision.content
         author = revision._get('author')
-        reason = _("reverted back %s") % timesince(revision.date)
+        reason = 'reverted back %s' % timesince(revision.date)
         if page.name == 'config/stylesheet':
             report, parsed = c.site.parse_css(content)
             if report.errors:
