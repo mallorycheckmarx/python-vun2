@@ -37,7 +37,7 @@ from pylons.middleware import ErrorDocuments, ErrorHandler, StaticJavascripts
 from pylons.wsgiapp import PylonsApp, PylonsBaseWSGIApp
 
 from r2.config.environment import load_environment
-from r2.config.extensions import extension_mapping, set_extension
+from r2.config.extensions import set_extension, extension_mapping
 from r2.config.rewrites import rewrites
 from r2.lib.strings import string_dict
 from r2.lib.utils import is_subdomain
@@ -57,7 +57,7 @@ httpexceptions._exceptions[429] = HTTPTooManyRequests
 wsgiwrappers.STATUS_CODE_TEXT[429] = HTTPTooManyRequests.title
 
 #from pylons.middleware import error_mapper
-def error_mapper(code, message, environ, global_conf=None, **kw):
+def error_mapper(code, message, environ, global_conf=None, **unused):
     if environ.get('pylons.error_call'):
         return None
     else:
@@ -132,30 +132,29 @@ class DomainMiddleware(object):
         self.app = app
 
     def __call__(self, environ, start_response):
-        pylons_globals = config['pylons.g']
+        g = config['pylons.g']
         http_host = environ.get('HTTP_HOST', 'localhost').lower()
-        domain, _, port = http_host.partition(':')
+        domain, unused, port = http_host.partition(':')
 
         # remember the port
         try:
             environ['request_port'] = int(port)
         except ValueError:
             pass
-        
+
         # localhost is exempt so paster run/shell will work
         # media_domain doesn't need special processing since it's just ads
-        if (domain == "localhost" or 
-            is_subdomain(domain, pylons_globals.media_domain)):
+        if domain == "localhost" or is_subdomain(domain, g.media_domain):
             return self.app(environ, start_response)
 
         # tell reddit_base to redirect to the appropriate subreddit for
         # a legacy CNAME
-        if not is_subdomain(domain, pylons_globals.domain):
+        if not is_subdomain(domain, g.domain):
             environ['legacy-cname'] = domain
             return self.app(environ, start_response)
 
         # figure out what subdomain we're on if any
-        subdomains = domain[:-len(pylons_globals.domain) - 1].split('.')
+        subdomains = domain[:-len(g.domain) - 1].split('.')
         extension_subdomains = dict(m="mobile",
                                     i="compact",
                                     api="api",
@@ -165,7 +164,7 @@ class DomainMiddleware(object):
 
         sr_redirect = None
         for subdomain in subdomains[:]:
-            if subdomain in pylons_globals.reserved_subdomains:
+            if subdomain in g.reserved_subdomains:
                 continue
 
             extension = extension_subdomains.get(subdomain)
@@ -181,9 +180,9 @@ class DomainMiddleware(object):
         # if there was a subreddit subdomain, redirect
         if sr_redirect and environ.get("FULLPATH"):
             resp = Response()
-            if not subdomains and pylons_globals.domain_prefix:
-                subdomains.append(pylons_globals.domain_prefix)
-            subdomains.append(pylons_globals.domain)
+            if not subdomains and g.domain_prefix:
+                subdomains.append(g.domain_prefix)
+            subdomains.append(g.domain)
             redir = "%s/r/%s/%s" % ('.'.join(subdomains),
                                     sr_redirect, environ['FULLPATH'])
             redir = "http://" + redir.replace('//', '/')
@@ -234,7 +233,7 @@ class ExtensionMiddleware(object):
 
     def __call__(self, environ, start_response):
         path = environ['PATH_INFO']
-        _, _, path_ext = path.rpartition('.')
+        unused, unused, path_ext = path.rpartition('.')
         domain_ext = environ.get('reddit-domain-extension')
 
         ext = None
@@ -334,17 +333,17 @@ class LimitUploadSize(object):
                 resp = Response()
                 resp.status_code = 413
                 resp.content = ("<html>"
-                             "<head>"
-                             "<script type='text/javascript'>"
-                             "parent.completedUploadImage('failed',"
-                             "''," 
-                             "''," 
-                             "[['BAD_CSS_NAME', ''], ['IMAGE_ERROR', '",
-                             error_msg,"']],"
-                             "'image-upload');"
-                             "</script></head><body>"
-                             "you shouldn\'t be here"
-                             "</body></html>")
+                                "<head>"
+                                "<script type='text/javascript'>"
+                                "parent.completedUploadImage('failed',"
+                                "''," 
+                                "''," 
+                                "[['BAD_CSS_NAME', ''], ['IMAGE_ERROR', '",
+                                error_msg,"']],"
+                                "'image-upload');"
+                                "</script></head><body>"
+                                "you shouldn\'t be here"
+                                "</body></html>")
                 return resp(environ, start_response)
 
         return self.app(environ, start_response)
@@ -422,7 +421,7 @@ def make_app(global_conf, full_stack=True, **app_conf):
 
     # Configure the Pylons environment
     load_environment(global_conf, app_conf)
-    pylons_global = config['pylons.g']
+    g = config['pylons.g']
 
     # The Pylons WSGI app
     app = PylonsApp(base_wsgi_app=RedditApp)
@@ -434,7 +433,7 @@ def make_app(global_conf, full_stack=True, **app_conf):
 
     app = LimitUploadSize(app)
 
-    profile_directory = pylons_global.config.get('profile_directory')
+    profile_directory = g.config.get('profile_directory')
     if profile_directory:
         app = ProfilingMiddleware(app, profile_directory)
 
@@ -460,7 +459,7 @@ def make_app(global_conf, full_stack=True, **app_conf):
     static_app = StaticURLParser(config['pylons.paths']['static_files'])
     static_cascade = [static_app, javascripts_app, app]
 
-    if config['r2.plugins'] and pylons_global.config['uncompressedJS']:
+    if config['r2.plugins'] and g.config['uncompressedJS']:
         plugin_static_apps = Cascade([StaticURLParser(plugin.static_dir)
                                       for plugin in config['r2.plugins']])
         static_cascade.insert(0, plugin_static_apps)
@@ -469,13 +468,10 @@ def make_app(global_conf, full_stack=True, **app_conf):
     #add the rewrite rules
     app = RewriteMiddleware(app)
 
-    if (not pylons_global.config['uncompressedJS'] and 
-        pylons_global.config['debug']):
-        static_path = pylons_global.config['static_path']
-        static_domain = pylons_global.config['static_domain']
+    if not g.config['uncompressedJS'] and g.config['debug']:
         static_fallback = StaticTestMiddleware(static_app,
-                                               static_path,
-                                               static_domain)
+                                               g.config['static_path'],
+                                               g.config['static_domain'])
         app = Cascade([static_fallback, app])
 
     return app

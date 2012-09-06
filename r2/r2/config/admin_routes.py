@@ -20,8 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-def add(mc):
-    mc('/admin/', controller='awards')
+def add(mapper_connect):
+    mapper_connect('/admin/', controller='awards')
 
 try:
     from r2admin.config.routing import *

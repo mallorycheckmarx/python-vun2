@@ -29,270 +29,268 @@ from pylons import config
 
 def make_map():
     mapper = Mapper()
-    mc = mapper.connect
+    connect = mapper.connect
 
     for plugin in config['r2.plugins']:
-        plugin.add_routes(mc)
+        plugin.add_routes(connect)
 
-    admin_routes.add(mc)
+    admin_routes.add(connect)
 
-    mc('/login', controller='forms', action='login')
-    mc('/register', controller='forms', action='register')
-    mc('/logout', controller='forms', action='logout')
-    mc('/verify', controller='forms', action='verify')
-    mc('/adminon', controller='forms', action='adminon')
-    mc('/adminoff', controller='forms', action='adminoff')
-    mc('/submit', controller='front', action='submit')
-    mc('/validuser', controller='forms', action='validuser')
+    connect('/login', controller='forms', action='login')
+    connect('/register', controller='forms', action='register')
+    connect('/logout', controller='forms', action='logout')
+    connect('/verify', controller='forms', action='verify')
+    connect('/adminon', controller='forms', action='adminon')
+    connect('/adminoff', controller='forms', action='adminoff')
+    connect('/submit', controller='front', action='submit')
+    connect('/validuser', controller='forms', action='validuser')
 
-    mc('/over18', controller='post', action='over18')
+    connect('/over18', controller='post', action='over18')
 
-    mc('/search', controller='front', action='search')
+    connect('/search', controller='front', action='search')
 
-    mc('/rules', controller='front', action='rules')
-    mc('/sup', controller='front', action='sup')
-    mc('/traffic', controller='front', action='site_traffic')
-    mc('/traffic/languages/:langcode', controller='front', 
-       action='lang_traffic', langcode='')
-    mc('/traffic/adverts/:code', controller='front', action='advert_traffic', 
-       code='')
-    mc('/account-activity', controller='front', action='account_activity')
+    connect('/rules', controller='front', action='rules')
+    connect('/sup', controller='front', action='sup')
+    connect('/traffic', controller='front', action='site_traffic')
+    connect('/traffic/languages/:langcode', controller='front', 
+            action='lang_traffic', langcode='')
+    connect('/traffic/adverts/:code', controller='front', 
+            action='advert_traffic', code='')
+    connect('/account-activity', controller='front', action='account_activity')
 
-    mc('/about/message/:where', controller='message', action='listing')
-    mc('/about/log', controller='front', action='moderationlog')
-    mc('/about', controller='front', action='about')
-    mc('/about/:location', controller='front', action='editreddit',
-       location='about')
+    connect('/about/message/:where', controller='message', action='listing')
+    connect('/about/log', controller='front', action='moderationlog')
+    connect('/about', controller='front', action='about')
+    connect('/about/:location', controller='front', action='editreddit',
+            location='about')
 
-    mc('/reddits/create', controller='front', action='newreddit')
-    mc('/reddits/search', controller='front', action='search_reddits')
-    mc('/reddits/login', controller='forms', action='login')
-    mc('/reddits/:where', controller='reddits', action='listing',
-       where='popular', requirements=dict(where="popular|new|banned"))
+    connect('/reddits/create', controller='front', action='newreddit')
+    connect('/reddits/search', controller='front', action='search_reddits')
+    connect('/reddits/login', controller='forms', action='login')
+    connect('/reddits/:where', controller='reddits', action='listing',
+            where='popular', requirements=dict(where="popular|new|banned"))
 
-    mc('/reddits/mine/:where', controller='myreddits', action='listing',
-       where='subscriber',
-       requirements=dict(where='subscriber|contributor|moderator'))
+    connect('/reddits/mine/:where', controller='myreddits', action='listing',
+            where='subscriber',
+            requirements=dict(where='subscriber|contributor|moderator'))
 
-    mc('/buttons', controller='buttons', action='button_demo_page')
+    connect('/buttons', controller='buttons', action='button_demo_page')
 
     #/button.js and buttonlite.js - the embeds
-    mc('/button', controller='buttons', action='button_embed')
-    mc('/buttonlite', controller='buttons', action='button_lite')
+    connect('/button', controller='buttons', action='button_embed')
+    connect('/buttonlite', controller='buttons', action='button_lite')
 
-    mc('/widget', controller='buttons', action='widget_demo_page')
-    mc('/bookmarklets', controller='buttons', action='bookmarklets')
+    connect('/widget', controller='buttons', action='widget_demo_page')
+    connect('/bookmarklets', controller='buttons', action='bookmarklets')
 
-    mc('/awards', controller='front', action='awards')
+    connect('/awards', controller='front', action='awards')
 
-    mc('/i18n', controller='redirect', action='redirect',
-       dest='http://www.reddit.com/r/i18n')
-    mc('/feedback', controller='feedback', action='feedback')
-    mc('/ad_inq', controller='feedback', action='ad_inq')
+    connect('/i18n', controller='redirect', action='redirect',
+            dest='http://www.reddit.com/r/i18n')
+    connect('/feedback', controller='feedback', action='feedback')
+    connect('/ad_inq', controller='feedback', action='ad_inq')
 
-    mc('/admin/usage', controller='usage')
+    connect('/admin/usage', controller='usage')
 
     # Used for editing ads
-    mc('/admin/ads', controller='ads')
-    mc('/admin/ads/:adcn/:action', controller='ads',
-       requirements=dict(action="assign|srs"))
+    connect('/admin/ads', controller='ads')
+    connect('/admin/ads/:adcn/:action', controller='ads',
+            requirements=dict(action="assign|srs"))
 
-    mc('/admin/awards', controller='awards')
-    mc('/admin/awards/:awardcn/:action', controller='awards',
-       requirements=dict(action="give|winners"))
+    connect('/admin/awards', controller='awards')
+    connect('/admin/awards/:awardcn/:action', controller='awards',
+            requirements=dict(action="give|winners"))
 
-    mc('/admin/errors', controller='errorlog')
+    connect('/admin/errors', controller='errorlog')
 
-    mc('/admin/:action', controller='admin')
+    connect('/admin/:action', controller='admin')
 
-    mc('/user/:username/about', controller='user', action='about',
-       where='overview')
-    mc('/user/:username/:where', controller='user', action='listing',
-       where='overview')
-    mc('/u/:username', controller='redirect', action='user_redirect')
+    connect('/user/:username/about', controller='user', action='about',
+            where='overview')
+    connect('/user/:username/:where', controller='user', action='listing',
+            where='overview')
+    connect('/u/:username', controller='redirect', action='user_redirect')
 
     # preserve timereddit URLs from 4/1/2012
-    mc('/t/:timereddit', controller='redirect', action='timereddit_redirect')
-    mc('/t/:timereddit/*rest', controller='redirect',
-       action='timereddit_redirect')
+    connect('/t/:timereddit', controller='redirect',
+            action='timereddit_redirect')
+    connect('/t/:timereddit/*rest', controller='redirect',
+            action='timereddit_redirect')
 
-    mc('/prefs/:location', controller='forms', action='prefs',
-       location='options')
+    connect('/prefs/:location', controller='forms', action='prefs',
+            location='options')
 
-    mc('/depmod', controller='forms', action='depmod')
+    connect('/depmod', controller='forms', action='depmod')
 
-    mc('/info/0:article/*rest', controller='front',
-       action='oldinfo', dest='comments', type='ancient')
-    mc('/info/:article/:dest/:comment', controller='front',
-       action='oldinfo', type='old', dest='comments', comment=None)
+    connect('/info/0:article/*rest', controller='front',
+            action='oldinfo', dest='comments', type='ancient')
+    connect('/info/:article/:dest/:comment', controller='front',
+            action='oldinfo', type='old', dest='comments', comment=None)
 
-    mc('/related/:article/:title', controller='front',
-       action='related', title=None)
-    mc('/details/:article/:title', controller='front',
-       action='details', title=None)
-    mc('/traffic/:article/:title', controller='front',
-       action='traffic', title=None)
-    mc('/comments/:article/:title/:comment', controller='front',
-       action='comments', title=None, comment=None)
-    mc('/duplicates/:article/:title', controller='front',
-       action='duplicates', title=None)
+    connect('/related/:article/:title', controller='front',
+            action='related', title=None)
+    connect('/details/:article/:title', controller='front',
+            action='details', title=None)
+    connect('/traffic/:article/:title', controller='front',
+            action='traffic', title=None)
+    connect('/comments/:article/:title/:comment', controller='front',
+            action='comments', title=None, comment=None)
+    connect('/duplicates/:article/:title', controller='front',
+            action='duplicates', title=None)
 
-    mc('/mail/optout', controller='forms', action='optout')
-    mc('/mail/optin', controller='forms', action='optin')
-    mc('/stylesheet', controller='front', action='stylesheet')
-    mc('/frame', controller='front', action='frame')
-    mc('/framebuster/:blah', controller='front', action='framebuster')
-    mc('/framebuster/:what/:blah',
-       controller='front', action='framebuster')
+    connect('/mail/optout', controller='forms', action='optout')
+    connect('/mail/optin', controller='forms', action='optin')
+    connect('/stylesheet', controller='front', action='stylesheet')
+    connect('/frame', controller='front', action='frame')
+    connect('/framebuster/:blah', controller='front', action='framebuster')
+    connect('/framebuster/:what/:blah',
+            controller='front', action='framebuster')
 
-    mc('/promoted/edit_promo/:link',
-       controller='promote', action='edit_promo')
-    mc('/promoted/pay/:link/:indx',
-       controller='promote', action='pay')
-    mc('/promoted/graph',
-       controller='promote', action='graph')
-    mc('/promoted/:action', controller='promote',
-       requirements=dict(action="edit_promo|new_promo|roadblock"))
-    mc('/promoted/:sort', controller='promote', action="listing")
-    mc('/promoted/', controller='promoted', action="listing", sort="")
+    connect('/promoted/edit_promo/:link',
+            controller='promote', action='edit_promo')
+    connect('/promoted/pay/:link/:indx',
+            controller='promote', action='pay')
+    connect('/promoted/graph',
+            controller='promote', action='graph')
+    connect('/promoted/:action', controller='promote',
+            requirements=dict(action="edit_promo|new_promo|roadblock"))
+    connect('/promoted/:sort', controller='promote', action="listing")
+    connect('/promoted/', controller='promoted', action="listing", sort="")
 
-    mc('/health', controller='health', action='health')
+    connect('/health', controller='health', action='health')
 
-    mc('/', controller='hot', action='listing')
+    connect('/', controller='hot', action='listing')
 
     listing_controllers = "hot|new|randomrising|comments"
 
-    mc('/:controller', action='listing',
-       requirements=dict(controller=listing_controllers))
-    mc('/saved', controller='user', action='saved_redirect')
+    connect('/:controller', action='listing',
+            requirements=dict(controller=listing_controllers))
+    connect('/saved', controller='user', action='saved_redirect')
 
-    mc('/by_id/:names', controller='byId', action='listing')
+    connect('/by_id/:names', controller='byId', action='listing')
 
-    mc('/:sort', controller='browse', sort='top', action='listing',
-       requirements=dict(sort='top|controversial'))
+    connect('/:sort', controller='browse', sort='top', action='listing',
+            requirements=dict(sort='top|controversial'))
 
-    mc('/message/compose', controller='message', action='compose')
-    mc('/message/messages/:mid', controller='message', action='listing',
-       where="messages")
-    mc('/message/:where', controller='message', action='listing')
-    mc('/message/moderator/:subwhere', controller='message', action='listing',
-       where='moderator')
+    connect('/message/compose', controller='message', action='compose')
+    connect('/message/messages/:mid', controller='message', action='listing',
+            where="messages")
+    connect('/message/:where', controller='message', action='listing')
+    connect('/message/moderator/:subwhere', controller='message',
+            action='listing', where='moderator')
 
-    mc('/thanks', controller='forms', action="thanks", secret='')
-    mc('/thanks/:secret', controller='forms', action="thanks")
+    connect('/thanks', controller='forms', action="thanks", secret='')
+    connect('/thanks/:secret', controller='forms', action="thanks")
 
-    mc('/gold', controller='forms', action="gold")
+    connect('/gold', controller='forms', action="gold")
 
-    mc('/password', controller='forms', action="password")
-    mc('/:action', controller='front',
-       requirements=dict(action="random|framebuster|selfserviceoatmeal"))
-    mc('/:action', controller='embed',
-       requirements=dict(action="help|blog|faq"))
-    mc('/help/*anything', controller='embed', action='help')
+    connect('/password', controller='forms', action="password")
+    connect('/:action', controller='front',
+            requirements=dict(action="random|framebuster|selfserviceoatmeal"))
+    connect('/:action', controller='embed',
+            requirements=dict(action="help|blog|faq"))
+    connect('/help/*anything', controller='embed', action='help')
 
-    mc('/goto', controller='toolbar', action='goto')
-    mc('/tb/:id', controller='toolbar', action='tb')
-    mc('/toolbar/:action', controller='toolbar',
-       requirements=dict(action="toolbar|inner|login"))
-    mc('/toolbar/comments/:id', controller='toolbar', action='comments')
+    connect('/goto', controller='toolbar', action='goto')
+    connect('/tb/:id', controller='toolbar', action='tb')
+    connect('/toolbar/:action', controller='toolbar',
+            requirements=dict(action="toolbar|inner|login"))
+    connect('/toolbar/comments/:id', controller='toolbar', action='comments')
 
-    mc('/c/:comment_id', controller='front', action='comment_by_id')
+    connect('/c/:comment_id', controller='front', action='comment_by_id')
 
-    mc('/s/*rest', controller='toolbar', action='s')
+    connect('/s/*rest', controller='toolbar', action='s')
     # additional toolbar-related rules just above the catchall
 
-    mc('/d/:what', controller='api', action='bookmarklet')
+    connect('/d/:what', controller='api', action='bookmarklet')
 
-    mc('/resetpassword/:key', controller='forms',
-       action='resetpassword')
-    mc('/verification/:key', controller='forms',
-       action='verify_email')
-    mc('/resetpassword', controller='forms',
-       action='resetpassword')
+    connect('/resetpassword/:key', controller='forms', action='resetpassword')
+    connect('/verification/:key', controller='forms', action='verify_email')
+    connect('/resetpassword', controller='forms', action='resetpassword')
 
-    mc('/post/:action/:url_user', controller='post',
-       requirements=dict(action="login|reg"))
-    mc('/post/:action', controller='post',
-       requirements=dict(action="options|over18|unlogged_options|optout"
-                         "|optin|login|reg"))
+    connect('/post/:action/:url_user', controller='post',
+            requirements=dict(action="login|reg"))
+    connect('/post/:action', controller='post',
+            requirements=dict(action="options|over18|unlogged_options|optout"
+                              "|optin|login|reg"))
 
-    mc('/api', controller='redirect', action='redirect', dest='/dev/api')
-    mc('/api/distinguish/:how', controller='api', action="distinguish")
+    connect('/api', controller='redirect', action='redirect', dest='/dev/api')
+    connect('/api/distinguish/:how', controller='api', action="distinguish")
     # wherever this is, google has to agree.
-    mc('/api/gcheckout', controller='ipn', action='gcheckout')
-    mc('/api/spendcreddits', controller='ipn', action="spendcreddits")
-    mc('/api/ipn/:secret', controller='ipn', action='ipn')
-    mc('/ipn/:secret', controller='ipn', action='ipn')
-    mc('/api/:action/:url_user', controller='api',
-       requirements=dict(action="login|register"))
-    mc('/api/gadget/click/:ids', controller='api', action='gadget',
+    connect('/api/gcheckout', controller='ipn', action='gcheckout')
+    connect('/api/spendcreddits', controller='ipn', action="spendcreddits")
+    connect('/api/ipn/:secret', controller='ipn', action='ipn')
+    connect('/ipn/:secret', controller='ipn', action='ipn')
+    connect('/api/:action/:url_user', controller='api',
+            requirements=dict(action="login|register"))
+    connect('/api/gadget/click/:ids', controller='api', action='gadget',
        type='click')
-    mc('/api/gadget/:type', controller='api', action='gadget')
-    mc('/api/:action', controller='promote',
+    connect('/api/gadget/:type', controller='api', action='gadget')
+    connect('/api/:action', controller='promote',
        requirements=dict(action=("promote|unpromote|edit_promo|link_thumb|"
                                  "freebie|promote_note|update_pay|refund|"
                                  "traffic_viewer|rm_traffic_viewer|"
                                  "edit_campaign|delete_campaign|meta_promo|"
                                  "add_roadblock|rm_roadblock")))
-    mc('/api/:action', controller='apiminimal',
-       requirements=dict(action="new_captcha"))
-    mc('/api/:action', controller='api')
+    connect('/api/:action', controller='apiminimal',
+            requirements=dict(action="new_captcha"))
+    connect('/api/:action', controller='api')
 
-    mc("/api/v1/:action", controller="oauth2frontend",
-       requirements=dict(action="authorize"))
-    mc("/api/v1/:action", controller="oauth2access",
-       requirements=dict(action="access_token"))
-    mc("/api/v1/:action", controller="apiv1")
+    connect("/api/v1/:action", controller="oauth2frontend",
+            requirements=dict(action="authorize"))
+    connect("/api/v1/:action", controller="oauth2access",
+            requirements=dict(action="access_token"))
+    connect("/api/v1/:action", controller="apiv1")
 
-    mc('/dev', controller='redirect', action='redirect', dest='/dev/api')
-    mc('/dev/api', controller='apidocs', action='docs')
+    connect('/dev', controller='redirect', action='redirect', dest='/dev/api')
+    connect('/dev/api', controller='apidocs', action='docs')
 
-    mc("/button_info", controller="api", action="info", limit=1)
+    connect("/button_info", controller="api", action="info", limit=1)
 
-    mc('/captcha/:iden', controller='captcha', action='captchaimg')
+    connect('/captcha/:iden', controller='captcha', action='captchaimg')
 
-    mc('/mediaembed/:link', controller="mediaembed", action="mediaembed")
+    connect('/mediaembed/:link', controller="mediaembed", action="mediaembed")
 
-    mc('/doquery', controller='query', action='doquery')
+    connect('/doquery', controller='query', action='doquery')
 
-    mc('/store', controller='redirect', action='redirect',
+    connect('/store', controller='redirect', action='redirect',
        dest='http://store.reddit.com/index.html')
 
-    mc('/code', controller='redirect', action='redirect',
-       dest='http://github.com/reddit/')
+    connect('/code', controller='redirect', action='redirect',
+            dest='http://github.com/reddit/')
 
-    mc('/socialite', controller='redirect', action='redirect',
-       dest='https://addons.mozilla.org/firefox/addon/socialite/')
+    connect('/socialite', controller='redirect', action='redirect',
+            dest='https://addons.mozilla.org/firefox/addon/socialite/')
 
-    mc('/mobile', controller='redirect', action='redirect',
-       dest='http://m.reddit.com/')
+    connect('/mobile', controller='redirect', action='redirect',
+            dest='http://m.reddit.com/')
 
-    mc('/authorize_embed', controller='front', action='authorize_embed')
+    connect('/authorize_embed', controller='front', action='authorize_embed')
 
     # Used for showing ads
-    mc("/ads/", controller="ad", action="ad")
-    mc("/ads/r/:reddit_name/:keyword", controller="ad", action="ad",
-       keyword=None)
-    mc("/ads/:codename", controller="ad", action="ad_by_codename")
+    connect("/ads/", controller="ad", action="ad")
+    connect("/ads/r/:reddit_name/:keyword", controller="ad", action="ad",
+            keyword=None)
+    connect("/ads/:codename", controller="ad", action="ad_by_codename")
 
-    mc("/try", controller="forms", action="try_compact")
+    connect("/try", controller="forms", action="try_compact")
 
     # This route handles displaying the error page and
     # graphics used in the 404/500
     # error pages. It should likely stay at the top
     # to ensure that the error page is
     # displayed properly.
-    mc('/error/document/:id', controller='error', action="document")
+    connect('/error/document/:id', controller='error', action="document")
 
     # these should be near the buttom, because they should only kick
     # in if everything else fails. It's the attempted catch-all
     # reddit.com/http://... and reddit.com/34fr, but these redirect to
     # the less-guessy versions at /s/ and /tb/
-    mc('/:linkoid', controller='toolbar', action='linkoid',
-       requirements=dict(linkoid='[0-9a-z]{1,6}'))
-    mc('/:urloid', controller='toolbar', action='urloid',
-       requirements=dict(urloid=r'(\w+\.\w{2,}|https?).*'))
+    connect('/:linkoid', controller='toolbar', action='linkoid',
+            requirements=dict(linkoid='[0-9a-z]{1,6}'))
+    connect('/:urloid', controller='toolbar', action='urloid',
+            requirements=dict(urloid=r'(\w+\.\w{2,}|https?).*'))
 
-    mc("/*url", controller='front', action='catchall')
+    connect("/*url", controller='front', action='catchall')
 
     return mapper

@@ -37,11 +37,11 @@ from r2.lib.jsontemplates import (AccountJsonTemplate,
                                   StylesheetTemplate,
                                   SubredditJsonTemplate,
                                   SubredditSettingsTemplate,
-                                  UserListJsonTemplate,
-                                  UserTableItemJsonTemplate,
                                   TakedownJsonTemplate,
                                   TrafficJsonTemplate,
-                                  UserItemHTMLJsonTemplate
+                                  UserItemHTMLJsonTemplate,
+                                  UserListJsonTemplate,
+                                  UserTableItemJsonTemplate,
                                  )
 
 tpm = tp_manager.tp_manager()

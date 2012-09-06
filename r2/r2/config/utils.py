@@ -207,10 +207,12 @@ class Results():
             raise StopIteration
 
 def string2js(convert_str):
-    """adapted from http://svn.red-bean.com/bob/simplejson/trunk/simplejson/encoder.py"""
-    ESCAPE = re.compile(r'[\x00-\x19\\"\b\f\n\r\t]')
-    ESCAPE_ASCII = re.compile(r'([\\"/]|[^\ -~])')
-    ESCAPE_DCT = {
+    """adapted from 
+        http://svn.red-bean.com/bob/simplejson/trunk/simplejson/encoder.py
+    """
+    escape_regex = re.compile(r'[\x00-\x19\\"\b\f\n\r\t]')
+    #ESCAPE_ASCII = re.compile(r'([\\"/]|[^\ -~])')
+    escape_items = {
         # escape all forward slashes to prevent </script> attack
         '/': '\\/',
         '\\': '\\\\',
@@ -222,8 +224,8 @@ def string2js(convert_str):
         '\t': '\\t',
     }
     for i in range(20):
-        ESCAPE_DCT.setdefault(chr(i), '\\u%04x' % (i,))
+        escape_items.setdefault(chr(i), '\\u%04x' % (i,))
 
     def replace(match):
-        return ESCAPE_DCT[match.group(0)]
-    return '"' + ESCAPE.sub(replace, convert_str) + '"'
+        return escape_items[match.group(0)]
+    return '"' + escape_regex.sub(replace, convert_str) + '"'

@@ -54,12 +54,12 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
     config.init_app(global_conf, app_conf, package='r2',
                     template_engine='mako', paths=paths)
 
-    pylons_globals = config['pylons.g'] = Globals(global_conf, app_conf, paths)
+    g = config['pylons.g'] = Globals(global_conf, app_conf, paths)
     if setup_globals:
-        pylons_globals.setup()
-        r2.config.cache = pylons_globals.cache
-    pylons_globals.plugins.load_plugins()
-    config['r2.plugins'] = pylons_globals.plugins
+        g.setup()
+        r2.config.cache = g.cache
+    g.plugins.load_plugins()
+    config['r2.plugins'] = g.plugins
 
     config['pylons.h'] = r2.lib.helpers
     config['routes.map'] = routing.make_map()
@@ -69,7 +69,7 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
 
     # The following template options are passed to your template engines
     tmpl_options = config['buffet.template_options']
-    tmpl_options['mako.filesystem_checks'] = getattr(pylons_globals, 
+    tmpl_options['mako.filesystem_checks'] = getattr(g, 
                                                      'reload_templates', False)
     tmpl_options['mako.default_filters'] = ["mako_websafe"]
     tmpl_options['mako.imports'] = [
