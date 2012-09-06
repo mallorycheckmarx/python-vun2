@@ -39,7 +39,6 @@ from pylons.wsgiapp import PylonsApp, PylonsBaseWSGIApp
 from r2.config.environment import load_environment
 from r2.config.extensions import set_extension, extension_mapping
 from r2.config.rewrites import rewrites
-from r2.lib.strings import string_dict
 from r2.lib.utils import is_subdomain
 
 # hack in Paste support for HTTP 429 "Too Many Requests"
@@ -328,6 +327,9 @@ class LimitUploadSize(object):
                 return resp(environ, start_response)
 
             if cl_int > self.max_size:
+                #NOTE: local import only string_dict, Translations required 
+                #to import, which are not ready at pylons start, TODO?
+                from r2.lib.strings import string_dict
                 error_msg = (string_dict['css_validator_messages']['max_size'] %
                              dict(max_size=self.max_size/1024))
                 resp = Response()

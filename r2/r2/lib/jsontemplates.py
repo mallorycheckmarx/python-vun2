@@ -32,7 +32,7 @@ from r2.config.extensions import get_api_subtype
 from r2.lib.filters import spaceCompress, safemarkdown
 from r2.lib.scraper import get_media_embed
 from r2.lib.utils import to36, tup, iters
-from r2.lib.util.wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Templated
+from r2.lib.wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Templated
 from r2.models import Comment, Link, Subreddit, Message
 
 def make_typename(typ):
