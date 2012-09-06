@@ -158,7 +158,7 @@ $.handleResponse = handleResponse;
 
 var api_loc = '/api/';
 $.request = function(op, parameters, worker_in, block, type, 
-                     get_only, errorhandler, callback) {
+                     get_only, errorhandler) {
     /* 
        Uniquitous reddit AJAX poster.  Automatically addes
        handleResponse(action) worker to deal with the API result.  The
