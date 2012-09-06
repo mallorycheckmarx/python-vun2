@@ -246,20 +246,14 @@ class VWikiPageCreate(Validator):
         page = normalize_page(page)
         if c.is_wiki_mod and WikiPage.is_special(page):
             c.error = {'reason': 'PAGE_CREATED_ELSEWHERE'}
-            return False
-        if page.count('/') > MAX_SEPARATORS:
+        elif page.count('/') > MAX_SEPARATORS:
             c.error = {'reason': 'PAGE_NAME_MAX_SEPARATORS', 'max_separators': MAX_SEPERATORS}
-            return False
-        try:
-            if not len(page) > MAX_PAGE_NAME_LENGTH:
+        elif len(page) > MAX_PAGE_NAME_LENGTH:
+            c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
+        else:
+            try:
                 WikiPage.get(c.wiki_id, page)
-            else:
-                c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
-            return False
-        except tdb_cassandra.NotFound:
-            if c.user_is_admin:
-                return True
-            if not this_may_revise():
-                jsonAbort(403, 'MAY_NOT_CREATE')
-            else:
-                return True
+                c.error = {'reason': 'PAGE_EXISTS'}
+            except tdb_cassandra.NotFound:
+                pass
+        return this_may_revise()

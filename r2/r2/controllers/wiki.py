@@ -115,12 +115,15 @@ class WikiController(RedditController):
     @validate(may_create = VWikiPageCreate('page'))
     def GET_wiki_create(self, may_create, page, view=False):
         api = c.extension == 'json'
-        if c.error or api:
-            if api:
-                if c.error:
-                    self.handle_error(403, **c.error)
-                else:
-                    self.handle_error(404, 'PAGE_NOT_FOUND', may_create=may_create)
+        
+        if c.error and c.error['reason'] == 'PAGE_EXISTS':
+            return self.redirect(join_urls(c.wiki_base_url, page))
+        elif not may_create or api:
+            if may_create and c.error:
+                self.handle_error(403, **c.error)
+            else:
+                self.handle_error(404, 'PAGE_NOT_FOUND', may_create=may_create)
+        elif c.error:
             error = ''
             if c.error['reason'] == 'PAGE_NAME_LENGTH':
                 error = _("this wiki cannot handle page names of that magnitude!  please select a page name shorter than %d characters") % c.error['max_length']
@@ -129,13 +132,12 @@ class WikiController(RedditController):
             elif c.error['reason'] == 'PAGE_NAME_MAX_SEPERATORS':
                 error = _('a max of %d separators "/" are allowed in a wiki page name.') % c.error['max_separator']
             return BoringPage(_("Wiki error"), infotext=error).render()
-        if view:
+        elif view:
             return WikiNotFound().render()
-        if may_create:
+        elif may_create:
             WikiPage.create(c.wiki_id, page)
             url = join_urls(c.wiki_base_url, '/edit/', page)
             return self.redirect(url)
-        return self.GET_wikiPage(page=page)
     
     @validate(page=VWikiPageRevise('page', restricted=True))
     def GET_wiki_revise(self, page, message=None, **kw):
