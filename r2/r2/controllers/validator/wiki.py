@@ -176,14 +176,14 @@ class VWikiPage(Validator):
         if (not c.is_wiki_mod) and self.modonly:
             jsonabort(403, 'MOD_REQUIRED')
         
-        wp = self.ValidPage(page)
+        wp = self.validpage(page)
         
         # TODO: MAKE NOT REQUIRED
         c.page_obj = wp
         
         return wp
     
-    def ValidPage(self, page):
+    def validpage(self, page):
         try:
             wp = WikiPage.get(c.wiki_id, page)
             if self.restricted and wp.restricted:
@@ -203,7 +203,7 @@ class VWikiPage(Validator):
                 if not(c.is_wiki_mod and WikiPage.is_special(page)):
                     jsonabort(404, 'PAGE_NOT_FOUND', may_create=False)
     
-    def ValidVersion(self, version, pageid=None):
+    def validversion(self, version, pageid=None):
         if not version:
             return
         try:
@@ -219,7 +219,7 @@ class VWikiPageAndVersion(VWikiPage):
         wp = VWikiPage.run(self, page)
         validated = []
         for v in versions:
-            validated += [self.ValidVersion(v, wp._id) if v and wp else None]
+            validated += [self.validversion(v, wp._id) if v and wp else None]
         return tuple([wp] + validated)
 
 class VWikiPageRevise(VWikiPage):
@@ -230,7 +230,7 @@ class VWikiPageRevise(VWikiPage):
         if not this_may_revise(wp):
             jsonabort(403, 'MAY_NOT_REVISE')
         if previous:
-            prev = self.ValidVersion(previous, wp._id)
+            prev = self.validversion(previous, wp._id)
             return (wp, prev)
         return (wp, None)
 
