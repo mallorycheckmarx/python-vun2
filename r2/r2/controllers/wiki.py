@@ -247,7 +247,7 @@ class WikiApiController(WikiController):
             VRatelimit.ratelimit(rate_user = True, rate_ip = True, prefix = "rate_wiki_", seconds=EDIT_RATELIMIT_SECONDS)
         return json.dumps({})
     
-    @validate(page=VWikiPage('page'), user=VExistingUname('user'))
+    @validate(page=VWikiPage('page'), user=VExistingUname('username'))
     def POST_wiki_allow_editor(self, act, page, user):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
