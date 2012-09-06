@@ -228,7 +228,7 @@ class WikiController(RedditController):
                 c.wikidisabled = True
 
 class WikiApiController(WikiController):
-    @validate(VRatelimit(rate_user = True, rate_ip = True, prefix = "rate_wiki_"),
+    @validate(VRatelimit(rate_user=True, rate_ip=True, prefix="rate_wiki_"),
               pageandprevious = VWikiPageRevise(('page', 'previous'), restricted=True),
               content = VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
@@ -258,7 +258,7 @@ class WikiApiController(WikiController):
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         if not c.is_wiki_mod:
-            VRatelimit.ratelimit(rate_user = True, rate_ip = True, prefix = "rate_wiki_", seconds=EDIT_RATELIMIT_SECONDS)
+            VRatelimit.ratelimit(rate_user=True, rate_ip=True, prefix="rate_wiki_", seconds=EDIT_RATELIMIT_SECONDS)
         return json.dumps({})
     
     @validate(page=VWikiPage('page'), user=VExistingUname('username'))
