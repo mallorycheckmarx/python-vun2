@@ -20,29 +20,58 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing     import Thing, Relation, NotFound
-from r2.lib.db.operators import lower
-from r2.lib.db.userrel   import UserRel
-from r2.lib.db           import tdb_cassandra
-from r2.lib.memoize      import memoize
-from r2.lib.utils        import modhash, valid_hash, randstr, timefromnow
-from r2.lib.utils        import UrlParser
-from r2.lib.utils        import constant_time_compare
-from r2.lib.cache        import sgm
-from r2.lib import filters
-from r2.lib.log import log_text
-from r2.models.last_modified import LastModified
+import hashlib
+import hmac
+import time
+from datetime import datetime, timedelta
 
+import bcrypt
+from pycassa.system_manager import ASCII_TYPE
 from pylons import c, g, request
 from pylons.i18n import _
-import time
-import hashlib
-from copy import copy
-from datetime import datetime, timedelta
-import bcrypt
-import hmac
-import hashlib
-from pycassa.system_manager import ASCII_TYPE
+
+from r2.lib import filters
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.db.operators import lower
+from r2.lib.db.userrel import UserRel
+from r2.lib.log import log_text
+from r2.lib.memoize import memoize
+from r2.lib.template_helpers import static, add_sr
+from r2.lib.utils import (modhash,
+                          valid_hash,
+                          randstr,
+                          timefromnow,
+                          UrlParser,
+                          constant_time_compare
+                          )
+from r2.models import (Subreddit,
+                       OAuth2Client,
+                       LastModified,
+                       apply_updates,
+                       filter_quotas
+                       )
+
+__all__ = [
+           #Constants
+           #Classes
+           "Account",
+           "AccountsActiveBySR",
+           "DeletedUser",
+           "FakeAccount",
+           #Exceptions
+           "AccountExists",
+           #Functions
+           "change_password",
+           "make_feedurl",
+           "passhash",
+           "register",
+           "valid_admin_cookie",
+           "valid_feed",
+           "valid_login",
+           "valid_otp_cookie",
+           "valid_password",
+           ]
 
 
 COOKIE_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S'
@@ -214,7 +243,6 @@ class Account(Thing):
         return karmas
 
     def update_last_visit(self, current_time):
-        from admintools import apply_updates
 
         apply_updates(self)
 
@@ -380,13 +408,11 @@ class Account(Thing):
 
         # Remove OAuth2Client developer permissions.  This will delete any
         # clients for which this account is the sole developer.
-        from r2.models.token import OAuth2Client
         for client in OAuth2Client._by_developer(self):
             client.remove_developer(self)
 
     @property
     def subreddits(self):
-        from subreddit import Subreddit
         return Subreddit.user_subreddits(self)
 
     def recent_share_emails(self):
@@ -411,7 +437,6 @@ class Account(Thing):
         self.share = share
 
     def set_cup(self, cup_info):
-        from r2.lib.template_helpers import static
 
         if cup_info is None:
             return
@@ -464,7 +489,6 @@ class Account(Thing):
         g.hardcache.set(key, fnames, 86400 * 30)
 
     def quota_baskets(self, kind):
-        from r2.models.admintools import filter_quotas
         key = self.quota_key(kind)
         fnames = g.hardcache.get(key)
 
@@ -666,7 +690,6 @@ def valid_otp_cookie(cookie):
 
 def valid_feed(name, feedhash, path):
     if name and feedhash and path:
-        from r2.lib.template_helpers import add_sr
         path = add_sr(path)
         try:
             user = Account._by_name(name)

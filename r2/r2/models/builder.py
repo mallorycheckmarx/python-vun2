@@ -20,27 +20,52 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from account import *
-from link import *
-from vote import *
-from report import *
-from listing import Listing
-from pylons import g
-from pylons.i18n import _
-
-import subreddit
-
-from r2.lib.comment_tree import moderator_messages, sr_conversation, conversation
-from r2.lib.comment_tree import user_messages, subreddit_messages
-
-from r2.lib.wrapped import Wrapped
-from r2.lib import utils
-from r2.lib.db import operators, tdb_cassandra
-from r2.lib.filters import _force_unicode
+import time
 from copy import deepcopy
 
-import time
-from admintools import compute_votes, admintools, ip_span
+from pylons import g, c
+from pylons.i18n import _
+
+from r2.config.utils import tup
+from r2.models import (Account,
+                       Listing,
+                       Subreddit,
+                       compute_votes,
+                       admintools,
+                       ip_span,
+                       )
+from r2.models._builder import _CommentBuilder, _MessageBuilder
+from r2.lib.comment_tree import (moderator_messages,
+                                 sr_conversation, 
+                                 conversation,
+                                 user_messages,
+                                 subreddit_messages,
+                                 )
+from r2.lib.db import tdb_cassandra, queries
+from r2.lib.db.thing import Thing
+from r2.lib.filters import _force_unicode
+from r2.lib.template_helpers import add_attr
+from r2.lib.wrapped import Wrapped
+
+
+__all__ = [
+           #Constants
+           "MAX_RECURSION",
+           #Classes
+           "Builder",
+           "IDBuilder",
+           "ModeratorMessageBuilder",
+           "MultiredditMessageBuilder",
+           "QueryBuilder",
+           "SearchBuilder",
+           "SrMessageBuilder",
+           "TopCommentBuilder",
+           "UserMessageBuilder",
+           #Exceptions
+           #Functions
+           "empty_listing",
+           "make_wrapper",
+           ]
 
 EXTRA_FACTOR = 1.5
 MAX_RECURSION = 10
@@ -58,8 +83,6 @@ class Builder(object):
             return item.keep_item(item)
 
     def wrap_items(self, items):
-        from r2.lib.db import queries
-        from r2.lib.template_helpers import add_attr
         user = c.user if c.user_is_loggedin else None
 
         #get authors
@@ -361,7 +384,7 @@ class QueryBuilder(Builder):
 
             #no results, we're done
             if not new_items:
-                break;
+                break
 
             #if fewer results than we wanted, we're done
             elif self.num and len(new_items) < self.num - num_have:
@@ -543,7 +566,6 @@ def make_wrapper(parent_wrapper = Wrapped, **params):
         return w
     return wrapper_fn
 
-from _builder import _CommentBuilder, _MessageBuilder
 
 class CommentBuilder(_CommentBuilder):
     def item_iter(self, a):
@@ -594,6 +616,7 @@ class TopCommentBuilder(CommentBuilder):
     def get_items(self, num = 10):
         final = CommentBuilder.get_items(self, num = num)
         return [ cm for cm in final if not cm.deleted ]
+
 class SrMessageBuilder(MessageBuilder):
     def __init__(self, sr, **kw):
         self.sr = sr

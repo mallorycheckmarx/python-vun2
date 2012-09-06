@@ -20,11 +20,14 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from mako.filters import url_escape
+from pylons import g
+
+from r2.lib.db.operators import desc, lower
 from r2.lib.db.thing import Thing, Relation, NotFound
-from r2.lib.db.operators import asc, desc, lower
 from r2.lib.memoize import memoize
-from r2.models import Subreddit
-from pylons import c, g, request
+from r2.lib.template_helpers import get_domain
+from r2.models.subreddit import Subreddit
 
 class Ad (Thing):
     _defaults = dict(
@@ -69,8 +72,6 @@ class Ad (Thing):
         return "%s/ads/%s" % (g.ad_domain, self.codename)
 
     def submit_link(self):
-        from r2.lib.template_helpers import get_domain
-        from mako.filters import url_escape
 
         d = get_domain(subreddit=False)
         u = self.url()

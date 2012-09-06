@@ -20,21 +20,22 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.utils import tup, fetch_things2
-from r2.lib.filters import websafe
-from r2.lib.log import log_text
-from r2.models import Report, Account, Subreddit
+from copy import copy
+from datetime import datetime, timedelta
 
 from pylons import g
 
-from datetime import datetime, timedelta
-from copy import copy
+from r2.lib.db import queries
+from r2.lib.filters import websafe
+from r2.lib.utils import tup, fetch_things2
+from r2.lib.utils.trial_utils import trial_info
+from r2.models import Report, Account, Subreddit
+
 
 class AdminTools(object):
 
     def spam(self, things, auto=True, moderator_banned=False,
              banner=None, date=None, train_spam=True, **kw):
-        from r2.lib.db import queries
 
         all_things = tup(things)
         new_things = [x for x in all_things if not x._spam]
@@ -78,7 +79,6 @@ class AdminTools(object):
         queries.ban(all_things, filtered=auto)
 
     def unspam(self, things, unbanner=None, train_spam=True, insert=True):
-        from r2.lib.db import queries
 
         things = tup(things)
 
@@ -359,7 +359,6 @@ def ip_span(ip):
     return '<!-- %s -->' % ip
 
 def filter_quotas(unfiltered):
-    from r2.lib.utils.trial_utils import trial_info
 
     trials = trial_info(unfiltered)
 
@@ -424,6 +423,7 @@ def check_request(end_time):
     pass
 
 try:
+    #TODO It may be correct to import * here, but marking just to be sure 
     from r2admin.models.admintools import *
 except ImportError:
     pass

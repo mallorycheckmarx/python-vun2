@@ -39,3 +39,4 @@ from admintools import *
 from token import *
 from modaction import *
 from promo import *
+from last_modified import *
