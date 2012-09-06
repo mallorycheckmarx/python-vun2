@@ -101,7 +101,7 @@ class Account(Thing):
                      has_subscribed = False,
                      pref_media = 'subreddit',
                      share = {},
-                     wiki_override = False,
+                     wiki_override = True,
                      email = "",
                      email_verified = False,
                      ignorereports = False,
