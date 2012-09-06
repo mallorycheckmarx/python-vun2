@@ -22,25 +22,18 @@
 
 from os.path import normpath
 import datetime
-import json
 
-from pylons.controllers.util import abort, redirect_to
+from pylons.controllers.util import redirect_to
 from pylons import c, g, request
 
 from r2.models.wiki import WikiPage, WikiRevision
 from r2.controllers.validator import Validator
 from r2.lib.db import tdb_cassandra
+from r2.lib.base import jsonabort
 
 MAX_PAGE_NAME_LENGTH = g.wiki_max_page_name_length
 
 MAX_SEPARATORS = g.wiki_max_page_separators
-
-def jsonAbort(code, reason=None, **data):
-    data['code'] = code
-    data['reason'] = reason if reason else 'UNKNOWN_ERROR'
-    if c.render_style == 'api':
-        request.environ['usable_error_content'] = json.dumps(data)
-    abort(code)
 
 def this_may_revise(page=None):
     if not c.user_is_loggedin:
@@ -170,7 +163,7 @@ class VWikiPage(Validator):
         try:
             page = str(page)
         except UnicodeEncodeError:
-            jsonAbort(400, 'INVALID_PAGE_NAME')
+            jsonabort(400, 'INVALID_PAGE_NAME')
         
         if ' ' in page:
             new_name = page.replace(' ', '_')
@@ -181,7 +174,7 @@ class VWikiPage(Validator):
         
         c.page = page
         if (not c.is_wiki_mod) and self.modonly:
-            jsonAbort(403, 'MOD_REQUIRED')
+            jsonabort(403, 'MOD_REQUIRED')
         
         wp = self.ValidPage(page)
         
@@ -195,20 +188,20 @@ class VWikiPage(Validator):
             wp = WikiPage.get(c.wiki_id, page)
             if self.restricted and wp.restricted:
                 if not wp.special:
-                    jsonAbort(403, 'RESTRICTED_PAGE')
+                    jsonabort(403, 'RESTRICTED_PAGE')
             if not this_may_view(wp):
-                jsonAbort(403, 'MAY_NOT_VIEW')
+                jsonabort(403, 'MAY_NOT_VIEW')
             return wp
         except tdb_cassandra.NotFound:
             if self.required:
-                jsonAbort(404, 'PAGE_NOT_FOUND')
+                jsonabort(404, 'PAGE_NOT_FOUND')
             if not c.user_is_loggedin:
-                jsonAbort(403, 'LOGIN_REQUIRED')
+                jsonabort(403, 'LOGIN_REQUIRED')
             if c.user_is_admin:
                 return # admins may always create
             if WikiPage.is_restricted(page):
                 if not(c.is_wiki_mod and WikiPage.is_special(page)):
-                    jsonAbort(404, 'PAGE_NOT_FOUND', may_create=False)
+                    jsonabort(404, 'PAGE_NOT_FOUND', may_create=False)
     
     def ValidVersion(self, version, pageid=None):
         if not version:
@@ -216,10 +209,10 @@ class VWikiPage(Validator):
         try:
             r = WikiRevision.get(version, pageid)
             if r.is_hidden and not c.is_wiki_mod:
-                jsonAbort(403, 'HIDDEN_REVISION')
+                jsonabort(403, 'HIDDEN_REVISION')
             return r
         except (tdb_cassandra.NotFound, ValueError):
-            jsonAbort(404, 'INVALID_REVISION')
+            jsonabort(404, 'INVALID_REVISION')
 
 class VWikiPageAndVersion(VWikiPage):    
     def run(self, page, *versions):
@@ -233,9 +226,9 @@ class VWikiPageRevise(VWikiPage):
     def run(self, page, previous=None):
         wp = VWikiPage.run(self, page)
         if not wp:
-            jsonAbort(404, 'INVALID_PAGE')
+            jsonabort(404, 'INVALID_PAGE')
         if not this_may_revise(wp):
-            jsonAbort(403, 'MAY_NOT_REVISE')
+            jsonabort(403, 'MAY_NOT_REVISE')
         if previous:
             prev = self.ValidVersion(previous, wp._id)
             return (wp, prev)

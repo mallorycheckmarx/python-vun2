@@ -40,6 +40,7 @@ import re, hashlib
 from urllib import quote
 import urllib2
 import sys
+import json
 
 
 OPERATIONAL_EXCEPTIONS = (_pylibmc.MemcachedError,
@@ -63,7 +64,15 @@ def is_local_address(ip):
     # TODO: support the /20 and /24 private networks? make this configurable?
     return ip.startswith('10.')
 
-def abort(code_or_exception=None, detail="", headers=None, comment=None):
+def jsonabort(code, reason=None, **data):
+    body = None
+    if c.render_style == 'api':
+        data['code'] = code
+        data['reason'] = reason if reason else 'UNKNOWN_ERROR'
+        body = json.dumps(data)
+    abort(code, body=body)
+
+def abort(code_or_exception=None, detail="", headers=None, comment=None, body=None):
     """Raise an HTTPException and save it in environ for use by error pages."""
     # Pylons 0.9.6 makes it really hard to get your raised HTTPException,
     # so this helper implements it manually using a familiar syntax.
@@ -78,6 +87,8 @@ def abort(code_or_exception=None, detail="", headers=None, comment=None):
             exc_cls = httpexceptions.get_exception(code_or_exception)
         exc = exc_cls(detail, headers, comment)
     request.environ['r2.controller.exception'] = exc
+    if body:
+        request.environ['usable_error_content'] = body
     raise exc
 
 class BaseController(WSGIController):
