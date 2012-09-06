@@ -966,7 +966,8 @@ a.author { margin-right: 0.5em; }
     font-weight: bold;
 }
 
-.wikititle { 
+.wikititle {
+    margin-left: 15px;
     color: #666;
 }
 
@@ -1046,21 +1047,20 @@ a.author { margin-right: 0.5em; }
 }
 
 .pageactions {
+    display: inline-block;
     font-size: larger;
     margin-left: 25px;
-    border-radius: 7px;
-    background-color: white;
-    border: 1px solid grey;
-    padding-top: 5px;
-    padding-bottom: 5px;
-    
+    border-radius: 5px;
+    border: 1px solid #8D9CAA;
+    vertical-align: middle;
 }
 
 .wikiaction {
-    background-color: white;
-    padding-top: 5px;
-    padding-bottom: 5px;
-    border-radius: 5px;
+    display: inline-block;
+    margin: 2px;
+    padding-top: 2px;
+    padding-bottom: 3px;
+    border-radius: 3px;
 }
 
 .wikititle {
