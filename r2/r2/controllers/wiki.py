@@ -252,7 +252,7 @@ class WikiApiController(WikiController):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         if act == 'del':
-            page.remove_editor(c.user)
+            page.remove_editor(c.username)
         else:
             if not user:
                 self.handle_error(404, 'UNKOWN_USER')
