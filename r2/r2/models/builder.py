@@ -41,10 +41,9 @@ from r2.lib.comment_tree import (moderator_messages,
                                  user_messages,
                                  subreddit_messages,
                                  )
-from r2.lib.db import tdb_cassandra, queries
+from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import Thing
 from r2.lib.filters import _force_unicode
-from r2.lib.template_helpers import add_attr
 from r2.lib.wrapped import Wrapped
 
 
@@ -83,6 +82,8 @@ class Builder(object):
             return item.keep_item(item)
 
     def wrap_items(self, items):
+        from r2.lib.db import queries
+        from r2.lib.template_helpers import add_attr
         user = c.user if c.user_is_loggedin else None
 
         #get authors

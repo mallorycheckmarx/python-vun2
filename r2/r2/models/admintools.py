@@ -25,10 +25,8 @@ from datetime import datetime, timedelta
 
 from pylons import g
 
-from r2.lib.db import queries
 from r2.lib.filters import websafe
 from r2.lib.utils import tup, fetch_things2
-from r2.lib.utils.trial_utils import trial_info
 from r2.models import Report, Account, Subreddit
 
 
@@ -36,6 +34,7 @@ class AdminTools(object):
 
     def spam(self, things, auto=True, moderator_banned=False,
              banner=None, date=None, train_spam=True, **kw):
+        from r2.lib.db import queries
 
         all_things = tup(things)
         new_things = [x for x in all_things if not x._spam]
@@ -79,6 +78,7 @@ class AdminTools(object):
         queries.ban(all_things, filtered=auto)
 
     def unspam(self, things, unbanner=None, train_spam=True, insert=True):
+        from r2.lib.db import queries
 
         things = tup(things)
 
@@ -359,6 +359,7 @@ def ip_span(ip):
     return '<!-- %s -->' % ip
 
 def filter_quotas(unfiltered):
+    from r2.lib.utils.trial_utils import trial_info
 
     trials = trial_info(unfiltered)
 

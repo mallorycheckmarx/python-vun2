@@ -37,7 +37,6 @@ from r2.lib.db.operators import lower
 from r2.lib.db.userrel import UserRel
 from r2.lib.log import log_text
 from r2.lib.memoize import memoize
-from r2.lib.template_helpers import static, add_sr
 from r2.lib.utils import (modhash,
                           valid_hash,
                           randstr,
@@ -45,12 +44,7 @@ from r2.lib.utils import (modhash,
                           UrlParser,
                           constant_time_compare
                           )
-from r2.models import (Subreddit,
-                       OAuth2Client,
-                       LastModified,
-                       apply_updates,
-                       filter_quotas
-                       )
+from r2.models import Subreddit, LastModified
 
 __all__ = [
            #Constants
@@ -243,6 +237,7 @@ class Account(Thing):
         return karmas
 
     def update_last_visit(self, current_time):
+        from admintools import apply_updates
 
         apply_updates(self)
 
@@ -408,11 +403,13 @@ class Account(Thing):
 
         # Remove OAuth2Client developer permissions.  This will delete any
         # clients for which this account is the sole developer.
+        from r2.models import OAuth2Client
         for client in OAuth2Client._by_developer(self):
             client.remove_developer(self)
 
     @property
     def subreddits(self):
+        from r2.models import Subreddit
         return Subreddit.user_subreddits(self)
 
     def recent_share_emails(self):
@@ -437,6 +434,7 @@ class Account(Thing):
         self.share = share
 
     def set_cup(self, cup_info):
+        from r2.lib.template_helpers import static
 
         if cup_info is None:
             return
@@ -489,6 +487,7 @@ class Account(Thing):
         g.hardcache.set(key, fnames, 86400 * 30)
 
     def quota_baskets(self, kind):
+        from r2.models import filter_quotas
         key = self.quota_key(kind)
         fnames = g.hardcache.get(key)
 
@@ -690,6 +689,7 @@ def valid_otp_cookie(cookie):
 
 def valid_feed(name, feedhash, path):
     if name and feedhash and path:
+        from r2.lib.template_helpers import add_sr
         path = add_sr(path)
         try:
             user = Account._by_name(name)

@@ -26,7 +26,6 @@ from pylons import g
 from r2.lib.db.operators import desc, lower
 from r2.lib.db.thing import Thing, Relation, NotFound
 from r2.lib.memoize import memoize
-from r2.lib.template_helpers import get_domain
 from r2.models.subreddit import Subreddit
 
 class Ad (Thing):
@@ -72,6 +71,7 @@ class Ad (Thing):
         return "%s/ads/%s" % (g.ad_domain, self.codename)
 
     def submit_link(self):
+        from r2.lib.template_helpers import get_domain
 
         d = get_domain(subreddit=False)
         u = self.url()
