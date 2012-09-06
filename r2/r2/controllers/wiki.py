@@ -93,9 +93,12 @@ class WikiController(RedditController):
         else:
             message = _("viewing revision from %s") % timesince(version.date)
             if version2:
-                timestamp1 = _("%s ago") % timesince(version.date)
-                timestamp2 = _("%s ago") % timesince(version2.date)
-                message = _("comparing revisions from %s and %s") % (timestamp1, timestamp2)
+                t1 = timesince(version.date)
+                t2 = timesince(version2.date)
+                timestamp1 = _("%s ago") % t1
+                timestamp2 = _("%s ago") % t2
+                message = _("comparing revisions from %(date_1)s and %(date_2)s") \
+                          % {'date_1': t1, 'date_2': t2}
                 diffcontent = make_htmldiff(version.content, version2.content, timestamp1, timestamp2)
                 content = version2.content
             else:
