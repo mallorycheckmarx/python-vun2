@@ -199,13 +199,6 @@ class VWikiPage(Validator):
         except tdb_cassandra.NotFound:
             if self.required:
                 apiabort(404, 'PAGE_NOT_FOUND')
-            if not c.user_is_loggedin:
-                jsonabort(403, 'LOGIN_REQUIRED')
-            if c.user_is_admin:
-                return # admins may always create
-            if WikiPage.is_restricted(page):
-                if not(c.is_wiki_mod and WikiPage.is_special(page)):
-                    jsonabort(404, 'PAGE_NOT_FOUND', may_create=False)
             return None
     
     def validversion(self, version, pageid=None):
