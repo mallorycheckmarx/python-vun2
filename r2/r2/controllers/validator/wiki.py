@@ -234,7 +234,7 @@ class VWikiPageRevise(VWikiPage):
         wp = VWikiPage.run(self, page)
         if not wp:
             jsonAbort(404, 'INVALID_PAGE')
-        if not this_may_revise(page):
+        if not this_may_revise(wp):
             jsonAbort(403, 'MAY_NOT_REVISE')
         if previous:
             prev = self.ValidVersion(previous, wp._id)
