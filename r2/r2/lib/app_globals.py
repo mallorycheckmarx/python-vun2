@@ -139,7 +139,7 @@ class Globals(object):
             'disable_ratelimit',
             'amqp_logging',
             'read_only_mode',
-            'allow_wiki_editing',
+            'wiki_disabled',
             'heavy_load_mode',
             's3_media_direct',
             'disable_captcha',
