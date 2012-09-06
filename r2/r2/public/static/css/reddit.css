@@ -1022,22 +1022,6 @@ a.author { margin-right: 0.5em; }
     opacity: .5;
 }
 
-.wikiactions {
-    margin-left: 10px;
-    padding-top: 5px;
-    padding-bottom: 5px;
-    vertical-align: middle;
-}
-
-#wikiactions {
-    font-weight: normal;
-    font-size: x-small;
-}
-
-#wikiactions h1 {
-    font-weight: normal;
-}
-
 .wikiaction-revisions::before {
     background-image: url(../report.png); /* SPRITE */
 }
@@ -1068,11 +1052,6 @@ a.author { margin-right: 0.5em; }
     vertical-align: middle;
 }
 
-.wikiactions .wikiaction {
-    padding-right: 24px;
-    padding-left: 24px;
-}
-
 .pageactions .wikiaction {
     padding-right: 10px;
     padding-left: 10px;
@@ -1084,10 +1063,6 @@ a.author { margin-right: 0.5em; }
 
 .pageactions .wikiaction-current:hover {
     background-color: #5F99CF;
-}
-
-.wikiactions .wikiaction-current {
-    font-weight: bold;
 }
 
 .pageactions .wikiaction-current {
