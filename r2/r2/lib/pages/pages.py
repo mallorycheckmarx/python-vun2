@@ -192,7 +192,7 @@ class Reddit(Templated):
 
         self.toolbars = self.build_toolbars()
     
-    def wiki_actions_menu(self):
+    def wiki_actions_menu(self, moderator=False):
         buttons = []
         
         buttons.append(NamedButton("wikirecentrevisions", 
@@ -202,6 +202,9 @@ class Reddit(Templated):
         buttons.append(NamedButton("wikipageslist", 
                            css_class="wikiaction-pages",
                            dest="pages"))
+        if moderator:
+            buttons += [NamedButton('wikibanned', css_class = 'reddit-ban'),
+            NamedButton('wikicontributors', css_class = 'reddit-contributors')]
                            
         return SideContentBox(_('wiki tools'),
                       [NavMenu(buttons,
@@ -245,9 +248,7 @@ class Reddit(Templated):
 
         if is_single_subreddit:
             buttons += [NamedButton("banned", css_class="reddit-ban"),
-                        NamedButton("flair", css_class="reddit-flair"),
-                        NamedButton('wikibanned', css_class = 'reddit-ban'),
-                        NamedButton('wikicontributors', css_class = 'reddit-contributors')]
+                        NamedButton("flair", css_class="reddit-flair")]
 
         buttons += [NamedButton("log", css_class="reddit-moderationlog"),
                     NamedButton("unmoderated", css_class="reddit-unmoderated")]
@@ -294,10 +295,11 @@ class Reddit(Templated):
         # don't show the subreddit info bar on cnames unless the option is set
         if not isinstance(c.site, FakeSubreddit) and (not c.cname or c.site.show_cname_sidebar):
             ps.append(SubredditInfoBar())
+            moderator = c.user_is_loggedin and (c.user_is_admin or 
+                                          c.site.is_moderator(c.user))
             if c.show_wiki_actions:
-                ps.append(self.wiki_actions_menu())
-            if c.user_is_loggedin and (c.user_is_admin or
-                                       c.site.is_moderator(c.user)):
+                ps.append(self.wiki_actions_menu(moderator=moderator))
+            if moderator:
                 ps.append(self.sr_admin_menu())
             if (c.user.pref_show_adbox or not c.user.gold) and not g.disable_ads:
                 ps.append(Ads())
