@@ -32,7 +32,7 @@ def get_api_subtype():
     if is_api() and c.render_style.startswith('api-'):
         return c.render_style[4:]
 
-EXTENSION_MAPPING = {
+extension_mapping = {
     "rss": ("xml", "text/xml; charset=UTF-8"),
     "xml": ("xml", "text/xml; charset=UTF-8"),
     "js": ("js", "text/javascript; charset=UTF-8"),
@@ -54,4 +54,4 @@ API_TYPES = ('api', 'json')
 
 def set_extension(environ, ext):
     environ["extension"] = ext
-    environ["render_style"], environ["content_type"] = EXTENSION_MAPPING[ext]
+    environ["render_style"], environ["content_type"] = extension_mapping[ext]
