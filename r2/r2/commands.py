@@ -20,24 +20,21 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import paste.deploy.config
+import os
+import sys
+
 import paste.fixture
+import paste.deploy.config
 from paste.registry import RegistryManager
 from paste.script import command
 from paste.deploy import appconfig        
-from r2.config.environment import load_environment
-from paste.script.pluginlib import find_egg_info_dir
 from pylons.wsgiapp import PylonsApp
 
-#from pylons.commands import ShellCommand, ControllerCommand, \
-#     RestControllerCommand
+from r2.config.environment import load_environment
 
-import os, sys
-#
-# commands that will be available by running paste with this app
-#
 
 class RunCommand(command.Command):
+    """commands that will be available by running paste with this app"""
     max_args = 2
     min_args = 1
 

@@ -21,15 +21,19 @@
 ###############################################################################
 
 import calendar
+import time
 
-from utils import to36, tup, iters
-from wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Templated
+import pytz
 from mako.template import Template
-from r2.config.extensions import get_api_subtype
-from r2.lib.filters import spaceCompress, safemarkdown
-import time, pytz
 from pylons import c, g
 from pylons.i18n import _
+
+from r2.config.extensions import get_api_subtype
+from r2.lib.filters import spaceCompress, safemarkdown
+from r2.lib.scraper import get_media_embed
+from r2.lib.utils import to36, tup, iters
+from r2.lib.wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Templated
+from r2.models import Comment, Link, Subreddit, Message
 
 def make_typename(typ):
     return 't%s' % to36(typ._type_id)
@@ -236,7 +240,6 @@ class AccountJsonTemplate(IdentityJsonTemplate):
                                                   )
 
     def thing_attr(self, thing, attr):
-        from r2.models import Subreddit
         if attr == "has_mail":
             if c.user_is_loggedin and thing._id == c.user._id:
                 return bool(c.have_messages)
@@ -293,7 +296,6 @@ class LinkJsonTemplate(ThingJsonTemplate):
                                                 )
 
     def thing_attr(self, thing, attr):
-        from r2.lib.scraper import get_media_embed
         if attr == "media_embed":
            if (thing.media_object and
                not isinstance(thing.media_object, basestring)):
@@ -356,7 +358,6 @@ class CommentJsonTemplate(ThingJsonTemplate):
                                                 )
 
     def thing_attr(self, thing, attr):
-        from r2.models import Comment, Link, Subreddit
         if attr == 'link_id':
             return make_fullname(Link, thing.link_id)
         elif attr == "editted" and not isinstance(thing.editted, bool):
@@ -376,7 +377,6 @@ class CommentJsonTemplate(ThingJsonTemplate):
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def kind(self, wrapped):
-        from r2.models import Comment
         return make_typename(Comment)
 
     def raw_data(self, thing):
@@ -428,7 +428,6 @@ class MessageJsonTemplate(ThingJsonTemplate):
                                                 first_message= "first_message")
 
     def thing_attr(self, thing, attr):
-        from r2.models import Message
         if attr == "was_comment":
             return thing.was_comment
         elif attr == "context":
@@ -453,7 +452,6 @@ class MessageJsonTemplate(ThingJsonTemplate):
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def rendered_data(self, wrapped):
-        from r2.models import Message
         parent_id = wrapped.parent_id
         if parent_id:
             parent_id = make_fullname(Message, parent_id)

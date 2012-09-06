@@ -21,14 +21,35 @@
 ###############################################################################
 
 from r2.lib.manager import tp_manager
-from r2.lib.jsontemplates import *
+from r2.lib.jsontemplates import (AccountJsonTemplate,
+                                  CommentJsonTemplate,
+                                  FlairCsvJsonTemplate,
+                                  FlairListJsonTemplate,
+                                  LinkJsonTemplate,
+                                  ListingJsonTemplate,
+                                  MessageJsonTemplate,
+                                  MoreCommentJsonTemplate,
+                                  NullJsonTemplate,
+                                  OrganicListingJsonTemplate,
+                                  PanestackJsonTemplate,
+                                  PromotedLinkJsonTemplate,
+                                  RedditJsonTemplate,
+                                  StylesheetTemplate,
+                                  SubredditJsonTemplate,
+                                  SubredditSettingsTemplate,
+                                  TakedownJsonTemplate,
+                                  TrafficJsonTemplate,
+                                  UserItemHTMLJsonTemplate,
+                                  UserListJsonTemplate,
+                                  UserTableItemJsonTemplate,
+                                 )
 
 tpm = tp_manager.tp_manager()
 
-def api(type, cls):
-    tpm.add_handler(type, 'api', cls())
-    tpm.add_handler(type, 'api-html', cls())
-    tpm.add_handler(type, 'api-compact', cls())
+def api(api_type, cls):
+    tpm.add_handler(api_type, 'api', cls())
+    tpm.add_handler(api_type, 'api-html', cls())
+    tpm.add_handler(api_type, 'api-compact', cls())
 
 # blanket fallback rule
 api('templated', NullJsonTemplate)

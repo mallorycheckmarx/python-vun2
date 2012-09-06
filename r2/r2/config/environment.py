@@ -47,7 +47,8 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
     if ConfigValue.bool(global_conf.get('uncompressedJS')):
         paths['static_files'] = os.path.join(root_path, 'public')
     else:
-        paths['static_files'] = os.path.join(os.path.dirname(root_path), 'build/public')
+        paths['static_files'] = os.path.join(os.path.dirname(root_path), 
+                                             'build/public')
 
     config.init_app(global_conf, app_conf, package='r2',
                     template_engine='mako', paths=paths)
@@ -66,17 +67,15 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
     config['pylons.response_options']['headers'] = {}
 
     # The following template options are passed to your template engines
-    #tmpl_options = {}
-    #tmpl_options['myghty.log_errors'] = True
-    #tmpl_options['myghty.escapes'] = dict(l=webhelpers.auto_link, s=webhelpers.simple_format)
-
     tmpl_options = config['buffet.template_options']
-    tmpl_options['mako.filesystem_checks'] = getattr(g, 'reload_templates', False)
+    tmpl_options['mako.filesystem_checks'] = getattr(g, 
+                                                     'reload_templates', False)
     tmpl_options['mako.default_filters'] = ["mako_websafe"]
-    tmpl_options['mako.imports'] = \
-                                 ["from r2.lib.filters import websafe, unsafe, mako_websafe",
-                                  "from pylons import c, g, request",
-                                  "from pylons.i18n import _, ungettext"]
+    tmpl_options['mako.imports'] = [
+        "from r2.lib.filters import websafe, unsafe, mako_websafe",
+        "from pylons import c, g, request",
+        "from pylons.i18n import _, ungettext"
+        ]
     
     # Add your own template options config options here,
     # note that all config options will override
