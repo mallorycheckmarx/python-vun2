@@ -222,8 +222,9 @@ class WikiApiController(WikiController):
               pageandprevious = VWikiPageRevise(('page', 'previous'), restricted=True),
               content = VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
-        if errors.RATELIMIT in c.errors:
-            ratelimit = c.errors[errors.RATELIMIT]
+        if (errors.RATELIMIT, 'ratelimit') in c.errors:
+            ratelimit = c.errors[(errors.RATELIMIT, 'ratelimit')]
+            c.errors = None
             self.handle_error(429, 'WIKI_EDIT_RATELIMIT', message=ratelimit.message, time=ratelimit.msg_params['time'])
         page, previous = pageandprevious
         previous = previous._id if previous else None
@@ -291,4 +292,5 @@ class WikiApiController(WikiController):
     
     def pre(self):
         WikiController.pre(self)
+        c.render_style = 'api'
         set_extension(request.environ, 'json')

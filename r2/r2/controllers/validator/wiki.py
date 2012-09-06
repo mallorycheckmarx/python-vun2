@@ -38,7 +38,7 @@ MAX_SEPARATORS = g.wiki_max_page_separators
 def jsonAbort(code, reason=None, **data):
     data['code'] = code
     data['reason'] = reason if reason else 'UNKNOWN_ERROR'
-    if c.extension == 'json':
+    if c.render_style == 'api':
         request.environ['usable_error_content'] = json.dumps(data)
     abort(code)
 

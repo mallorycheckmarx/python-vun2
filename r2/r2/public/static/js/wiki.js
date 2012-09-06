@@ -88,8 +88,10 @@ r.wiki = {
                     special.fadeIn('slow')
                 },
                 429: function(xhr) {
+                    var message = JSON.parse(xhr.responseText).message
+                        ,specials = special.children('#specials')
                     specials.empty()
-                    specials.text('You are doing that too much, please try again shortly.')
+                    specials.text(message)
                     special.fadeIn('slow')
                 }
             }
