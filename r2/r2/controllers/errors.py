@@ -91,7 +91,7 @@ error_list = dict((
         ('NO_LINKS', _("that reddit only allows text posts")),
         ('TOO_OLD', _("that's a piece of history now; it's too late to reply to it")),
         ('BAD_CSS_NAME', _('invalid css name')),
-	('BAD_CSS',_('invalid css')),
+        ('BAD_CSS',_('invalid css')),
         ('TOO_MUCH_FLAIR_CSS', _('too many flair css classes')),
         ('BAD_FLAIR_TARGET', _('not a valid flair target')),
         ('OAUTH2_INVALID_CLIENT', _('invalid client id')),
