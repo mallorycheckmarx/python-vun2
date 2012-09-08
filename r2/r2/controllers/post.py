@@ -20,16 +20,27 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.pages import *
-from reddit_base import cross_domain
-from api import ApiController
-from r2.lib.utils import Storage, query_string, UrlParser
-from r2.lib.emailer import opt_in, opt_out
-from pylons import request, c, g
-from validator import *
-from pylons.i18n import _
-from r2.models import *
 import hashlib
+
+from pylons import g, c, request
+from pylons.i18n import _
+
+from r2.lib.emailer import opt_in, opt_out
+from r2.lib.pages import (BoringPage, LoginPage, OptOut, Over18)
+from r2.lib.utils import Storage, query_string, UrlParser
+#from r2.models import *
+
+from r2.controllers.api import ApiController
+from r2.controllers.validator import (VBoolean,
+                                      VDestination,
+                                      VInt,
+                                      VLang,
+                                      VModhash,
+                                      VOneOf,
+                                      VUser,
+                                      nop,
+                                      validate,
+                                      )
 
 class PostController(ApiController):
     def api_wrapper(self, kw):

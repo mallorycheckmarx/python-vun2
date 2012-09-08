@@ -21,7 +21,6 @@
 ###############################################################################
 
 import json
-import collections
 
 from r2.lib.db.thing import MultiRelation, Relation
 from r2.lib.db import tdb_cassandra
@@ -30,13 +29,21 @@ from r2.lib.utils._utils import flatten
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.utils import SimpleSillyStub
 
-from account import Account
-from link import Link, Comment
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.link import Comment, Link
 
-from pylons import g
-from datetime import datetime, timedelta
+__all__ = [
+           #Constants
+           #Classes
+           "CassandraCommentVote",
+           "CassandraLinkVote",
+           "Vote",
+           #Exceptions
+           #Functions
+           ]
 
-__all__ = ['Vote', 'CassandraLinkVote', 'CassandraCommentVote', 'score_changes']
 
 def score_changes(amount, old_amount):
     uc = dc = 0

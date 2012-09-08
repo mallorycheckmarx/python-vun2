@@ -20,11 +20,27 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.models import Thing, Link, Subreddit, AllSR, admintools
-from r2.lib.utils import Storage, tup
-from r2.lib.memoize import memoize
 from datetime import datetime
+
 from pylons import g
+
+from r2.lib.db.thing import Thing
+from r2.lib.memoize import memoize
+from r2.lib.utils import Storage, tup
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.admintools import admintools
+from r2.models.subreddit import AllSR
+
+__all__ = [
+           #Constants
+           #Classes
+           "Trial"
+           #Exceptions
+           #Functions
+           ]
+
 
 class Trial(Storage):
     def __init__(self, defendant):

@@ -26,12 +26,10 @@ import time
 from datetime import datetime, timedelta
 
 import bcrypt
-from pycassa.system_manager import ASCII_TYPE
 from pylons import c, g, request
 from pylons.i18n import _
 
 from r2.lib import filters
-from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import Thing, Relation, NotFound
 from r2.lib.db.operators import lower
 from r2.lib.db.userrel import UserRel
@@ -44,13 +42,17 @@ from r2.lib.utils import (modhash,
                           UrlParser,
                           constant_time_compare
                           )
-from r2.models import Subreddit, LastModified
+
+
+#internal package imports should be fully qualified since __init__.py will
+#not be ready the first time it is used.
+from r2.models.account_subreddit import AccountsActiveBySR
+from r2.models.last_modified import LastModified
 
 __all__ = [
            #Constants
            #Classes
            "Account",
-           "AccountsActiveBySR",
            "DeletedUser",
            "FakeAccount",
            #Exceptions
@@ -409,8 +411,7 @@ class Account(Thing):
 
     @property
     def subreddits(self):
-        from r2.models import Subreddit
-        return Subreddit.user_subreddits(self)
+        return subreddit.Subreddit.user_subreddits(self)
 
     def recent_share_emails(self):
         return self.share.get('recent', set([]))
@@ -814,27 +815,3 @@ class DeletedUser(FakeAccount):
             pass
         else:
             object.__setattr__(self, attr, val)
-
-class AccountsActiveBySR(tdb_cassandra.View):
-    _use_db = True
-    _connection_pool = 'main'
-    _ttl = 15*60
-
-    _extra_schema_creation_args = dict(key_validation_class=ASCII_TYPE)
-
-    _read_consistency_level  = tdb_cassandra.CL.ONE
-    _write_consistency_level = tdb_cassandra.CL.ANY
-
-    @classmethod
-    def touch(cls, account, sr):
-        cls._set_values(sr._id36,
-                        {account._id36: ''})
-
-    @classmethod
-    def get_count(cls, sr, cached=True):
-        return cls.get_count_cached(sr._id36, _update=not cached)
-
-    @classmethod
-    @memoize('accounts_active', time=60)
-    def get_count_cached(cls, sr_id):
-        return cls._cf.get_count(sr_id)

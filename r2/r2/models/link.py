@@ -20,30 +20,54 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import Thing, Relation, NotFound, MultiRelation, \
-     CreationError
-from r2.lib.db.operators import desc
-from r2.lib.utils import base_url, tup, domain, title_to_url, UrlParser
-from r2.lib.utils.trial_utils import trial_info
-from account import Account, DeletedUser
-from subreddit import Subreddit
-from printable import Printable
-from r2.config import cache, extensions
-from r2.lib.memoize import memoize
-from r2.lib.filters import _force_utf8
-from r2.lib import utils
-from r2.lib.log import log_text
-from mako.filters import url_escape
-from r2.lib.strings import strings, Score
-from r2.lib.db import tdb_cassandra
-from r2.models.subreddit import MultiReddit
+import re
+from datetime import datetime
 
 from pylons import c, g, request
-from pylons.i18n import ungettext, _
-from datetime import datetime
-from hashlib import md5
+from pylons.i18n import _
 
-import random, re
+from r2.config import extensions
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import (Thing,
+                             Relation,
+                             NotFound,
+                             MultiRelation,
+                             CreationError
+                             )
+from r2.lib.filters import _force_utf8
+from r2.lib import utils
+from r2.lib.strings import Score
+from r2.lib.utils import tup, domain, title_to_url, UrlParser
+from r2.lib.utils.trial_utils import trial_info
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account, DeletedUser
+from r2.models.subreddit import Subreddit, MultiReddit
+from r2.models.printable import Printable
+
+__all__ = [
+           #Constants
+           #Classes
+           "Comment",
+           "CommentSortsCache",
+           "Inbox",
+           "Link",
+           "LinksByUrl",
+           "LinkOnTrial",
+           "Message",
+           "ModeratorInbox",
+           "MoreChildren",
+           "MoreMessages",
+           "MoreRecursion",
+           "PromotedLink",
+           "SaveHide",
+           "SavesByAccount",
+           "StarkComment",
+           #Exceptions
+           #Functions
+           ]
+
 
 class LinkExists(Exception): pass
 

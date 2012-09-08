@@ -20,24 +20,53 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from validator import *
+from pylons import g, c, request
 from pylons.i18n import _
-from r2.models import *
+
+from r2.lib import cssfilter, promote
 from r2.lib.authorize import get_account_info, edit_profile
-from r2.lib.pages import *
-from r2.lib.pages.things import wrap_links
-from r2.lib.strings import strings
-from r2.lib.menus import *
-from r2.controllers.listingcontroller import ListingController
 from r2.lib.db import queries
-
-from r2.controllers.reddit_base import RedditController
-
-from r2.lib.utils import make_offset_date
 from r2.lib.media import force_thumbnail, thumbnail_url
-from r2.lib.scraper import MediaEmbed
-from r2.lib import cssfilter
-from datetime import datetime
+from r2.lib.pages import (LinkInfoPage,
+                          PaymentForm,
+                          PromotePage,
+                          Promote_Graph,
+                          PromoteLinkForm,
+                          Roadblocks,
+                          UploadedImage,
+                          )
+from r2.lib.pages.things import wrap_links
+from r2.lib.pages.trafficpages import TrafficViewerList
+from r2.lib.strings import strings
+from r2.lib.utils import make_offset_date
+from r2.models import Link, Message
+
+from r2.controllers.errors import errors
+from r2.controllers.listingcontroller import ListingController
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import (VBoolean,
+                                      VByName, 
+                                      VDateRange,
+                                      VExistingUname,
+                                      VFloat,
+                                      VInt,
+                                      VLength,
+                                      VLink,
+                                      VModhash,
+                                      VRatelimit,
+                                      VSponsor,
+                                      VSponsorAdmin,
+                                      VSubmitSR,
+                                      VTitle,
+                                      VUrl,
+                                      ValidAddress,
+                                      ValidCard,
+                                      ValidIP,
+                                      nop,
+                                      noresponse,
+                                      validate,
+                                      validatedForm,
+                                      )
 
 class PromoteController(ListingController):
     skip = False
@@ -228,7 +257,7 @@ class PromoteController(ListingController):
 
                 l.media_override = media_override
 
-                if getattr(link, "domain_override", False) or domain_override:
+                if getattr(l, "domain_override", False) or domain_override:
                     l.domain_override = domain_override
             l._commit()
 

@@ -20,55 +20,175 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from reddit_base import RedditController, MinimalController, set_user_cookie
-from reddit_base import cross_domain, paginated_listing
-
-from pylons.i18n import _
-from pylons import c, request, response
-
-from validator import *
-
-from r2.models import *
-
-from r2.lib import amqp
-
-from r2.lib.utils import get_title, sanitize_url, timeuntil, set_last_modified
-from r2.lib.utils import query_string, timefromnow, randstr
-from r2.lib.utils import timeago, tup, filter_links
-from r2.lib.pages import EnemyList, FriendList, ContributorList, ModList, \
-    BannedList, BoringPage, FormPage, CssError, UploadedImage, ClickGadget, \
-    UrlParser, WrappedUser, BoringPage
-from r2.lib.pages import FlairList, FlairCsv, FlairTemplateEditor, \
-    FlairSelector
-from r2.lib.pages import PrefApps
-from r2.lib.utils.trial_utils import indict, end_trial, trial_info
-from r2.lib.pages.things import wrap_links, default_thing_wrapper
-from r2.models.last_modified import LastModified
-
-from r2.lib.menus import CommentSortMenu
-from r2.lib.captcha import get_iden
-from r2.lib.strings import strings
-from r2.lib.filters import _force_unicode, websafe_json, websafe, spaceCompress
-from r2.lib.db import queries
-from r2.lib.db.queries import changed
-from r2.lib import media
-from r2.lib import promote
-from r2.lib.comment_tree import delete_comment
-from r2.lib import tracking,  cssfilter, emailer
-from r2.lib.subreddit_search import search_reddits
-from r2.lib.log import log_text
-from r2.lib.filters import safemarkdown
-from r2.lib.scraper import str_to_image
-from r2.controllers.api_docs import api_doc, api_section
-from r2.lib.search import SearchQuery
-from r2.controllers.oauth2 import OAuth2ResourceController, require_oauth2_scope
-
 import csv
 from collections import defaultdict
 from datetime import datetime, timedelta
 import hashlib
-import urllib
-import urllib2
+
+from pylons import g, c, request
+from pylons.controllers.util import abort
+from pylons.i18n import _
+
+from r2.lib import amqp, media, promote, cssfilter, emailer, totp
+from r2.lib.captcha import get_iden
+from r2.lib.comment_tree import delete_comment
+from r2.lib.db import queries
+from r2.lib.db.queries import changed
+from r2.lib.db.thing import CreationError, NotFound
+from r2.lib.filters import (_force_unicode,
+                            safemarkdown,
+                            spaceCompress,
+                            websafe,
+                            websafe_json,
+                            )
+from r2.lib.log import log_text
+from r2.lib.menus import CommentSortMenu
+from r2.lib.pages import (BannedList,
+                          BoringPage,
+                          ClickGadget,
+                          ContributorList,
+                          CssError,
+                          FlairCsv,
+                          FlairList,
+                          FlairSelector,
+                          FlairTemplateEditor,
+                          FriendList,
+                          ModList,
+                          PrefApps,
+                          UploadedImage,
+                          UrlParser,
+                          WrappedUser,
+                          )
+from r2.lib.pages.things import wrap_links, default_thing_wrapper
+from r2.lib.scraper import str_to_image
+from r2.lib.search import SearchQuery
+from r2.lib.strings import strings
+from r2.lib.subreddit_search import search_reddits
+from r2.lib.template_helpers import add_sr
+from r2.lib.utils import (filter_links,
+                          get_title,
+                          query_string,
+                          randstr,
+                          sanitize_url,
+                          set_last_modified,
+                          timefromnow,
+                          timeuntil,
+                          timeago,
+                          tup,
+                          )
+from r2.lib.utils.trial_utils import indict, end_trial, trial_info
+from r2.lib.wrapped import Wrapped
+from r2.models import (Account,
+                       Ad,
+                       AdSR,
+                       Award,
+                       Comment,
+                       CommentBuilder,
+                       FakeSubreddit,
+                       FlairTemplate,
+                       FlairTemplateBySubredditIndex,
+                       Inbox,
+                       Jury,
+                       LastModified,
+                       Link,
+                       Listing,
+                       Message,
+                       ModAction,
+                       OAuth2AccessToken,
+                       OAuth2Client,
+                       PasswordResetToken,
+                       Report,
+                       SpotlightListing,
+                       SrMessageBuilder,
+                       Subreddit,
+                       Trophy,
+                       UserMessageBuilder,
+                       change_password,
+                       claim_gold,
+                       register,
+                       admintools,
+                       LINK_FLAIR,
+                       USER_FLAIR,
+                      )
+
+from r2.controllers.api_docs import api_doc, api_section
+from r2.controllers.errors import errors
+from r2.controllers.oauth2 import OAuth2ResourceController, require_oauth2_scope
+from r2.controllers.reddit_base import (RedditController,
+                                        MinimalController,
+                                        set_user_cookie,
+                                        cross_domain,
+                                        paginated_listing,
+                                        )
+from r2.controllers.validator import (VAdmin,
+                                      VAdminOrAdminSecret,
+                                      VAdByCodename,
+                                      ValidEmails,
+                                      ValidIP,
+                                      VAwardByCodename,
+                                      VBoolean,
+                                      VByName,
+                                      VByNameIfAuthor,
+                                      VCaptcha,
+                                      VCanDistinguish,
+                                      VCommentIDs,
+                                      VCnameDomain,
+                                      VCssName,
+                                      VDestination,
+                                      VExistingUname,
+                                      VFlairAccount,
+                                      VFlairCss,
+                                      VFlairLink,
+                                      VFlairManager,
+                                      VFlairTemplateByID,
+                                      VFlairText,
+                                      VFloat,
+                                      VImageType,
+                                      VInt,
+                                      VGold,
+                                      VMarkdown,
+                                      VMenu,
+                                      VMessageRecipient,
+                                      VModhash,
+                                      VLang,
+                                      VLength,
+                                      VLimit,
+                                      VOneOf,
+                                      VOneTimeToken,
+                                      VOneTimePassword,
+                                      VOAuth2ClientDeveloper,
+                                      VOAuth2ClientID,
+                                      VPassword,
+                                      VPrintable,
+                                      VRatelimit,
+                                      VRequired,
+                                      VSanitizedUrl,
+                                      VSelfText,
+                                      VShamedDomain,
+                                      VSponsor,
+                                      VSrCanAlter,
+                                      VSrCanBan,
+                                      VSrModerator,
+                                      VSubmitSR,
+                                      VSubmitParent,
+                                      VSubredditName,
+                                      VSubredditSponsorship,
+                                      VSubscribeSR,
+                                      VThrottledLogin,
+                                      VTitle,
+                                      VTrophy,
+                                      VUname,
+                                      VUrl,
+                                      VUser,
+                                      VUserWithEmail,
+                                      VVotehash,
+                                      json_validate,
+                                      nop,
+                                      noresponse,
+                                      validate,
+                                      validatedForm,
+                                      validatedMultipartForm,
+                                      )
 
 def reject_vote(thing):
     voteword = request.params.get('dir')

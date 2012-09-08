@@ -26,6 +26,9 @@ from pylons import g
 from r2.lib.db.operators import desc, lower
 from r2.lib.db.thing import Thing, Relation, NotFound
 from r2.lib.memoize import memoize
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
 from r2.models.subreddit import Subreddit
 
 class Ad (Thing):

@@ -21,25 +21,21 @@
 ###############################################################################
 
 import os.path
+import random as rand
 
 import pylons
-import paste.fileapp
-from paste.httpexceptions import HTTPFound, HTTPMovedPermanently
-from pylons.middleware import error_document_template, media_path
 from pylons import c, request, g
 from pylons.i18n import _
-import random as rand
-from r2.lib.filters import safemarkdown, unsafe
+from paste.httpexceptions import HTTPFound, HTTPMovedPermanently
 
 try:
     # place all r2 specific imports in here.  If there is a code error, it'll get caught and
     # the stack trace won't be presented to the user in production
-    from reddit_base import RedditController, Cookies
-    from r2.models.subreddit import DefaultSR, Subreddit
-    from r2.models.link import Link
     from r2.lib import pages
-    from r2.lib.strings import strings, rand_strings
+    from r2.lib.strings import rand_strings
     from r2.lib.template_helpers import static
+    from r2.models import DefaultSR, Subreddit, Link
+    from r2.controllers.reddit_base import RedditController, Cookies
 except Exception, e:
     if g.debug:
         # if debug mode, let the error filter up to pylons to be handled

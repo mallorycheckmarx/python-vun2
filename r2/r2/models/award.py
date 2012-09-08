@@ -20,12 +20,25 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from pylons import g
+
 from r2.lib.db.thing import Thing, Relation, NotFound
-from r2.lib.db.userrel import UserRel
 from r2.lib.db.operators import asc, desc, lower
 from r2.lib.memoize import memoize
-from r2.models import Account
-from pylons import c, g, request
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+
+__all__ = [
+           #Constants
+           #Classes
+           "Award",
+           "Trophy",
+           #Exceptions
+           #Functions
+           ]
+
 
 class Award (Thing):
     _defaults = dict(

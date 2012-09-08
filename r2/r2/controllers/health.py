@@ -20,18 +20,11 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from threading import Thread
-import os
-import time
 import json
 
-from pylons.controllers.util import abort
 from pylons import c, g, response
 
-from reddit_base import MinimalController
-from r2.lib.amqp import worker
-
-from validator import *
+from r2.controllers.reddit_base import MinimalController
 
 class HealthController(MinimalController):
     def post(self):

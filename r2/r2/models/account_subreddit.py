@@ -20,16 +20,43 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.pages import AdminPage, AdminUsage
+from pycassa.system_manager import ASCII_TYPE
 
-from r2.controllers.validator import VAdmin, validate
-from r2.controllers.reddit_base import RedditController
+from r2.lib.db import tdb_cassandra
+from r2.lib.memoize import memoize
 
-class UsageController(RedditController):
+__all__ = [
+           #Constants
+           #Classes
+           "AccountsActiveBySR",
+           #Exceptions
+           #Functions
+           ]
 
-    @validate(VAdmin())
-    def GET_index(self):
-        res = AdminPage(content = AdminUsage(),
-                        show_sidebar = False,
-                        title = 'usage').render()
-        return res
+
+#NOTE: this file exists to contain classes that might create a circular
+#dependency between account.py and subreddit.py
+
+class AccountsActiveBySR(tdb_cassandra.View):
+    _use_db = True
+    _connection_pool = 'main'
+    _ttl = 15*60
+
+    _extra_schema_creation_args = dict(key_validation_class=ASCII_TYPE)
+
+    _read_consistency_level  = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.ANY
+
+    @classmethod
+    def touch(cls, account, sr):
+        cls._set_values(sr._id36,
+                        {account._id36: ''})
+
+    @classmethod
+    def get_count(cls, sr, cached=True):
+        return cls.get_count_cached(sr._id36, _update=not cached)
+
+    @classmethod
+    @memoize('accounts_active', time=60)
+    def get_count_cached(cls, sr_id):
+        return cls._cf.get_count(sr_id)

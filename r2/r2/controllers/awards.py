@@ -21,10 +21,19 @@
 ###############################################################################
 
 from pylons import request, g
-from reddit_base import RedditController
-from r2.lib.pages import AdminPage, AdminAwards
-from r2.lib.pages import AdminAwardGive, AdminAwardWinners
-from validator import *
+
+from r2.lib.pages import (AdminPage,
+                          AdminAwards,
+                          AdminAwardGive,
+                          AdminAwardWinners,
+                          )
+
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import (VAdmin,
+                                      VAwardByCodename,
+                                      nop,
+                                      validate,
+                                      )
 
 class AwardsController(RedditController):
 

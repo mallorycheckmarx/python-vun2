@@ -21,22 +21,34 @@
 ###############################################################################
 
 from urllib import urlencode
-import base64
-import simplejson
 
-from pylons import c, g, request
+from pylons import c, request
 from pylons.i18n import _
+
 from r2.config.extensions import set_extension
 from r2.lib.base import abort
-from reddit_base import RedditController, MinimalController, require_https
-from r2.lib.db.thing import NotFound
-from r2.models import Account
-from r2.models.token import OAuth2Client, OAuth2AuthorizationCode, OAuth2AccessToken
 from r2.controllers.errors import ForbiddenError, errors
-from validator import validate, VRequired, VOneOf, VUser, VModhash, VOAuth2ClientID, VOAuth2Scope
 from r2.lib.pages import OAuth2AuthorizationPage
 from r2.lib.require import RequirementException, require, require_split
 from r2.lib.utils import parse_http_basic
+from r2.models import (Account,
+                       OAuth2Client,
+                       OAuth2AuthorizationCode,
+                       OAuth2AccessToken,
+                       )
+
+from r2.controllers.reddit_base import (RedditController,
+                                        MinimalController,
+                                        require_https,
+                                        )
+from r2.controllers.validator import (VModhash,
+                                      VOAuth2ClientID,
+                                      VOAuth2Scope,
+                                      VOneOf,
+                                      VRequired,
+                                      VUser,
+                                      validate,
+                                      )
 
 scope_info = {
     "identity": {

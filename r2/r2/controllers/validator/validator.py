@@ -20,32 +20,51 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request, response
+import inspect
+import re
+from copy import copy
+from curses.ascii import isprint
+from datetime import datetime, timedelta
+from itertools import chain
+
+import pycountry
+from pylons import c, g, request
 from pylons.i18n import _
 from pylons.controllers.util import abort
+
 from r2.config.extensions import api_type
 from r2.lib import utils, captcha, promote, totp
-from r2.lib.filters import unkeep_space, websafe, _force_unicode
-from r2.lib.filters import markdown_souptest
-from r2.lib.db import tdb_cassandra
-from r2.lib.db.operators import asc, desc
-from r2.lib.template_helpers import add_sr
-from r2.lib.jsonresponse import json_respond, JQueryResponse, JsonResponse
-from r2.lib.log import log_text
-from r2.models import *
 from r2.lib.authorize import Address, CreditCard
-from r2.lib.utils import constant_time_compare
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.filters import unkeep_space, markdown_souptest
+from r2.lib.jsonresponse import JQueryResponse, JsonResponse
+from r2.lib.utils import tup, constant_time_compare, UrlParser
+from r2.lib.log import log_text
+from r2.models import (Account,
+                       Ad,
+                       Award,
+                       Comment,
+                       FakeSubreddit,
+                       FlairTemplateBySubredditIndex,
+                       Link,
+                       Message,
+                       OAuth2Client,
+                       Subreddit,
+                       Trophy,
+                       admin_ratelimit,
+                       login_throttle,
+                       is_shamed_domain,
+                       is_banned_IP,
+                       valid_password,
+                       valid_login,
+                      )
 
-from r2.controllers.errors import errors, UserRequiredException
-from r2.controllers.errors import VerifiedUserRequiredException
-from r2.controllers.errors import GoldRequiredException
+from r2.controllers.errors import (errors,
+                                   UserRequiredException,
+                                   VerifiedUserRequiredException,
+                                   )
 
-from copy import copy
-from datetime import datetime, timedelta
-from curses.ascii import isprint
-import re, inspect
-import pycountry
-from itertools import chain
 
 def visible_promo(article):
     is_promo = getattr(article, "promoted", None) is not None
@@ -961,9 +980,9 @@ class VUname(VRequired):
             try:
                 a = Account._by_name(user_name, True)
                 if a._deleted:
-                   return self.error(errors.USERNAME_TAKEN_DEL)
+                    return self.error(errors.USERNAME_TAKEN_DEL)
                 else:
-                   return self.error(errors.USERNAME_TAKEN)
+                    return self.error(errors.USERNAME_TAKEN)
             except NotFound:
                 return user_name
 
@@ -1288,7 +1307,6 @@ class VRatelimit(Validator):
         Validator.__init__(self, *a, **kw)
 
     def run (self):
-        from r2.models.admintools import admin_ratelimit
 
         if g.disable_ratelimit:
             return
@@ -1312,7 +1330,6 @@ class VRatelimit(Validator):
             # when errors have associated field parameters, we'll need
             # to add that here
             if self.error == errors.RATELIMIT:
-                from datetime import datetime
                 delta = expire_time - datetime.now(g.tz)
                 self.seconds = delta.total_seconds()
                 if self.seconds < 3:  # Don't ratelimit within three seconds

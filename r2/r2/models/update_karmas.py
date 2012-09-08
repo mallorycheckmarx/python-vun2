@@ -20,9 +20,21 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.models import Link, Account, Subreddit
 from r2.lib.db.operators import desc, or_
 from r2.lib.utils import timeago
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.subreddit import Subreddit
+
+__all__ = [
+           #Constants
+           #Classes
+           #Exceptions
+           #Functions
+           ]
+
 
 def all_comments():
     q = Comment._query(Comment.c._score > 2,

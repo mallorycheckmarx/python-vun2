@@ -20,14 +20,27 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import DataThing, Thing, MultiRelation, Relation
-from r2.lib.db.thing import NotFound, load_things
-from r2.lib.db.userrel import UserRel
-from r2.lib.db.operators import asc, desc, lower
+from r2.lib.db.thing import (DataThing,
+                             MultiRelation,
+                             Relation,
+                             load_things,
+                             )
 from r2.lib.memoize import memoize
 from r2.lib.utils import timeago
-from r2.models import Account, Link
-from pylons import c, g, request
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.link import Link
+
+__all__ = [
+           #Constants
+           #Classes
+           "Jury",
+           #Exceptions
+           #Functions
+           ]
+
 
 class Jury(MultiRelation('jury',
                          Relation(Account, Link))):

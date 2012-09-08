@@ -28,18 +28,34 @@ from pylons import g
 from pycassa.system_manager import ASCII_TYPE, UTF8_TYPE
 from pycassa.batch import Mutator
 
-from r2.models import Thing
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.operators import asc
 from r2.lib.db.sorts import epoch_seconds
+from r2.lib.db.thing import Thing
 from r2.lib.utils import flatten, to36
+
+__all__ = [
+           #Constants
+           #Classes
+           "CachedQuery",
+           "CachedQueryMutator",
+           "MergedCachedQuery",
+           "SubredditQueryCache",
+           "ThingTupleComparator",
+           "UserQueryCache",
+           #Exceptions
+           #Functions
+           "cached_query",
+           "filter_identity",
+           "filter_thing2",
+           "merged_cached_query",
+           ]
 
 
 CONNECTION_POOL = g.cassandra_pools['main']
 PRUNE_CHANCE = g.querycache_prune_chance
 MAX_CACHED_ITEMS = 1000
 LOG = g.log
-
 
 # if cjson is installed, use it. it's faster.
 try:

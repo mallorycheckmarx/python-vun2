@@ -24,14 +24,30 @@ import uuid
 
 from pylons import g
 
-from r2.lib.db.operators import asc, desc
-from r2.lib.db.thing import Relation, Thing
 from r2.lib.db import tdb_cassandra
+from r2.lib.db.operators import asc, desc
+from r2.lib.db.thing import Relation
 from r2.lib.db.userrel import UserRel
 from r2.lib.memoize import memoize
 from r2.lib.utils import to36
-from account import Account
-from subreddit import Subreddit
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.subreddit import Subreddit
+
+__all__ = [
+           #Constants
+           "LINK_FLAIR",
+           "USER_FLAIR",
+           #Classes
+           "Flair",
+           "FlairTemplate",
+           "FlairTemplateBySubredditIndex",
+           #Exceptions
+           #Functions
+           ]
+
 
 USER_FLAIR = 'USER_FLAIR'
 LINK_FLAIR = 'LINK_FLAIR'

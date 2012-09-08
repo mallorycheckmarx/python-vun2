@@ -27,6 +27,15 @@ from pycassa.system_manager import UTF8_TYPE
 
 from r2.lib.db.tdb_cassandra import ThingMeta
 
+__all__ = [
+           #Constants
+           #Classes
+           "NamedGlobals",
+           #Exceptions
+           #Functions
+           ]
+
+
 NoDefault = object()
 
 class KeyValueStore(object):

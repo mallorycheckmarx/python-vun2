@@ -20,29 +20,61 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from __future__ import with_statement
+import math
+import random
 
 from pylons import c, g
 from pylons.i18n import _
 
 from r2.lib.db.thing import Thing, Relation, NotFound
-from account import Account, AccountsActiveBySR
-from printable import Printable
 from r2.lib.db.userrel import UserRel
-from r2.lib.db.operators import lower, or_, and_, desc
+from r2.lib.db.operators import lower, desc
 from r2.lib.memoize import memoize
-from r2.lib.utils import tup, interleave_lists, last_modified_multi, flatten
-from r2.lib.utils import timeago, summarize_markdown
+from r2.lib.utils import tup, last_modified_multi
+from r2.lib.utils import summarize_markdown
 from r2.lib.cache import sgm
 from r2.lib.strings import strings, Score
 from r2.lib.filters import _force_unicode
 from r2.lib.db import tdb_cassandra
 from r2.lib.cache import CL_ONE
 
-import math
+#internal package imports should be fully qualified and not use 'from'
+#this allows circular dependancies to be resolved easily, since  using 'from'
+#requires the whole module be compiled during the import, which a simple import
+#does not
+from r2.models.account import Account
+from r2.models.account_subreddit import AccountsActiveBySR
+from r2.models.printable import Printable
 
-import os.path
-import random
+__all__ = [
+           #Constants
+           "All",
+           "Contrib",
+           "Friends",
+           "Frontpage",
+           "Mod",
+           "Random",
+           "RandomNSFW",
+           "Sub",
+           #Classes
+           "_DefaultSR",
+           "AllSR",
+           "ContribSR",
+           "DefaultSR",
+           "DomainSR",
+           "FakeSubreddit",
+           "ModContribSR",
+           "ModSR",
+           "MultiReddit",
+           "SRMember",
+           "Subreddit",
+           "SubredditPopularityByLanguage",
+           "SubSR",
+           #Exceptions
+           "SubredditExists",
+           #Functions
+           ]
+
 
 class SubredditExists(Exception): pass
 

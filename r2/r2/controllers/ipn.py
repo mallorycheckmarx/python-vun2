@@ -20,19 +20,41 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from xml.dom.minidom import Document
+import base64
+import urllib
+import urllib2
 from httplib import HTTPSConnection
 from urlparse import urlparse
-import base64
+from xml.dom.minidom import Document
 
-from pylons.controllers.util import abort
-from pylons import c, g, response
+from BeautifulSoup import BeautifulStoneSoup
+from pylons import c, g, request, response
 from pylons.i18n import _
 
-from validator import *
-from r2.models import *
+from r2.lib.db.thing import NotFound
+from r2.lib.log import log_text
+from r2.lib.strings import strings
+from r2.lib.utils import tup
+from r2.models import (Account,
+                       account_by_payingid,
+                       accountid_from_paypalsubscription,
+                       cancel_subscription,
+                       create_claimed_gold,
+                       create_gift_gold,
+                       send_system_message,
+                       admintools,
+                       )
 
-from reddit_base import RedditController
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import (VFloat,
+                                      VInt,
+                                      VLength,
+                                      VPrintable,
+                                      VUser,
+                                      textresponse,
+                                      validate,
+                                      validatedForm,
+                                      )
 
 def get_blob(code):
     key = "payment_blob-" + code
@@ -122,7 +144,7 @@ def check_txn_type(txn_type, psl):
 
 
 def verify_ipn(parameters):
-    paraemeters['cmd'] = '_notify-validate'
+    parameters['cmd'] = '_notify-validate'
     try:
         safer = dict([k, v.encode('utf-8')] for k, v in parameters.items())
         params = urllib.urlencode(safer)

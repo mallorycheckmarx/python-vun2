@@ -22,18 +22,34 @@
 
 import datetime
 import hashlib
-from email.MIMEText import MIMEText
+from email.mime.text import MIMEText
 
 import sqlalchemy as sa
+from pylons import g, request
+from pylons.i18n import _
 from sqlalchemy.dialects.postgresql.base import PGInet
 
 from r2.lib.db.tdb_sql import make_metadata, index_str, create_table
-from r2.lib.utils import Storage, timeago, Enum, tup
-from account import Account
 from r2.lib.db.thing import Thing
 from r2.lib.memoize import memoize
-from pylons import g, request
-from pylons.i18n import _
+from r2.lib.utils import Enum, tup
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.admintools import is_banned_IP
+
+__all__ = [
+           #Constants
+           #Classes
+           "Email",
+           #Exceptions
+           #Functions
+           "has_opted_out",
+           "opt_count",
+           "opt_out",
+           ]
+
 
 def mail_queue(metadata):
     return sa.Table(g.db_app_name + '_mail_queue', metadata,
@@ -234,7 +250,6 @@ class EmailHandler(object):
 
 
     def from_queue(self, max_date, batch_limit = 50, kind = None):
-        from r2.models import is_banned_IP, Account, Thing
         keep_trying = True
         min_id = None
         s = self.queue_table

@@ -20,10 +20,11 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from reddit_base import RedditController
 import StringIO
+
 import r2.lib.captcha as captcha
-from pylons import c
+
+from r2.controllers.reddit_base import RedditController
 
 class CaptchaController(RedditController):
     def GET_captchaimg(self, iden):

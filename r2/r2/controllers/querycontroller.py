@@ -20,12 +20,14 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from reddit_base import RedditController
-from validator import *
-from r2.lib.db.queries import CachedResults
-
 import cPickle as pickle
-from urllib import unquote
+
+from pylons import g
+from pylons.controllers.util import abort
+
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import nop, validate
+
 
 class QueryController(RedditController):
     @validate(query = nop('query'))

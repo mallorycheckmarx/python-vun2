@@ -20,13 +20,25 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import Thing, Relation, MultiRelation, thing_prefix
-from r2.lib.utils import tup
-from r2.lib.memoize import memoize
-from r2.models import Link, Comment, Message, Subreddit, Account
-from r2.models.vote import score_changes
-
 from pylons import g
+
+from r2.lib.db.thing import Relation, MultiRelation
+from r2.lib.utils import tup
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.link import Link, Comment, Message
+from r2.models.subreddit import Subreddit
+
+__all__ = [
+           #Constants
+           #Classes
+           "Report",
+           #Exceptions
+           #Functions
+           ]
+
 
 class Report(MultiRelation('report',
                            Relation(Account, Link),

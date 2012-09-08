@@ -20,43 +20,161 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from validator import *
-from pylons.i18n import _, ungettext
-from reddit_base import RedditController, base_listing, paginated_listing, prevent_framing_and_css
-from r2 import config
-from r2.models import *
-from r2.config.extensions import is_api
-from r2.lib.pages import *
-from r2.lib.pages.things import wrap_links
-from r2.lib.pages import trafficpages
-from r2.lib.menus import *
-from r2.lib.utils import to36, sanitize_url, check_cheating, title_to_url
-from r2.lib.utils import query_string, UrlParser, link_from_url, link_duplicates
-from r2.lib.utils import randstr
-from r2.lib.template_helpers import get_domain
-from r2.lib.filters import unsafe, _force_unicode
-from r2.lib.emailer import has_opted_out, Email
-from r2.lib.db.operators import desc
-from r2.lib.db import queries
-from r2.lib.db.tdb_cassandra import MultiColumnQuery
-from r2.lib.strings import strings
-from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
-                           InvalidQuery)
-from r2.lib import jsontemplates
-from r2.lib import sup
-import r2.lib.db.thing as thing
-from errors import errors
-from listingcontroller import ListingController
-from api_docs import api_doc, api_section
-from pylons import c, request, request, Response
-from r2.models.token import EmailVerificationToken
-
+import random
+import re
+import socket
+import time 
+from datetime import timedelta
+from hashlib import md5
 from operator import attrgetter
-import string
-import random as rand
-import re, socket
-import time as time_module
 from urllib import quote_plus
+
+from pylons import g, c, request
+from pylons.controllers.util import abort
+from pylons.i18n import _
+
+import r2.lib.db.thing as thing
+from r2 import config
+from r2.config.extensions import is_api
+from r2.lib import sup
+from r2.lib.db.thing import NotFound
+from r2.lib.emailer import has_opted_out, Email
+from r2.lib.filters import _force_unicode
+from r2.lib.menus import (CommentSortMenu,
+                          NavButton,
+                          NavMenu,
+                          SearchSortMenu,
+                          )
+from r2.lib.pages import (AccountActivityPage,
+                          AdminModeInterstitial,
+                          BannedList,
+                          BoringPage,
+                          Captcha,
+                          Cnameframe,
+                          CommentVisitsBox,
+                          CommentPane,
+                          ContributorList,
+                          CreateSubreddit,
+                          DetailsPage,
+                          EditReddit,
+                          EnemyList,
+                          FlairPane,
+                          FormPage,
+                          FrameBuster,
+                          FriendList,
+                          Gold,
+                          GoldPayment,
+                          InfoBar,
+                          LinkCommentSep,
+                          LinkInfoPage,
+                          LoginPage,
+                          ModList,
+                          NewLink,
+                          OptOut,
+                          PaneStack,
+                          Password,
+                          PermalinkMessage,
+                          PrefApps,
+                          PrefDelete,
+                          PrefFeeds,
+                          PrefUpdate,
+                          PrefOptions,
+                          PrefOTP,
+                          PrefsPage,
+                          Reddit,
+                          RedditAds,
+                          RegisterPage,
+                          ResetPassword,
+                          RulesPage,
+                          SearchPage,
+                          SelfServiceOatmeal,
+                          SubredditsPage,
+                          SubredditStylesheet,
+                          Thanks,
+                          TryCompact,
+                          UserAwards,
+                          UserText,
+                          trafficpages,
+                          )
+from r2.lib.pages.things import wrap_links, default_thing_wrapper
+from r2.lib.search import (SearchQuery,
+                           SubredditSearchQuery,
+                           SearchException,
+                           InvalidQuery,
+                           )
+from r2.lib.strings import strings
+from r2.lib.template_helpers import get_domain, add_sr
+from r2.lib.utils import (UrlParser,
+                          check_cheating,
+                          link_duplicates,
+                          link_from_url,
+                          query_string,
+                          randstr,
+                          sanitize_url,
+                          title_to_url,
+                          to36,
+                          )
+from r2.lib.utils.trial_utils import trial_info
+from r2.lib.wrapped import Wrapped
+from r2.models import (Account,
+                       AllSR,
+                       Award,
+                       ContribSR,
+                       DefaultSR,
+                       IDBuilder,
+                       EmailVerificationToken,
+                       FakeSubreddit,
+                       Jury,
+                       Link,
+                       LinkListing,
+                       LinkOnTrial,
+                       ModAction,
+                       ModActionListing,
+                       ModContribSR,
+                       ModSR,
+                       MultiReddit,
+                       OAuth2Client,
+                       PasswordResetToken,
+                       QueryBuilder,
+                       SearchBuilder,
+                       Subreddit,
+                       MAX_RECURSION,
+                       Friends,
+                       )
+
+from r2.controllers.api_docs import api_doc, api_section
+from r2.controllers.errors import errors, UserRequiredException
+from r2.controllers.listingcontroller import ListingController
+from r2.controllers.reddit_base import (RedditController,
+                                        base_listing,
+                                        paginated_listing,
+                                        prevent_framing_and_css
+                                        )
+from r2.controllers.validator import (VAdmin,
+                                      VBoolean,
+                                      VByName,
+                                      VCount, 
+                                      VCommentByID,
+                                      VCommentID,
+                                      VDestination,
+                                      VInt,
+                                      VLength,
+                                      VLink,
+                                      VMenu,
+                                      VModhash,
+                                      VOneOf,
+                                      VOneTimeToken,
+                                      VPrintable,
+                                      VRequired,
+                                      VSponsorAdmin,
+                                      VTrafficViewer,
+                                      VUser,
+                                      can_view_link_comments,
+                                      can_comment_link,
+                                      nop,
+                                      validate,
+                                      )
+
 
 class FrontController(RedditController):
 
@@ -93,7 +211,7 @@ class FrontController(RedditController):
     @api_doc(api_section.listings)
     def GET_random(self):
         """The Serendipity button"""
-        sort = rand.choice(('new','hot'))
+        sort = random.choice(('new','hot'))
         links = c.site.get_links(sort, 'all')
         if isinstance(links, thing.Query):
             links._limit = g.num_serendipity
@@ -101,7 +219,7 @@ class FrontController(RedditController):
         else:
             links = list(links)[:g.num_serendipity]
 
-        rand.shuffle(links)
+        random.shuffle(links)
 
         builder = IDBuilder(links, skip = True,
                             keep_fn = lambda x: x.fresh,
@@ -831,7 +949,7 @@ class FrontController(RedditController):
             res = listing.listing()
         except SearchException + (socket.error,) as e:
             return self.search_fail(e)
-        timing = time_module.time() - builder.start_time
+        timing = time.time() - builder.start_time
 
         return builder.results, timing, res
 

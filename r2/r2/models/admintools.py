@@ -27,8 +27,37 @@ from pylons import g
 
 from r2.lib.filters import websafe
 from r2.lib.utils import tup, fetch_things2
-from r2.models import Report, Account, Subreddit
 
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.report import Report
+from r2.models.subreddit import Subreddit
+
+#NOTE: all functions are exported, admins will need to decide which stay based on r2admin
+__all__ = [
+           #Constants
+           "admintools",
+           #Classes
+           #Exceptions
+           #Functions
+           "admin_ratelimit",
+           "accountid_from_paypalsubscription",
+           "apply_updates",
+           "cancel_subscription",
+           "check_request",
+           "compute_votes",
+           "filter_quotas",
+           "is_banned_IP",
+           "is_shamed_domain",
+           "ip_span",
+           "login_throttle",
+           "send_system_message",
+           "update_gold_users",
+           "update_score",
+           "valid_thing",
+           "valid_user"
+           ]
 
 class AdminTools(object):
 
@@ -333,6 +362,9 @@ def is_banned_domain(dom, ip):
 def is_shamed_domain(dom, ip):
     return False, None, None
 
+def send_system_message(account, subject, message):
+    pass
+
 def valid_thing(v, karma, *a, **kw):
     return not v._thing1._spam
 
@@ -424,7 +456,6 @@ def check_request(end_time):
     pass
 
 try:
-    #TODO It may be correct to import * here, but marking just to be sure 
     from r2admin.models.admintools import *
 except ImportError:
     pass

@@ -20,10 +20,15 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import request, g
-from reddit_base import RedditController
+from pylons.controllers.util import abort
+
 from r2.lib.pages import AdminPage, AdminAds, AdminAdAssign, AdminAdSRs
-from validator import *
+
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import (VAdByCodename,
+                                      VSponsorAdmin,
+                                      validate,
+                                      )
 
 class AdsController(RedditController):
 

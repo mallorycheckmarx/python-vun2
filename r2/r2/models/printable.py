@@ -21,7 +21,18 @@
 ###############################################################################
 
 from pylons import c, request
+
 from r2.lib.strings import Score
+
+__all__ = [
+           #Constants
+           #Classes
+           "Printable",
+           #Exceptions
+           #Functions
+           ]
+
+
 class Printable(object):
     show_spam = False
     show_reports = False

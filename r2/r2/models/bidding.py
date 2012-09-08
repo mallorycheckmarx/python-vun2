@@ -20,23 +20,47 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from sqlalchemy import Column, String, DateTime, Date, Float, Integer, Boolean,\
-     BigInteger, func as safunc, and_, or_
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.schema import PrimaryKeyConstraint
-from sqlalchemy.orm import sessionmaker, scoped_session
+import datetime
+
+from pylons import g, request
+from sqlalchemy import (Column,
+                        String,
+                        DateTime,
+                        Date,
+                        Float,
+                        Integer,
+                        Boolean,
+                        BigInteger, 
+                        func as safunc, 
+                        and_, 
+                        or_,
+                        )
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.dialects.postgresql.base import PGInet as Inet
 from sqlalchemy.ext.declarative import declarative_base
-from pylons import g
-from r2.lib.utils import Enum
-from r2.models.account import Account
-from r2.models import Link
-from r2.lib.db.thing import Thing, NotFound
-from pylons import request
-from r2.lib.memoize import memoize
-import datetime
 
+from r2.lib.db.thing import Thing, NotFound
+from r2.lib.memoize import memoize
+from r2.lib.utils import Enum
+
+#internal package imports should be fully qualified to allow
+#__init__.py to ignore dependency ordering
+from r2.models.account import Account
+from r2.models.link import Link
+
+__all__ = [
+           #Constants
+           #Classes
+           "Bid",
+           "CustomerID",
+           "PayID",
+           "PromoteDates",
+           "PromotionWeights",
+           "ShippingAddress",
+           #Exceptions
+           #Functions
+           ]
 
 engine = g.dbm.get_engine('authorize')
 # Allocate a session maker for communicating object changes with the back end  

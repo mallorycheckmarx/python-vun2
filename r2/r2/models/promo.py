@@ -20,9 +20,16 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import Thing, NotFound
-from r2.lib.utils import Enum
-from r2.models import Link
+from r2.lib.db.thing import Thing
+
+__all__ = [
+           #Constants
+           #Classes
+           "PromoCampaign",
+           #Exceptions
+           #Functions
+           ]
+
 
 NO_TRANSACTION = 0
 

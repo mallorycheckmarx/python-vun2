@@ -20,10 +20,11 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from paste.httpexceptions import HTTPForbidden
-from r2.lib.utils import Storage, tup
 from pylons.i18n import _
-from copy import copy
+
+from paste.httpexceptions import HTTPForbidden
+
+from r2.lib.utils import Storage, tup
 
 error_list = dict((
         ('USER_REQUIRED', _("please login to do that")),
