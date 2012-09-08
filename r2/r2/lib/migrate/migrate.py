@@ -24,6 +24,10 @@
 One-time use functions to migrate from one reddit-version to another
 """
 from r2.lib.promote import *
+from r2.lib.db.thing import Thing
+from r2.lib.db.operators import asc, desc
+from r2.lib.utils import fetch_things2
+from r2.models import Comment, Message
 
 def add_allow_top_to_srs():
     "Add the allow_top property to all stored subreddits"

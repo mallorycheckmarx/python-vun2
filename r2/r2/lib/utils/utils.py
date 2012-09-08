@@ -21,6 +21,7 @@
 ###############################################################################
 
 import base64
+import time
 
 from urllib import unquote_plus
 from urllib2 import urlopen
@@ -45,6 +46,7 @@ from r2.lib.require import require, require_split
 import snudown
  
 from r2.lib.utils._utils import *
+from r2.lib.require import RequirementException
         
 iters = (list, tuple, set)
 

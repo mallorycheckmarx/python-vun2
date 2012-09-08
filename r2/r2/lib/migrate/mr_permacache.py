@@ -87,25 +87,22 @@ pv *.listings | ./mr_permacache "top1k_writefiles('listings')"
 
 """
 
-import os, os.path, errno
+import os
+import os.path
+import errno
 import sys
-import itertools
 from hashlib import md5
 
+from r2.models import Account, Comment, Link, Subreddit
+
 from r2.lib import mr_tools
-from r2.lib.mr_tools import dataspec_m_thing, dataspec_m_rel, join_things
-
-
-from dateutil.parser import parse as parse_timestamp
-
-from r2.models import *
-from r2.lib.db.sorts import epoch_seconds, score, controversy, _hot
-from r2.lib.utils import fetch_things2, in_chunks, progress, UniqueIterator, tup
-from r2.lib import comment_tree
 from r2.lib.db import queries
-
+from r2.lib.db.operators import timeago
+from r2.lib.db.sorts import epoch_seconds, score, controversy, _hot
 from r2.lib.jsontemplates import make_fullname # what a strange place
                                                # for this function
+from r2.lib.mr_tools import dataspec_m_thing, dataspec_m_rel, join_things
+from r2.lib.utils import progress
 
 def join_links():
     join_things(('author_id', 'sr_id'))

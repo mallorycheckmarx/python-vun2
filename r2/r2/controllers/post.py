@@ -28,7 +28,6 @@ from pylons.i18n import _
 from r2.lib.emailer import opt_in, opt_out
 from r2.lib.pages import (BoringPage, LoginPage, OptOut, Over18)
 from r2.lib.utils import Storage, query_string, UrlParser
-#from r2.models import *
 
 from r2.controllers.api import ApiController
 from r2.controllers.validator import (VBoolean,

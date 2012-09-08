@@ -1,6 +1,8 @@
 import sys
 from collections import defaultdict
-from r2.models import *
+
+from r2.lib.db.thing import NotFound
+from r2.models import Link, PromoCampaign
 
 def fix_trans_id():
     bad_campaigns = list(PromoCampaign._query(PromoCampaign.c.trans_id == 1, data=True))

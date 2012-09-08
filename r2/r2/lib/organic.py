@@ -20,16 +20,16 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.models import *
+import random
+
+from pylons import g, c
+
+from r2.lib import count
 from r2.lib.memoize import memoize
 from r2.lib.normalized_hot import get_hot
-from r2.lib import count
-from r2.lib.utils import UniqueIterator, timeago
 
-from pylons import c
+from r2.models import FakeAccount, Subreddit, All
 
-import random
-from time import time
 
 organic_lifetime = 5*60
 organic_length   = 30

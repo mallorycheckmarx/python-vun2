@@ -20,35 +20,30 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from __future__ import with_statement
-
-from r2.models import *
-from r2.lib.utils import sanitize_url, strip_www, randstr
-from r2.lib.strings import string_dict
-from r2.lib.pages.things import wrap_links
-
-from pylons import g, c
-from pylons.i18n import _
-from mako import filters
-
-import os
-import tempfile
-from r2.lib import s3cp
-
-from r2.lib.media import upload_media
-
-from r2.lib.template_helpers import s3_https_if_secure
-
 import re
 from urlparse import urlparse
+from xml.dom import DOMException
 
 import cssutils
 from cssutils import CSSParser
-from cssutils.css import CSSStyleRule
-from cssutils.css import CSSValue, CSSValueList
-from cssutils.css import CSSPrimitiveValue
-from cssutils.css import cssproperties
-from xml.dom import DOMException
+from cssutils.css import (CSSStyleRule,
+                          CSSValue,
+                          CSSValueList,
+                          CSSPrimitiveValue,
+                          cssproperties,
+                          )
+from mako import filters
+from pylons import g, c
+from pylons.i18n import _
+
+from r2.lib.db.thing import Thing
+from r2.lib.media import upload_media, s3_direct_url
+from r2.lib.pages.things import wrap_links
+from r2.lib.strings import string_dict
+from r2.lib.template_helpers import s3_https_if_secure
+from r2.lib.utils import strip_www
+from r2.models import Comment, Link, Subreddit
+
 
 msgs = string_dict['css_validator_messages']
 
