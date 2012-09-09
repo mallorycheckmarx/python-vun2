@@ -21,16 +21,24 @@
 ###############################################################################
 
 import re
+import inspect
 from collections import defaultdict
 from itertools import chain
-import inspect
 from os.path import abspath, relpath
 
 from pylons import g
 from pylons.i18n import _
-from reddit_base import RedditController
-from r2.lib.utils import Storage
+
+from r2.lib.export import export
 from r2.lib.pages import BoringPage, ApiHelp
+from r2.lib.utils import Storage
+
+from r2.controllers.reddit_base import RedditController
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 # API sections displayed in the documentation page.
 # Each section can have a title and a markdown-formatted description.
@@ -72,6 +80,8 @@ section_info = {
 
 api_section = Storage((k, k) for k in section_info)
 
+
+@export
 def api_doc(section, **kwargs):
     """
     Add documentation annotations to the decorated function.
@@ -93,6 +103,7 @@ def api_doc(section, **kwargs):
 
         return api_function
     return add_metadata
+
 
 class ApidocsController(RedditController):
     @staticmethod

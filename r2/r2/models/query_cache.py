@@ -32,23 +32,11 @@ from r2.lib.db import tdb_cassandra
 from r2.lib.db.operators import asc
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.db.thing import Thing
+from r2.lib.export import export
 from r2.lib.utils import flatten, to36
 
 __all__ = [
-           #Constants
-           #Classes
-           "CachedQuery",
-           "CachedQueryMutator",
-           "MergedCachedQuery",
-           "SubredditQueryCache",
-           "ThingTupleComparator",
-           "UserQueryCache",
-           #Exceptions
-           #Functions
-           "cached_query",
-           "filter_identity",
-           "filter_thing2",
-           "merged_cached_query",
+           #Constants Only, use @export for functions/classes
            ]
 
 
@@ -67,6 +55,7 @@ else:
     json.dumps, json.loads = json.encode, json.decode
 
 
+@export
 class ThingTupleComparator(object):
     def __init__(self, sorts):
         self.sorts = sorts
@@ -111,6 +100,7 @@ class CachedQueryBase(object):
             yield x[0]
 
 
+@export
 class CachedQuery(CachedQueryBase):
     def __init__(self, model, key, query, filter_fn):
         self.model = model
@@ -217,6 +207,7 @@ class CachedQuery(CachedQueryBase):
                                self.model.__name__, self.key)
 
 
+@export
 class MergedCachedQuery(CachedQueryBase):
     def __init__(self, queries):
         self.queries = queries
@@ -237,6 +228,7 @@ class MergedCachedQuery(CachedQueryBase):
             q.update()
 
 
+@export
 class CachedQueryMutator(object):
     def __init__(self):
         self.mutator = Mutator(CONNECTION_POOL)
@@ -275,16 +267,19 @@ class CachedQueryMutator(object):
             CachedQuery._prune_multi(self.to_prune)
 
 
+@export
 def filter_identity(x):
     return x
 
 
+@export
 def filter_thing2(x):
     """A filter to apply to the results of a relationship query returns
     the object of the relationship."""
     return x._thing2
 
 
+@export
 def cached_query(model, filter_fn=filter_identity):
     def cached_query_decorator(fn):
         def cached_query_wrapper(*args):
@@ -313,6 +308,7 @@ def cached_query(model, filter_fn=filter_identity):
     return cached_query_decorator
 
 
+@export
 def merged_cached_query(fn):
     def merge_wrapper(*args):
         queries = fn(*args)
@@ -370,9 +366,11 @@ class BaseQueryCache(object):
                            timestamp=timestamps.get(col))
 
 
+@export
 class UserQueryCache(BaseQueryCache):
     _use_db = True
 
 
+@export
 class SubredditQueryCache(BaseQueryCache):
     _use_db = True

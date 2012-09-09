@@ -30,11 +30,16 @@ import r2.lib.helpers
 from r2.config import routing
 from r2.lib.app_globals import Globals
 from r2.lib.configparse import ConfigValue
+from r2.lib.export import export
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 mimetypes.init()
 
 
+@export
 def load_environment(global_conf={}, app_conf={}, setup_globals=True):
     # Setup our paths
     root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

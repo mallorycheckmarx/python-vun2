@@ -23,55 +23,32 @@
 from pylons import g, c, request
 from pylons.i18n import _
 
+import r2.lib.pages as pages
 from r2.lib import cssfilter, promote
 from r2.lib.authorize import get_account_info, edit_profile
 from r2.lib.db import queries
 from r2.lib.media import force_thumbnail, thumbnail_url
-from r2.lib.pages import (LinkInfoPage,
-                          PaymentForm,
-                          PromotePage,
-                          Promote_Graph,
-                          PromoteLinkForm,
-                          Roadblocks,
-                          UploadedImage,
-                          )
-from r2.lib.pages.things import wrap_links
 from r2.lib.pages.trafficpages import TrafficViewerList
 from r2.lib.strings import strings
 from r2.lib.utils import make_offset_date
+from r2.lib.wrapper import wrap_links
 from r2.models import Link, Message
 
+import r2.controllers.validator as validator
 from r2.controllers.errors import errors
 from r2.controllers.listingcontroller import ListingController
 from r2.controllers.reddit_base import RedditController
-from r2.controllers.validator import (VBoolean,
-                                      VByName, 
-                                      VDateRange,
-                                      VExistingUname,
-                                      VFloat,
-                                      VInt,
-                                      VLength,
-                                      VLink,
-                                      VModhash,
-                                      VRatelimit,
-                                      VSponsor,
-                                      VSponsorAdmin,
-                                      VSubmitSR,
-                                      VTitle,
-                                      VUrl,
-                                      ValidAddress,
-                                      ValidCard,
-                                      ValidIP,
-                                      nop,
-                                      noresponse,
-                                      validate,
-                                      validatedForm,
-                                      )
+from r2.controllers.validator import noresponse, validate, validatedForm
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class PromoteController(ListingController):
     skip = False
     where = 'promoted'
-    render_cls = PromotePage
+    render_cls = pages.PromotePage
 
     @property
     def title_text(self):
@@ -91,7 +68,7 @@ class PromoteController(ListingController):
             return promote.get_live_links(author_id)
         return promote.get_all_links(author_id)
 
-    @validate(VSponsor())
+    @validate(validator.VSponsor())
     def GET_listing(self, sort = "", **env):
         if not c.user_is_loggedin or not c.user.email_verified:
             return self.redirect("/ad_inq")
@@ -100,85 +77,86 @@ class PromoteController(ListingController):
 
     GET_index = GET_listing
 
-    @validate(VSponsor())
+    @validate(validator.VSponsor())
     def GET_new_promo(self):
-        return PromotePage('content', content = PromoteLinkForm()).render()
+        return pages.PromotePage('content', content=pages.PromoteLinkForm()
+                                 ).render()
 
-    @validate(VSponsor('link'),
-              link = VLink('link'))
+    @validate(validator.VSponsor('link'),
+              link=validator.VLink('link'))
     def GET_edit_promo(self, link):
         if not link or link.promoted is None:
             return self.abort404()
         rendered = wrap_links(link, wrapper = promote.sponsor_wrapper,
                               skip = False)
 
-        form = PromoteLinkForm(link = link,
-                               listing = rendered,
-                               timedeltatext = "")
+        form = pages.PromoteLinkForm(link=link,
+                                     listing=rendered,
+                                     timedeltatext="")
 
-        page = PromotePage('new_promo', content = form)
+        page = pages.PromotePage('new_promo', content=form)
 
         return page.render()
 
-    @validate(VSponsor())
+    @validate(validator.VSponsor())
     def GET_graph(self):
-        content = Promote_Graph()
+        content = pages.Promote_Graph()
         if c.user_is_sponsor and c.render_style == 'csv':
             c.response.content = content.as_csv()
             return c.response
-        return PromotePage("graph", content = content).render()
+        return pages.PromotePage("graph", content=content).render()
 
 
     ### POST controllers below
-    @validatedForm(VSponsorAdmin(),
-                   link = VLink("link_id"),
-                   indx = VInt("indx"))
+    @validatedForm(validator.VSponsorAdmin(),
+                   link=validator.VLink("link_id"),
+                   indx=validator.VInt("indx"))
     def POST_freebie(self, form, jquery, link, indx):
         if promote.is_promo(link) and indx is not None:
             promote.free_campaign(link, indx, c.user)
             form.redirect(promote.promo_edit_url(link))
 
-    @validatedForm(VSponsorAdmin(),
-                   link = VByName("link"),
-                   note = nop("note"))
+    @validatedForm(validator.VSponsorAdmin(),
+                   link=validator.VByName("link"),
+                   note=validator.nop("note"))
     def POST_promote_note(self, form, jquery, link, note):
         if promote.is_promo(link):
             form.find(".notes").children(":last").after(
                 "<p>" + promote.promotion_log(link, note, True) + "</p>")
 
 
-    @noresponse(VSponsorAdmin(),
-                thing = VByName('id'))
+    @noresponse(validator.VSponsorAdmin(),
+                thing=validator.VByName('id'))
     def POST_promote(self, thing):
         if promote.is_promo(thing):
             promote.accept_promotion(thing)
 
-    @noresponse(VSponsorAdmin(),
-                thing = VByName('id'),
-                reason = nop("reason"))
+    @noresponse(validator.VSponsorAdmin(),
+                thing=validator.VByName('id'),
+                reason=validator.nop("reason"))
     def POST_unpromote(self, thing, reason):
         if promote.is_promo(thing):
-            promote.reject_promotion(thing, reason = reason)
+            promote.reject_promotion(thing, reason=reason)
 
-    @validatedForm(VSponsor('link_id'),
-                   VModhash(),
-                   VRatelimit(rate_user = True,
-                              rate_ip = True,
-                              prefix = 'create_promo_'),
-                   l     = VLink('link_id'),
-                   title = VTitle('title'),
-                   url   = VUrl('url', allow_self = False, lookup = False),
-                   ip    = ValidIP(),
-                   disable_comments = VBoolean("disable_comments"),
-                   set_clicks = VBoolean("set_maximum_clicks"),
-                   max_clicks = VInt("maximum_clicks", min = 0),
-                   set_views = VBoolean("set_maximum_views"),
-                   max_views = VInt("maximum_views", min = 0),
-                   media_width = VInt("media-width", min = 0),
-                   media_height = VInt("media-height", min = 0),
-                   media_embed = VLength("media-embed", 1000),
-                   media_override = VBoolean("media-override"),
-                   domain_override = VLength("domain", 100)
+    @validatedForm(validator.VSponsor('link_id'),
+                   validator.VModhash(),
+                   validator.VRatelimit(rate_user=True,
+                                        rate_ip=True,
+                                        prefix='create_promo_'),
+                   l=validator.VLink('link_id'),
+                   title=validator.VTitle('title'),
+                   url=validator.VUrl('url', allow_self=False, lookup=False),
+                   ip=validator.ValidIP(),
+                   disable_comments=validator.VBoolean("disable_comments"),
+                   set_clicks=validator.VBoolean("set_maximum_clicks"),
+                   max_clicks=validator.VInt("maximum_clicks", min=0),
+                   set_views=validator.VBoolean("set_maximum_views"),
+                   max_views=validator.VInt("maximum_views", min=0),
+                   media_width=validator.VInt("media-width", min=0),
+                   media_height=validator.VInt("media-height", min=0),
+                   media_embed=validator.VLength("media-embed", 1000),
+                   media_override=validator.VBoolean("media-override"),
+                   domain_override=validator.VLength("domain", 100)
                    )
     def POST_edit_promo(self, form, jquery, ip, l, title, url,
                         disable_comments,
@@ -263,18 +241,19 @@ class PromoteController(ListingController):
 
         form.redirect(promote.promo_edit_url(l))
 
-    @validate(VSponsorAdmin())
+    @validate(validator.VSponsorAdmin())
     def GET_roadblock(self):
-        return PromotePage('content', content = Roadblocks()).render()
+        return pages.PromotePage('content', content=pages.Roadblocks()).render()
 
-    @validatedForm(VSponsorAdmin(),
-                   VModhash(),
-                   dates = VDateRange(['startdate', 'enddate'],
-                                      future = 1, 
-                                      reference_date = promote.promo_datetime_now,
-                                      business_days = False, 
-                                      admin_override = True),
-                   sr = VSubmitSR('sr', promotion=True))
+    @validatedForm(validator.VSponsorAdmin(),
+                   validator.VModhash(),
+                   dates=validator.VDateRange(['startdate', 'enddate'],
+                                              future=1, 
+                                              reference_date=
+                                                  promote.promo_datetime_now,
+                                              business_days=False, 
+                                              admin_override=True),
+                   sr=validator.VSubmitSR('sr', promotion=True))
     def POST_add_roadblock(self, form, jquery, dates, sr):
         if (form.has_errors('startdate', errors.BAD_DATE,
                             errors.BAD_FUTURE_DATE) or
@@ -290,33 +269,35 @@ class PromoteController(ListingController):
             promote.roadblock_reddit(sr.name, sd.date(), ed.date())
             jquery.refresh()
 
-    @validatedForm(VSponsorAdmin(),
-                   VModhash(),
-                   dates = VDateRange(['startdate', 'enddate'],
-                                      future = 1, 
-                                      reference_date = promote.promo_datetime_now,
-                                      business_days = False, 
-                                      admin_override = True),
-                   sr = VSubmitSR('sr', promotion=True))
+    @validatedForm(validator.VSponsorAdmin(),
+                   validator.VModhash(),
+                   dates=validator.VDateRange(['startdate', 'enddate'],
+                                              future=1, 
+                                              reference_date=
+                                                  promote.promo_datetime_now,
+                                              business_days=False, 
+                                              admin_override=True),
+                   sr=validator.VSubmitSR('sr', promotion=True))
     def POST_rm_roadblock(self, form, jquery, dates, sr):
         if dates and sr:
             sd, ed = dates
             promote.unroadblock_reddit(sr.name, sd.date(), ed.date())
             jquery.refresh()
 
-    @validatedForm(VSponsor('link_id'),
-                   VModhash(),
-                   dates = VDateRange(['startdate', 'enddate'],
-                                  future = 1, 
-                                  reference_date = promote.promo_datetime_now,
-                                  business_days = False, 
-                                  admin_override = True),
-                   l     = VLink('link_id'),
-                   bid   = VFloat('bid', min=0, max=g.max_promote_bid, 
-                                  coerce=False, error=errors.BAD_BID),
-                   sr = VSubmitSR('sr', promotion=True),
-                   indx = VInt("indx"), 
-                   targeting = VLength("targeting", 10))
+    @validatedForm(validator.VSponsor('link_id'),
+                   validator.VModhash(),
+                   dates=validator.VDateRange(['startdate', 'enddate'],
+                                              future=1, 
+                                              reference_date=
+                                                  promote.promo_datetime_now,
+                                              business_days=False, 
+                                              admin_override=True),
+                   l=validator.VLink('link_id'),
+                   bid=validator.VFloat('bid', min=0, max=g.max_promote_bid, 
+                                        coerce=False, error=errors.BAD_BID),
+                   sr=validator.VSubmitSR('sr', promotion=True),
+                   indx=validator.VInt("indx"), 
+                   targeting=validator.VLength("targeting", 10))
     def POST_edit_campaign(self, form, jquery, l, indx,
                           dates, bid, sr, targeting):
         if not l:
@@ -391,19 +372,19 @@ class PromoteController(ListingController):
             l = promote.editable_add_props(l)
             jquery.new_campaign(*l.campaigns[indx])
 
-    @validatedForm(VSponsor('link_id'),
-                   VModhash(),
-                   l     = VLink('link_id'),
-                   indx = VInt("indx"))
+    @validatedForm(validator.VSponsor('link_id'),
+                   validator.VModhash(),
+                   l=validator.VLink('link_id'),
+                   indx=validator.VInt("indx"))
     def POST_delete_campaign(self, form, jquery, l, indx):
         if l and indx is not None:
             promote.delete_campaign(l, indx)
 
 
-    @validatedForm(VSponsor('container'),
-                   VModhash(),
-                   user = VExistingUname('name'),
-                   thing = VByName('container'))
+    @validatedForm(validator.VSponsor('container'),
+                   validator.VModhash(),
+                   user=validator.VExistingUname('name'),
+                   thing=validator.VByName('container'))
     def POST_traffic_viewer(self, form, jquery, user, thing):
         """
         Adds a user to the list of users allowed to view a promoted
@@ -433,27 +414,30 @@ class PromoteController(ListingController):
                         queries.new_message(item, inbox_rel)
 
 
-    @validatedForm(VSponsor('container'),
-                   VModhash(),
-                   iuser = VByName('id'),
-                   thing = VByName('container'))
+    @validatedForm(validator.VSponsor('container'),
+                   validator.VModhash(),
+                   iuser=validator.VByName('id'),
+                   thing=validator.VByName('container'))
     def POST_rm_traffic_viewer(self, form, jquery, iuser, thing):
         if thing and iuser:
             promote.rm_traffic_viewer(thing, iuser)
 
 
-    @validatedForm(VSponsor('link'),
-                   link = VByName("link"),
-                   indx = VInt("indx"),
-                   customer_id = VInt("customer_id", min = 0),
-                   pay_id = VInt("account", min = 0),
-                   edit   = VBoolean("edit"),
-                   address = ValidAddress(
-                    ["firstName", "lastName", "company", "address",
-                     "city", "state", "zip", "country", "phoneNumber"],
-                    allowed_countries = g.allowed_pay_countries),
-                   creditcard = ValidCard(["cardNumber", "expirationDate",
-                                           "cardCode"]))
+    @validatedForm(validator.VSponsor('link'),
+                   link=validator.VByName("link"),
+                   indx=validator.VInt("indx"),
+                   customer_id=validator.VInt("customer_id", min=0),
+                   pay_id=validator.VInt("account", min=0),
+                   edit=validator.VBoolean("edit"),
+                   address=
+                       validator.ValidAddress(["firstName", "lastName",
+                                               "company", "address", "city",
+                                               "state", "zip", "country",
+                                               "phoneNumber"],
+                    allowed_countries=g.allowed_pay_countries),
+                   creditcard=validator.ValidCard(["cardNumber",
+                                                   "expirationDate",
+                                                   "cardCode"]))
     def POST_update_pay(self, form, jquery, link, indx, customer_id, pay_id,
                         edit, address, creditcard):
         address_modified = not pay_id or edit
@@ -485,9 +469,9 @@ class PromoteController(ListingController):
                               reason or
                               _("failed to authenticate card.  sorry."))
 
-    @validate(VSponsor("link"),
-              article = VLink("link"),
-              indx = VInt("indx"))
+    @validate(validator.VSponsor("link"),
+              article=validator.VLink("link"),
+              indx=validator.VInt("indx"))
     def GET_pay(self, article, indx):
         # no need for admins to play in the credit card area
         if c.user_is_loggedin and c.user._id != article.author_id:
@@ -498,15 +482,15 @@ class PromoteController(ListingController):
 
         if g.authorizenetapi:
             data = get_account_info(c.user)
-            content = PaymentForm(article, indx,
-                                  customer_id = data.customerProfileId,
-                                  profiles = data.paymentProfiles)
+            content = pages.PaymentForm(article, indx,
+                                        customer_id=data.customerProfileId,
+                                        profiles=data.paymentProfiles)
         else:
-            content = PaymentForm(article, 0, customer_id = 0,
-                                  profiles = [])
-        res =  LinkInfoPage(link = article,
-                            content = content,
-                            show_sidebar = False)
+            content = pages.PaymentForm(article, 0, customer_id = 0,
+                                        profiles=[])
+        res =  pages.LinkInfoPage(link=article,
+                                  content=content,
+                                  show_sidebar=False)
         return res.render()
 
     def GET_link_thumb(self, *a, **kw):
@@ -515,9 +499,9 @@ class PromoteController(ListingController):
         """
         return "nothing to see here."
 
-    @validate(VSponsor("link_id"),
-              link = VByName('link_id'),
-              file = VLength('file', 500*1024))
+    @validate(validator.VSponsor("link_id"),
+              link=validator.VByName('link_id'),
+              file=validator.VLength('file', 500*1024))
     def POST_link_thumb(self, link=None, file=None):
         if link and (not promote.is_promoted(link) or
                      c.user_is_sponsor or c.user.trusted_sponsor):
@@ -529,11 +513,11 @@ class PromoteController(ListingController):
                 # if the image doesn't clean up nicely, abort
                 errors["IMAGE_ERROR"] = _("bad image")
             if any(errors.values()):
-                return UploadedImage("", "", "upload", errors = errors,
-                                     form_id = "image-upload").render()
+                return pages.UploadedImage("", "", "upload", errors=errors,
+                                           form_id="image-upload").render()
             else:
                 link._commit()
-                return UploadedImage(_('saved'), thumbnail_url(link), "",
-                                     errors = errors,
-                                     form_id = "image-upload").render()
+                return pages.UploadedImage(_('saved'), thumbnail_url(link), "",
+                                           errors=errors,
+                                           form_id="image-upload").render()
 

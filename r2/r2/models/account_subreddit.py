@@ -23,20 +23,18 @@
 from pycassa.system_manager import ASCII_TYPE
 
 from r2.lib.db import tdb_cassandra
+from r2.lib.export import export
 from r2.lib.memoize import memoize
 
 __all__ = [
-           #Constants
-           #Classes
-           "AccountsActiveBySR",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
 #NOTE: this file exists to contain classes that might create a circular
 #dependency between account.py and subreddit.py
 
+@export
 class AccountsActiveBySR(tdb_cassandra.View):
     _use_db = True
     _connection_pool = 'main'

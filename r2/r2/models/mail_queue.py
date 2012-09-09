@@ -24,121 +24,115 @@ import datetime
 import hashlib
 from email.mime.text import MIMEText
 
-import sqlalchemy as sa
+import sqlalchemy as sqla
 from pylons import g, request
 from pylons.i18n import _
 from sqlalchemy.dialects.postgresql.base import PGInet
 
 from r2.lib.db.tdb_sql import make_metadata, index_str, create_table
 from r2.lib.db.thing import Thing
+from r2.lib.export import export
 from r2.lib.memoize import memoize
 from r2.lib.utils import Enum, tup
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 from r2.models.admintools import is_banned_IP
 
 __all__ = [
-           #Constants
-           #Classes
-           "Email",
-           #Exceptions
-           #Functions
-           "has_opted_out",
-           "opt_count",
-           "opt_out",
+           #Constants Only, use @export for functions/classes
            ]
 
 
 def mail_queue(metadata):
-    return sa.Table(g.db_app_name + '_mail_queue', metadata,
-                    sa.Column("uid", sa.Integer,
-                              sa.Sequence('queue_id_seq'), primary_key=True),
-
-                    # unique hash of the message to carry around
-                    sa.Column("msg_hash", sa.String),
-                    
-                    # the id of the account who started it
-                    sa.Column('account_id', sa.BigInteger),
-
-                    # the name (not email) for the from
-                    sa.Column('from_name', sa.String),
-
-                    # the "To" address of the email
-                    sa.Column('to_addr', sa.String),
-
-                    # the "From" address of the email
-                    sa.Column('fr_addr', sa.String),
-                    
-                    # the "Reply-To" address of the email
-                    sa.Column('reply_to', sa.String),
-
-                    # fullname of the thing
-                    sa.Column('fullname', sa.String),
-                    
-                    # when added to the queue
-                    sa.Column('date',
-                              sa.DateTime(timezone = True),
-                              nullable = False),
-
-                    # IP of original request
-                    sa.Column('ip', PGInet),
-
-                    # enum of kind of event
-                    sa.Column('kind', sa.Integer),
-                    
-                    # any message that may have been included
-                    sa.Column('body', sa.String),
-                    
-                    )
+    return sqla.Table(g.db_app_name + '_mail_queue', metadata,
+                      sqla.Column("uid", sqla.Integer,
+                                  sqla.Sequence('queue_id_seq'),
+                                  primary_key=True),
+  
+                      # unique hash of the message to carry around
+                      sqla.Column("msg_hash", sqla.String),
+                      
+                      # the id of the account who started it
+                      sqla.Column('account_id', sqla.BigInteger),
+  
+                      # the name (not email) for the from
+                      sqla.Column('from_name', sqla.String),
+  
+                      # the "To" address of the email
+                      sqla.Column('to_addr', sqla.String),
+  
+                      # the "From" address of the email
+                      sqla.Column('fr_addr', sqla.String),
+                      
+                      # the "Reply-To" address of the email
+                      sqla.Column('reply_to', sqla.String),
+  
+                      # fullname of the thing
+                      sqla.Column('fullname', sqla.String),
+                      
+                      # when added to the queue
+                      sqla.Column('date',
+                                  sqla.DateTime(timezone=True),
+                                  nullable=False),
+  
+                      # IP of original request
+                      sqla.Column('ip', PGInet),
+  
+                      # enum of kind of event
+                      sqla.Column('kind', sqla.Integer),
+                      
+                      # any message that may have been included
+                      sqla.Column('body', sqla.String),
+                      
+                      )
 
 def sent_mail_table(metadata, name = 'sent_mail'):
-    return sa.Table(g.db_app_name + '_' + name, metadata,
-                    # tracking hash of the email
-                    sa.Column('msg_hash', sa.String, primary_key=True),
-                    
-                    # the account who started it
-                    sa.Column('account_id', sa.BigInteger),
-                    
-                    # the "To" address of the email
-                    sa.Column('to_addr', sa.String),
+    return sqla.Table(g.db_app_name + '_' + name, metadata,
+                      # tracking hash of the email
+                      sqla.Column('msg_hash', sqla.String, primary_key=True),
+                      
+                      # the account who started it
+                      sqla.Column('account_id', sqla.BigInteger),
+                      
+                      # the "To" address of the email
+                      sqla.Column('to_addr', sqla.String),
+  
+                      # the "From" address of the email
+                      sqla.Column('fr_addr', sqla.String),
+                      
+                      # the "reply-to" address of the email
+                      sqla.Column('reply_to', sqla.String),
+  
+                      # IP of original request
+                      sqla.Column('ip', PGInet),
+  
+                      # fullname of the reference thing
+                      sqla.Column('fullname', sqla.String),
+  
+                      # send date
+                      sqla.Column('date',
+                                sqla.DateTime(timezone=True),
+                                default=sqla.func.now(),
+                                nullable=False),
+  
+                      # enum of kind of event
+                      sqla.Column('kind', sqla.Integer),
+  
+                      )
+ 
 
-                    # the "From" address of the email
-                    sa.Column('fr_addr', sa.String),
-                    
-                    # the "reply-to" address of the email
-                    sa.Column('reply_to', sa.String),
-
-                    # IP of original request
-                    sa.Column('ip', PGInet),
-
-                    # fullname of the reference thing
-                    sa.Column('fullname', sa.String),
-
-                    # send date
-                    sa.Column('date',
-                              sa.DateTime(timezone = True),
-                              default = sa.func.now(),
-                              nullable = False),
-
-                    # enum of kind of event
-                    sa.Column('kind', sa.Integer),
-
-                    )
-                    
-
+@export
 def opt_out(metadata):
-    return sa.Table(g.db_app_name + '_opt_out', metadata,
-                    sa.Column('email', sa.String, primary_key = True),
-                    # when added to the list
-                    sa.Column('date',
-                              sa.DateTime(timezone = True),
-                              default = sa.func.now(),
-                              nullable = False),
-                    # why did they do it!?
-                    sa.Column('msg_hash', sa.String),
-                    )
+    return sqla.Table(g.db_app_name + '_opt_out', metadata,
+                      sqla.Column('email', sqla.String, primary_key=True),
+                      # when added to the list
+                      sqla.Column('date',
+                                  sqla.DateTime(timezone=True),
+                                  default=sqla.func.now(),
+                                  nullable=False),
+                      # why did they do it!?
+                      sqla.Column('msg_hash', sqla.String),
+                      )
 
 class EmailHandler(object):
     def __init__(self, force = False):
@@ -174,7 +168,7 @@ class EmailHandler(object):
 
     def has_opted_out(self, email):
         o = self.opt_table
-        s = sa.select([o.c.email], o.c.email == email, limit = 1)
+        s = sqla.select([o.c.email], o.c.email == email, limit = 1)
         res = s.execute()
         return bool(res.fetchall())
 
@@ -193,7 +187,7 @@ class EmailHandler(object):
                 has_opted_out(email, _update = True)
                 opt_count(_update = True)
                 return (email, True)
-            except sa.exc.DBAPIError:
+            except sqla.exc.DBAPIError:
                 return (email, False)
         return (None, False)
 
@@ -203,7 +197,7 @@ class EmailHandler(object):
         if email:
             o = self.opt_table
             if self.has_opted_out(email):
-                sa.delete(o, o.c.email == email).execute()
+                sqla.delete(o, o.c.email == email).execute()
 
                 #clear caches
                 has_opted_out(email, _update = True)
@@ -215,7 +209,7 @@ class EmailHandler(object):
         
     def get_recipient(self, msg_hash):
         t = self.track_table
-        s = sa.select([t.c.to_addr], t.c.msg_hash == msg_hash).execute()
+        s = sqla.select([t.c.to_addr], t.c.msg_hash == msg_hash).execute()
         res = s.fetchall()
         return res[0][0] if res and res[:1] else None
 
@@ -260,12 +254,13 @@ class EmailHandler(object):
             if kind:
                 where.append(s.c.kind == kind)
                 
-            res = sa.select([s.c.to_addr, s.c.account_id,
-                             s.c.from_name, s.c.fullname, s.c.body, 
-                             s.c.kind, s.c.ip, s.c.date, s.c.uid,
-                             s.c.msg_hash, s.c.fr_addr, s.c.reply_to],
-                            sa.and_(*where),
-                            order_by = s.c.uid, limit = batch_limit).execute()
+            res = sqla.select([s.c.to_addr, s.c.account_id,
+                               s.c.from_name, s.c.fullname, s.c.body, 
+                               s.c.kind, s.c.ip, s.c.date, s.c.uid,
+                               s.c.msg_hash, s.c.fr_addr, s.c.reply_to],
+                               sqla.and_(*where),
+                               order_by = s.c.uid, limit = batch_limit
+                               ).execute()
             res = res.fetchall()
 
             if not res: break
@@ -301,9 +296,10 @@ class EmailHandler(object):
         where = [s.c.date < max_date]
         if kind:
             where.append([s.c.kind == kind])
-        sa.delete(s, sa.and_(*where)).execute()
+        sqla.delete(s, sqla.and_(*where)).execute()
 
 
+@export
 class Email(object):
     handler = EmailHandler()
 
@@ -427,18 +423,21 @@ class Email(object):
                 msg['Reply-To'] = utf8(self.reply_to)
             return msg
         return None
-            
+ 
+
+@export
 @memoize('r2.models.mail_queue.has_opted_out')
 def has_opted_out(email):
     o = Email.handler.opt_table
-    s = sa.select([o.c.email], o.c.email == email, limit = 1)
+    s = sqla.select([o.c.email], o.c.email == email, limit = 1)
     res = s.execute()
     return bool(res.fetchall())
-    
+ 
 
+@export
 @memoize('r2.models.mail_queue.opt_count')
 def opt_count():
     o = Email.handler.opt_table
-    s = sa.select([sa.func.count(o.c.email)])
+    s = sqla.select([sqla.func.count(o.c.email)])
     res = s.execute().fetchone()
     return int(res[0])

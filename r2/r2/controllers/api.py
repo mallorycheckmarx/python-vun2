@@ -29,13 +29,16 @@ from pylons import g, c, request
 from pylons.controllers.util import abort
 from pylons.i18n import _
 
+import r2.lib.pages as pages
+import r2.models as models
 from r2.lib import amqp, media, promote, cssfilter, emailer, totp
 from r2.lib.captcha import get_iden
 from r2.lib.comment_tree import delete_comment
 from r2.lib.db import queries
 from r2.lib.db.queries import changed
 from r2.lib.db.thing import CreationError, NotFound
-from r2.lib.filters import (_force_unicode,
+from r2.lib.filters import (#Functions
+                            _force_unicode,
                             safemarkdown,
                             spaceCompress,
                             websafe,
@@ -43,29 +46,15 @@ from r2.lib.filters import (_force_unicode,
                             )
 from r2.lib.log import log_text
 from r2.lib.menus import CommentSortMenu
-from r2.lib.pages import (BannedList,
-                          BoringPage,
-                          ClickGadget,
-                          ContributorList,
-                          CssError,
-                          FlairCsv,
-                          FlairList,
-                          FlairSelector,
-                          FlairTemplateEditor,
-                          FriendList,
-                          ModList,
-                          PrefApps,
-                          UploadedImage,
-                          UrlParser,
-                          WrappedUser,
-                          )
-from r2.lib.pages.things import wrap_links, default_thing_wrapper
 from r2.lib.scraper import str_to_image
 from r2.lib.search import SearchQuery
 from r2.lib.strings import strings
 from r2.lib.subreddit_search import search_reddits
 from r2.lib.template_helpers import add_sr
-from r2.lib.utils import (filter_links,
+from r2.lib.utils import (#Classes
+                          UrlParser,
+                          #Functions
+                          filter_links,
                           get_title,
                           query_string,
                           randstr,
@@ -78,110 +67,30 @@ from r2.lib.utils import (filter_links,
                           )
 from r2.lib.utils.trial_utils import indict, end_trial, trial_info
 from r2.lib.wrapped import Wrapped
-from r2.models import (Account,
-                       Ad,
-                       AdSR,
-                       Award,
-                       Comment,
-                       CommentBuilder,
-                       FakeSubreddit,
-                       FlairTemplate,
-                       FlairTemplateBySubredditIndex,
-                       Inbox,
-                       Jury,
-                       LastModified,
-                       Link,
-                       Listing,
-                       Message,
-                       ModAction,
-                       OAuth2AccessToken,
-                       OAuth2Client,
-                       PasswordResetToken,
-                       Report,
-                       SpotlightListing,
-                       SrMessageBuilder,
-                       Subreddit,
-                       Trophy,
-                       UserMessageBuilder,
+from r2.lib.wrapper import wrap_links, default_thing_wrapper
+from r2.models import (#Functions
                        change_password,
                        claim_gold,
                        register,
+                       #Constants/Variables
                        admintools,
                        LINK_FLAIR,
                        USER_FLAIR,
                       )
 
+import r2.controllers.validator as validator
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.errors import errors
 from r2.controllers.oauth2 import OAuth2ResourceController, require_oauth2_scope
-from r2.controllers.reddit_base import (RedditController,
+from r2.controllers.reddit_base import (#Classes
+                                        RedditController,
                                         MinimalController,
+                                        #Functions
                                         set_user_cookie,
                                         cross_domain,
                                         paginated_listing,
                                         )
-from r2.controllers.validator import (VAdmin,
-                                      VAdminOrAdminSecret,
-                                      VAdByCodename,
-                                      ValidEmails,
-                                      ValidIP,
-                                      VAwardByCodename,
-                                      VBoolean,
-                                      VByName,
-                                      VByNameIfAuthor,
-                                      VCaptcha,
-                                      VCanDistinguish,
-                                      VCommentIDs,
-                                      VCnameDomain,
-                                      VCssName,
-                                      VDestination,
-                                      VExistingUname,
-                                      VFlairAccount,
-                                      VFlairCss,
-                                      VFlairLink,
-                                      VFlairManager,
-                                      VFlairTemplateByID,
-                                      VFlairText,
-                                      VFloat,
-                                      VImageType,
-                                      VInt,
-                                      VGold,
-                                      VMarkdown,
-                                      VMenu,
-                                      VMessageRecipient,
-                                      VModhash,
-                                      VLang,
-                                      VLength,
-                                      VLimit,
-                                      VOneOf,
-                                      VOneTimeToken,
-                                      VOneTimePassword,
-                                      VOAuth2ClientDeveloper,
-                                      VOAuth2ClientID,
-                                      VPassword,
-                                      VPrintable,
-                                      VRatelimit,
-                                      VRequired,
-                                      VSanitizedUrl,
-                                      VSelfText,
-                                      VShamedDomain,
-                                      VSponsor,
-                                      VSrCanAlter,
-                                      VSrCanBan,
-                                      VSrModerator,
-                                      VSubmitSR,
-                                      VSubmitParent,
-                                      VSubredditName,
-                                      VSubredditSponsorship,
-                                      VSubscribeSR,
-                                      VThrottledLogin,
-                                      VTitle,
-                                      VTrophy,
-                                      VUname,
-                                      VUrl,
-                                      VUser,
-                                      VUserWithEmail,
-                                      VVotehash,
+from r2.controllers.validator import (#Functions
                                       json_validate,
                                       nop,
                                       noresponse,
@@ -231,9 +140,9 @@ class ApiController(RedditController, OAuth2ResourceController):
     def ajax_login_redirect(self, form, jquery, dest):
         form.redirect("/login" + query_string(dict(dest=dest)))
 
-    @validate(link1 = VUrl(['url']),
-              link2 = VByName('id'),
-              count = VLimit('limit'))
+    @validate(link1=validator.VUrl(['url']),
+              link2=validator.VByName('id'),
+              count=validator.VLimit('limit'))
     @api_doc(api_section.links_and_comments)
     def GET_info(self, link1, link2, count):
         """
@@ -246,7 +155,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             links = filter_links(tup(link1), filter_spam = False)
 
         listing = wrap_links(filter(None, links or []), num = count)
-        return BoringPage(_("API"), content = listing).render()
+        return pages.BoringPage(_("API"), content = listing).render()
 
 
     @json_validate()
@@ -262,11 +171,12 @@ class ApiController(RedditController, OAuth2ResourceController):
         else:
             return {}
 
-    @validatedForm(VCaptcha(),
-                   name=VRequired('name', errors.NO_NAME),
-                   email=ValidEmails('email', num = 1),
-                   reason = VOneOf('reason', ('ad_inq', 'feedback', "i18n")),
-                   message=VRequired('text', errors.NO_TEXT),
+    @validatedForm(validator.VCaptcha(),
+                   name=validator.VRequired('name', errors.NO_NAME),
+                   email=validator.ValidEmails('email', num=1),
+                   reason=validator.VOneOf('reason',
+                                           ('ad_inq', 'feedback', "i18n")),
+                   message=validator.VRequired('text', errors.NO_TEXT),
                    )
     def POST_feedback(self, form, jquery, name, email, reason, message):
         if not (form.has_errors('name',     errors.NO_NAME) or
@@ -289,13 +199,13 @@ class ApiController(RedditController, OAuth2ResourceController):
     POST_ad_inq = POST_feedback
 
 
-    @validatedForm(VCaptcha(),
-                   VUser(),
-                   VModhash(),
-                   ip = ValidIP(),
-                   to = VMessageRecipient('to'),
-                   subject = VRequired('subject', errors.NO_SUBJECT),
-                   body = VMarkdown(['text', 'message']))
+    @validatedForm(validator.VCaptcha(),
+                   validator.VUser(),
+                   validator.VModhash(),
+                   ip=validator.ValidIP(),
+                   to=validator.VMessageRecipient('to'),
+                   subject=validator.VRequired('subject', errors.NO_SUBJECT),
+                   body=validator.VMarkdown(['text', 'message']))
     @api_doc(api_section.messages)
     def POST_compose(self, form, jquery, to, subject, body, ip):
         """
@@ -308,7 +218,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 form.has_errors("text", errors.NO_TEXT, errors.TOO_LONG) or
                 form.has_errors("captcha", errors.BAD_CAPTCHA)):
 
-            m, inbox_rel = Message._new(c.user, to, subject, body, ip)
+            m, inbox_rel = models.Message._new(c.user, to, subject, body, ip)
             form.set_html(".status", _("your message has been delivered"))
             form.set_inputs(to = "", subject = "", text = "", captcha="")
 
@@ -316,21 +226,22 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             queries.new_message(m, inbox_rel)
 
-    @validatedForm(VUser(),
-                   VCaptcha(),
-                   VRatelimit(rate_user = True, rate_ip = True,
-                              prefix = "rate_submit_"),
-                   VShamedDomain('url'),
-                   ip = ValidIP(),
-                   sr = VSubmitSR('sr', 'kind'),
-                   url = VUrl(['url', 'sr', 'resubmit']),
-                   title = VTitle('title'),
-                   save = VBoolean('save'),
-                   selftext = VSelfText('text'),
-                   kind = VOneOf('kind', ['link', 'self']),
-                   then = VOneOf('then', ('tb', 'comments'),
-                                 default='comments'),
-                   extension = VLength("extension", 20))
+    @validatedForm(validator.VUser(),
+                   validator.VCaptcha(),
+                   validator.VRatelimit(rate_user=True,
+                                        rate_ip=True,
+                                        prefix="rate_submit_"),
+                   validator.VShamedDomain('url'),
+                   ip=validator.ValidIP(),
+                   sr=validator.VSubmitSR('sr', 'kind'),
+                   url=validator.VUrl(['url', 'sr', 'resubmit']),
+                   title=validator.VTitle('title'),
+                   save=validator.VBoolean('save'),
+                   selftext=validator.VSelfText('text'),
+                   kind=validator.VOneOf('kind', ['link', 'self']),
+                   then=validator.VOneOf('then', ('tb', 'comments'),
+                                         default='comments'),
+                   extension=validator.VLength("extension", 20))
     @api_doc(api_section.links_and_comments)
     def POST_submit(self, form, jquery, url, selftext, kind, title,
                     save, sr, ip, then, extension):
@@ -445,8 +356,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                 return
 
         # well, nothing left to do but submit it
-        l = Link._submit(request.post.title, url if kind == 'link' else 'self',
-                         c.user, sr, ip, spam=c.user._spam)
+        l = models.Link._submit(request.post.title, 
+                                url if kind == 'link' else 'self',
+                                c.user, sr, ip, spam=c.user._spam)
 
         if banmsg:
             g.stats.simple_event('spam.domainban.link_url')
@@ -469,8 +381,9 @@ class ApiController(RedditController, OAuth2ResourceController):
         #set the ratelimiter
         if should_ratelimit:
             c.user.clog_quota('link', l)
-            VRatelimit.ratelimit(rate_user=True, rate_ip = True,
-                                 prefix = "rate_submit_")
+            validator.VRatelimit.ratelimit(rate_user=True,
+                                           rate_ip=True,
+                                           prefix="rate_submit_")
 
         #update the queries
         queries.new_link(l)
@@ -488,18 +401,20 @@ class ApiController(RedditController, OAuth2ResourceController):
         form._send_data(id=l._id36)
         form._send_data(name=l._fullname)
 
-    @validatedForm(VRatelimit(rate_ip = True,
-                              rate_user = True,
-                              prefix = 'fetchtitle_'),
-                   VUser(),
-                   url = VSanitizedUrl('url'))
+    @validatedForm(validator.VRatelimit(rate_ip=True,
+                                        rate_user=True,
+                                        prefix='fetchtitle_'),
+                   validator.VUser(),
+                   url=validator.VSanitizedUrl('url'))
     def POST_fetch_title(self, form, jquery, url):
         if form.has_errors('ratelimit', errors.RATELIMIT):
             form.set_html(".title-status", "");
             return
 
-        VRatelimit.ratelimit(rate_ip = True, rate_user = True,
-                             prefix = 'fetchtitle_', seconds=1)
+        validator.VRatelimit.ratelimit(rate_ip=True,
+                                       rate_user=True,
+                                       prefix='fetchtitle_',
+                                       seconds=1)
         if url:
             title = get_title(url)
             if title:
@@ -529,19 +444,19 @@ class ApiController(RedditController, OAuth2ResourceController):
     def POST_register(self, *args, **kwargs):
         return self._handle_register(*args, **kwargs)
 
-    @validatedForm(user = VThrottledLogin(['user', 'passwd']),
-                   rem = VBoolean('rem'))
+    @validatedForm(user=validator.VThrottledLogin(['user', 'passwd']),
+                   rem=validator.VBoolean('rem'))
     def _handle_login(self, form, responder, user, rem):
         if not (responder.has_errors("vdelay", errors.RATELIMIT) or
                 responder.has_errors("passwd", errors.WRONG_PASSWORD)):
             self._login(responder, user, rem)
 
-    @validatedForm(VCaptcha(),
-                   VRatelimit(rate_ip = True, prefix = "rate_register_"),
-                   name = VUname(['user']),
-                   email = ValidEmails("email", num = 1),
-                   password = VPassword(['passwd', 'passwd2']),
-                   rem = VBoolean('rem'))
+    @validatedForm(validator.VCaptcha(),
+                   validator.VRatelimit(rate_ip=True, prefix="rate_register_"),
+                   name=validator.VUname(['user']),
+                   email=validator.ValidEmails("email", num=1),
+                   password=validator.VPassword(['passwd', 'passwd2']),
+                   rem=validator.VBoolean('rem'))
     def _handle_register(self, form, responder, name, email,
                       password, rem):
         bad_captcha = responder.has_errors('captcha', errors.BAD_CAPTCHA)
@@ -555,7 +470,8 @@ class ApiController(RedditController, OAuth2ResourceController):
                 (not g.disable_captcha and bad_captcha)):
             
             user = register(name, password)
-            VRatelimit.ratelimit(rate_ip = True, prefix = "rate_register_")
+            validator.VRatelimit.ratelimit(rate_ip=True,
+                                           prefix="rate_register_")
 
             #anything else we know (email, languages)?
             if email:
@@ -578,9 +494,9 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.user = user
             self._login(responder, user, rem)
 
-    @noresponse(VUser(),
-                VModhash(),
-                container = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                container=validator.VByName('id'))
     @api_doc(api_section.moderation)
     def POST_leavemoderator(self, container):
         """
@@ -589,13 +505,13 @@ class ApiController(RedditController, OAuth2ResourceController):
         """
         if container and container.is_moderator(c.user):
             container.remove_moderator(c.user)
-            Subreddit.special_reddits(c.user, "moderator", _update=True)
-            ModAction.create(container, c.user, 'removemoderator', target=c.user, 
-                             details='remove_self')
+            models.Subreddit.special_reddits(c.user, "moderator", _update=True)
+            models.ModAction.create(container, c.user, 'removemoderator',
+                                    target=c.user, details='remove_self')
 
-    @noresponse(VUser(),
-                VModhash(),
-                container = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                container=validator.VByName('id'))
     @api_doc(api_section.moderation)
     def POST_leavecontributor(self, container):
         """
@@ -603,15 +519,15 @@ class ApiController(RedditController, OAuth2ResourceController):
         """
         if container and container.is_contributor(c.user):
             container.remove_contributor(c.user)
-            Subreddit.special_reddits(c.user, "contributor", _update=True)
+            models.Subreddit.special_reddits(c.user, "contributor", _update=True)
 
-    @noresponse(VUser(),
-                VModhash(),
-                nuser = VExistingUname('name'),
-                iuser = VByName('id'),
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                nuser=validator.VExistingUname('name'),
+                iuser=validator.VByName('id'),
                 container = nop('container'),
-                type = VOneOf('type', ('friend', 'enemy', 'moderator', 
-                                       'contributor', 'banned')))
+                type=validator.VOneOf('type', ('friend', 'enemy', 'moderator', 
+                                               'contributor', 'banned')))
     @api_doc(api_section.users)
     def POST_unfriend(self, nuser, iuser, container, type):
         """
@@ -625,7 +541,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         if type in sr_types:
             container = c.site
         else:
-            container = VByName('container').run(container)
+            container=validator.VByName('container').run(container)
             if not container:
                 return
 
@@ -649,22 +565,22 @@ class ApiController(RedditController, OAuth2ResourceController):
         if new and type in sr_types:
             action = dict(banned='unbanuser', moderator='removemoderator', 
                           contributor='removecontributor').get(type, None)
-            ModAction.create(container, c.user, action, target=victim)
+            models.ModAction.create(container, c.user, action, target=victim)
 
         if type == "friend" and c.user.gold:
             c.user.friend_rels_cache(_update=True)
 
         if type in ("moderator", "contributor"):
-            Subreddit.special_reddits(victim, type, _update=True)
+            models.Subreddit.special_reddits(victim, type, _update=True)
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   ip = ValidIP(),
-                   friend = VExistingUname('name'),
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   ip=validator.ValidIP(),
+                   friend=validator.VExistingUname('name'),
                    container = nop('container'),
-                   type = VOneOf('type', ('friend', 'moderator',
-                                          'contributor', 'banned')),
-                   note = VLength('note', 300))
+                   type=validator.VOneOf('type', ('friend', 'moderator',
+                                                  'contributor', 'banned')),
+                   note=validator.VLength('note', 300))
     @api_doc(api_section.users)
     def POST_friend(self, form, jquery, ip, friend,
                     container, type, note):
@@ -676,7 +592,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         if type in sr_types:
             container = c.site
         else:
-            container = VByName('container').run(container)
+            container=validator.VByName('container').run(container)
             if not container:
                 return
         fn = getattr(container, 'add_' + type)
@@ -712,7 +628,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         if new and type in sr_types:
             action = dict(banned='banuser', moderator='addmoderator', 
                           contributor='addcontributor').get(type, None)
-            ModAction.create(container, c.user, action, target=friend)
+            models.ModAction.create(container, c.user, action, target=friend)
 
         if type == "friend" and c.user.gold:
             # Yes, the order of the next two lines is correct.
@@ -722,12 +638,12 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.user.add_friend_note(friend, note or '')
 
         if type in ("moderator", "contributor"):
-            Subreddit.special_reddits(friend, type, _update=True)
+            models.Subreddit.special_reddits(friend, type, _update=True)
 
-        cls = dict(friend=FriendList,
-                   moderator=ModList,
-                   contributor=ContributorList,
-                   banned=BannedList).get(type)
+        cls = dict(friend=pages.FriendList,
+                   moderator=pages.ModList,
+                   contributor=pages.ContributorList,
+                   banned=pages.BannedList).get(type)
         form.set_inputs(name = "")
         form.set_html(".status:first", _("added"))
         if new and cls:
@@ -742,7 +658,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 if msg and subj and friend.name != c.user.name:
                     # fullpath with domain needed or the markdown link
                     # will break
-                    if isinstance(container, Subreddit):
+                    if isinstance(container, models.Subreddit):
                         title = "%s: %s" % (container.path.rstrip("/"),
                                             container.title)
                     else:
@@ -757,23 +673,25 @@ class ApiController(RedditController, OAuth2ResourceController):
                     else:
                         from_sr = False
                         sr = None
-                    item, inbox_rel = Message._new(c.user, friend, subj, msg,
-                                                   ip, from_sr=from_sr, sr=sr)
+                    item, inbox_rel = models.Message._new(c.user, friend, subj,
+                                                          msg, ip,
+                                                          from_sr=from_sr,
+                                                          sr=sr)
 
                     queries.new_message(item, inbox_rel)
 
 
-    @validatedForm(VGold(),
-                   friend = VExistingUname('name'),
-                   note = VLength('note', 300))
+    @validatedForm(validator.VGold(),
+                   friend=validator.VExistingUname('name'),
+                   note=validator.VLength('note', 300))
     def POST_friendnote(self, form, jquery, friend, note):
         c.user.add_friend_note(friend, note)
         form.set_html('.status', _("saved"))
 
-    @validatedForm(VUser('curpass', default=''),
-                   VModhash(),
-                   password = VPassword(['curpass', 'curpass']),
-                   dest = VDestination())
+    @validatedForm(validator.VUser('curpass', default=''),
+                   validator.VModhash(),
+                   password=validator.VPassword(['curpass', 'curpass']),
+                   dest=validator.VDestination())
     @api_doc(api_section.account)
     def POST_clear_sessions(self, form, jquery, password, dest):
         """
@@ -790,7 +708,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         form.set_inputs(curpass = "")
 
         # deauthorize all access tokens
-        OAuth2AccessToken.revoke_all_by_user(c.user)
+        models.OAuth2AccessToken.revoke_all_by_user(c.user)
 
         # run the change password command to get a new salt
         change_password(c.user, password)
@@ -798,11 +716,11 @@ class ApiController(RedditController, OAuth2ResourceController):
         # invalidated.  drop a new cookie.
         self.login(c.user)
 
-    @validatedForm(VUser('curpass', default = ''),
-                   VModhash(),
-                   email = ValidEmails("email", num = 1),
-                   password = VPassword(['newpass', 'verpass']),
-                   verify = VBoolean("verify"))
+    @validatedForm(validator.VUser('curpass', default = ''),
+                   validator.VModhash(),
+                   email=validator.ValidEmails("email", num=1),
+                   password=validator.VPassword(['newpass', 'verpass']),
+                   verify=validator.VBoolean("verify"))
     @api_doc(api_section.account)
     def POST_update(self, form, jquery, email, password, verify):
         """
@@ -827,7 +745,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 # unverified email for now
                 c.user.email_verified = None
                 c.user._commit()
-                Award.take_away("verified_email", c.user)
+                models.Award.take_away("verified_email", c.user)
                 updated = True
             if verify:
                 # TODO: rate limit this?
@@ -843,7 +761,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.user.email = ''
             c.user.email_verified = None
             c.user._commit()
-            Award.take_away("verified_email", c.user)
+            models.Award.take_away("verified_email", c.user)
             updated = True
             form.set_html('.status', _('your email has been updated'))
 
@@ -863,12 +781,13 @@ class ApiController(RedditController, OAuth2ResourceController):
             # invalidated.  drop a new cookie.
             self.login(c.user)
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   delete_message = VLength("delete_message", max_length=500),
-                   username = VRequired("user", errors.NOT_USER),
-                   user = VThrottledLogin(["user", "passwd"]),
-                   confirm = VBoolean("confirm"))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   delete_message=validator.VLength("delete_message",
+                                                    max_length=500),
+                   username=validator.VRequired("user", errors.NOT_USER),
+                   user=validator.VThrottledLogin(["user", "passwd"]),
+                   confirm=validator.VBoolean("confirm"))
     @api_doc(api_section.account)
     def POST_delete_user(self, form, jquery, delete_message, username, user, confirm):
         """
@@ -894,9 +813,9 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.user.delete(delete_message)
             form.redirect("/?deleted=true")
 
-    @noresponse(VUser(),
-                VModhash(),
-                thing = VByNameIfAuthor('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                thing=validator.VByNameIfAuthor('id'))
     @api_doc(api_section.links_and_comments)
     def POST_del(self, thing):
         if not thing: return
@@ -912,68 +831,68 @@ class ApiController(RedditController, OAuth2ResourceController):
         changed(thing)
 
         #expire the item from the sr cache
-        if isinstance(thing, Link):
+        if isinstance(thing, models.Link):
             queries.delete(thing)
 
         #comments have special delete tasks
-        elif isinstance(thing, Comment):
+        elif isinstance(thing, models.Comment):
             parent_id = getattr(thing, 'parent_id', None)
             link_id = thing.link_id
             recipient = None
 
             if parent_id:
-                parent_comment = Comment._byID(parent_id, data=True)
-                recipient = Account._byID(parent_comment.author_id)
+                parent_comment = models.Comment._byID(parent_id, data=True)
+                recipient = models.Account._byID(parent_comment.author_id)
             else:
-                parent_link = Link._byID(link_id, data=True)
+                parent_link = models.Link._byID(link_id, data=True)
                 if parent_link.is_self:
-                    recipient = Account._byID(parent_link.author_id)
+                    recipient = models.Account._byID(parent_link.author_id)
 
             if not was_deleted:
                 delete_comment(thing)
 
             if recipient:
-                inbox_class = Inbox.rel(Account, Comment)
+                inbox_class = models.Inbox.rel(models.Account, models.Comment)
                 d = inbox_class._fast_query(recipient, thing, ("inbox", "selfreply"))
                 rels = filter(None, d.values()) or None
                 queries.new_comment(thing, rels)
 
             queries.delete(thing)
 
-    @noresponse(VUser(),
-                VModhash(),
-                VSrCanAlter('id'),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                validator.VSrCanAlter('id'),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_marknsfw(self, thing):
         thing.over_18 = True
         thing._commit()
 
         if c.user._id != thing.author_id:
-            ModAction.create(thing.subreddit_slow, c.user, target=thing,
-                             action='marknsfw')
+            models.ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                                    action='marknsfw')
 
         # flag search indexer that something has changed
         changed(thing)
 
-    @noresponse(VUser(),
-                VModhash(),
-                VSrCanAlter('id'),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                validator.VSrCanAlter('id'),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_unmarknsfw(self, thing):
         thing.over_18 = False
         thing._commit()
 
         if c.user._id != thing.author_id:
-            ModAction.create(thing.subreddit_slow, c.user, target=thing,
-                             action='marknsfw', details='remove')
+            models.ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                                    action='marknsfw', details='remove')
 
         # flag search indexer that something has changed
         changed(thing)
 
-    @noresponse(VUser(), VModhash(),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(), validator.VModhash(),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_report(self, thing):
         '''for reporting...'''
@@ -984,24 +903,24 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         # if it is a message that is being reported, ban it.
         # every user is admin over their own personal inbox
-        if isinstance(thing, Message):
+        if isinstance(thing, models.Message):
             admintools.spam(thing, False, True, c.user.name)
         # auto-hide links that are reported
-        elif isinstance(thing, Link):
+        elif isinstance(thing, models.Link):
             r = thing._hide(c.user)
             queries.new_savehide(r)
         # TODO: be nice to be able to remove comments that are reported
         # from a user's inbox so they don't have to look at them.
-        elif isinstance(thing, Comment):
+        elif isinstance(thing, models.Comment):
             pass
 
         if c.user._spam or c.user.ignorereports:
             return
-        Report.new(c.user, thing)
+        models.Report.new(c.user, thing)
         admintools.report(thing)
 
-    @noresponse(VUser(), VModhash(),
-                thing=VByName('id'))
+    @noresponse(validator.VUser(), validator.VModhash(),
+                thing=validator.VByName('id'))
     @api_doc(api_section.messages)
     def POST_block(self, thing):
         '''for blocking via inbox'''
@@ -1011,28 +930,28 @@ class ApiController(RedditController, OAuth2ResourceController):
         # actively harassed them (i.e., comment/link reply
         # or PM). Check that 'thing' would have showed up in the
         # user's inbox at some point
-        if isinstance(thing, Message):
+        if isinstance(thing, models.Message):
             if thing.to_id != c.user._id:
                 return
-        elif isinstance(thing, Comment):
+        elif isinstance(thing, models.Comment):
             parent_id = getattr(thing, 'parent_id', None)
             link_id = thing.link_id
             if parent_id:
-                parent_comment = Comment._byID(parent_id)
+                parent_comment = models.Comment._byID(parent_id)
                 parent_author_id = parent_comment.author_id
             else:
-                parent_link = Link._byID(link_id)
+                parent_link = models.Link._byID(link_id)
                 parent_author_id = parent_link.author_id
             if parent_author_id != c.user._id:
                 return
 
-        block_acct = Account._byID(thing.author_id)
+        block_acct = models.Account._byID(thing.author_id)
         if block_acct.name in g.admins:
             return
         c.user.add_enemy(block_acct)
 
-    @noresponse(VAdmin(), VModhash(),
-                thing = VByName('id'))
+    @noresponse(validator.VAdmin(), validator.VModhash(),
+                thing=validator.VByName('id'))
     def POST_indict(self, thing):
         '''put something on trial'''
         if not thing:
@@ -1040,20 +959,20 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         indict(thing)
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   item = VByNameIfAuthor('thing_id'),
-                   text = VSelfText('text'))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   item=validator.VByNameIfAuthor('thing_id'),
+                   text=validator.VSelfText('text'))
     @api_doc(api_section.links_and_comments)
     def POST_editusertext(self, form, jquery, item, text):
         if (not form.has_errors("text",
                                 errors.NO_TEXT, errors.TOO_LONG) and
             not form.has_errors("thing_id", errors.NOT_AUTHOR)):
 
-            if isinstance(item, Comment):
+            if isinstance(item, models.Comment):
                 kind = 'comment'
                 item.body = text
-            elif isinstance(item, Link):
+            elif isinstance(item, models.Link):
                 kind = 'link'
                 if not getattr(item, "is_self", False):
                     return abort(403, "forbidden")
@@ -1077,26 +996,27 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             if kind == 'link':
                 set_last_modified(item, 'comments')
-                LastModified.touch(item._fullname, 'Comments')
+                models.LastModified.touch(item._fullname, 'Comments')
 
             wrapper = default_thing_wrapper(expand_children = True)
             jquery(".content").replace_things(item, True, True, wrap = wrapper)
             jquery(".content .link .rank").hide()
 
     @require_oauth2_scope("comment")
-    @validatedForm(VUser(),
-                   VModhash(),
-                   VRatelimit(rate_user = True, rate_ip = True,
-                              prefix = "rate_comment_"),
-                   ip = ValidIP(),
-                   parent = VSubmitParent(['thing_id', 'parent']),
-                   comment = VMarkdown(['text', 'comment']))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   validator.VRatelimit(rate_user=True,
+                                        rate_ip=True,
+                                        prefix="rate_comment_"),
+                   ip=validator.ValidIP(),
+                   parent=validator.VSubmitParent(['thing_id', 'parent']),
+                   comment=validator.VMarkdown(['text', 'comment']))
     @api_doc(api_section.links_and_comments)
     def POST_comment(self, commentform, jquery, parent, comment, ip):
         should_ratelimit = True
         #check the parent type here cause we need that for the
         #ratelimit checks
-        if isinstance(parent, Message):
+        if isinstance(parent, models.Message):
             if not getattr(parent, "repliable", True):
                 abort(403, 'forbidden')
             is_message = True
@@ -1104,11 +1024,11 @@ class ApiController(RedditController, OAuth2ResourceController):
         else:
             is_message = False
             is_comment = True
-            if isinstance(parent, Link):
+            if isinstance(parent, models.Link):
                 link = parent
                 parent_comment = None
             else:
-                link = Link._byID(parent.link_id, data = True)
+                link = models.Link._byID(parent.link_id, data=True)
                 parent_comment = parent
             sr = parent.subreddit_slow
             if ((link.is_self and link.author_id == c.user._id)
@@ -1135,19 +1055,21 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             if is_message:
                 if parent.from_sr:
-                    to = Subreddit._byID(parent.sr_id)
+                    to = models.Subreddit._byID(parent.sr_id)
                 else:
-                    to = Account._byID(parent.author_id)
+                    to = models.Account._byID(parent.author_id)
                 subject = parent.subject
                 re = "re: "
                 if not subject.startswith(re):
                     subject = re + subject
-                item, inbox_rel = Message._new(c.user, to, subject,
-                                               comment, ip, parent = parent)
+                item, inbox_rel = models.Message._new(c.user, to, subject,
+                                                      comment, ip,
+                                                      parent=parent)
                 item.parent_id = parent._id
             else:
-                item, inbox_rel = Comment._new(c.user, link, parent_comment,
-                                               comment, ip)
+                item, inbox_rel = models.Comment._new(c.user, link,
+                                                      parent_comment,
+                                                      comment, ip)
                 queries.queue_vote(c.user, item, True, ip,
                                    cheater = (errors.CHEATER, None) in c.errors)
 
@@ -1158,7 +1080,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             # clean up the submission form and remove it from the DOM (if reply)
             t = commentform.find("textarea")
             t.attr('rows', 3).html("").val("")
-            if isinstance(parent, (Comment, Message)):
+            if isinstance(parent, (models.Comment, models.Message)):
                 commentform.remove()
                 jquery.things(parent._fullname).set_html(".reply-button:first",
                                                          _("replied"))
@@ -1177,19 +1099,21 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             #set the ratelimiter
             if should_ratelimit:
-                VRatelimit.ratelimit(rate_user=True, rate_ip = True,
-                                     prefix = "rate_comment_")
+                validator.VRatelimit.ratelimit(rate_user=True,
+                                               rate_ip=True,
+                                               prefix="rate_comment_")
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   VCaptcha(),
-                   VRatelimit(rate_user = True, rate_ip = True,
-                              prefix = "rate_share_"),
-                   share_from = VLength('share_from', max_length = 100),
-                   emails = ValidEmails("share_to"),
-                   reply_to = ValidEmails("replyto", num = 1), 
-                   message = VLength("message", max_length = 1000), 
-                   thing = VByName('parent'))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   validator.VCaptcha(),
+                   validator.VRatelimit(rate_user=True,
+                                        rate_ip=True,
+                                        prefix="rate_share_"),
+                   share_from=validator.VLength('share_from', max_length=100),
+                   emails=validator.ValidEmails("share_to"),
+                   reply_to=validator.ValidEmails("replyto", num=1), 
+                   message=validator.VLength("message", max_length=1000), 
+                   thing=validator.VByName('parent'))
     def POST_share(self, shareform, jquery, emails, thing, share_from, reply_to,
                    message):
 
@@ -1232,14 +1156,15 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             #set the ratelimiter
             if should_ratelimit:
-                VRatelimit.ratelimit(rate_user=True, rate_ip = True,
-                                     prefix = "rate_share_")
+                validator.VRatelimit.ratelimit(rate_user=True,
+                                               rate_ip = True,
+                                               prefix="rate_share_")
 
-    @noresponse(VUser(),
-                VModhash(),
-                ip = ValidIP(),
-                dir = VInt('dir', min=-1, max=1),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                ip=validator.ValidIP(),
+                dir=validator.VInt('dir', min=-1, max=1),
+                thing=validator.VByName('id'))
     def POST_juryvote(self, dir, thing, ip):
         if not thing:
             log_text("juryvote: no thing", level="warning")
@@ -1253,7 +1178,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             log_text("juryvote: no dir", level="warning")
             return
 
-        j = Jury.by_account_and_defendant(c.user, thing)
+        j = models.Jury.by_account_and_defendant(c.user, thing)
 
         if not trial_info([thing]).get(thing._fullname,False):
             log_text("juryvote: not on trial", level="warning")
@@ -1271,12 +1196,12 @@ class ApiController(RedditController, OAuth2ResourceController):
         j._date = c.start_time
         j._commit()
 
-    @noresponse(VUser(),
-                VModhash(),
-                vote_type = VVotehash(('vh', 'id')),
-                ip = ValidIP(),
-                dir = VInt('dir', min=-1, max=1),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                vote_type=validator.VVotehash(('vh', 'id')),
+                ip=validator.ValidIP(),
+                dir=validator.VInt('dir', min=-1, max=1),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_vote(self, dir, thing, ip, vote_type):
         ip = request.ip
@@ -1306,11 +1231,11 @@ class ApiController(RedditController, OAuth2ResourceController):
         queries.queue_vote(user, thing, dir, ip, organic, store = store,
                            cheater = (errors.CHEATER, None) in c.errors)
 
-    @validatedForm(VUser(),
-                   VModhash(),
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
                    # nop is safe: handled after auth checks below
                    stylesheet_contents = nop('stylesheet_contents'),
-                   op = VOneOf('op',['save','preview']))
+                   op=validator.VOneOf('op',['save','preview']))
     @api_doc(api_section.subreddits)
     def POST_subreddit_stylesheet(self, form, jquery,
                                   stylesheet_contents = '', op='save'):
@@ -1325,7 +1250,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         parsed, report = cssfilter.validate_css(stylesheet_contents)
 
         if report.errors:
-            error_items = [ CssError(x).render(style='html')
+            error_items = [ pages.CssError(x).render(style='html')
                             for x in sorted(report.errors) ]
             form.set_html(".status", _('validation errors'))
             form.set_html(".errors ul", ''.join(error_items))
@@ -1349,8 +1274,8 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             c.site._commit()
 
-            ModAction.create(c.site, c.user, action='editsettings', 
-                             details='stylesheet')
+            models.ModAction.create(c.site, c.user, action='editsettings', 
+                                    details='stylesheet')
 
             form.set_html(".status", _('saved'))
             form.set_html(".errors ul", "")
@@ -1383,9 +1308,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                     cssfilter.rendered_comment(comments))
 
 
-    @validatedForm(VSrModerator(),
-                   VModhash(),
-                   name = VCssName('img_name'))
+    @validatedForm(validator.VSrModerator(),
+                   validator.VModhash(),
+                   name=validator.VCssName('img_name'))
     @api_doc(api_section.subreddits)
     def POST_delete_sr_img(self, form, jquery, name):
         """
@@ -1398,12 +1323,12 @@ class ApiController(RedditController, OAuth2ResourceController):
             return self.abort(403,'forbidden')
         c.site.del_image(name)
         c.site._commit()
-        ModAction.create(c.site, c.user, action='editsettings', 
-                         details='del_image', description=name)
+        models.ModAction.create(c.site, c.user, action='editsettings', 
+                                details='del_image', description=name)
 
-    @validatedForm(VSrModerator(),
-                   VModhash(),
-                   sponsor = VInt("sponsor", min = 0, max = 1))
+    @validatedForm(validator.VSrModerator(),
+                   validator.VModhash(),
+                   sponsor=validator.VInt("sponsor", min=0, max=1))
     @api_doc(api_section.subreddits)
     def POST_delete_sr_header(self, form, jquery, sponsor):
         """
@@ -1420,8 +1345,8 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.site.header = None
             c.site.header_size = None
             c.site._commit()
-            ModAction.create(c.site, c.user, action='editsettings', 
-                             details='del_header')
+            models.ModAction.create(c.site, c.user, action='editsettings', 
+                                    details='del_header')
 
         # hide the button which started this
         form.find('.delete-img').hide()
@@ -1442,14 +1367,14 @@ class ApiController(RedditController, OAuth2ResourceController):
         """
         return "nothing to see here."
 
-    @validate(VSrModerator(),
-              VModhash(),
-              file = VLength('file', max_length=1024*500),
-              name = VCssName("name"),
-              img_type = VImageType('img_type'),
-              form_id = VLength('formid', max_length = 100), 
-              header = VInt('header', max=1, min=0),
-              sponsor = VSubredditSponsorship('sponsor'))
+    @validate(validator.VSrModerator(),
+              validator.VModhash(),
+              file=validator.VLength('file', max_length=1024*500),
+              name=validator.VCssName("name"),
+              img_type=validator.VImageType('img_type'),
+              form_id=validator.VLength('formid', max_length=100), 
+              header=validator.VInt('header', max=1, min=0),
+              sponsor=validator.VSubredditSponsorship('sponsor'))
     @api_doc(api_section.subreddits)
     def POST_upload_sr_img(self, file, header, sponsor, name, form_id, img_type):
         """
@@ -1486,13 +1411,14 @@ class ApiController(RedditController, OAuth2ResourceController):
                 errors['IMAGE_ERROR'] = _("too many images (you only get %d)") % g.max_sr_images
 
         if any(errors.values()):
-            return UploadedImage("", "", "", errors=errors).render()
+            return pages.UploadedImage("", "", "", errors=errors).render()
         else:
             try:
                 new_url = cssfilter.save_sr_image(c.site, file, suffix ='.' + img_type)
             except cssfilter.BadImage:
                 errors['IMAGE_ERROR'] = _("Invalid image or general image error")
-                return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
+                return pages.UploadedImage("", "", "", errors=errors,
+                                           form_id=form_id).render()
             size = str_to_image(file).size
             if header:
                 c.site.header = new_url
@@ -1509,36 +1435,46 @@ class ApiController(RedditController, OAuth2ResourceController):
                     kw = dict(details='upload_image_header')
                 else:
                     kw = dict(details='upload_image', description=name)
-                ModAction.create(c.site, c.user, action='editsettings', **kw)
+                models.ModAction.create(c.site, c.user,
+                                        action='editsettings', **kw)
 
-            return UploadedImage(_('saved'), new_url, name, 
-                                 errors=errors, form_id=form_id).render()
+            return pages.UploadedImage(_('saved'), new_url, name, 
+                                       errors=errors, form_id=form_id).render()
 
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   VRatelimit(rate_user = True,
-                              rate_ip = True,
-                              prefix = 'create_reddit_'),
-                   sr = VByName('sr'),
-                   name = VSubredditName("name"),
-                   title = VLength("title", max_length = 100),
-                   header_title = VLength("header-title", max_length = 500),
-                   domain = VCnameDomain("domain"),
-                   public_description = VMarkdown("public_description", max_length = 500),
-                   description = VMarkdown("description", max_length = 5120),
-                   lang = VLang("lang"),
-                   over_18 = VBoolean('over_18'),
-                   allow_top = VBoolean('allow_top'),
-                   show_media = VBoolean('show_media'),
-                   show_cname_sidebar = VBoolean('show_cname_sidebar'),
-                   type = VOneOf('type', ('public', 'private', 'restricted', 'archived')),
-                   link_type = VOneOf('link_type', ('any', 'link', 'self')),
-                   ip = ValidIP(),
-                   sponsor_text =VLength('sponsorship-text', max_length = 500),
-                   sponsor_name =VLength('sponsorship-name', max_length = 64),
-                   sponsor_url = VLength('sponsorship-url', max_length = 500),
-                   css_on_cname = VBoolean("css_on_cname"),
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   validator.VRatelimit(rate_user=True,
+                                        rate_ip=True,
+                                        prefix='create_reddit_'),
+                   sr=validator.VByName('sr'),
+                   name=validator.VSubredditName("name"),
+                   title=validator.VLength("title", max_length=100),
+                   header_title=validator.VLength("header-title",
+                                                  max_length=500),
+                   domain=validator.VCnameDomain("domain"),
+                   public_description=validator.VMarkdown("public_description",
+                                                          max_length=500),
+                   description=validator.VMarkdown("description",
+                                                   max_length=5120),
+                   lang=validator.VLang("lang"),
+                   over_18=validator.VBoolean('over_18'),
+                   allow_top=validator.VBoolean('allow_top'),
+                   show_media=validator.VBoolean('show_media'),
+                   show_cname_sidebar=validator.VBoolean('show_cname_sidebar'),
+                   type=validator.VOneOf('type', 
+                                         ('public', 'private',
+                                          'restricted', 'archived')),
+                   link_type=validator.VOneOf('link_type',
+                                              ('any', 'link', 'self')),
+                   ip=validator.ValidIP(),
+                   sponsor_text=validator.VLength('sponsorship-text',
+                                                  max_length=500),
+                   sponsor_name=validator.VLength('sponsorship-name',
+                                                  max_length=64),
+                   sponsor_url=validator.VLength('sponsorship-url',
+                                                 max_length=500),
+                   css_on_cname=validator.VBoolean("css_on_cname"),
                    )
     @api_doc(api_section.subreddits)
     def POST_site_admin(self, form, jquery, name, ip, sr,
@@ -1559,7 +1495,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.errors.add(errors.RATELIMIT, {'time': time})
 
         domain = kw['domain']
-        cname_sr = domain and Subreddit._by_domain(domain)
+        cname_sr = domain and models.Subreddit._by_domain(domain)
         if cname_sr and (not sr or sr != cname_sr):
             c.errors.add(errors.USED_CNAME)
 
@@ -1584,10 +1520,10 @@ class ApiController(RedditController, OAuth2ResourceController):
         #creating a new reddit
         elif not sr:
             #sending kw is ok because it was sanitized above
-            sr = Subreddit._new(name = name, author_id = c.user._id, ip = ip,
-                                **kw)
+            sr = models.Subreddit._new(name=name, author_id=c.user._id, ip=ip,
+                                       **kw)
 
-            Subreddit.subscribe_defaults(c.user)
+            models.Subreddit.subscribe_defaults(c.user)
             # make sure this user is on the admin list of that site!
             if sr.add_subscriber(c.user):
                 sr._incr('_ups', 1)
@@ -1595,9 +1531,9 @@ class ApiController(RedditController, OAuth2ResourceController):
             sr.add_contributor(c.user)
             redir = sr.path + "about/edit/?created=true"
             if not c.user_is_admin:
-                VRatelimit.ratelimit(rate_user=True,
-                                     rate_ip = True,
-                                     prefix = "create_reddit_")
+                validator.VRatelimit.ratelimit(rate_user=True,
+                                               rate_ip=True,
+                                               prefix="create_reddit_")
 
             queries.new_subreddit(sr)
             changed(sr)
@@ -1617,15 +1553,15 @@ class ApiController(RedditController, OAuth2ResourceController):
                 del kw['css_on_cname']
             for k, v in kw.iteritems():
                 if getattr(sr, k, None) != v:
-                    ModAction.create(sr, c.user, action='editsettings', 
-                                     details=k)
+                    models.ModAction.create(sr, c.user, action='editsettings', 
+                                            details=k)
                 setattr(sr, k, v)
             sr._commit()
 
             #update the domain cache if the domain changed
             if sr.domain != old_domain:
-                Subreddit._by_domain(old_domain, _update = True)
-                Subreddit._by_domain(sr.domain, _update = True)
+                models.Subreddit._by_domain(old_domain, _update=True)
+                models.Subreddit._by_domain(sr.domain, _update=True)
 
             # flag search indexer that something has changed
             changed(sr)
@@ -1639,10 +1575,10 @@ class ApiController(RedditController, OAuth2ResourceController):
         else:
             jquery.refresh()
 
-    @noresponse(q = VPrintable('q', max_length=500),
-                sort = VPrintable('sort', max_length=10),
-                t = VPrintable('t', max_length=10),
-                approval = VBoolean('approval'))
+    @noresponse(q=validator.VPrintable('q', max_length=500),
+                sort=validator.VPrintable('sort', max_length=10),
+                t=validator.VPrintable('t', max_length=10),
+                approval=validator.VBoolean('approval'))
     def POST_searchfeedback(self, q, sort, t, approval):
         timestamp = c.start_time.strftime("%Y/%m/%d-%H:%M:%S")
         if c.user_is_loggedin:
@@ -1656,10 +1592,10 @@ class ApiController(RedditController, OAuth2ResourceController):
         d['approval'] = approval
         g.hardcache.set(key, d, time=86400 * 7)
 
-    @noresponse(VUser(), VModhash(),
-                why = VSrCanBan('id'),
-                thing = VByName('id'),
-                spam = VBoolean('spam', default=True))
+    @noresponse(validator.VUser(), validator.VModhash(),
+                why=validator.VSrCanBan('id'),
+                thing=validator.VByName('id'),
+                spam=validator.VBoolean('spam', default=True))
     @api_doc(api_section.moderation)
     def POST_remove(self, why, thing, spam):
 
@@ -1691,14 +1627,14 @@ class ApiController(RedditController, OAuth2ResourceController):
                         banner=c.user.name,
                         train_spam=train_spam)
 
-        if isinstance(thing, (Link, Comment)):
+        if isinstance(thing, (models.Link, models.Comment)):
             sr = thing.subreddit_slow
             action = 'remove' + thing.__class__.__name__.lower()
-            ModAction.create(sr, c.user, action, **kw)
+            models.ModAction.create(sr, c.user, action, **kw)
 
-    @noresponse(VUser(), VModhash(),
-                why = VSrCanBan('id'),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(), validator.VModhash(),
+                why=validator.VSrCanBan('id'),
+                thing=validator.VByName('id'))
     @api_doc(api_section.moderation)
     def POST_approve(self, why, thing):
         if not thing: return
@@ -1717,15 +1653,15 @@ class ApiController(RedditController, OAuth2ResourceController):
         admintools.unspam(thing, c.user.name, train_spam=train_spam,
                           insert=insert)
 
-        if isinstance(thing, (Link, Comment)):
+        if isinstance(thing, (models.Link, models.Comment)):
             sr = thing.subreddit_slow
             action = 'approve' + thing.__class__.__name__.lower()
-            ModAction.create(sr, c.user, action, **kw)
+            models.ModAction.create(sr, c.user, action, **kw)
 
-    @validatedForm(VUser(), VModhash(),
-                   VCanDistinguish(('id', 'how')),
-                   thing = VByName('id'),
-                   how = VOneOf('how', ('yes','no','admin','special')))
+    @validatedForm(validator.VUser(), validator.VModhash(),
+                   validator.VCanDistinguish(('id', 'how')),
+                   thing=validator.VByName('id'),
+                   how=validator.VOneOf('how', ('yes','no','admin','special')))
     @api_doc(api_section.moderation)
     def POST_distinguish(self, form, jquery, thing, how):
         if not thing:return
@@ -1752,11 +1688,12 @@ class ApiController(RedditController, OAuth2ResourceController):
         jquery(".content .link .rank").hide()
         if log_modaction:
             sr = thing.subreddit_slow
-            ModAction.create(sr, c.user, 'distinguish', target=thing, **log_kw)
+            models.ModAction.create(sr, c.user, 'distinguish',
+                                    target=thing, **log_kw)
 
-    @noresponse(VUser(),
-                VModhash(),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_save(self, thing):
         if not thing: return
@@ -1764,9 +1701,9 @@ class ApiController(RedditController, OAuth2ResourceController):
         if r:
             queries.new_savehide(r)
 
-    @noresponse(VUser(),
-                VModhash(),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_unsave(self, thing):
         if not thing: return
@@ -1778,27 +1715,27 @@ class ApiController(RedditController, OAuth2ResourceController):
         if not things:
             return
         things = tup(things)
-        srs = Subreddit._byID([t.sr_id for t in things if t.sr_id],
-                              return_dict = True)
+        srs = models.Subreddit._byID([t.sr_id for t in things if t.sr_id],
+                                     return_dict=True)
         for t in things:
             if hasattr(t, "to_id") and c.user._id == t.to_id:
                 t.to_collapse = collapse
             elif hasattr(t, "author_id") and c.user._id == t.author_id:
                 t.author_collapse = collapse
-            elif isinstance(t, Message) and t.sr_id:
+            elif isinstance(t, models.Message) and t.sr_id:
                 if srs[t.sr_id].is_moderator(c.user):
                     t.to_collapse = collapse
             t._commit()
 
-    @noresponse(VUser(),
-                VModhash(),
-                things = VByName('id', multiple = True))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                things=validator.VByName('id', multiple=True))
     def POST_collapse_message(self, things):
         self.collapse_handler(things, True)
 
-    @noresponse(VUser(),
-                VModhash(),
-                things = VByName('id', multiple = True))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                things=validator.VByName('id', multiple=True))
     def POST_uncollapse_message(self, things):
         self.collapse_handler(things, False)
 
@@ -1814,7 +1751,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         messages = []
         # Group things by subreddit or type
         for thing in things:
-            if isinstance(thing, Message):
+            if isinstance(thing, models.Message):
                 if getattr(thing, 'sr_id', False):
                     sr_messages[thing.sr_id].append(thing)
                 else:
@@ -1823,8 +1760,8 @@ class ApiController(RedditController, OAuth2ResourceController):
                 comments.append(thing)
 
         if sr_messages:
-            mod_srs = Subreddit.reverse_moderator_ids(c.user)
-            srs = Subreddit._byID(sr_messages.keys())
+            mod_srs = models.Subreddit.reverse_moderator_ids(c.user)
+            srs = models.Subreddit._byID(sr_messages.keys())
         else:
             mod_srs = []
 
@@ -1843,23 +1780,23 @@ class ApiController(RedditController, OAuth2ResourceController):
             queries.set_unread(messages, c.user, unread)
 
 
-    @noresponse(VUser(),
-                VModhash(),
-                things = VByName('id', multiple=True, limit=25))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                things=validator.VByName('id', multiple=True, limit=25))
     @api_doc(api_section.messages)
     def POST_unread_message(self, things):
         self.unread_handler(things, True)
 
-    @noresponse(VUser(),
-                VModhash(),
-                things = VByName('id', multiple=True, limit=25))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                things=validator.VByName('id', multiple=True, limit=25))
     @api_doc(api_section.messages)
     def POST_read_message(self, things):
         self.unread_handler(things, False)
 
-    @noresponse(VUser(),
-                VModhash(),
-                thing = VByName('id', thing_cls=Link))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                thing=validator.VByName('id', thing_cls=models.Link))
     @api_doc(api_section.links_and_comments)
     def POST_hide(self, thing):
         if not thing: return
@@ -1867,9 +1804,9 @@ class ApiController(RedditController, OAuth2ResourceController):
         if r:
             queries.new_savehide(r)
 
-    @noresponse(VUser(),
-                VModhash(),
-                thing = VByName('id'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                thing=validator.VByName('id'))
     @api_doc(api_section.links_and_comments)
     def POST_unhide(self, thing):
         if not thing: return
@@ -1878,18 +1815,19 @@ class ApiController(RedditController, OAuth2ResourceController):
             queries.new_savehide(r)
 
 
-    @validatedForm(VUser(),
-                   parent = VByName('parent_id'))
+    @validatedForm(validator.VUser(),
+                   parent=validator.VByName('parent_id'))
     def POST_moremessages(self, form, jquery, parent):
         if not parent.can_view_slow():
             return self.abort(403,'forbidden')
 
         if parent.sr_id:
-            builder = SrMessageBuilder(parent.subreddit_slow,
-                                       parent = parent, skip = False)
+            builder = models.SrMessageBuilder(parent.subreddit_slow,
+                                              parent=parent, skip=False)
         else:
-            builder = UserMessageBuilder(c.user, parent = parent, skip = False)
-        listing = Listing(builder).listing()
+            builder = models.UserMessageBuilder(c.user, parent=parent,
+                                                skip=False)
+        listing = models.Listing(builder).listing()
         a = []
         for item in listing.things:
             a.append(item)
@@ -1900,10 +1838,10 @@ class ApiController(RedditController, OAuth2ResourceController):
                 item.child = None
         jquery.things(parent._fullname).parent().replace_things(a, False, True)
 
-    @validatedForm(link = VByName('link_id'),
-                   sort = VMenu('where', CommentSortMenu),
-                   children = VCommentIDs('children'),
-                   pv_hex = VPrintable('pv_hex', 40),
+    @validatedForm(link=validator.VByName('link_id'),
+                   sort=validator.VMenu('where', CommentSortMenu),
+                   children=validator.VCommentIDs('children'),
+                   pv_hex=validator.VPrintable('pv_hex', 40),
                    mc_id = nop('id'))
     @api_doc(api_section.links_and_comments)
     def POST_morechildren(self, form, jquery, link, sort, children,
@@ -1935,9 +1873,10 @@ class ApiController(RedditController, OAuth2ResourceController):
             c.previous_visits = g.cache.get(pv_hex)
 
         if children:
-            builder = CommentBuilder(link, CommentSortMenu.operator(sort),
-                                     children)
-            listing = Listing(builder, nextprev = False)
+            builder = models.CommentBuilder(link,
+                                            CommentSortMenu.operator(sort),
+                                            children)
+            listing = models.Listing(builder, nextprev = False)
             items = listing.get_items(num = 20)
             def _children(cur_items):
                 items = []
@@ -1970,8 +1909,8 @@ class ApiController(RedditController, OAuth2ResourceController):
 
 
     @validate(uh = nop('uh'), # VModHash() will raise, check manually
-              action = VOneOf('what', ('like', 'dislike', 'save')),
-              links = VUrl(['u']))
+              action=validator.VOneOf('what', ('like', 'dislike', 'save')),
+              links=validator.VUrl(['u']))
     def GET_bookmarklet(self, action, uh, links):
         '''Controller for the functionality of the bookmarklets (not
         the distribution page)'''
@@ -1987,10 +1926,10 @@ class ApiController(RedditController, OAuth2ResourceController):
         # unlike most cases, if not already submitted, error.
         elif errors.ALREADY_SUB in c.errors:
             # preserve the subreddit if not Default
-            sr = c.site if not isinstance(c.site, FakeSubreddit) else None
+            sr = c.site if not isinstance(c.site, models.FakeSubreddit) else None
 
             # check permissions on those links to make sure votes will count
-            Subreddit.load_subreddits(links, return_dict = False)
+            models.Subreddit.load_subreddits(links, return_dict = False)
             user = c.user if c.user_is_loggedin else None
             links = [l for l in links if l.subreddit_slow.can_view(user)]
 
@@ -2009,8 +1948,8 @@ class ApiController(RedditController, OAuth2ResourceController):
         return self.redirect("/static/css_submit.png")
 
 
-    @validatedForm(VUser(),
-                   code = VPrintable("code", 30))
+    @validatedForm(validator.VUser(),
+                   code=validator.VPrintable("code", 30))
     def POST_claimgold(self, form, jquery, code):
         if not code:
             c.errors.add(errors.NO_TEXT, field = "code")
@@ -2056,7 +1995,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         form.has_errors("code", errors.INVALID_CODE, errors.CLAIMED_CODE,
                         errors.NO_TEXT)
 
-    @validatedForm(user = VUserWithEmail('name'))
+    @validatedForm(user=validator.VUserWithEmail('name'))
     def POST_password(self, form, jquery, user):
         if form.has_errors('name', errors.USER_DOESNT_EXIST):
             return
@@ -2070,8 +2009,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                 form.set_html(".status", _("try again tomorrow"))
 
 
-    @validatedForm(token=VOneTimeToken(PasswordResetToken, "key"),
-                   password=VPassword(["passwd", "passwd2"]))
+    @validatedForm(token=validator.VOneTimeToken(models.PasswordResetToken,
+                                                 "key"),
+                   password=validator.VPassword(["passwd", "passwd2"]))
     def POST_resetpassword(self, form, jquery, token, password):
         # was the token invalid or has it expired?
         if not token:
@@ -2089,7 +2029,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         token.consume()
 
         # load up the user and check that things haven't changed
-        user = Account._by_fullname(token.user_id)
+        user = models.Account._by_fullname(token.user_id)
         if not token.valid_for_user(user):
             form.redirect('/password?expired=true')
             return
@@ -2103,7 +2043,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         jquery.redirect('/')
 
 
-    @noresponse(VUser())
+    @noresponse(validator.VUser())
     def POST_noframe(self):
         """
         removes the reddit toolbar if that currently the user's preference
@@ -2112,7 +2052,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         c.user._commit()
 
 
-    @noresponse(VUser())
+    @noresponse(validator.VUser())
     def POST_frame(self):
         """
         undoes POST_noframe
@@ -2121,10 +2061,10 @@ class ApiController(RedditController, OAuth2ResourceController):
         c.user._commit()
 
 
-    @noresponse(VUser(),
-                VModhash(),
-                action = VOneOf('action', ('sub', 'unsub')),
-                sr = VSubscribeSR('sr', 'sr_name'))
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                action=validator.VOneOf('action', ('sub', 'unsub')),
+                sr=validator.VSubscribeSR('sr', 'sr_name'))
     @api_doc(api_section.subreddits)
     def POST_subscribe(self, action, sr):
         # only users who can make edits are allowed to subscribe.
@@ -2135,7 +2075,7 @@ class ApiController(RedditController, OAuth2ResourceController):
     @classmethod
     def _subscribe(cls, sr, sub):
         try:
-            Subreddit.subscribe_defaults(c.user)
+            models.Subreddit.subscribe_defaults(c.user)
 
             if sub:
                 if sr.add_subscriber(c.user):
@@ -2151,11 +2091,12 @@ class ApiController(RedditController, OAuth2ResourceController):
             return
 
 
-    @validatedForm(VAdmin(),
-                   hexkey=VLength("hexkey", max_length=32),
-                   nickname=VLength("nickname", max_length = 1000),
-                   status = VOneOf("status",
-                      ("new", "severe", "interesting", "normal", "fixed")))
+    @validatedForm(validator.VAdmin(),
+                   hexkey=validator.VLength("hexkey", max_length=32),
+                   nickname=validator.VLength("nickname", max_length=1000),
+                   status=validator.VOneOf("status",
+                                           ("new", "severe",
+                                            "interesting", "normal", "fixed")))
     def POST_edit_error(self, form, jquery, hexkey, nickname, status):
         if form.has_errors(("hexkey", "nickname", "status"),
                            errors.NO_TEXT, errors.INVALID_OPTION):
@@ -2172,13 +2113,14 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         form.set_html(".status", _('saved'))
 
-    @validatedForm(VSponsor(),
-                   ad = VByName("fullname"),
-                   colliding_ad=VAdByCodename(("codename", "fullname")),
-                   codename = VLength("codename", max_length = 100),
-                   imgurl = VLength("imgurl", max_length = 1000),
-                   raw_html = VLength("raw_html", max_length = 10000),
-                   linkurl = VLength("linkurl", max_length = 1000))
+    @validatedForm(validator.VSponsor(),
+                   ad=validator.VByName("fullname"),
+                   colliding_ad=validator.VAdByCodename(("codename",
+                   "fullname")),
+                   codename=validator.VLength("codename", max_length=100),
+                   imgurl=validator.VLength("imgurl", max_length=1000),
+                   raw_html=validator.VLength("raw_html", max_length=10000),
+                   linkurl=validator.VLength("linkurl", max_length=1000))
     def POST_editad(self, form, jquery, ad, colliding_ad, codename,
                     imgurl, raw_html, linkurl):
         if form.has_errors(("codename", "imgurl", "linkurl"),
@@ -2193,10 +2135,10 @@ class ApiController(RedditController, OAuth2ResourceController):
             return
 
         if ad is None:
-            Ad._new(codename,
-                    imgurl=imgurl,
-                    raw_html=raw_html,
-                    linkurl=linkurl)
+            models.Ad._new(codename,
+                           imgurl=imgurl,
+                           raw_html=raw_html,
+                           linkurl=linkurl)
             form.set_html(".status", "saved. reload to see it.")
             return
 
@@ -2207,10 +2149,10 @@ class ApiController(RedditController, OAuth2ResourceController):
         ad._commit()
         form.set_html(".status", _('saved'))
 
-    @validatedForm(VSponsor(),
-                   ad = VByName("fullname"),
-                   sr = VSubmitSR("community"),
-                   weight = VInt("weight",
+    @validatedForm(validator.VSponsor(),
+                   ad=validator.VByName("fullname"),
+                   sr=validator.VSubmitSR("community"),
+                   weight=validator.VInt("weight",
                                  coerce=False, min=0, max=100000),
                    )
     def POST_assignad(self, form, jquery, ad, sr, weight):
@@ -2237,35 +2179,36 @@ class ApiController(RedditController, OAuth2ResourceController):
                      "error")
             abort(403, 'forbidden')
 
-        existing = AdSR.by_ad_and_sr(ad, sr)
+        existing = models.AdSR.by_ad_and_sr(ad, sr)
 
         if weight is not None:
             if existing:
                 existing.weight = weight
                 existing._commit()
             else:
-                AdSR._new(ad, sr, weight)
+                models.AdSR._new(ad, sr, weight)
 
             form.set_html(".status", _('saved'))
 
         else:
             if existing:
                 existing._delete()
-                AdSR.by_ad(ad, _update=True)
-                AdSR.by_sr(sr, _update=True)
+                models.AdSR.by_ad(ad, _update=True)
+                models.AdSR.by_sr(sr, _update=True)
 
             form.set_html(".status", _('deleted'))
 
 
-    @validatedForm(VAdmin(),
-                   award=VByName("fullname"),
-                   colliding_award=VAwardByCodename(("codename", "fullname")),
-                   codename=VLength("codename", max_length = 100),
-                   title=VLength("title", max_length = 100),
-                   awardtype=VOneOf("awardtype",
-                                    ("regular", "manual", "invisible")),
-                   api_ok=VBoolean("api_ok"),
-                   imgurl=VLength("imgurl", max_length = 1000))
+    @validatedForm(validator.VAdmin(),
+                   award=validator.VByName("fullname"),
+                   colliding_award=validator.VAwardByCodename(("codename",
+                                                               "fullname")),
+                   codename=validator.VLength("codename", max_length=100),
+                   title=validator.VLength("title", max_length=100),
+                   awardtype=validator.VOneOf("awardtype",
+                                            ("regular", "manual", "invisible")),
+                   api_ok=validator.VBoolean("api_ok"),
+                   imgurl=validator.VLength("imgurl", max_length=1000))
     def POST_editaward(self, form, jquery, award, colliding_award, codename,
                        title, awardtype, api_ok, imgurl):
         if form.has_errors(("codename", "title", "awardtype", "imgurl"),
@@ -2284,7 +2227,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             return
 
         if award is None:
-            Award._new(codename, title, awardtype, imgurl, api_ok)
+            models.Award._new(codename, title, awardtype, imgurl, api_ok)
             form.set_html(".status", "saved. reload to see it.")
             return
 
@@ -2297,12 +2240,12 @@ class ApiController(RedditController, OAuth2ResourceController):
         form.set_html(".status", _('saved'))
 
     @require_oauth2_scope("moderateflair")
-    @validatedForm(VFlairManager(),
-                   VModhash(),
-                   user = VFlairAccount("name"),
-                   link = VFlairLink('link'),
-                   text = VFlairText("text"),
-                   css_class = VFlairCss("css_class"))
+    @validatedForm(validator.VFlairManager(),
+                   validator.VModhash(),
+                   user=validator.VFlairAccount("name"),
+                   link=validator.VFlairLink('link'),
+                   text=validator.VFlairText("text"),
+                   css_class=validator.VFlairCss("css_class"))
     @api_doc(api_section.flair)
     def POST_flair(self, form, jquery, user, link, text, css_class):
         if link:
@@ -2310,7 +2253,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             if hasattr(c.site, '_id') and c.site._id == link.sr_id:
                 site = c.site
             else:
-                site = Subreddit._byID(link.sr_id, data=True)
+                site = models.Subreddit._byID(link.sr_id, data=True)
                 # make sure c.user has permission to set flair on this link
                 if not c.user_is_admin and not site.is_moderator(c.user):
                     abort(403, 'forbidden')
@@ -2334,8 +2277,8 @@ class ApiController(RedditController, OAuth2ResourceController):
             link.flair_css_class = css_class
             link._commit()
             changed(link)
-            ModAction.create(site, c.user, action='editflair', target=link,
-                             details='flair_edit')
+            models.ModAction.create(site, c.user, action='editflair', target=link,
+                                    details='flair_edit')
         elif flair_type == USER_FLAIR:
             if not text and not css_class:
                 # empty text and css is equivalent to unflairing
@@ -2355,13 +2298,13 @@ class ApiController(RedditController, OAuth2ResourceController):
             user._commit()
 
             if c.user != user:
-                ModAction.create(site, c.user, action='editflair',
-                                 target=user, details='flair_edit')
+                models.ModAction.create(site, c.user, action='editflair',
+                                        target=user, details='flair_edit')
 
             if new:
                 jquery.redirect('?name=%s' % user.name)
             else:
-                flair = WrappedUser(
+                flair = pages.WrappedUser(
                     user, force_show_flair=True,
                     include_flair_selector=True).render(style='html')
                 jquery('.tagline .flairselectable.id-%s'
@@ -2371,9 +2314,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                 form.set_html('.status', _('saved'))
 
     @require_oauth2_scope("moderateflair")
-    @validatedForm(VFlairManager(),
-                   VModhash(),
-                   user = VFlairAccount("name"))
+    @validatedForm(validator.VFlairManager(),
+                   validator.VModhash(),
+                   user=validator.VFlairAccount("name"))
     @api_doc(api_section.flair)
     def POST_deleteflair(self, form, jquery, user):
         # Check validation.
@@ -2384,22 +2327,22 @@ class ApiController(RedditController, OAuth2ResourceController):
         setattr(user, 'flair_%s_css_class' % c.site._id, None)
         user._commit()
 
-        ModAction.create(c.site, c.user, action='editflair', target=user,
-                         details='flair_delete')
+        models.ModAction.create(c.site, c.user, action='editflair', target=user,
+                                details='flair_delete')
 
         jquery('#flairrow_%s' % user._id36).remove()
-        unflair = WrappedUser(
-            user, include_flair_selector=True).render(style='html')
+        unflair = pages.WrappedUser(user, include_flair_selector=True
+                                    ).render(style='html')
         jquery('.tagline .id-%s' % user._fullname).parent().html(unflair)
 
     @require_oauth2_scope("moderateflair")
-    @validate(VFlairManager(),
-              VModhash(),
+    @validate(validator.VFlairManager(),
+              validator.VModhash(),
               flair_csv = nop('flair_csv'))
     @api_doc(api_section.flair)
     def POST_flaircsv(self, flair_csv):
         limit = 100  # max of 100 flair settings per call
-        results = FlairCsv()
+        results = pages.FlairCsv()
         # encode to UTF-8, since csv module doesn't fully support unicode
         infile = csv.reader(flair_csv.strip().encode('utf-8').split('\n'))
         for i, row in enumerate(infile):
@@ -2416,7 +2359,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 line_result.error('row', 'improperly formatted row, ignoring')
                 continue
 
-            user = VFlairAccount('name').run(name)
+            user=validator.VFlairAccount('name').run(name)
             if not user:
                 line_result.error('user',
                                   "unable to resolve user `%s', ignoring"
@@ -2429,13 +2372,13 @@ class ApiController(RedditController, OAuth2ResourceController):
                 css_class = None
 
             orig_text = text
-            text = VFlairText('text').run(orig_text)
+            text = validator.VFlairText('text').run(orig_text)
             if text and orig_text and len(text) < len(orig_text):
                 line_result.warn('text',
                                  'truncating flair text to %d chars'
                                  % len(text))
 
-            if css_class and not VFlairCss('css_class').run(css_class):
+            if css_class and not validator.VFlairCss('css_class').run(css_class):
                 line_result.error('css',
                                   "invalid css class `%s', ignoring"
                                   % css_class)
@@ -2455,15 +2398,15 @@ class ApiController(RedditController, OAuth2ResourceController):
             line_result.status = '%s flair for user %s' % (mode, user.name)
             line_result.ok = True
 
-        ModAction.create(c.site, c.user, action='editflair',
-                         details='flair_csv')
+        models.ModAction.create(c.site, c.user, action='editflair',
+                                details='flair_csv')
 
-        return BoringPage(_("API"), content = results).render()
+        return pages.BoringPage(_("API"), content = results).render()
 
     @require_oauth2_scope("moderateflair")
-    @validatedForm(VUser(),
-                   VModhash(),
-                   flair_enabled = VBoolean("flair_enabled"))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   flair_enabled=validator.VBoolean("flair_enabled"))
     @api_doc(api_section.flair)
     def POST_setflairenabled(self, form, jquery, flair_enabled):
         setattr(c.user, 'flair_%s_enabled' % c.site._id, flair_enabled)
@@ -2472,61 +2415,62 @@ class ApiController(RedditController, OAuth2ResourceController):
 
     @require_oauth2_scope("moderateflair")
     @validatedForm(
-        VFlairManager(),
-        VModhash(),
-        flair_enabled = VBoolean("flair_enabled"),
-        flair_position = VOneOf("flair_position", ("left", "right")),
-        link_flair_position = VOneOf("link_flair_position",
-                                     ("", "left", "right")),
-        flair_self_assign_enabled = VBoolean("flair_self_assign_enabled"),
-        link_flair_self_assign_enabled =
-            VBoolean("link_flair_self_assign_enabled"))
+        validator.VFlairManager(),
+        validator.VModhash(),
+        flair_enabled=validator.VBoolean("flair_enabled"),
+        flair_position=validator.VOneOf("flair_position", ("left", "right")),
+        link_flair_position=validator.VOneOf("link_flair_position",
+                                             ("", "left", "right")),
+        flair_self_assign_enabled=validator.VBoolean("flair_self_assign_enabled"),
+        link_flair_self_assign_enabled=
+            validator.VBoolean("link_flair_self_assign_enabled"))
     @api_doc(api_section.flair)
     def POST_flairconfig(self, form, jquery, flair_enabled, flair_position,
                          link_flair_position, flair_self_assign_enabled,
                          link_flair_self_assign_enabled):
         if c.site.flair_enabled != flair_enabled:
             c.site.flair_enabled = flair_enabled
-            ModAction.create(c.site, c.user, action='editflair',
-                             details='flair_enabled')
+            models.ModAction.create(c.site, c.user, action='editflair',
+                                    details='flair_enabled')
         if c.site.flair_position != flair_position:
             c.site.flair_position = flair_position
-            ModAction.create(c.site, c.user, action='editflair',
-                             details='flair_position')
+            models.ModAction.create(c.site, c.user, action='editflair',
+                                    details='flair_position')
         if c.site.link_flair_position != link_flair_position:
             c.site.link_flair_position = link_flair_position
-            ModAction.create(c.site, c.user, action='editflair',
-                             details='link_flair_position')
+            models.ModAction.create(c.site, c.user, action='editflair',
+                                    details='link_flair_position')
         if c.site.flair_self_assign_enabled != flair_self_assign_enabled:
             c.site.flair_self_assign_enabled = flair_self_assign_enabled
-            ModAction.create(c.site, c.user, action='editflair',
-                             details='flair_self_enabled')
+            models.ModAction.create(c.site, c.user, action='editflair',
+                                    details='flair_self_enabled')
         if (c.site.link_flair_self_assign_enabled
             != link_flair_self_assign_enabled):
             c.site.link_flair_self_assign_enabled = (
                 link_flair_self_assign_enabled)
-            ModAction.create(c.site, c.user, action='editflair',
-                             details='link_flair_self_enabled')
+            models.ModAction.create(c.site, c.user, action='editflair',
+                                    details='link_flair_self_enabled')
         c.site._commit()
         jquery.refresh()
 
     @require_oauth2_scope("moderateflair")
     @paginated_listing(max_page_size=1000)
-    @validate(user = VFlairAccount('name'))
+    @validate(user=validator.VFlairAccount('name'))
     @api_doc(api_section.flair)
     def GET_flairlist(self, num, after, reverse, count, user):
-        flair = FlairList(num, after, reverse, '', user)
-        return BoringPage(_("API"), content = flair).render()
+        flair = pages.FlairList(num, after, reverse, '', user)
+        return pages.BoringPage(_("API"), content = flair).render()
 
     @require_oauth2_scope("moderateflair")
-    @validatedForm(VFlairManager(),
-                   VModhash(),
-                   flair_template = VFlairTemplateByID('flair_template_id'),
-                   text = VFlairText('text'),
-                   css_class = VFlairCss('css_class'),
-                   text_editable = VBoolean('text_editable'),
-                   flair_type = VOneOf('flair_type', (USER_FLAIR, LINK_FLAIR),
-                                       default=USER_FLAIR))
+    @validatedForm(validator.VFlairManager(),
+                   validator.VModhash(),
+                   flair_template=validator.VFlairTemplateByID('flair_template_id'),
+                   text=validator.VFlairText('text'),
+                   css_class=validator.VFlairCss('css_class'),
+                   text_editable=validator.VBoolean('text_editable'),
+                   flair_type=validator.VOneOf('flair_type',
+                                               (USER_FLAIR, LINK_FLAIR),
+                                               default=USER_FLAIR))
     @api_doc(api_section.flair)
     def POST_flairtemplate(self, form, jquery, flair_template, text,
                            css_class, text_editable, flair_type):
@@ -2552,7 +2496,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             new = False
         else:
             try:
-                flair_template = FlairTemplateBySubredditIndex.create_template(
+                flair_template = models.FlairTemplateBySubredditIndex.create_template(
                     c.site._id, text=text, css_class=css_class,
                     text_editable=text_editable,
                     flair_type=flair_type)
@@ -2570,68 +2514,70 @@ class ApiController(RedditController, OAuth2ResourceController):
             }
             empty_id = empty_ids[flair_type]
             jquery(empty_id).before(
-                FlairTemplateEditor(flair_template, flair_type)
+                pages.FlairTemplateEditor(flair_template, flair_type)
                 .render(style='html'))
-            empty_template = FlairTemplate()
+            empty_template = models.FlairTemplate()
             empty_template._committed = True  # to disable unnecessary warning
             jquery(empty_id).html(
-                FlairTemplateEditor(empty_template, flair_type)
+                pages.FlairTemplateEditor(empty_template, flair_type)
                 .render(style='html'))
             form.set_html('.status', _('saved'))
         else:
             jquery('#%s' % flair_template._id).html(
-                FlairTemplateEditor(flair_template, flair_type)
+                pages.FlairTemplateEditor(flair_template, flair_type)
                 .render(style='html'))
             form.set_html('.status', _('saved'))
             jquery('input[name="text"]').data('saved', text)
             jquery('input[name="css_class"]').data('saved', css_class)
-        ModAction.create(c.site, c.user, action='editflair',
-                             details='flair_template')
+        models.ModAction.create(c.site, c.user, action='editflair',
+                                details='flair_template')
 
     @require_oauth2_scope("moderateflair")
-    @validatedForm(VFlairManager(),
-                   VModhash(),
-                   flair_template = VFlairTemplateByID('flair_template_id'))
+    @validatedForm(validator.VFlairManager(),
+                   validator.VModhash(),
+                   flair_template=validator.VFlairTemplateByID('flair_template_id'))
     @api_doc(api_section.flair)
     def POST_deleteflairtemplate(self, form, jquery, flair_template):
-        idx = FlairTemplateBySubredditIndex.by_sr(c.site._id)
+        idx = models.FlairTemplateBySubredditIndex.by_sr(c.site._id)
         if idx.delete_by_id(flair_template._id):
             jquery('#%s' % flair_template._id).parent().remove()
-            ModAction.create(c.site, c.user, action='editflair',
-                             details='flair_delete_template')
+            models.ModAction.create(c.site, c.user, action='editflair',
+                                    details='flair_delete_template')
 
     @require_oauth2_scope("moderateflair")
-    @validatedForm(VFlairManager(), VModhash(),
-                   flair_type = VOneOf('flair_type', (USER_FLAIR, LINK_FLAIR),
-                                       default=USER_FLAIR))
+    @validatedForm(validator.VFlairManager(), validator.VModhash(),
+                   flair_type=validator.VOneOf('flair_type',
+                                               (USER_FLAIR, LINK_FLAIR),
+                                               default=USER_FLAIR))
     @api_doc(api_section.flair)
     def POST_clearflairtemplates(self, form, jquery, flair_type):
-        FlairTemplateBySubredditIndex.clear(c.site._id, flair_type=flair_type)
+        models.FlairTemplateBySubredditIndex.clear(c.site._id,
+                                                   flair_type=flair_type)
         jquery.refresh()
-        ModAction.create(c.site, c.user, action='editflair',
-                         details='flair_clear_template')
+        models.ModAction.create(c.site, c.user, action='editflair',
+                                details='flair_clear_template')
 
-    @validate(VUser(),
-              user = VFlairAccount('name'),
-              link = VFlairLink('link'))
+    @validate(validator.VUser(),
+              user=validator.VFlairAccount('name'),
+              link=validator.VFlairLink('link'))
     def POST_flairselector(self, user, link):
         if link:
             if hasattr(c.site, '_id') and c.site._id == link.sr_id:
                 site = c.site
             else:
-                site = Subreddit._byID(link.sr_id, data=True)
-            return FlairSelector(link=link, site=site).render()
+                site = models.Subreddit._byID(link.sr_id, data=True)
+            return pages.FlairSelector(link=link, site=site).render()
         if user and not (c.user_is_admin or c.site.is_moderator(c.user)):
             # ignore user parameter if c.user is not mod/admin
             user = None
-        return FlairSelector(user=user).render()
+        return pages.FlairSelector(user=user).render()
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   user = VFlairAccount('name'),
-                   link = VFlairLink('link'),
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   user=validator.VFlairAccount('name'),
+                   link=validator.VFlairLink('link'),
                    flair_template_id = nop('flair_template_id'),
-                   text = VFlairText('text'))
+                   text=validator.VFlairText('text'))
     @api_doc(api_section.flair)
     def POST_selectflair(self, form, jquery, user, link, flair_template_id,
                          text):
@@ -2640,7 +2586,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             if hasattr(c.site, '_id') and c.site._id == link.sr_id:
                 site = c.site
             else:
-                site = Subreddit._byID(link.sr_id, data=True)
+                site = models.Subreddit._byID(link.sr_id, data=True)
             self_assign_enabled = site.link_flair_self_assign_enabled
         else:
             flair_type = USER_FLAIR
@@ -2649,7 +2595,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         if flair_template_id:
             try:
-                flair_template = FlairTemplateBySubredditIndex.get_template(
+                flair_template = models.FlairTemplateBySubredditIndex.get_template(
                     site._id, flair_template_id, flair_type=flair_type)
             except NotFound:
                 # TODO: serve error to client
@@ -2687,13 +2633,13 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             if ((c.site.is_moderator(c.user) or c.user_is_admin)
                 and c.user != user):
-                ModAction.create(c.site, c.user, action='editflair',
-                                 target=user, details='flair_edit')
+                models.ModAction.create(c.site, c.user, action='editflair',
+                                        target=user, details='flair_edit')
 
             # Push some client-side updates back to the browser.
-            u = WrappedUser(user, force_show_flair=True,
-                            flair_text_editable=text_editable,
-                            include_flair_selector=True)
+            u = pages.WrappedUser(user, force_show_flair=True,
+                                  flair_text_editable=text_editable,
+                                  include_flair_selector=True)
             flair = u.render(style='html')
             jquery('.tagline .flairselectable.id-%s'
                 % user._fullname).parent().html(flair)
@@ -2708,8 +2654,8 @@ class ApiController(RedditController, OAuth2ResourceController):
             changed(link)
 
             if ((c.site.is_moderator(c.user) or c.user_is_admin)):
-                ModAction.create(c.site, c.user, action='editflair',
-                                 target=link, details='flair_edit')
+                models.ModAction.create(c.site, c.user, action='editflair',
+                                        target=link, details='flair_edit')
 
             # Push some client-side updates back to the browser.
 
@@ -2728,13 +2674,14 @@ class ApiController(RedditController, OAuth2ResourceController):
             # TODO: close the selector popup more gracefully
             jquery('body').click()
 
-    @validatedForm(secret_used=VAdminOrAdminSecret("secret"),
-                   award=VByName("fullname"),
-                   description=VLength("description", max_length=1000),
-                   url=VLength("url", max_length=1000),
-                   cup_hours=VFloat("cup_hours",
+    @validatedForm(secret_used=validator.VAdminOrAdminSecret("secret"),
+                   award=validator.VByName("fullname"),
+                   description=validator.VLength("description",
+                                                 max_length=1000),
+                   url=validator.VLength("url", max_length=1000),
+                   cup_hours=validator.VFloat("cup_hours",
                                       coerce=False, min=0, max=24 * 365),
-                   recipient=VExistingUname("recipient"))
+                   recipient=validator.VExistingUname("recipient"))
     def POST_givetrophy(self, form, jquery, secret_used, award, description,
                         url, cup_hours, recipient):
         if form.has_errors("recipient", errors.USER_DOESNT_EXIST,
@@ -2760,21 +2707,21 @@ class ApiController(RedditController, OAuth2ResourceController):
         else:
             cup_expiration = None
         
-        t = Trophy._new(recipient, award, description=description, url=url,
-                        cup_info=dict(expiration=cup_expiration))
+        t = models.Trophy._new(recipient, award, description=description, url=url,
+                               cup_info=dict(expiration=cup_expiration))
 
         form.set_html(".status", _('saved'))
         form._send_data(trophy_fn=t._id36)
     
-    @validatedForm(VAdmin(),
-                   account = VExistingUname("account"))
+    @validatedForm(validator.VAdmin(),
+                   account=validator.VExistingUname("account"))
     def POST_removecup(self, form, jquery, account):
         if not account:
             return self.abort404()
         account.remove_cup()
 
-    @validatedForm(secret_used=VAdminOrAdminSecret("secret"),
-                   trophy = VTrophy("trophy_fn"))
+    @validatedForm(secret_used=validator.VAdminOrAdminSecret("secret"),
+                   trophy=validator.VTrophy("trophy_fn"))
     def POST_removetrophy(self, form, jquery, secret_used, trophy):
         if not trophy:
             return self.abort404()
@@ -2788,13 +2735,15 @@ class ApiController(RedditController, OAuth2ResourceController):
             return
 
         trophy._delete()
-        Trophy.by_account(recipient, _update=True)
-        Trophy.by_award(award, _update=True)
+        models.Trophy.by_account(recipient, _update=True)
+        models.Trophy.by_award(award, _update=True)
 
-    @validatedForm(links = VByName('links', thing_cls = Link, multiple = True),
-                   show = VByName('show', thing_cls = Link, multiple = False))
+    @validatedForm(links=validator.VByName('links', thing_cls=models.Link,
+                                           multiple=True),
+                   show=validator.VByName('show', thing_cls=models.Link,
+                                          multiple=False))
     def POST_fetch_links(self, form, jquery, links, show):
-        l = wrap_links(links, listing_cls = SpotlightListing,
+        l = wrap_links(links, listing_cls = models.SpotlightListing,
                        num_margin = 0, mid_margin = 0)
         jquery(".content").replace_things(l, stubs = True)
 
@@ -2802,8 +2751,8 @@ class ApiController(RedditController, OAuth2ResourceController):
             jquery('.organic-listing .link:visible').hide()
             jquery('.organic-listing .id-%s' % show._fullname).show()
 
-    @noresponse(VUser(),
-              ui_elem = VOneOf('id', ('organic',)))
+    @noresponse(validator.VUser(),
+              ui_elem=validator.VOneOf('id', ('organic',)))
     def POST_disable_ui(self, ui_elem):
         if ui_elem:
             pref = "pref_%s" % ui_elem
@@ -2811,8 +2760,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                 setattr(c.user, "pref_" + ui_elem, False)
                 c.user._commit()
 
-    @validatedForm(type = VOneOf('type', ('click'), default = 'click'),
-                   links = VByName('ids', thing_cls = Link, multiple = True))
+    @validatedForm(type=validator.VOneOf('type', ('click'), default='click'),
+                   links=validator.VByName('ids', thing_cls=models.Link,
+                                           multiple=True))
     def GET_gadget(self, form, jquery, type, links):
         if not links and type == 'click':
             # malformed cookie, clear it out
@@ -2821,7 +2771,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         if not links:
             return
 
-        content = ClickGadget(links).make_content()
+        content = pages.ClickGadget(links).make_content()
 
         jquery('.gadget').show().find('.click-gadget').html(
             spaceCompress(content))
@@ -2838,7 +2788,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         c.user.pref_frame_commentspanel = False
         c.user._commit()
 
-    @json_validate(query = VPrintable('query', max_length = 50))
+    @json_validate(query=validator.VPrintable('query', max_length=50))
     def POST_search_reddit_names(self, responder, query):
         names = []
         if query:
@@ -2846,7 +2796,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         return {'names': names}
 
-    @validate(link = VByName('link_id', thing_cls = Link))
+    @validate(link=validator.VByName('link_id', thing_cls=models.Link))
     def POST_expando(self, link):
         if not link:
             abort(404, 'not found')
@@ -2855,12 +2805,12 @@ class ApiController(RedditController, OAuth2ResourceController):
         wrapped = list(wrapped)[0]
         return websafe(spaceCompress(wrapped.link_child.content()))
 
-    @validatedForm(VUser('password', default=''),
-                   VModhash(),
-                   VOneTimePassword("otp",
-                                    required=not g.disable_require_admin_otp),
-                   remember=VBoolean("remember"),
-                   dest=VDestination())
+    @validatedForm(validator.VUser('password', default=''),
+                   validator.VModhash(),
+                   validator.VOneTimePassword("otp",
+                                required=not g.disable_require_admin_otp),
+                   remember=validator.VBoolean("remember"),
+                   dest=validator.VDestination())
     def POST_adminon(self, form, jquery, remember, dest):
         if form.has_errors('password', errors.WRONG_PASSWORD):
             return
@@ -2876,8 +2826,8 @@ class ApiController(RedditController, OAuth2ResourceController):
         self.enable_admin_mode(c.user)
         form.redirect(dest)
 
-    @validatedForm(VUser("password", default=""),
-                   VModhash())
+    @validatedForm(validator.VUser("password", default=""),
+                   validator.VModhash())
     def POST_generate_otp_secret(self, form, jquery):
         if form.has_errors("password", errors.WRONG_PASSWORD):
             return
@@ -2886,8 +2836,8 @@ class ApiController(RedditController, OAuth2ResourceController):
         g.cache.set('otp_secret_' + c.user._id36, secret, time=300)
         jquery("body").make_totp_qrcode(secret)
 
-    @validatedForm(VUser(),
-                   VModhash(),
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
                    otp=nop("otp"))
     def POST_enable_otp(self, form, jquery, otp):
         if form.has_errors("password", errors.WRONG_PASSWORD):
@@ -2899,7 +2849,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             form.has_errors("otp", errors.EXPIRED)
             return
 
-        if not VOneTimePassword.validate_otp(secret, otp):
+        if not validator.VOneTimePassword.validate_otp(secret, otp):
             c.errors.add(errors.WRONG_PASSWORD, field="otp")
             form.has_errors("otp", errors.WRONG_PASSWORD)
             return
@@ -2909,9 +2859,9 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         form.redirect("/prefs/otp")
 
-    @validatedForm(VUser("password", default=""),
-                   VOneTimePassword("otp", required=True),
-                   VModhash())
+    @validatedForm(validator.VUser("password", default=""),
+                   validator.VOneTimePassword("otp", required=True),
+                   validator.VModhash())
     def POST_disable_otp(self, form, jquery):
         if form.has_errors("password", errors.WRONG_PASSWORD):
             return
@@ -2925,7 +2875,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         c.user._commit()
         form.redirect("/prefs/otp")
 
-    @json_validate(query=VLength("query", max_length=50))
+    @json_validate(query=validator.VLength("query", max_length=50))
     @api_doc(api_section.subreddits, extensions=["json"])
     def GET_subreddits_by_topic(self, responder, query):
         if not g.CLOUDSEARCH_SEARCH_API:
@@ -2934,7 +2884,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         if not query or not query.strip():
             return []
 
-        exclude = Subreddit.default_subreddits()
+        exclude = models.Subreddit.default_subreddits()
 
         faceting = {"reddit":{"sort":"-sum(text_relevance)", "count":20}}
         results = SearchQuery(query, sort="relevance", faceting=faceting,
@@ -2952,21 +2902,22 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         return sr_results
 
-    @noresponse(VUser(),
-                VModhash(),
-                client=VOAuth2ClientID())
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                client=validator.VOAuth2ClientID())
     @api_doc(api_section.apps)
     def POST_revokeapp(self, client):
         if client:
             client.revoke(c.user)
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   name=VRequired('name', errors.NO_TEXT,
-                                  docs=dict(name=_("a name for the app"))),
-                   about_url=VSanitizedUrl('about_url'),
-                   icon_url=VSanitizedUrl('icon_url'),
-                   redirect_uri=VSanitizedUrl('redirect_uri'))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   name=validator.VRequired('name', errors.NO_TEXT,
+                                            docs=dict(name=
+                                                      _("a name for the app"))),
+                   about_url=validator.VSanitizedUrl('about_url'),
+                   icon_url=validator.VSanitizedUrl('icon_url'),
+                   redirect_uri=validator.VSanitizedUrl('redirect_uri'))
     @api_doc(api_section.apps)
     def POST_updateapp(self, form, jquery, name, about_url, icon_url, redirect_uri):
         if (form.has_errors('name', errors.NO_TEXT) |
@@ -2978,7 +2929,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         client_id = request.post.get('client_id')
         if client_id:
             # client_id was specified, updating existing OAuth2Client
-            client = OAuth2Client.get_token(client_id)
+            client = models.OAuth2Client.get_token(client_id)
             if not client:
                 form.set_html('.status', _('invalid client id'))
                 return
@@ -2995,27 +2946,27 @@ class ApiController(RedditController, OAuth2ResourceController):
             client.redirect_uri = redirect_uri
             client._commit()
             form.set_html('.status', _('application updated'))
-            apps = PrefApps([], [client])
+            apps = pages.PrefApps([], [client])
             jquery('#developed-app-%s' % client._id).replaceWith(
                 apps.call('developed_app', client, collapsed=False))
         else:
             # client_id was omitted or empty, creating new OAuth2Client
-            client = OAuth2Client._new(name=name,
-                                       description=description,
-                                       about_url=about_url or '',
-                                       redirect_uri=redirect_uri)
+            client = models.OAuth2Client._new(name=name,
+                                              description=description,
+                                              about_url=about_url or '',
+                                              redirect_uri=redirect_uri)
             client._commit()
             client.add_developer(c.user)
             form.set_html('.status', _('application created'))
-            apps = PrefApps([], [client])
+            apps = pages.PrefApps([], [client])
             jquery('#developed-apps > h1').show()
             jquery('#developed-apps > ul').append(
                 apps.call('developed_app', client, collapsed=False))
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   client=VOAuth2ClientDeveloper(),
-                   account=VExistingUname('name'))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   client=validator.VOAuth2ClientDeveloper(),
+                   account=validator.VExistingUname('name'))
     @api_doc(api_section.apps)
     def POST_adddeveloper(self, form, jquery, client, account):
         if not client:
@@ -3034,15 +2985,15 @@ class ApiController(RedditController, OAuth2ResourceController):
             return
 
         form.set_html('.status', _('developer added'))
-        apps = PrefApps([], [client])
+        apps = pages.PrefApps([], [client])
         (jquery('#app-developer-%s input[name="name"]' % client._id).val('')
             .closest('.prefright').find('ul').append(
                 apps.call('editable_developer', client, account)))
 
-    @validatedForm(VUser(),
-                   VModhash(),
-                   client=VOAuth2ClientDeveloper(),
-                   account=VExistingUname('name'))
+    @validatedForm(validator.VUser(),
+                   validator.VModhash(),
+                   client=validator.VOAuth2ClientDeveloper(),
+                   account=validator.VExistingUname('name'))
     @api_doc(api_section.apps)
     def POST_removedeveloper(self, form, jquery, client, account):
         if client and account and not form.has_errors('name'):
@@ -3052,19 +3003,19 @@ class ApiController(RedditController, OAuth2ResourceController):
             else:
                 jquery('li#app-dev-%s-%s' % (client._id, account._id)).fadeOut()
 
-    @noresponse(VUser(),
-                VModhash(),
-                client=VOAuth2ClientDeveloper())
+    @noresponse(validator.VUser(),
+                validator.VModhash(),
+                client=validator.VOAuth2ClientDeveloper())
     @api_doc(api_section.apps)
     def POST_deleteapp(self, client):
         if client:
             client.deleted = True
             client._commit()
 
-    @validatedMultipartForm(VUser(),
-                            VModhash(),
-                            client=VOAuth2ClientDeveloper(),
-                            icon_file=VLength(
+    @validatedMultipartForm(validator.VUser(),
+                            validator.VModhash(),
+                            client=validator.VOAuth2ClientDeveloper(),
+                            icon_file=validator.VLength(
                                 'file', max_length=1024*128,
                                 docs=dict(file=_("an icon (72x72)"))))
     @api_doc(api_section.apps)

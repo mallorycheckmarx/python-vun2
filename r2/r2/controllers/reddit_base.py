@@ -39,6 +39,7 @@ from pylons.controllers.util import redirect_to
 from pylons.i18n import _
 from pylons.i18n.translation import LanguageError
 
+import r2.models as models
 from r2.config.extensions import is_api
 from r2.lib import pages, utils, filters, amqp
 from r2.lib.authentication import authenticate_user
@@ -51,52 +52,33 @@ from r2.lib.strings import strings
 from r2.lib.tracking import encrypt, decrypt
 from r2.lib.translation import set_lang
 from r2.lib.template_helpers import add_sr
-from r2.models import (
-                       #Variables
-                       All,
-                       Friends,
-                       Random,
-                       RandomNSFW,
-                       Sub,
-                       #Classes
-                       DefaultSR,
-                       DomainSR,
-                       FakeAccount,
-                       FakeSubreddit,
-                       Frontpage,
-                       Link,
-                       MultiReddit,
-                       Subreddit,
-                       #Functions
+from r2.models import (#Functions
                        check_request,
                        valid_feed,
                        valid_admin_cookie,
                        valid_otp_cookie,
                        )
 
-
+import r2.controllers.validator as validator
 from r2.controllers.errors import ErrorSet, ForbiddenError, errors
-from r2.controllers.validator import (
-                                      VByName,
-                                      VCount,
-                                      VLength,
-                                      VLimit,
-                                      VTarget,
-                                      chksrname,
-                                      build_arg_list,
-                                      fullname_regex,
-                                      validate,
-                                      )
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 NEVER = 'Thu, 31 Dec 2037 23:59:59 GMT'
 DELETE = 'Thu, 01-Jan-1970 00:00:01 GMT'
 
 cache_affecting_cookies = ('reddit_first','over18','_options')
 
+
 class Cookies(dict):
     def add(self, name, value, *k, **kw):
         name = name.encode('utf-8')
         self[name] = Cookie(value, *k, **kw)
+
 
 class Cookie(object):
     def __init__(self, value, expires=None, domain=None,
@@ -117,12 +99,12 @@ class Cookie(object):
         return ("Cookie(value=%r, expires=%r, domain=%r, dirty=%r)"
                 % (self.value, self.expires, self.domain, self.dirty))
 
-class UnloggedUser(FakeAccount):
+class UnloggedUser(models.FakeAccount):
     _cookie = 'options'
     allowed_prefs = ('pref_content_langs', 'pref_lang', 'pref_frame_commentspanel')
 
     def __init__(self, browser_langs, *a, **kw):
-        FakeAccount.__init__(self, *a, **kw)
+        models.FakeAccount.__init__(self, *a, **kw)
         if browser_langs:
             lang = browser_langs[0]
             content_langs = list(browser_langs)
@@ -192,7 +174,7 @@ def set_user_cookie(name, val, **kwargs):
                                            **kwargs)
 
     
-valid_click_cookie = fullname_regex(Link, True).match
+valid_click_cookie = validator.fullname_regex(models.Link, True).match
 def set_recent_clicks():
     c.recent_clicks = []
     if not c.user_is_loggedin:
@@ -210,8 +192,8 @@ def set_recent_clicks():
             names = names[:5]
 
             try:
-                c.recent_clicks = Link._by_fullname(names, data = True,
-                                                    return_dict = False)
+                c.recent_clicks = models.Link._by_fullname(names, data=True,
+                                                           return_dict=False)
             except NotFound:
                 # clear their cookie because it's got bad links in it
                 set_user_cookie('recentclicks2', '')
@@ -299,50 +281,50 @@ def set_subreddit():
 
     can_stale = request.method.upper() in ('GET','HEAD')
 
-    c.site = Frontpage
+    c.site = models.Frontpage
     if not sr_name:
         #check for cnames
         cname = request.environ.get('legacy-cname')
         if cname:
-            sr = Subreddit._by_domain(cname) or Frontpage
+            sr = models.Subreddit._by_domain(cname) or models.Frontpage
             domain = g.domain
             if g.domain_prefix:
                 domain = ".".join((g.domain_prefix, domain))
             redirect_to('http://%s%s' % (domain, sr.path), _code=301)
     elif sr_name == 'r':
         #reddits
-        c.site = Sub
+        c.site = models.Sub
     elif '+' in sr_name:
         sr_names = sr_name.split('+')
-        srs = set(Subreddit._by_name(sr_names, stale=can_stale).values())
-        if All in srs:
-            c.site = All
-        elif Friends in srs:
-            c.site = Friends
+        srs = set(models.Subreddit._by_name(sr_names, stale=can_stale).values())
+        if models.All in srs:
+            c.site = models.All
+        elif models.Friends in srs:
+            c.site = models.Friends
         else:
-            srs = [sr for sr in srs if not isinstance(sr, FakeSubreddit)]
+            srs = [sr for sr in srs if not isinstance(sr, models.FakeSubreddit)]
             if len(srs) == 0:
-                c.site = MultiReddit([], sr_name)
+                c.site = models.MultiReddit([], sr_name)
             elif len(srs) == 1:
                 c.site = srs.pop()    
             else:
                 sr_ids = [sr._id for sr in srs]
-                c.site = MultiReddit(sr_ids, sr_name)
+                c.site = models.MultiReddit(sr_ids, sr_name)
     else:
         try:
-            c.site = Subreddit._by_name(sr_name, stale=can_stale)
+            c.site = models.Subreddit._by_name(sr_name, stale=can_stale)
         except NotFound:
-            sr_name = chksrname(sr_name)
+            sr_name = validator.chksrname(sr_name)
             if sr_name:
                 redirect_to("/reddits/search?q=%s" % sr_name)
             elif not c.error_page and not request.path.startswith("/api/login/") :
                 abort(404)
 
     #if we didn't find a subreddit, check for a domain listing
-    if not sr_name and isinstance(c.site, DefaultSR) and domain:
-        c.site = DomainSR(domain)
+    if not sr_name and isinstance(c.site, models.DefaultSR) and domain:
+        c.site = models.DomainSR(domain)
 
-    if isinstance(c.site, FakeSubreddit):
+    if isinstance(c.site, models.FakeSubreddit):
         c.default_sr = True
 
 def set_content_type():
@@ -508,13 +490,13 @@ def ratelimit_throttled():
 
 def paginated_listing(default_page_size=25, max_page_size=100, backend='sql'):
     def decorator(fn):
-        @validate(num=VLimit('limit', default=default_page_size,
-                             max_limit=max_page_size),
-                  after=VByName('after', backend=backend),
-                  before=VByName('before', backend=backend),
-                  count=VCount('count'),
-                  target=VTarget("target"),
-                  show=VLength('show', 3))
+        @validate(num=validator.VLimit('limit', default=default_page_size,
+                                       max_limit=max_page_size),
+                  after=validator.VByName('after', backend=backend),
+                  before=validator.VByName('before', backend=backend),
+                  count=validator.VCount('count'),
+                  target=validator.VTarget("target"),
+                  show=validator.VLength('show', 3))
         @utils.wraps_api(fn)
         def new_fn(self, before, **env):
             if c.render_style == "htmllite":
@@ -524,7 +506,7 @@ def paginated_listing(default_page_size=25, max_page_size=100, backend='sql'):
 
             if "show" in env and env['show'] == 'all':
                 c.ignore_hide_rules = True
-            kw = build_arg_list(fn, env)
+            kw = validator.build_arg_list(fn, env)
 
             #turn before into after/reverse
             kw['reverse'] = False
@@ -906,13 +888,14 @@ class RedditController(MinimalController):
                 read_mod_cookie()
             if hasattr(c.user, 'msgtime') and c.user.msgtime:
                 c.have_messages = c.user.msgtime
-            c.show_mod_mail = Subreddit.reverse_moderator_ids(c.user)
+            c.show_mod_mail = models.Subreddit.reverse_moderator_ids(c.user)
             c.have_mod_messages = getattr(c.user, "modmsgtime", False)
             c.user_is_admin = maybe_admin and c.user.name in g.admins
             c.user_special_distinguish = c.user.special_distinguish()
             c.user_is_sponsor = c.user_is_admin or c.user.name in g.sponsors
             c.otp_cached = is_otpcookie_valid
-            if not isinstance(c.site, FakeSubreddit) and not g.disallow_db_writes:
+            if (not isinstance(c.site, models.FakeSubreddit) and
+                not g.disallow_db_writes):
                 c.user.update_sr_activity(c.site)
 
         c.over18 = over18()
@@ -927,15 +910,15 @@ class RedditController(MinimalController):
         set_colors()
 
         # set some environmental variables in case we hit an abort
-        if not isinstance(c.site, FakeSubreddit):
+        if not isinstance(c.site, models.FakeSubreddit):
             request.environ['REDDIT_NAME'] = c.site.name
 
         # random reddit trickery -- have to do this after the content lang is set
-        if c.site == Random:
-            c.site = Subreddit.random_reddit()
+        if c.site == models.Random:
+            c.site = models.Subreddit.random_reddit()
             redirect_to("/" + c.site.path.strip('/') + request.path)
-        elif c.site == RandomNSFW:
-            c.site = Subreddit.random_reddit(over18 = True)
+        elif c.site == models.RandomNSFW:
+            c.site = models.Subreddit.random_reddit(over18 = True)
             redirect_to("/" + c.site.path.strip('/') + request.path)
         
         if not request.path.startswith("/api/login/"):

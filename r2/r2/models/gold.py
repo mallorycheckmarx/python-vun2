@@ -26,27 +26,18 @@ from httplib import HTTPSConnection
 from urlparse import urlparse
 from time import time
 
-import sqlalchemy as sa
+import sqlalchemy as sqla
 from BeautifulSoup import BeautifulStoneSoup
 from pylons import g
 from sqlalchemy.exc import IntegrityError
 from xml.dom.minidom import Document
 
 from r2.lib.db.tdb_sql import make_metadata, index_str, create_table
+from r2.lib.export import export
 from r2.lib.utils import tup, randstr
 
 __all__ = [
-           #Constants
-           #Classes
-           #Exceptions
-           #Functions
-           "account_by_payingid",
-           "claim_gold",
-           "create_claimed_gold",
-           "create_gift_gold",
-           "_google_ordernum_request",
-           "_google_charge_and_ship",
-           "_google_checkout_post",
+           #Constants Only, use @export for functions/classes
            ]
 
 
@@ -57,21 +48,21 @@ ENGINE_NAME = 'authorize'
 ENGINE = g.dbm.get_engine(ENGINE_NAME)
 METADATA = make_metadata(ENGINE)
 
-gold_table = sa.Table('reddit_gold', METADATA,
-                      sa.Column('trans_id', sa.String, nullable = False,
-                                primary_key = True),
-                      # status can be: invalid, unclaimed, claimed
-                      sa.Column('status', sa.String, nullable = False),
-                      sa.Column('date', sa.DateTime(timezone=True),
-                                nullable = False,
-                                default = sa.func.now()),
-                      sa.Column('payer_email', sa.String, nullable = False),
-                      sa.Column('paying_id', sa.String, nullable = False),
-                      sa.Column('pennies', sa.Integer, nullable = False),
-                      sa.Column('secret', sa.String, nullable = True),
-                      sa.Column('account_id', sa.String, nullable = True),
-                      sa.Column('days', sa.Integer, nullable = True),
-                      sa.Column('subscr_id', sa.String, nullable = True))
+gold_table = sqla.Table('reddit_gold', METADATA,
+                        sqla.Column('trans_id', sqla.String, nullable=False,
+                                    primary_key=True),
+                        # status can be: invalid, unclaimed, claimed
+                        sqla.Column('status', sqla.String, nullable=False),
+                        sqla.Column('date', sqla.DateTime(timezone=True),
+                                    nullable=False,
+                                    default=sqla.func.now()),
+                        sqla.Column('payer_email', sqla.String, nullable=False),
+                        sqla.Column('paying_id', sqla.String, nullable=False),
+                        sqla.Column('pennies', sqla.Integer, nullable=False),
+                        sqla.Column('secret', sqla.String, nullable=True),
+                        sqla.Column('account_id', sqla.String, nullable=True),
+                        sqla.Column('days', sqla.Integer, nullable=True),
+                        sqla.Column('subscr_id', sqla.String, nullable=True))
 
 indices = [index_str(gold_table, 'status', 'status'),
            index_str(gold_table, 'date', 'date'),
@@ -98,8 +89,8 @@ def create_unclaimed_gold (trans_id, payer_email, paying_id,
                                     )
     except IntegrityError:
         rp = gold_table.update(
-            sa.and_(gold_table.c.status == 'uncharged',
-                    gold_table.c.trans_id == str(trans_id)),
+            sqla.and_(gold_table.c.status == 'uncharged',
+                      gold_table.c.trans_id == str(trans_id)),
             values = {
                 gold_table.c.status: "unclaimed",
                 gold_table.c.payer_email: payer_email,
@@ -140,6 +131,7 @@ subscription with your reddit account -- just visit
     emailer.gold_email(body, payer_email, "reddit gold subscriptions")
 
 
+@export
 def create_claimed_gold (trans_id, payer_email, paying_id,
                          pennies, days, secret, account_id, date,
                          subscr_id = None, status="claimed"):
@@ -154,6 +146,8 @@ def create_claimed_gold (trans_id, payer_email, paying_id,
                                 account_id=account_id,
                                 date=date)
 
+
+@export
 def create_gift_gold (giver_id, recipient_id, days, date, signed):
     trans_id = "X%d%s-%s" % (int(time()), randstr(2), 'S' if signed else 'A')
 
@@ -166,9 +160,11 @@ def create_gift_gold (giver_id, recipient_id, days, date, signed):
                                 account_id=recipient_id,
                                 date=date)
 
+
+@export
 def account_by_payingid(paying_id):
-    s = sa.select([sa.distinct(gold_table.c.account_id)],
-                  gold_table.c.paying_id == paying_id)
+    s = sqla.select([sqla.distinct(gold_table.c.account_id)],
+                     gold_table.c.paying_id == paying_id)
     res = s.execute().fetchall()
 
     if len(res) != 1:
@@ -176,11 +172,13 @@ def account_by_payingid(paying_id):
 
     return int(res[0][0])
 
+
 # returns None if the ID was never valid
 # returns "already claimed" if it's already been claimed
 # Otherwise, it's valid and the function claims it, returning a tuple with:
 #   * the number of days
 #   * the subscr_id, if any
+@export
 def claim_gold(secret, account_id):
     if not secret:
         return None
@@ -189,8 +187,8 @@ def claim_gold(secret, account_id):
     # so they might get sloppy and catch the period or some whitespace.
     secret = secret.strip(". ")
 
-    rp = gold_table.update(sa.and_(gold_table.c.status == 'unclaimed',
-                                   gold_table.c.secret == secret),
+    rp = gold_table.update(sqla.and_(gold_table.c.status == 'unclaimed',
+                                     gold_table.c.secret == secret),
                            values = {
                                       gold_table.c.status: 'claimed',
                                       gold_table.c.account_id: account_id,
@@ -203,9 +201,9 @@ def claim_gold(secret, account_id):
     else:
         raise ValueError("rowcount == %d?" % rp.rowcount)
 
-    s = sa.select([gold_table.c.days, gold_table.c.subscr_id],
-                  gold_table.c.secret == secret,
-                  limit = 1)
+    s = sqla.select([gold_table.c.days, gold_table.c.subscr_id],
+                     gold_table.c.secret == secret,
+                     limit=1)
     rows = s.execute().fetchall()
 
     if not rows:
@@ -216,11 +214,11 @@ def claim_gold(secret, account_id):
         return "already claimed"
 
 def check_by_email(email):
-    s = sa.select([gold_table.c.status,
-                           gold_table.c.secret,
-                           gold_table.c.days,
-                           gold_table.c.account_id],
-                          gold_table.c.payer_email == email)
+    s = sqla.select([gold_table.c.status,
+                     gold_table.c.secret,
+                     gold_table.c.days,
+                     gold_table.c.account_id],
+                     gold_table.c.payer_email == email)
     return s.execute().fetchall()
 
 # google checkout specific code:
@@ -239,9 +237,9 @@ def new_google_transaction(trans_id):
                                     secret=None,
                                     date=datetime.now(g.tz))
     except IntegrityError:
-        s = sa.select([gold_table.c.trans_id],
-                      sa.and_(gold_table.c.status == 'declined',
-                              gold_table.c.trans_id == "g" + str(key)))
+        s = sqla.select([gold_table.c.trans_id],
+                         sqla.and_(gold_table.c.status == 'declined',
+                                   gold_table.c.trans_id == "g" + str(key)))
         res = s.execute().fetchall()
         if res:
             gold_table.update(gold_table.c.trans_id == "g" + str(key),
@@ -251,6 +249,7 @@ def new_google_transaction(trans_id):
             g.log.error("transaction id already exists in table: %s" % key)
 
 
+@export
 def _google_ordernum_request(ordernums):
     d = Document()
     n = d.createElement("notification-history-request")
@@ -267,6 +266,8 @@ def _google_ordernum_request(ordernums):
 
     return _google_checkout_post(g.GOOGLE_REPORT_URL, d.toxml("UTF-8"))
 
+
+@export
 def _google_charge_and_ship(ordernum):
     d = Document()
     n = d.createElement("charge-and-ship-order")
@@ -278,6 +279,7 @@ def _google_charge_and_ship(ordernum):
     return _google_checkout_post(g.GOOGLE_REQUEST_URL, d.toxml("UTF-8"))
 
 
+@export
 def _google_checkout_post(url, params):
     u = urlparse("%s%s" % (url, g.GOOGLE_ID))
     conn = HTTPSConnection(u.hostname, u.port)
@@ -313,8 +315,8 @@ def process_google_transaction(trans_id):
         if 'PAYMENT_DECLINED' in [x.contents[0] for x in status]:
             g.log.error("google declined transaction found: '%s'" % trans_id)
             rp = gold_table.update(
-                sa.and_(gold_table.c.status == 'uncharged',
-                        gold_table.c.trans_id == 'g' + str(trans_id)),
+                sqla.and_(gold_table.c.status == 'uncharged',
+                          gold_table.c.trans_id == 'g' + str(trans_id)),
                 values = { gold_table.c.status : "declined" }).execute()
         elif 'REVIEWING' not in [x.contents[0] for x in status]:
             g.log.error("google transaction not found: '%s', status: %s"
@@ -340,8 +342,8 @@ def process_google_transaction(trans_id):
             else:
                 g.log.error("Got %d pennies via Google?" % pennies)
                 rp = gold_table.update(
-                    sa.and_(gold_table.c.status == 'uncharged',
-                            gold_table.c.trans_id == 'g' + str(trans_id)),
+                    sqla.and_(gold_table.c.status == 'uncharged',
+                              gold_table.c.trans_id == 'g' + str(trans_id)),
                     values = { gold_table.c.status : "strange",
                                gold_table.c.pennies : pennies,
                                gold_table.c.payer_email : email,
@@ -369,8 +371,8 @@ def process_google_transaction(trans_id):
 
 
 def process_uncharged():
-    s = sa.select([gold_table.c.trans_id],
-                 gold_table.c.status == 'uncharged')
+    s = sqla.select([gold_table.c.trans_id],
+                     gold_table.c.status == 'uncharged')
     res = s.execute().fetchall()
 
     for trans_id, in res:

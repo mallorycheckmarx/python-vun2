@@ -26,6 +26,11 @@ from paste.httpexceptions import HTTPForbidden
 
 from r2.lib.utils import Storage, tup
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
 error_list = dict((
         ('USER_REQUIRED', _("please login to do that")),
         ('HTTPS_REQUIRED', _("this page must be accessed using https")),

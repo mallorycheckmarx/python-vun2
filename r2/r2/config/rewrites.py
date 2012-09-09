@@ -22,6 +22,12 @@
 
 import re
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           "rewrites",
+           ]
+
+
 rewrites = (#these first two rules prevent the .embed rewrite from
             #breaking other js that should work
             ("\A/_(.*)", "/_$1"),

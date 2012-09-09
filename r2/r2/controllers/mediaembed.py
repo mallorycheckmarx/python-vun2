@@ -32,9 +32,13 @@ from r2.lib.cache import make_key
 from r2.controllers.reddit_base import MinimalController
 from r2.controllers.validator import VLink, validate
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class MediaembedController(MinimalController):
-    @validate(link = VLink('link'))
+    @validate(link=VLink('link'))
     def GET_mediaembed(self, link):
         if request.host != g.media_domain:
             # don't serve up untrusted content except on our

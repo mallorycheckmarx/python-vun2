@@ -22,48 +22,46 @@
 
 from pylons import request, g
 
-from r2.lib.pages import (AdminPage,
-                          AdminAwards,
-                          AdminAwardGive,
-                          AdminAwardWinners,
-                          )
+from r2.lib import pages
 
+from r2.controllers import validator
 from r2.controllers.reddit_base import RedditController
-from r2.controllers.validator import (VAdmin,
-                                      VAwardByCodename,
-                                      nop,
-                                      validate,
-                                      )
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class AwardsController(RedditController):
 
-    @validate(VAdmin())
+    @validate(validator.VAdmin())
     def GET_index(self):
-        res = AdminPage(content = AdminAwards(),
-                        title = 'awards').render()
+        res = pages.AdminPage(content = pages.AdminAwards(),
+                              title = 'awards').render()
         return res
 
-    @validate(VAdmin(),
-              award = VAwardByCodename('awardcn'),
-              recipient = nop('recipient'),
-              desc = nop('desc'),
-              url = nop('url'),
-              hours = nop('hours'))
+    @validate(validator.VAdmin(),
+              award=validator.VAwardByCodename('awardcn'),
+              recipient=validator.nop('recipient'),
+              desc=validator.nop('desc'),
+              url=validator.nop('url'),
+              hours=validator.nop('hours'))
     def GET_give(self, award, recipient, desc, url, hours):
         if award is None:
             abort(404, 'page not found')
 
-        res = AdminPage(content = AdminAwardGive(award, recipient, desc,
-                                                 url, hours),
-                        title='give an award').render()
+        res = pages.AdminPage(content = pages.AdminAwardGive(award, recipient,
+                                                             desc, url, hours),
+                              title='give an award').render()
         return res
 
-    @validate(VAdmin(),
-              award = VAwardByCodename('awardcn'))
+    @validate(validator.VAdmin(),
+              award=validator.VAwardByCodename('awardcn'))
     def GET_winners(self, award):
         if award is None:
             abort(404, 'page not found')
 
-        res = AdminPage(content = AdminAwardWinners(award),
-                        title='award winners').render()
+        res = pages.AdminPage(content = pages.AdminAwardWinners(award),
+                              title='award winners').render()
         return res

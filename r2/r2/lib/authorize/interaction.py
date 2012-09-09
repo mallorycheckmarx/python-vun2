@@ -20,9 +20,12 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from api import *
 from pylons import g
-from r2.models.bidding import Bid
+
+from r2.lib.utils import Storage
+from r2.models import Bid
+
+from r2.lib.authorize.api import Address, CreditCard
 
 # useful test data:
 test_card = dict(AMEX       = ("370000000000002"  , 1234),

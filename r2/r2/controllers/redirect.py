@@ -26,6 +26,11 @@ from r2.lib.base import BaseController
 
 from r2.controllers.validator import chkuser, chksrname
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
 class RedirectController(BaseController):
     def GET_redirect(self, dest):
         return redirect_to(str(dest))

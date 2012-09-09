@@ -27,22 +27,12 @@ from pycassa.system_manager import ASCII_TYPE, DATE_TYPE, UTF8_TYPE
 
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import NotFound
+from r2.lib.export import export
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 
 __all__ = [
-           #Constants
-           #Classes
-           "EmailVerificationToken",
-           "OAuth2AccessToken",
-           "OAuth2AccessTokensByUser",
-           "OAuth2AuthorizationCode",
-           "OAuth2Client",
-           "PasswordResetToken",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
@@ -109,6 +99,7 @@ class ConsumableToken(Token):
         self._commit()
 
 
+@export
 class OAuth2Client(Token):
     """A client registered for OAuth2 access"""
     max_developers = 20
@@ -245,6 +236,7 @@ class OAuth2ClientsByDeveloper(tdb_cassandra.View):
     _connection_pool = 'main'
 
 
+@export
 class OAuth2AuthorizationCode(ConsumableToken):
     """An OAuth2 authorization code for completing authorization flow"""
     token_size = 20
@@ -279,6 +271,7 @@ class OAuth2AuthorizationCode(ConsumableToken):
             return None
 
 
+@export
 class OAuth2AccessToken(Token):
     """An OAuth2 access token for accessing protected resources"""
     token_size = 20
@@ -365,6 +358,8 @@ class OAuth2AccessToken(Token):
     def scope_list(self):
         return self.scope.split(',')
 
+
+@export
 class OAuth2AccessTokensByUser(tdb_cassandra.View):
     """Index listing the outstanding access tokens for an account."""
 
@@ -374,6 +369,8 @@ class OAuth2AccessTokensByUser(tdb_cassandra.View):
     _view_of = OAuth2AccessToken
     _connection_pool = 'main'
 
+
+@export
 class EmailVerificationToken(ConsumableToken):
     _use_db = True
     _connection_pool = "main"
@@ -389,6 +386,7 @@ class EmailVerificationToken(ConsumableToken):
         return self.email == user.email
 
 
+@export
 class PasswordResetToken(ConsumableToken):
     _use_db = True
     _connection_pool = "main"

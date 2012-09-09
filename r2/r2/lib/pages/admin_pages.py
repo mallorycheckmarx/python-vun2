@@ -20,23 +20,34 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons         import c, g
-from r2.lib.wrapped import Templated
-from pages   import Reddit
-from r2.lib.menus   import NamedButton, NavButton, menu, NavMenu
+from pylons import g, c
 
+from r2.lib.export import export
+from r2.lib.menus import NavButton, menu, NavMenu
+from r2.lib.wrapped import Templated
+
+from r2.lib.pages.pages import Reddit
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
+@export
 class AdminSidebar(Templated):
     def __init__(self, user):
         Templated.__init__(self)
         self.user = user
 
 
+@export
 class Details(Templated):
     def __init__(self, link, *a, **kw):
         Templated.__init__(self, *a, **kw)
         self.link = link
 
 
+@export
 class AdminPage(Reddit):
     create_reddit_box  = False
     submit_box         = False
@@ -65,6 +76,8 @@ class AdminPage(Reddit):
 
         Reddit.__init__(self, nav_menus = nav_menus, *a, **kw)
 
+
+@export
 class AdminProfileMenu(NavMenu):
     def __init__(self, path):
         NavMenu.__init__(self, [], base_path = path,

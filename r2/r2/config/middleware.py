@@ -24,22 +24,26 @@
 import re
 import urllib
 import tempfile
-import urlparse
 from threading import Lock
 
 from paste.cascade import Cascade
+from paste.deploy.converters import asbool
 from paste.registry import RegistryManager
 from paste.urlparser import StaticURLParser
-from paste.deploy.converters import asbool
 from pylons import config, Response
 from pylons.error import error_template
 from pylons.middleware import ErrorDocuments, ErrorHandler, StaticJavascripts
 from pylons.wsgiapp import PylonsApp, PylonsBaseWSGIApp
 
-from r2.config.environment import load_environment
-from r2.config.rewrites import rewrites
-from r2.config.extensions import extension_mapping, set_extension
 from r2.lib.utils import is_subdomain
+
+from r2.config.environment import load_environment
+from r2.config.extensions import extension_mapping, set_extension
+from r2.config.rewrites import rewrites
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 # hack in Paste support for HTTP 429 "Too Many Requests"

@@ -25,12 +25,17 @@ from pylons import g
 
 from r2.lib.db.operators import desc, lower
 from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.export import export
 from r2.lib.memoize import memoize
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.subreddit import Subreddit
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
+@export
 class Ad (Thing):
     _defaults = dict(
         codename = None,
@@ -91,6 +96,8 @@ class Ad (Thing):
         return dict(rendering=self.rendering(), linkurl=self.linkurl,
                     submit_link=self.submit_link())
 
+
+@export
 class AdSR(Relation(Ad, Subreddit)):
     @classmethod
     def _new(cls, ad, sr, weight=100):

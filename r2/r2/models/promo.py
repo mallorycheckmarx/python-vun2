@@ -21,18 +21,17 @@
 ###############################################################################
 
 from r2.lib.db.thing import Thing
+from r2.lib.export import export
 
 __all__ = [
-           #Constants
-           #Classes
-           "PromoCampaign",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
 NO_TRANSACTION = 0
 
+
+@export
 class PromoCampaign(Thing):
     
     @classmethod 

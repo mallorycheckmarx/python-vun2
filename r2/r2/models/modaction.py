@@ -28,24 +28,20 @@ from pylons.i18n import _
 
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import Thing
+from r2.lib.export import export
 from r2.lib.utils import tup
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 from r2.models.link import Link, Comment
 from r2.models.printable import Printable
 from r2.models.subreddit import Subreddit
 
 __all__ = [
-           #Constants
-           #Classes
-           "ModAction",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
+@export
 class ModAction(tdb_cassandra.UuidThing, Printable):
     """
     Columns:

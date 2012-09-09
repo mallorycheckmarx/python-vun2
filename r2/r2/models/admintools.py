@@ -25,38 +25,18 @@ from datetime import datetime, timedelta
 
 from pylons import g
 
+from r2.lib.export import export
 from r2.lib.filters import websafe
 from r2.lib.utils import tup, fetch_things2
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
+from r2.models.award import Award
 from r2.models.report import Report
 from r2.models.subreddit import Subreddit
 
-#NOTE: all functions are exported, admins will need to decide which stay based on r2admin
 __all__ = [
-           #Constants
+           #Constants Only, use @export for functions/classes
            "admintools",
-           #Classes
-           #Exceptions
-           #Functions
-           "admin_ratelimit",
-           "accountid_from_paypalsubscription",
-           "apply_updates",
-           "cancel_subscription",
-           "check_request",
-           "compute_votes",
-           "filter_quotas",
-           "is_banned_IP",
-           "is_shamed_domain",
-           "ip_span",
-           "login_throttle",
-           "send_system_message",
-           "update_gold_users",
-           "update_score",
-           "valid_thing",
-           "valid_user"
            ]
 
 class AdminTools(object):
@@ -261,6 +241,8 @@ class AdminTools(object):
 
 admintools = AdminTools()
 
+
+@export
 def cancel_subscription(subscr_id):
     q = Account._query(Account.c.gold_subscr_id == subscr_id, data=True)
     l = list(q)
@@ -278,6 +260,8 @@ def all_gold_users():
                        sort="_id")
     return fetch_things2(q)
 
+
+@export
 def accountid_from_paypalsubscription(subscr_id):
     if subscr_id is None:
         return None
@@ -290,6 +274,8 @@ def accountid_from_paypalsubscription(subscr_id):
     else:
         return None
 
+
+@export
 def update_gold_users(verbose=False):
     now = datetime.now(g.display_tz)
     minimum = None
@@ -350,46 +336,71 @@ def update_gold_users(verbose=False):
             delta, account = minimum
             print "Next expiration is %s, in %d days" % (account.name, delta.days)
 
+
+@export
 def admin_ratelimit(user):
     return True
 
+
+@export
 def is_banned_IP(ip):
     return False
+
 
 def is_banned_domain(dom, ip):
     return None
 
+
+@export
 def is_shamed_domain(dom, ip):
     return False, None, None
 
+
+@export
 def send_system_message(account, subject, message):
     pass
 
+
+@export
 def valid_thing(v, karma, *a, **kw):
     return not v._thing1._spam
 
+
+@export
 def valid_user(v, sr, karma, *a, **kw):
     return True
 
+
 # Returns whether this person is being suspicious
+@export
 def login_throttle(username, wrong_password):
     return False
 
+
+@export
 def apply_updates(user):
     pass
 
-def update_score(obj, up_change, down_change, vote, old_valid_thing):
-     obj._incr('_ups',   up_change)
-     obj._incr('_downs', down_change)
 
+@export
+def update_score(obj, up_change, down_change, vote, old_valid_thing):
+    obj._incr('_ups',   up_change)
+    obj._incr('_downs', down_change)
+
+
+@export
 def compute_votes(wrapper, item):
     wrapper.upvotes   = item._ups
     wrapper.downvotes = item._downs
 
+
+@export
 def ip_span(ip):
     ip = websafe(ip)
     return '<!-- %s -->' % ip
 
+
+@export
 def filter_quotas(unfiltered):
     from r2.lib.utils.trial_utils import trial_info
 
@@ -452,6 +463,8 @@ def filter_quotas(unfiltered):
     else:
         return baskets, None
 
+
+@export
 def check_request(end_time):
     pass
 

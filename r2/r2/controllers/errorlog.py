@@ -20,16 +20,22 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.pages import AdminPage, AdminErrorLog
+from r2.lib import pages
 
+import r2.controllers.validator as validator
 from r2.controllers.reddit_base import RedditController
-from r2.controllers.validator import VAdmin, validate
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class ErrorlogController(RedditController):
-    @validate(VAdmin())
+    @validate(validator.VAdmin())
     def GET_index(self):
-        res = AdminPage(content = AdminErrorLog(),
-                        title = 'error log',
-                        show_sidebar = False
-                        ).render()
+        res = pages.AdminPage(content=pages.AdminErrorLog(),
+                              title='error log',
+                              show_sidebar=False
+                              ).render()
         return res

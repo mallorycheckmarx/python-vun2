@@ -38,10 +38,10 @@ from pylons.i18n import _
 
 from r2.lib.db.thing import Thing
 from r2.lib.media import upload_media, s3_direct_url
-from r2.lib.pages.things import wrap_links
 from r2.lib.strings import string_dict
 from r2.lib.template_helpers import s3_https_if_secure
 from r2.lib.utils import strip_www
+from r2.lib.wrapper import wrap_links
 from r2.models import Comment, Link, Subreddit
 
 

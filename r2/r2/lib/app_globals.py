@@ -20,29 +20,35 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from __future__ import with_statement
 import ConfigParser
-from pylons import config
-import pytz, os, logging, sys, socket, re, subprocess, random
+import json
+import logging
+import os
 import signal
+import socket
+import subprocess
+import sys
 from datetime import timedelta, datetime
 from urlparse import urlparse
-import json
-from r2.lib.contrib import ipaddress
-from sqlalchemy import engine
-from sqlalchemy import event
+
+import pytz
+from sqlalchemy import engine, event
+
+from r2.lib import cache
 from r2.lib.configparse import ConfigValue, ConfigValueParser
-from r2.lib.cache import LocalCache, SelfEmptyingCache
-from r2.lib.cache import CMemcache, StaleCacheChain
-from r2.lib.cache import HardCache, MemcacheChain, MemcacheChain, HardcacheChain
-from r2.lib.cache import CassandraCache, CassandraCacheChain, CacheChain, CL_ONE, CL_QUORUM
-from r2.lib.utils import thread_dump
+from r2.lib.contrib import ipaddress
 from r2.lib.db.stats import QueryStats
-from r2.lib.translation import get_active_langs, I18N_PATH
+from r2.lib.export import export
 from r2.lib.lock import make_lock_factory
 from r2.lib.manager import db_manager
-from r2.lib.stats import Stats, CacheStats, StatsCollectingConnectionPool
 from r2.lib.plugin import PluginLoader
+from r2.lib.stats import Stats, CacheStats, StatsCollectingConnectionPool
+from r2.lib.translation import get_active_langs, I18N_PATH
+from r2.lib.utils import thread_dump
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 LIVE_CONFIG_NODE = "/config/live"
@@ -65,6 +71,7 @@ def extract_live_config(config, plugins):
     return parsed
 
 
+@export
 class Globals(object):
     spec = {
 
@@ -167,12 +174,12 @@ class Globals(object):
 
         ConfigValue.choice: {
              'cassandra_rcl': {
-                 'ONE': CL_ONE,
-                 'QUORUM': CL_QUORUM
+                 'ONE': cache.CL_ONE,
+                 'QUORUM': cache.CL_QUORUM
              },
              'cassandra_wcl': {
-                 'ONE': CL_ONE,
-                 'QUORUM': CL_QUORUM
+                 'ONE': cache.CL_ONE,
+                 'QUORUM': cache.CL_QUORUM
              },
         },
     }
@@ -262,8 +269,8 @@ class Globals(object):
         # to cache_chains (closed around by reset_caches) so that they
         # can properly reset their local components
 
-        localcache_cls = (SelfEmptyingCache if self.running_as_script
-                          else LocalCache)
+        localcache_cls = (cache.SelfEmptyingCache if self.running_as_script
+                          else cache.LocalCache)
         num_mc_clients = self.num_mc_clients
 
         self.cache_chains = {}
@@ -290,8 +297,10 @@ class Globals(object):
             self.live_config = extract_live_config(parser, self.plugins)
             self.throttles = tuple()  # immutable since it's not real
 
-        self.memcache = CMemcache(self.memcaches, num_clients = num_mc_clients)
-        self.lock_cache = CMemcache(self.lockcaches, num_clients=num_mc_clients)
+        self.memcache = cache.CMemcache(self.memcaches,
+                                        num_clients=num_mc_clients)
+        self.lock_cache = cache.CMemcache(self.lockcaches,
+                                          num_clients=num_mc_clients)
 
         self.stats = Stats(self.config.get('statsd_addr'),
                            self.config.get('statsd_sample_rate'))
@@ -322,16 +331,21 @@ class Globals(object):
                 ),
         }
 
-        perma_memcache = (CMemcache(self.permacache_memcaches, num_clients = num_mc_clients)
+        perma_memcache = (cache.CMemcache(self.permacache_memcaches,
+                                          num_clients=num_mc_clients)
                           if self.permacache_memcaches
                           else None)
-        self.permacache = CassandraCacheChain(localcache_cls(),
-                                              CassandraCache('permacache',
-                                                             self.cassandra_pools[self.cassandra_default_pool],
-                                                             read_consistency_level = self.cassandra_rcl,
-                                                             write_consistency_level = self.cassandra_wcl),
-                                              memcache = perma_memcache,
-                                              lock_factory = self.make_lock)
+        cass_cache = cache.CassandraCache('permacache',
+                                          self.cassandra_pools[
+                                              self.cassandra_default_pool],
+                                          read_consistency_level=
+                                              self.cassandra_rcl,
+                                          write_consistency_level=
+                                              self.cassandra_wcl),
+        self.permacache = cache.CassandraCacheChain(localcache_cls(),
+                                                    cass_cache,
+                                                    memcache=perma_memcache,
+                                                    lock_factory=self.make_lock)
 
         self.cache_chains.update(permacache=self.permacache)
 
@@ -339,30 +353,34 @@ class Globals(object):
         # chains are reset to use the appropriate initial entries
 
         if self.stalecaches:
-            self.cache = StaleCacheChain(localcache_cls(),
-                                         CMemcache(self.stalecaches, num_clients=num_mc_clients),
-                                         self.memcache)
+            new_cache_tmp = cache.CMemcache(self.stalecaches,
+                                            num_clients=num_mc_clients)
+            self.cache = cache.StaleCacheChain(localcache_cls(), new_cache_tmp,
+                                               self.memcache)
         else:
-            self.cache = MemcacheChain((localcache_cls(), self.memcache))
+            self.cache = cache.MemcacheChain((localcache_cls(), self.memcache))
         self.cache_chains.update(cache=self.cache)
 
-        self.rendercache = MemcacheChain((localcache_cls(),
-                                          CMemcache(self.rendercaches,
-                                                    noreply=True, no_block=True,
-                                                    num_clients = num_mc_clients)))
+        new_cache_tmp = cache.CMemcache(self.rendercaches,
+                                        noreply=True,
+                                        no_block=True,
+                                        num_clients=num_mc_clients)
+
+        self.rendercache = cache.MemcacheChain((localcache_cls(),
+                                                new_cache_tmp))
         self.cache_chains.update(rendercache=self.rendercache)
 
-        self.thing_cache = CacheChain((localcache_cls(),))
+        self.thing_cache = cache.CacheChain((localcache_cls(),))
         self.cache_chains.update(thing_cache=self.thing_cache)
 
         #load the database info
         self.dbm = self.load_db_params()
 
         # can't do this until load_db_params() has been called
-        self.hardcache = HardcacheChain((localcache_cls(),
-                                         self.memcache,
-                                         HardCache(self)),
-                                        cache_negative_results = True)
+        self.hardcache = cache.HardcacheChain((localcache_cls(),
+                                               self.memcache,
+                                               cache.HardCache(self)),
+                                              cache_negative_results=True)
         self.cache_chains.update(hardcache=self.hardcache)
 
         # I know this sucks, but we need non-request-threads to be

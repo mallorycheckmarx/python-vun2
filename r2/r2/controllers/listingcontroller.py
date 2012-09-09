@@ -27,75 +27,39 @@ from pylons import g, c, request
 from pylons.i18n import _
 from pylons.controllers.util import redirect_to, abort
 
+import r2.lib.menus as menu
+import r2.lib.pages as pages
 import r2.lib.search as search
+import r2.models as models
 from r2.config.extensions import is_api
-from r2.lib import organic, sup, promote, utils
+from r2.lib import organic, sup, promote, utils, pages
 from r2.lib.db import queries
 from r2.lib.db.operators import desc
 from r2.lib.db.thing import Query, NotFound
-from r2.lib.menus import (NavButton,
-                          NavMenu,
-                          NewMenu,
-                          TimeMenu,
-                          ProfileSortMenu,
-                          ControversyTimeMenu
-                          )
 from r2.lib.normalized_hot import normalized_hot, get_hot
-from r2.lib.pages import (Captcha,
-                          InfoBar,
-                          InterestBar,
-                          MessageCompose,
-                          MessagePage,
-                          MySubredditsPage,
-                          PaneStack,
-                          ProfilePage,
-                          Reddit,
-                          SubredditsPage,
-                          votes_visible,
-                         )
-from r2.lib.pages.things import default_thing_wrapper, wrap_links
+from r2.lib.pages import votes_visible
 from r2.lib.promote import randomized_promotion_list, get_promote_srid
 from r2.lib.rising import get_rising
 from r2.lib.strings import strings, plurals
 from r2.lib.utils import iters, check_cheating, timeago, query_string
 from r2.lib.wrapped import Wrapped
-from r2.models import (Comment,
-                       DefaultSR,
-                       FakeSubreddit,
-                       IDBuilder,
-                       Link,
-                       LinkListing,
-                       Listing,
-                       Message,
-                       ModeratorMessageBuilder,
-                       ModSR,
-                       MultiReddit,
-                       MultiredditMessageBuilder,
-                       QueryBuilder,
-                       SearchBuilder,
-                       SpotlightListing,
-                       SRMember,
-                       SrMessageBuilder,
-                       Subreddit,
-                       UserMessageBuilder,
-                      )
+from r2.lib.wrapper import default_thing_wrapper, wrap_links
 from r2.models.query_cache import CachedQuery, MergedCachedQuery
 
+import r2.controllers.validator as validator
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import OAuth2ResourceController, require_oauth2_scope
-from r2.controllers.reddit_base import (RedditController,
+from r2.controllers.reddit_base import (#Classes
+                                        RedditController,
+                                        #Functions
                                         base_listing,
                                         organic_pos,
                                         )
-from r2.controllers.validator import (nop,
-                                      VMenu,
-                                      VByName,
-                                      VExistingUname,
-                                      VMessageID,
-                                      VUser,
-                                      VOneOf,
-                                      validate,
-                                      )
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 class ListingController(RedditController):
@@ -124,7 +88,7 @@ class ListingController(RedditController):
     show_sidebar = True
 
     # class (probably a subclass of Reddit) to use to render the page.
-    render_cls = Reddit
+    render_cls = pages.Reddit
 
     #extra parameters to send to the render_cls constructor
     render_params = {}
@@ -173,15 +137,15 @@ class ListingController(RedditController):
         if self.builder_cls:
             builder_cls = self.builder_cls
         elif isinstance(self.query_obj, Query):
-            builder_cls = QueryBuilder
+            builder_cls = models.QueryBuilder
         elif isinstance(self.query_obj, search.SearchQuery):
-            builder_cls = SearchBuilder
+            builder_cls = models.SearchBuilder
         elif isinstance(self.query_obj, iters):
-            builder_cls = IDBuilder
+            builder_cls = models.IDBuilder
         elif isinstance(self.query_obj, (queries.CachedResults, queries.MergedCachedResults)):
-            builder_cls = IDBuilder
+            builder_cls = models.IDBuilder
         elif isinstance(self.query_obj, (CachedQuery, MergedCachedQuery)):
-            builder_cls = IDBuilder
+            builder_cls = models.IDBuilder
 
         b = builder_cls(self.query_obj,
                         num = self.num,
@@ -209,7 +173,8 @@ class ListingController(RedditController):
         if (getattr(c.site, "_id", -1) == get_promote_srid() and 
             not c.user_is_sponsor):
             abort(403, 'forbidden')
-        pane = LinkListing(self.builder_obj, show_nums = self.show_nums).listing()
+        pane = models.LinkListing(self.builder_obj, show_nums=self.show_nums
+                                  ).listing()
         # Indicate that the comment tree wasn't built for comments
         for i in pane:
             if hasattr(i, 'full_comment_path'):
@@ -266,14 +231,15 @@ class HotController(FixListing, ListingController):
     def spotlight(self):
         campaigns_by_link = {}
         if (self.requested_ad or
-            not isinstance(c.site, DefaultSR) and c.user.pref_show_sponsors):
+            not isinstance(c.site, models.DefaultSR) and
+            c.user.pref_show_sponsors):
 
             link_ids = None
 
             if self.requested_ad:
                 link = None
                 try:
-                    link = Link._by_fullname(self.requested_ad)
+                    link = models.Link._by_fullname(self.requested_ad)
                 except NotFound:
                     pass
 
@@ -307,7 +273,7 @@ class HotController(FixListing, ListingController):
                         thing.campaign = campaigns_by_link.get(thing._fullname, None)
                     return res
 
-        elif (isinstance(c.site, DefaultSR)
+        elif (isinstance(c.site, models.DefaultSR)
             and (not c.user_is_loggedin
                  or (c.user_is_loggedin and c.user.pref_organic))):
 
@@ -351,11 +317,11 @@ class HotController(FixListing, ListingController):
                 disp_links = [spotlight_links[(i + pos) % num_tl]
                               for i in xrange(-2, left_side)]
 
-            b = IDBuilder(disp_links,
-                          wrap = self.builder_wrapper,
-                          num = num_links,
-                          keep_fn = spotlight_keep_fn,
-                          skip = True)
+            b = models.IDBuilder(disp_links,
+                                 wrap=self.builder_wrapper,
+                                 num=num_links,
+                                 keep_fn=spotlight_keep_fn,
+                                 skip=True)
 
             try:
                 vislink = spotlight_links[pos]
@@ -364,10 +330,12 @@ class HotController(FixListing, ListingController):
                 g.log.error("pos = %d" % pos)
                 raise
 
-            s = SpotlightListing(b, spotlight_items = spotlight_links,
-                                 visible_item = vislink,
-                                 max_num = self.listing_obj.max_num,
-                                 max_score = self.listing_obj.max_score).listing()
+            s = models.SpotlightListing(b,
+                                        spotlight_items=spotlight_links,
+                                        visible_item=vislink,
+                                        max_num=self.listing_obj.max_num,
+                                        max_score=self.listing_obj.max_score
+                                        ).listing()
 
             has_subscribed = c.user.has_subscribed
             promo_visible = promote.is_promo(s.lookup[vislink])
@@ -376,7 +344,7 @@ class HotController(FixListing, ListingController):
                                      if has_subscribed else
                                      'spotlight_interest_nosub_p']
                 if random.random() < prob:
-                    bar = InterestBar(has_subscribed)
+                    bar = pages.InterestBar(has_subscribed)
                     s.spotlight_items.insert(pos, bar)
                     s.visible_item = bar
 
@@ -391,10 +359,10 @@ class HotController(FixListing, ListingController):
 
     def query(self):
         #no need to worry when working from the cache
-        if g.use_query_cache or isinstance(c.site, DefaultSR):
+        if g.use_query_cache or isinstance(c.site, models.DefaultSR):
             self.fix_listing = False
 
-        if isinstance(c.site, DefaultSR):
+        if isinstance(c.site, models.DefaultSR):
             if c.user_is_loggedin:
                 srlimit = Subreddit.DEFAULT_LIMIT
                 over18 = c.user.has_subscribed and c.over18
@@ -407,12 +375,12 @@ class HotController(FixListing, ListingController):
                                                over18=over18)
             return normalized_hot(sr_ids)
 
-        elif isinstance(c.site, MultiReddit):
+        elif isinstance(c.site, pages.MultiReddit):
             return normalized_hot(c.site.kept_sr_ids, obey_age_limit=False)
 
         #if not using the query_cache we still want cached front pages
         elif (not g.use_query_cache
-              and not isinstance(c.site, FakeSubreddit)
+              and not isinstance(c.site, models.FakeSubreddit)
               and self.after is None
               and self.count == 0):
             return get_hot([c.site])
@@ -424,7 +392,8 @@ class HotController(FixListing, ListingController):
         if c.render_style == "html":
             spotlight = self.spotlight()
             if spotlight:
-                return PaneStack([spotlight, self.listing_obj], css_class='spacer')
+                return pages.PaneStack([spotlight, self.listing_obj],
+                                       css_class='spacer')
         return self.listing_obj
 
     def title(self):
@@ -442,7 +411,7 @@ class NewController(ListingController):
 
     @property
     def menus(self):
-        return [NewMenu(default = self.sort)]
+        return [menu.NewMenu(default=self.sort)]
 
     def keep_fn(self):
         def keep(item):
@@ -472,13 +441,13 @@ class NewController(ListingController):
         else:
             return c.site.get_links('new', 'all')
 
-    @validate(sort = VMenu('controller', NewMenu))
+    @validate(sort=validator.VMenu('controller', menu.NewMenu))
     def POST_listing(self, sort, **env):
         # VMenu validator will save the value of sort before we reach this
         # point. Now just redirect to GET mode.
         return self.redirect(request.fullpath + query_string(dict(sort=sort)))
 
-    @validate(sort = VMenu('controller', NewMenu))
+    @validate(sort=validator.VMenu('controller', menu.NewMenu))
     @listing_api_doc(uri='/new')
     def GET_listing(self, sort, **env):
         self.sort = sort
@@ -500,19 +469,19 @@ class BrowseController(ListingController):
 
     @property
     def menus(self):
-        return [ControversyTimeMenu(default = self.time)]
+        return [menu.ControversyTimeMenu(default=self.time)]
 
     def query(self):
         return c.site.get_links(self.sort, self.time)
 
-    @validate(t = VMenu('sort', ControversyTimeMenu))
+    @validate(t=validator.VMenu('sort', menu.ControversyTimeMenu))
     def POST_listing(self, sort, t, **env):
         # VMenu validator will save the value of time before we reach this
         # point. Now just redirect to GET mode.
         return self.redirect(
             request.fullpath + query_string(dict(sort=sort, t=t)))
 
-    @validate(t = VMenu('sort', ControversyTimeMenu))
+    @validate(t=validator.VMenu('sort', menu.ControversyTimeMenu))
     @listing_api_doc(uri='/{sort}', uri_variants=['/top', '/controversial'])
     def GET_listing(self, sort, t, **env):
         self.sort = sort
@@ -555,7 +524,7 @@ class ByIDController(ListingController):
     def query(self):
         return self.names
 
-    @validate(links = VByName("names", thing_cls = Link, multiple = True))
+    @validate(links=validator.VByName("names", thing_cls=models.Link, multiple=True))
     def GET_listing(self, links, **env):
         if not links:
             return self.abort404()
@@ -581,16 +550,16 @@ class ByIDController(ListingController):
 #        return ListingController.GET_listing(self, **env)
 
 class UserController(ListingController):
-    render_cls = ProfilePage
+    render_cls = pages.ProfilePage
     show_nums = False
 
     @property
     def menus(self):
         res = []
         if (self.where in ('overview', 'submitted', 'comments')):
-            res.append(ProfileSortMenu(default = self.sort))
+            res.append(menu.ProfileSortMenu(default=self.sort))
             if self.sort not in ("hot", "new"):
-                res.append(TimeMenu(default = self.time))
+                res.append(menu.TimeMenu(default=self.time))
         return res
 
     def title(self):
@@ -670,9 +639,9 @@ class UserController(ListingController):
 
         return q
 
-    @validate(vuser = VExistingUname('username'),
-              sort = VMenu('sort', ProfileSortMenu, remember = False),
-              time = VMenu('t', TimeMenu, remember = False))
+    @validate(vuser=validator.VExistingUname('username'),
+              sort=validator.VMenu('sort', menu.ProfileSortMenu, remember=False),
+              time=validator.VMenu('t', menu.TimeMenu, remember=False))
     @listing_api_doc(section=api_section.users, uri='/{username}/{where}',
                      uri_variants=['/{username}/' + where for where in [
                                        'overview', 'submitted', 'commented',
@@ -715,13 +684,13 @@ class UserController(ListingController):
 
         return ListingController.GET_listing(self, **env)
 
-    @validate(vuser = VExistingUname('username'))
+    @validate(vuser=validator.VExistingUname('username'))
     @api_doc(section=api_section.users, uri='/{username}/about', extensions=['json'])
     def GET_about(self, vuser):
         """Return information about the user, including karma and gold status."""
         if not is_api() or not vuser:
             return self.abort404()
-        return Reddit(content = Wrapped(vuser)).render()
+        return pages.Reddit(content=Wrapped(vuser)).render()
 
     def GET_saved_redirect(self):
         if not c.user_is_loggedin:
@@ -738,7 +707,7 @@ class UserController(ListingController):
 
 class MessageController(ListingController):
     show_nums = False
-    render_cls = MessagePage
+    render_cls = pages.MessagePage
     allow_stylesheets = False
     # note: this intentionally replaces the listing-page class which doesn't
     # conceptually fit for styling these pages.
@@ -746,7 +715,8 @@ class MessageController(ListingController):
 
     @property
     def show_sidebar(self):
-        if c.default_sr and not isinstance(c.site, (ModSR, MultiReddit)):
+        if c.default_sr and not isinstance(c.site, (models.ModSR,
+                                                    models.MultiReddit)):
             return False
 
         return self.where in ("moderator", "multi")
@@ -755,19 +725,19 @@ class MessageController(ListingController):
     def menus(self):
         if c.default_sr and self.where in ('inbox', 'messages', 'comments',
                           'selfreply', 'unread'):
-            buttons = (NavButton(_("all"), "inbox"),
-                       NavButton(_("unread"), "unread"),
-                       NavButton(plurals.messages, "messages"),
-                       NavButton(_("comment replies"), 'comments'),
-                       NavButton(_("post replies"), 'selfreply'))
+            buttons = (menu.NavButton(_("all"), "inbox"),
+                       menu.NavButton(_("unread"), "unread"),
+                       menu.NavButton(plurals.messages, "messages"),
+                       menu.NavButton(_("comment replies"), 'comments'),
+                       menu.NavButton(_("post replies"), 'selfreply'))
 
-            return [NavMenu(buttons, base_path = '/message/',
-                            default = 'inbox', type = "flatlist")]
+            return [menu.NavMenu(buttons, base_path = '/message/',
+                                 default='inbox', type="flatlist")]
         elif not c.default_sr or self.where in ('moderator', 'multi'):
-            buttons = (NavButton(_("all"), "inbox"),
-                       NavButton(_("unread"), "unread"))
-            return [NavMenu(buttons, base_path = '/message/moderator/',
-                            default = 'inbox', type = "flatlist")]
+            buttons = (menu.NavButton(_("all"), "inbox"),
+                       menu.NavButton(_("unread"), "unread"))
+            return [menu.NavMenu(buttons, base_path = '/message/moderator/',
+                                 default='inbox', type="flatlist")]
         return []
 
 
@@ -793,10 +763,10 @@ class MessageController(ListingController):
 
     @staticmethod
     def builder_wrapper(thing):
-        if isinstance(thing, Comment):
+        if isinstance(thing, models.Comment):
             f = thing._fullname
             w = Wrapped(thing)
-            w.render_class = Message
+            w.render_class = models.Message
             w.to_id = c.user._id
             w.was_comment = True
             w._fullname = f
@@ -809,23 +779,23 @@ class MessageController(ListingController):
         if (self.where == 'messages' or
             (self.where in ("moderator", "multi") and self.subwhere != "unread")):
             root = c.user
-            message_cls = UserMessageBuilder
+            message_cls = models.UserMessageBuilder
 
             if self.where == "multi":
                 root = c.site
-                message_cls = MultiredditMessageBuilder
+                message_cls = models.MultiredditMessageBuilder
             elif not c.default_sr:
                 root = c.site
-                message_cls = SrMessageBuilder
+                message_cls = models.SrMessageBuilder
             elif self.where == 'moderator' and self.subwhere != 'unread':
-                message_cls = ModeratorMessageBuilder
+                message_cls = models.ModeratorMessageBuilder
 
             parent = None
             skip = False
             if self.message:
                 if self.message.first_message:
-                    parent = Message._byID(self.message.first_message,
-                                           data=True)
+                    parent = models.Message._byID(self.message.first_message,
+                                                 data=True)
                 else:
                     parent = self.message
             elif c.user.pref_threaded_messages:
@@ -844,7 +814,7 @@ class MessageController(ListingController):
     def listing(self):
         if (self.where == 'messages' and 
             (c.user.pref_threaded_messages or self.message)):
-            return Listing(self.builder_obj).listing()
+            return models.Listing(self.builder_obj).listing()
         pane = ListingController.listing(self)
 
         # Indicate that the comment tree wasn't built for comments
@@ -892,20 +862,20 @@ class MessageController(ListingController):
 
         return q
 
-    @validate(VUser(),
-              message = VMessageID('mid'),
-              mark = VOneOf('mark',('true','false')))
+    @validate(validator.VUser(),
+              message=validator.VMessageID('mid'),
+              mark=validator.VOneOf('mark',('true','false')))
     @listing_api_doc(section=api_section.messages,
                      uri='/message/{where}',
                      uri_variants=['/message/inbox', '/message/unread', '/message/sent'])
     def GET_listing(self, where, mark, message, subwhere = None, **env):
         if not (c.default_sr or c.site.is_moderator(c.user) or c.user_is_admin):
             abort(403, "forbidden")
-        if isinstance(c.site, MultiReddit):
+        if isinstance(c.site, models.MultiReddit):
             if not (c.user_is_admin or c.site.is_moderator(c.user)):
                 self.abort403()
             self.where = "multi"
-        elif isinstance(c.site, ModSR) or not c.default_sr:
+        elif isinstance(c.site, models.ModSR) or not c.default_sr:
             self.where = "moderator"
         else:
             self.where = where
@@ -921,21 +891,22 @@ class MessageController(ListingController):
         self.message = message
         return ListingController.GET_listing(self, **env)
 
-    @validate(VUser(),
-              to = nop('to'),
-              subject = nop('subject'),
-              message = nop('message'),
-              success = nop('success'))
+    @validate(validator.VUser(),
+              to=validator.nop('to'),
+              subject=validator.nop('subject'),
+              message=validator.nop('message'),
+              success=validator.nop('success'))
     def GET_compose(self, to, subject, message, success):
-        captcha = Captcha() if c.user.needs_captcha() else None
-        content = MessageCompose(to = to, subject = subject,
-                                 captcha = captcha,
-                                 message = message,
-                                 success = success)
-        return MessagePage(content = content).render()
+        captcha = pages.Captcha() if c.user.needs_captcha() else None
+        content = pages.MessageCompose(to=to,
+                                       subject=subject,
+                                       captcha=captcha,
+                                       message=message,
+                                       success=success)
+        return pages.MessagePage(content=content).render()
 
 class RedditsController(ListingController):
-    render_cls = SubredditsPage
+    render_cls = pages.SubredditsPage
 
     def title(self):
         return _('reddits')
@@ -965,10 +936,10 @@ class RedditsController(ListingController):
 
             if g.domain != 'reddit.com':
                 # don't try to render special subreddits (like promos)
-                reddits._filter(Subreddit.c.author_id != -1)
+                reddits._filter(models.Subreddit.c.author_id != -1)
 
             if not c.over18:
-                reddits._filter(Subreddit.c.over_18 == False)
+                reddits._filter(models.Subreddit.c.over_18 == False)
 
         if self.where == 'popular':
             self.render_params = {"show_interestbar": True}
@@ -983,7 +954,7 @@ class RedditsController(ListingController):
         return ListingController.GET_listing(self, **env)
 
 class MyredditsController(ListingController, OAuth2ResourceController):
-    render_cls = MySubredditsPage
+    render_cls = pages.MySubredditsPage
 
     def pre(self):
         ListingController.pre(self)
@@ -991,24 +962,25 @@ class MyredditsController(ListingController, OAuth2ResourceController):
 
     @property
     def menus(self):
-        buttons = (NavButton(plurals.subscriber,  'subscriber'),
-                    NavButton(getattr(plurals, "approved submitter"), 'contributor'),
-                    NavButton(plurals.moderator,   'moderator'))
+        buttons = (menu.NavButton(plurals.subscriber, 'subscriber'),
+                   menu.NavButton(getattr(plurals, "approved submitter"),
+                                  'contributor'),
+                    menu.NavButton(plurals.moderator, 'moderator'))
 
-        return [NavMenu(buttons, base_path = '/reddits/mine/',
-                        default = 'subscriber', type = "flatlist")]
+        return [menu.NavMenu(buttons, base_path='/reddits/mine/',
+                        default='subscriber', type="flatlist")]
 
     def title(self):
         return _('reddits: ') + self.where
 
     def query(self):
-        reddits = SRMember._query(SRMember.c._name == self.where,
-                                  SRMember.c._thing2_id == c.user._id,
-                                  #hack to prevent the query from
-                                  #adding it's own date
-                                  sort = (desc('_t1_ups'), desc('_t1_date')),
-                                  eager_load = True,
-                                  thing_data = True)
+        reddits = models.SRMember._query(models.SRMember.c._name == self.where,
+                                        models.SRMember.c._thing2_id == c.user._id,
+                                        #hack to prevent the query from
+                                        #adding it's own date
+                                        sort=(desc('_t1_ups'), desc('_t1_date')),
+                                        eager_load=True,
+                                        thing_data=True)
         reddits.prewrap_fn = lambda x: x._thing1
         return reddits
 
@@ -1020,26 +992,26 @@ class MyredditsController(ListingController, OAuth2ResourceController):
         else:
             message = strings.sr_messages.get(self.where)
 
-        stack = PaneStack()
+        stack = pages.PaneStack()
 
         if message:
-            stack.append(InfoBar(message=message))
+            stack.append(pages.InfoBar(message=message))
 
         stack.append(self.listing_obj)
 
         return stack
 
     def build_listing(self, after=None, **kwargs):
-        if after and isinstance(after, Subreddit):
-            after = SRMember._fast_query(after, c.user, self.where,
-                                         data=False).values()[0]
-        if after and not isinstance(after, SRMember):
+        if after and isinstance(after, models.Subreddit):
+            after = models.SRMember._fast_query(after, c.user, self.where,
+                                               data=False).values()[0]
+        if after and not isinstance(after, models.SRMember):
             abort(400, 'gimme a srmember')
 
         return ListingController.build_listing(self, after=after, **kwargs)
 
     @require_oauth2_scope("myreddits")
-    @validate(VUser())
+    @validate(validator.VUser())
     @listing_api_doc(section=api_section.subreddits,
                      uri='/reddits/mine/{where}',
                      uri_variants=['/reddits/mine/subscriber', '/reddits/mine/contributor', '/reddits/mine/moderator'])

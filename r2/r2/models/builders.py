@@ -26,17 +26,17 @@ from copy import deepcopy
 from pylons import g, c
 
 from r2.lib.utils import tup
-from r2.lib.comment_tree import (moderator_messages,
+from r2.lib.comment_tree import (#Functions
+                                 moderator_messages,
                                  sr_conversation, 
                                  conversation,
                                  user_messages,
                                  subreddit_messages,
                                  )
 from r2.lib.db.thing import Thing
+from r2.lib.export import export
 from r2.lib.wrapped import Wrapped
 
-# internal package imports should be fully qualified since __init__.py
-# will not have imported everything yet.
 from r2.models.builder import Builder
 from r2.models._builder import _CommentBuilder, _MessageBuilder
 from r2.models.account import Account
@@ -46,24 +46,14 @@ from r2.models.admintools import admintools, compute_votes, ip_span
 
 
 __all__ = [
-           #Constants
-           #Classes
-           "CommentBuilder",
-           "IDBuilder",
-           "ModeratorMessageBuilder",
-           "MultiredditMessageBuilder",
-           "QueryBuilder",
-           "SearchBuilder",
-           "SrMessageBuilder",
-           "TopCommentBuilder",
-           "UserMessageBuilder",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
 EXTRA_FACTOR = 1.5
 
+
+@export
 class QueryBuilder(Builder):
     def __init__(self, query, wrap=Wrapped, keep_fn=None, skip=False, **kw):
         Builder.__init__(self, wrap=wrap, keep_fn=keep_fn)
@@ -202,6 +192,8 @@ class QueryBuilder(Builder):
                 before_count,
                 after_count)
 
+
+@export
 class IDBuilder(QueryBuilder):
     def thing_lookup(self, names):
         return Thing._by_fullname(names, data=True, return_dict=False,
@@ -274,6 +266,8 @@ class SimpleBuilder(IDBuilder):
             next = next._id
         return (items, prev, next, bcount, acount)
 
+
+@export
 class SearchBuilder(IDBuilder):
     def __init__(self, query, wrap=Wrapped, keep_fn=None, skip=False,
                  skip_deleted_authors=True, **kw):
@@ -307,6 +301,8 @@ class SearchBuilder(IDBuilder):
         else:
             return True
 
+
+@export
 class CommentBuilder(_CommentBuilder):
     def item_iter(self, a):
         for i in a:
@@ -323,6 +319,8 @@ class MessageBuilder(_MessageBuilder):
                 for j in i.child.things:
                     yield j
 
+
+@export
 class ModeratorMessageBuilder(MessageBuilder):
     def __init__(self, user, **kw):
         self.user = user
@@ -334,6 +332,8 @@ class ModeratorMessageBuilder(MessageBuilder):
         sr_ids = Subreddit.reverse_moderator_ids(self.user)
         return moderator_messages(sr_ids)
 
+
+@export
 class MultiredditMessageBuilder(MessageBuilder):
     def __init__(self, user, **kw):
         self.user = user
@@ -344,6 +344,8 @@ class MultiredditMessageBuilder(MessageBuilder):
             return conversation(self.user, self.parent)
         return moderator_messages(c.site.sr_ids)
 
+
+@export
 class TopCommentBuilder(CommentBuilder):
     """A comment builder to fetch only the top-level, non-spam,
        non-deleted comments"""
@@ -357,6 +359,8 @@ class TopCommentBuilder(CommentBuilder):
         final = CommentBuilder.get_items(self, num = num)
         return [ cm for cm in final if not cm.deleted ]
 
+
+@export
 class SrMessageBuilder(MessageBuilder):
     def __init__(self, sr, **kw):
         self.sr = sr
@@ -367,6 +371,8 @@ class SrMessageBuilder(MessageBuilder):
             return sr_conversation(self.sr, self.parent)
         return subreddit_messages(self.sr)
 
+
+@export
 class UserMessageBuilder(MessageBuilder):
     def __init__(self, user, **kw):
         self.user = user

@@ -20,28 +20,26 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import (DataThing,
+from r2.lib.db.thing import (#Classes
+                             DataThing,
                              MultiRelation,
                              Relation,
+                             #Functions
                              load_things,
                              )
+from r2.lib.export import export
 from r2.lib.memoize import memoize
 from r2.lib.utils import timeago
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 from r2.models.link import Link
 
 __all__ = [
-           #Constants
-           #Classes
-           "Jury",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
+@export
 class Jury(MultiRelation('jury',
                          Relation(Account, Link))):
     @classmethod

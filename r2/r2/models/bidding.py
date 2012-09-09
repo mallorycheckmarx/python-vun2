@@ -22,45 +22,25 @@
 
 import datetime
 
+import sqlalchemy as sqla
 from pylons import g, request
-from sqlalchemy import (Column,
-                        String,
-                        DateTime,
-                        Date,
-                        Float,
-                        Integer,
-                        Boolean,
-                        BigInteger, 
-                        func as safunc, 
-                        and_, 
-                        or_,
-                        )
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.dialects.postgresql.base import PGInet as Inet
 from sqlalchemy.ext.declarative import declarative_base
 
 from r2.lib.db.thing import Thing, NotFound
+from r2.lib.export import export
 from r2.lib.memoize import memoize
 from r2.lib.utils import Enum
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 from r2.models.link import Link
 
 __all__ = [
-           #Constants
-           #Classes
-           "Bid",
-           "CustomerID",
-           "PayID",
-           "PromoteDates",
-           "PromotionWeights",
-           "ShippingAddress",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
+
 
 engine = g.dbm.get_engine('authorize')
 # Allocate a session maker for communicating object changes with the back end  
@@ -181,7 +161,7 @@ class Sessionized(object):
         only by one() and lookup().
         """
         args = cls._disambiguate_args(lambda x: x.primary_key, *a, **kw)
-        res = cls.query().filter(and_(*[k == v for k, v in args]))
+        res = cls.query().filter(sqla.and_(*[k == v for k, v in args]))
         try:
             res = res.all() if multiple else res.one()
             # res.one() will raise NoResultFound, while all() will
@@ -231,12 +211,14 @@ class Sessionized(object):
         except NotFound:
             return []
 
+
+@export
 class CustomerID(Sessionized, Base):
     __tablename__  = "authorize_account_id"
 
-    account_id    = Column(BigInteger, primary_key = True,
-                           autoincrement = False)
-    authorize_id  = Column(BigInteger)
+    account_id    = sqla.Column(sqla.BigInteger, primary_key = True,
+                                autoincrement = False)
+    authorize_id  = sqla.Column(sqla.BigInteger)
 
     def __repr__(self):
         return "<AuthNetID(%s)>" % self.authorize_id
@@ -257,13 +239,15 @@ class CustomerID(Sessionized, Base):
         except NotFound:
             return
 
+
+@export
 class PayID(Sessionized, Base):
     __tablename__ = "authorize_pay_id"
 
-    account_id    = Column(BigInteger, primary_key = True,
-                           autoincrement = False)
-    pay_id        = Column(BigInteger, primary_key = True,
-                           autoincrement = False)
+    account_id    = sqla.Column(sqla.BigInteger, primary_key = True,
+                                autoincrement = False)
+    pay_id        = sqla.Column(sqla.BigInteger, primary_key = True,
+                                autoincrement = False)
 
     def __repr__(self):
         return "<%s(%d)>" % (self.__class__.__name__, self.authorize_id)
@@ -272,46 +256,50 @@ class PayID(Sessionized, Base):
     def get_ids(cls, key):
         return [int(x.pay_id) for x in cls.get(key)]
 
+
+@export
 class ShippingAddress(Sessionized, Base):
     __tablename__ = "authorize_ship_id"
 
-    account_id    = Column(BigInteger, primary_key = True,
-                           autoincrement = False)
-    ship_id       = Column(BigInteger, primary_key = True,
-                           autoincrement = False)
+    account_id    = sqla.Column(sqla.BigInteger, primary_key = True,
+                                autoincrement = False)
+    ship_id       = sqla.Column(sqla.BigInteger, primary_key = True,
+                                autoincrement = False)
 
     def __repr__(self):
         return "<%s(%d)>" % (self.__class__.__name__, self.authorize_id)
 
+
+@export
 class Bid(Sessionized, Base):
     __tablename__ = "bids"
 
     STATUS        = Enum("AUTH", "CHARGE", "REFUND", "VOID")
 
     # will be unique from authorize
-    transaction   = Column(BigInteger, primary_key = True,
-                           autoincrement = False)
+    transaction   = sqla.Column(sqla.BigInteger, primary_key = True,
+                                autoincrement = False)
 
     # identifying characteristics
-    account_id    = Column(BigInteger, index = True, nullable = False)
-    pay_id        = Column(BigInteger, index = True, nullable = False)
-    thing_id      = Column(BigInteger, index = True, nullable = False)
+    account_id    = sqla.Column(sqla.BigInteger, index = True, nullable = False)
+    pay_id        = sqla.Column(sqla.BigInteger, index = True, nullable = False)
+    thing_id      = sqla.Column(sqla.BigInteger, index = True, nullable = False)
 
     # breadcrumbs
-    ip            = Column(Inet)
-    date          = Column(DateTime(timezone = True), default = safunc.now(),
-                           nullable = False)
+    ip            = sqla.Column(Inet)
+    date          = sqla.Column(sqla.DateTime(timezone = True),
+                                default = sqla.func.now(), nullable = False)
 
     # bid information:
-    bid           = Column(Float, nullable = False)
-    charge        = Column(Float)
+    bid           = sqla.Column(sqla.Float, nullable = False)
+    charge        = sqla.Column(sqla.Float)
 
-    status        = Column(Integer, nullable = False,
+    status        = sqla.Column(sqla.Integer, nullable = False,
                            default = STATUS.AUTH)
 
     # make this a primary key as well so that we can have more than
     # one freebie per campaign
-    campaign      = Column(Integer, default = 0, primary_key = True)
+    campaign      = sqla.Column(sqla.Integer, default = 0, primary_key = True)
 
     @classmethod
     def _new(cls, trans_id, user, pay_id, thing_id, bid, campaign = 0):
@@ -326,7 +314,7 @@ class Bid(Sessionized, Base):
 #        transids = filter(lambda x: x != 0, transids)
 #        if transids:
 #            q = cls.query()
-#            q = q.filter(or_(*[cls.transaction == i for i in transids]))
+#            q = q.filter(sqla.or_(*[cls.transaction == i for i in transids]))
 #            return dict((p.transaction, p) for p in q)
 #        return {}
 
@@ -360,22 +348,26 @@ class Bid(Sessionized, Base):
     def refund(self):
         self.set_status(self.STATUS.REFUND)
 
+
 #TODO: decommission and drop tables once the patch is working
+@export
 class PromoteDates(Sessionized, Base):
     __tablename__ = "promote_date"
 
-    thing_name   = Column(String, primary_key = True, autoincrement = False)
+    thing_name   = sqla.Column(sqla.String, primary_key = True,
+                               autoincrement = False)
 
-    account_id   = Column(BigInteger, index = True,  autoincrement = False)
+    account_id   = sqla.Column(sqla.BigInteger, index = True,
+                               autoincrement = False)
 
-    start_date = Column(Date(), nullable = False, index = True)
-    end_date   = Column(Date(), nullable = False, index = True)
+    start_date = sqla.Column(sqla.Date(), nullable = False, index = True)
+    end_date   = sqla.Column(sqla.Date(), nullable = False, index = True)
 
-    actual_start = Column(DateTime(timezone = True), index = True)
-    actual_end   = Column(DateTime(timezone = True), index = True)
+    actual_start = sqla.Column(sqla.DateTime(timezone = True), index = True)
+    actual_end   = sqla.Column(sqla.DateTime(timezone = True), index = True)
 
-    bid          = Column(Float)
-    refund       = Column(Float)
+    bid          = sqla.Column(sqla.Float)
+    refund       = sqla.Column(sqla.Float)
 
     @classmethod
     def update(cls, thing, start_date, end_date):
@@ -418,8 +410,8 @@ class PromoteDates(Sessionized, Base):
     def for_date(cls, date):
         if isinstance(date, datetime.datetime):
             date = date.date()
-        q = cls.query().filter(and_(cls.start_date <= date,
-                                    cls.end_date > date))
+        q = cls.query().filter(sqla.and_(cls.start_date <= date,
+                                         cls.end_date > date))
         return q.all()
 
     @classmethod
@@ -430,16 +422,16 @@ class PromoteDates(Sessionized, Base):
             end_date = end_date.date()
         # Three cases to be included:
         # 1) start date is in the provided interval
-        start_inside = and_(cls.start_date >= start_date,
-                            cls.start_date <  end_date)
+        start_inside = sqla.and_(cls.start_date >= start_date,
+                                 cls.start_date <  end_date)
         # 2) end date is in the provided interval
-        end_inside   = and_(cls.end_date   >= start_date,
-                            cls.end_date   <  end_date)
+        end_inside   = sqla.and_(cls.end_date   >= start_date,
+                                 cls.end_date   <  end_date)
         # 3) interval is a subset of a promoted interval
-        surrounds    = and_(cls.start_date <= start_date,
-                            cls.end_date   >= end_date)
+        surrounds    = sqla.and_(cls.start_date <= start_date,
+                                 cls.end_date   >= end_date)
 
-        q = cls.query().filter(or_(start_inside, end_inside, surrounds))
+        q = cls.query().filter(sqla.or_(start_inside, end_inside, surrounds))
         if account_id is not None:
             q = q.filter(cls.account_id == account_id)
 
@@ -490,29 +482,33 @@ class PromoteDates(Sessionized, Base):
 
         return res
 
+
 # eventual replacement for PromoteDates
+@export
 class PromotionWeights(Sessionized, Base):
     __tablename__ = "promotion_weight"
 
-    thing_name = Column(String, primary_key = True,
-                        nullable = False, index = True)
+    thing_name = sqla.Column(sqla.String, primary_key = True,
+                             nullable = False, index = True)
 
-    promo_idx    = Column(BigInteger, index = True, autoincrement = False,
-                          primary_key = True)
+    promo_idx    = sqla.Column(sqla.BigInteger, index = True,
+                               autoincrement = False,
+                               primary_key = True)
 
-    sr_name    = Column(String, primary_key = True,
-                        nullable = True,  index = True)
-    date       = Column(Date(), primary_key = True,
-                        nullable = False, index = True)
+    sr_name    = sqla.Column(sqla.String, primary_key = True,
+                             nullable = True,  index = True)
+    date       = sqla.Column(sqla.Date(), primary_key = True,
+                             nullable = False, index = True)
 
     # because we might want to search by account
-    account_id   = Column(BigInteger, index = True, autoincrement = False)
+    account_id   = sqla.Column(sqla.BigInteger, index = True,
+                               autoincrement = False)
 
     # bid and weight should always be the same, but they don't have to be
-    bid        = Column(Float, nullable = False)
-    weight     = Column(Float, nullable = False)
+    bid        = sqla.Column(sqla.Float, nullable = False)
+    weight     = sqla.Column(sqla.Float, nullable = False)
 
-    finished   = Column(Boolean)
+    finished   = sqla.Column(sqla.Boolean)
 
     @classmethod
     def reschedule(cls, thing, idx, sr, start_date, end_date, total_weight,
@@ -557,7 +553,7 @@ class PromotionWeights(Sessionized, Base):
         start_date = to_date(start_date)
         end_date   = to_date(end_date)
         q = cls.query()
-        q = q.filter(and_(cls.date >= start_date, cls.date < end_date))
+        q = q.filter(sqla.and_(cls.date >= start_date, cls.date < end_date))
 
         if author_id is not None:
             q = q.filter(cls.account_id == author_id)
@@ -580,7 +576,7 @@ class PromotionWeights(Sessionized, Base):
         start_date = to_date(start_date)
         end_date   = to_date(end_date)
         q = cls.query()
-        q = q.filter(and_(cls.date >= start_date, cls.date < end_date))
+        q = q.filter(sqla.and_(cls.date >= start_date, cls.date < end_date))
         q = list(q)
 
         links = Link._by_fullname([x.thing_name for x in q], data=True)

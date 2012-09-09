@@ -24,22 +24,17 @@ from pylons import g
 
 from r2.lib.db.thing import Thing, Relation, NotFound
 from r2.lib.db.operators import asc, desc, lower
+from r2.lib.export import export
 from r2.lib.memoize import memoize
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 
 __all__ = [
-           #Constants
-           #Classes
-           "Award",
-           "Trophy",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
+@export
 class Award (Thing):
     _defaults = dict(
         awardtype = 'regular',
@@ -130,6 +125,8 @@ class Award (Thing):
         else:
             g.log.debug("%s didn't have %s" % (user, codename))
 
+
+@export
 class Trophy(Relation(Account, Award)):
     @classmethod
     def _new(cls, recipient, award, description = None,

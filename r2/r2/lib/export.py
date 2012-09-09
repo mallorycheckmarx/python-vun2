@@ -20,28 +20,22 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import json
+import sys
 
-from pylons import c, g, response
+def export(exported_entity):
+    """Use a decorator to avoid retyping function/class names.
+  
+    * Based on an idea by Duncan Booth:
+    http://groups.google.com/group/comp.lang.python/msg/11cbb03e09611b8a
+    * Improved via a suggestion by Dave Angel:
+    http://groups.google.com/group/comp.lang.python/msg/3d400fb22d8a42e1
+    * Copied from Stack Overflow
+    http://stackoverflow.com/questions/6206089/is-it-a-good-practice-to-add-names-to-all-using-a-decorator
+    """
+    all_var = sys.modules[exported_entity.__module__].__dict__.setdefault('__all__', [])
+    if exported_entity.__name__ not in all_var:  # Prevent duplicates if run from an IDE.
+        all_var.append(exported_entity.__name__)
+    return exported_entity
 
-from r2.controllers.reddit_base import MinimalController
+export(export)  # Emulate decorating ourself
 
-__all__ = [
-           #Constants Only, use @export for functions/classes
-           ]
-
-
-class HealthController(MinimalController):
-    def post(self):
-        pass
-
-    def try_pagecache(self):
-        pass
-
-    def pre(self):
-        pass
-
-    def GET_health(self):
-        c.dontcache = True
-        response.headers['Content-Type'] = 'text/plain'
-        return json.dumps(g.versions, sort_keys=True, indent=4)

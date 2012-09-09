@@ -23,23 +23,19 @@
 from pylons import g
 
 from r2.lib.db.thing import Relation, MultiRelation
+from r2.lib.export import export
 from r2.lib.utils import tup
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 from r2.models.link import Link, Comment, Message
 from r2.models.subreddit import Subreddit
 
 __all__ = [
-           #Constants
-           #Classes
-           "Report",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
+@export
 class Report(MultiRelation('report',
                            Relation(Account, Link),
                            Relation(Account, Comment),

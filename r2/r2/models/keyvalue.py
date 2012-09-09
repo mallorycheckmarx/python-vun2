@@ -25,14 +25,12 @@ import json
 from pycassa import NotFoundException
 from pycassa.system_manager import UTF8_TYPE
 
+from r2.lib.export import export
+
 from r2.lib.db.tdb_cassandra import ThingMeta
 
 __all__ = [
-           #Constants
-           #Classes
-           "NamedGlobals",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
@@ -66,6 +64,7 @@ class KeyValueStore(object):
         cls._cf.insert(key, {"data": json.dumps(data)})
 
 
+@export
 class NamedGlobals(KeyValueStore):
     _use_db = True
 

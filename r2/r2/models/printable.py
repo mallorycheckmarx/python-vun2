@@ -22,17 +22,15 @@
 
 from pylons import c, request
 
+from r2.lib.export import export
 from r2.lib.strings import Score
 
 __all__ = [
-           #Constants
-           #Classes
-           "Printable",
-           #Exceptions
-           #Functions
+           #Constants Only, use @export for functions/classes
            ]
 
 
+@export
 class Printable(object):
     show_spam = False
     show_reports = False

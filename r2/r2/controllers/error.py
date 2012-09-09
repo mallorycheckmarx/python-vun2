@@ -47,6 +47,11 @@ except Exception, e:
         import os
         os._exit(1)
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
 NUM_FAILIENS = 3
 
 redditbroke =  \

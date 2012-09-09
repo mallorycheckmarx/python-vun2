@@ -24,30 +24,25 @@ from pylons import g, c
 from pylons.i18n import _
 
 from r2.lib.db import tdb_cassandra
+from r2.lib.export import export
 from r2.lib.filters import _force_unicode
 from r2.lib.wrapped import Wrapped
 
-#internal package imports should be fully qualified to allow
-#__init__.py to ignore dependency ordering
 from r2.models.account import Account
 from r2.models.listing import Listing
 from r2.models.subreddit import Subreddit
 from r2.models.admintools import admintools, compute_votes, ip_span
 
-
 __all__ = [
-           #Constants
+           #Constants Only, use @export for functions/classes
            "MAX_RECURSION",
-           #Classes
-           "Builder",
-           #Exceptions
-           #Functions
-           "empty_listing",
-           "make_wrapper",
            ]
+
 
 MAX_RECURSION = 10
 
+
+@export
 class Builder(object):
     def __init__(self, wrap=Wrapped, keep_fn=None, stale=True):
         self.stale = stale
@@ -284,6 +279,7 @@ class Builder(object):
             return True
 
 
+@export
 def empty_listing(*things):
     parent_name = None
     for t in things:
@@ -296,6 +292,8 @@ def empty_listing(*things):
     l.things = list(things)
     return Wrapped(l)
 
+
+@export
 def make_wrapper(parent_wrapper = Wrapped, **params):
     def wrapper_fn(thing):
         w = parent_wrapper(thing)

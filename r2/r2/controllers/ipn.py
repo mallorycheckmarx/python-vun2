@@ -31,30 +31,29 @@ from BeautifulSoup import BeautifulStoneSoup
 from pylons import c, g, request, response
 from pylons.i18n import _
 
+import r2.controllers.validator as validator
 from r2.lib.db.thing import NotFound
 from r2.lib.log import log_text
 from r2.lib.strings import strings
 from r2.lib.utils import tup
-from r2.models import (Account,
+from r2.models import (#Functions
                        account_by_payingid,
                        accountid_from_paypalsubscription,
                        cancel_subscription,
                        create_claimed_gold,
                        create_gift_gold,
                        send_system_message,
+                       #Constants/Variables
                        admintools,
                        )
 
 from r2.controllers.reddit_base import RedditController
-from r2.controllers.validator import (VFloat,
-                                      VInt,
-                                      VLength,
-                                      VPrintable,
-                                      VUser,
-                                      textresponse,
-                                      validate,
-                                      validatedForm,
-                                      )
+from r2.controllers.validator import textresponse, validatedForm
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 def get_blob(code):
     key = "payment_blob-" + code
@@ -181,7 +180,7 @@ def existing_subscription(subscr_id, paying_id, custom):
             return None
 
     try:
-        account = Account._byID(account_id, data=True)
+        account = models.Account._byID(account_id, data=True)
 
         if account._deleted:
             g.log.info("Just got IPN renewal for deleted account #%d"
@@ -277,9 +276,10 @@ def _google_checkout_post(url, params):
 
 class IpnController(RedditController):
     # Used when buying gold with creddits
-    @validatedForm(VUser(),
-                   months = VInt("months"),
-                   passthrough = VPrintable("passthrough", max_length=50))
+    @validatedForm(validator.VUser(),
+                   months=validator.VInt("months"),
+                   passthrough=validator.VPrintable("passthrough",
+                                                    max_length=50))
     def POST_spendcreddits(self, form, jquery, months, passthrough):
         if months is None or months < 1:
             form.set_html(".status", _("nice try."))
@@ -307,7 +307,7 @@ class IpnController(RedditController):
                              c.user._id)
 
         try:
-            recipient = Account._by_name(recipient_name)
+            recipient = models.Account._by_name(recipient_name)
         except NotFound:
             raise ValueError("Invalid username %s in spendcreddits, buyer = %s"
                              % (recipient_name, c.user.name))
@@ -333,7 +333,7 @@ class IpnController(RedditController):
         form.set_html(".status", _("the gold has been delivered!"))
         jquery("button").hide()
 
-    @textresponse(full_sn = VLength('serial-number', 100))
+    @textresponse(full_sn=validator.VLength('serial-number', 100))
     def POST_gcheckout(self, full_sn):
         if full_sn:
             short_sn = full_sn.split('-')[0]
@@ -394,14 +394,14 @@ class IpnController(RedditController):
             g.log.error("GOOGLE CHCEKOUT: didn't work")
             g.log.error(repr(list(request.POST.iteritems())))
 
-    @textresponse(paypal_secret = VPrintable('secret', 50),
-                  payment_status = VPrintable('payment_status', 20),
-                  txn_id = VPrintable('txn_id', 20),
-                  paying_id = VPrintable('payer_id', 50),
-                  payer_email = VPrintable('payer_email', 250),
-                  mc_currency = VPrintable('mc_currency', 20),
-                  mc_gross = VFloat('mc_gross'),
-                  custom = VPrintable('custom', 50))
+    @textresponse(paypal_secret=validator.VPrintable('secret', 50),
+                  payment_status=validator.VPrintable('payment_status', 20),
+                  txn_id=validator.VPrintable('txn_id', 20),
+                  paying_id=validator.VPrintable('payer_id', 50),
+                  payer_email=validator.VPrintable('payer_email', 250),
+                  mc_currency=validator.VPrintable('mc_currency', 20),
+                  mc_gross=validator.VFloat('mc_gross'),
+                  custom=validator.VPrintable('custom', 50))
     def POST_ipn(self, paypal_secret, payment_status, txn_id, paying_id,
                  payer_email, mc_currency, mc_gross, custom):
 
@@ -487,7 +487,7 @@ class IpnController(RedditController):
             dump_parameters(parameters)
             raise ValueError("No buyer_id in IPN/GC with custom='%s'" % custom)
         try:
-            buyer = Account._byID(buyer_id)
+            buyer = models.Account._byID(buyer_id)
         except NotFound:
             dump_parameters(parameters)
             raise ValueError("Invalid buyer_id %d in IPN/GC with custom='%s'"
@@ -515,7 +515,7 @@ class IpnController(RedditController):
         elif payment_blob['goldtype'] == 'gift':
             recipient_name = payment_blob.get('recipient', None)
             try:
-                recipient = Account._by_name(recipient_name)
+                recipient = models.Account._by_name(recipient_name)
             except NotFound:
                 dump_parameters(parameters)
                 raise ValueError("Invalid recipient_name %s in IPN/GC with custom='%s'"

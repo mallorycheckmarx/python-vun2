@@ -26,6 +26,11 @@ import r2.lib.captcha as captcha
 
 from r2.controllers.reddit_base import RedditController
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
 class CaptchaController(RedditController):
     def GET_captchaimg(self, iden):
         image = captcha.get_image(iden)

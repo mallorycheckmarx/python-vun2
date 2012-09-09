@@ -25,30 +25,27 @@ from urllib import urlencode
 from pylons import c, request
 from pylons.i18n import _
 
+import r2.models as models
 from r2.config.extensions import set_extension
 from r2.lib.base import abort
 from r2.controllers.errors import ForbiddenError, errors
 from r2.lib.pages import OAuth2AuthorizationPage
 from r2.lib.require import RequirementException, require, require_split
 from r2.lib.utils import parse_http_basic
-from r2.models import (Account,
-                       OAuth2Client,
-                       OAuth2AuthorizationCode,
-                       OAuth2AccessToken,
-                       )
 
-from r2.controllers.reddit_base import (RedditController,
+import r2.controllers.validator as validator
+from r2.controllers.reddit_base import (#Classes
+                                        RedditController,
                                         MinimalController,
+                                        #Functions
                                         require_https,
                                         )
-from r2.controllers.validator import (VModhash,
-                                      VOAuth2ClientID,
-                                      VOAuth2Scope,
-                                      VOneOf,
-                                      VRequired,
-                                      VUser,
-                                      validate,
-                                      )
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 scope_info = {
     "identity": {
@@ -102,12 +99,14 @@ class OAuth2FrontendController(RedditController):
 
         return self.redirect(redirect_uri+"?"+urlencode(resp), code=302)
 
-    @validate(VUser(),
-              response_type = VOneOf("response_type", ("code",)),
-              client = VOAuth2ClientID(),
-              redirect_uri = VRequired("redirect_uri", errors.OAUTH2_INVALID_REDIRECT_URI),
-              scope = VOAuth2Scope(),
-              state = VRequired("state", errors.NO_TEXT))
+    @validate(validator.VUser(),
+              response_type=validator.VOneOf("response_type", ("code",)),
+              client=validator.VOAuth2ClientID(),
+              redirect_uri=
+                  validator.VRequired("redirect_uri",
+                                      errors.OAUTH2_INVALID_REDIRECT_URI),
+              scope=validator.VOAuth2Scope(),
+              state=validator.VRequired("state", errors.NO_TEXT))
     def GET_authorize(self, response_type, client, redirect_uri, scope, state):
         """
         First step in [OAuth 2.0](http://oauth.net/2/) authentication.
@@ -138,21 +137,24 @@ class OAuth2FrontendController(RedditController):
         else:
             return self._error_response(state, redirect_uri)
 
-    @validate(VUser(),
-              VModhash(fatal=False),
-              client = VOAuth2ClientID(),
-              redirect_uri = VRequired("redirect_uri", errors.OAUTH2_INVALID_REDIRECT_URI),
-              scope = VOAuth2Scope(),
-              state = VRequired("state", errors.NO_TEXT),
-              authorize = VRequired("authorize", errors.OAUTH2_ACCESS_DENIED))
+    @validate(validator.VUser(),
+              validator.VModhash(fatal=False),
+              client=validator.VOAuth2ClientID(),
+              redirect_uri=
+                  validator.VRequired("redirect_uri",
+                                      errors.OAUTH2_INVALID_REDIRECT_URI),
+              scope=validator.VOAuth2Scope(),
+              state=validator.VRequired("state", errors.NO_TEXT),
+              authorize=validator.VRequired("authorize",
+                                            errors.OAUTH2_ACCESS_DENIED))
     def POST_authorize(self, authorize, client, redirect_uri, scope, state):
         """Endpoint for OAuth2 authorization."""
 
         self._check_redirect_uri(client, redirect_uri)
 
         if not c.errors:
-            code = OAuth2AuthorizationCode._new(client._id, redirect_uri,
-                                                c.user._id36, scope)
+            code = models.OAuth2AuthorizationCode._new(client._id, redirect_uri,
+                                                       c.user._id36, scope)
             resp = {"code": code._id, "state": state}
             return self.redirect(redirect_uri+"?"+urlencode(resp), code=302)
         else:
@@ -169,16 +171,18 @@ class OAuth2AccessController(MinimalController):
         auth = request.headers.get("Authorization")
         try:
             client_id, client_secret = parse_http_basic(auth)
-            client = OAuth2Client.get_token(client_id)
+            client = models.OAuth2Client.get_token(client_id)
             require(client)
             require(client.secret == client_secret)
             return client
         except RequirementException:
             abort(401, headers=[("WWW-Authenticate", 'Basic realm="reddit"')])
 
-    @validate(grant_type = VOneOf("grant_type", ("authorization_code",)),
-              code = VRequired("code", errors.NO_TEXT),
-              redirect_uri = VRequired("redirect_uri", errors.OAUTH2_INVALID_REDIRECT_URI))
+    @validate(grant_type=validator.VOneOf("grant_type", ("authorization_code",)),
+              code=validator.VRequired("code", errors.NO_TEXT),
+              redirect_uri=
+                  validator.VRequired("redirect_uri",
+                                      errors.OAUTH2_INVALID_REDIRECT_URI))
     def POST_access_token(self, grant_type, code, redirect_uri):
         """
         Exchange an [OAuth 2.0](http://oauth.net/2/) authorization code
@@ -202,9 +206,13 @@ class OAuth2AccessController(MinimalController):
 
         resp = {}
         if not c.errors:
-            auth_token = OAuth2AuthorizationCode.use_token(code, c.oauth2_client._id, redirect_uri)
+            auth_token = models.OAuth2AuthorizationCode.use_token(code,
+                                                                  c.oauth2_client._id,
+                                                                  redirect_uri)
             if auth_token:
-                access_token = OAuth2AccessToken._new(auth_token.client_id, auth_token.user_id, auth_token.scope)
+                access_token = models.OAuth2AccessToken._new(auth_token.client_id,
+                                                             auth_token.user_id,
+                                                             auth_token.scope)
                 resp["access_token"] = access_token._id
                 resp["token_type"] = access_token.token_type
                 resp["expires_in"] = access_token._ttl
@@ -228,11 +236,11 @@ class OAuth2ResourceController(MinimalController):
         require_https()
 
         try:
-            access_token = OAuth2AccessToken.get_token(self._get_bearer_token())
+            access_token = models.OAuth2AccessToken.get_token(self._get_bearer_token())
             require(access_token)
             require(access_token.check_valid())
             c.oauth2_access_token = access_token
-            account = Account._byID36(access_token.user_id, data=True)
+            account = models.Account._byID36(access_token.user_id, data=True)
             require(account)
             require(not account._deleted)
             c.oauth_user = account

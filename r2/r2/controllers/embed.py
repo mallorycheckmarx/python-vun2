@@ -34,6 +34,11 @@ from r2.lib.template_helpers import get_domain
 
 from r2.controllers.reddit_base import RedditController
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
 @memoize("renderurl_cached", time=60)
 def renderurl_cached(path):
     # Needed so http://reddit.com/help/ works

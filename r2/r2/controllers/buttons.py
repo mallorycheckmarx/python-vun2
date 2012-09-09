@@ -24,27 +24,20 @@ from pylons import c, g, request
 from pylons.controllers.util import abort
 from pylons.i18n import _
 
-from r2.lib.pages import (Bookmarklets,
-                          BoringPage,
-                          ButtonDemoPanel,
-                          ButtonLite,
-                          WidgetDemoPanel,
-                          )
-from r2.lib.pages.things import wrap_links, NotFound
+import r2.models as models
+from r2.lib import pages
+from r2.lib.db.thing import NotFound
 from r2.lib.utils import tup
-from r2.models import (DomainSR,
-                       FakeSubreddit,
-                       Link,
-                       )
+from r2.lib.wrapper import wrap_links
 
-from r2.controllers.validator import (VBoolean,
-                                      VInt,
-                                      VSanitizedUrl,
-                                      nop,
-                                      validate,
-                                      )
+import r2.controllers.validator as validator
+from r2.controllers.validator import validate
 
-from reddit_base import RedditController
+from r2.controllers.reddit_base import RedditController
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 class ButtonsController(RedditController):
     def get_wrapped_link(self, url, link = None, wrapper = None):
@@ -53,9 +46,11 @@ class ButtonsController(RedditController):
             if link:
                 links = [link]
             else:
-                sr = None if isinstance(c.site, FakeSubreddit) else c.site
+                sr = c.site
+                if isinstance(c.site, models.FakeSubreddit):
+                    sr = None
                 try:
-                    links = tup(Link._by_url(url, sr))
+                    links = tup(models.Link._by_url(url, sr))
                 except NotFound:
                     pass
 
@@ -82,7 +77,7 @@ class ButtonsController(RedditController):
             if wrapper:
                 return wrapper(None)
 
-    @validate(buttontype = VInt('t', 1, 5))
+    @validate(buttontype=validator.VInt('t', 1, 5))
     def GET_button_embed(self, buttontype):
         if not buttontype:
             abort(404)
@@ -90,11 +85,11 @@ class ButtonsController(RedditController):
         return self.redirect('/static/button/button%s.js' % buttontype,
                              code=301)
 
-    @validate(buttonimage = VInt('i', 0, 14),
-              title = nop('title'),
-              url = VSanitizedUrl('url'),
-              newwindow = VBoolean('newwindow', default = False),
-              styled = VBoolean('styled', default=True))
+    @validate(buttonimage=validator.VInt('i', 0, 14),
+              title=validator.nop('title'),
+              url=validator.VSanitizedUrl('url'),
+              newwindow=validator.VBoolean('newwindow', default=False),
+              styled=validator.VBoolean('styled', default=True))
     def GET_button_lite(self, buttonimage, title, url, styled, newwindow):
         c.render_style = 'js'
         c.response_content_type = 'text/javascript; charset=UTF-8'
@@ -109,29 +104,30 @@ class ButtonsController(RedditController):
             if not thing:
                 kw['url'] = url
                 kw['title'] = title
-            return ButtonLite(thing,
-                              image = 1 if buttonimage is None else buttonimage,
-                              target = "_new" if newwindow else "_parent",
-                              styled = styled, **kw)
+
+            image = 1 if buttonimage is None else buttonimage
+            target = "_new" if newwindow else "_parent",
+            return pages.ButtonLite(thing, image=image, target=target,
+                                    styled=styled, **kw)
 
         bjs = self.get_wrapped_link(url, wrapper = builder_wrapper)
         return self.sendjs(bjs.render(), callback='', escape=False)
 
     def GET_button_demo_page(self):
         # no buttons for domain listings -> redirect to top level
-        if isinstance(c.site, DomainSR):
+        if isinstance(c.site, models.DomainSR):
             return self.redirect('/buttons')
-        return BoringPage(_("reddit buttons"),
-                          show_sidebar = False, 
-                          content=ButtonDemoPanel()).render()
+        return pages.BoringPage(_("reddit buttons"),
+                                show_sidebar=False, 
+                                content=pages.ButtonDemoPanel()).render()
 
     def GET_widget_demo_page(self):
-        return BoringPage(_("reddit widget"),
-                          show_sidebar = False, 
-                          content=WidgetDemoPanel()).render()
+        return pages.BoringPage(_("reddit widget"),
+                                show_sidebar=False, 
+                                content=pages.WidgetDemoPanel()).render()
 
     def GET_bookmarklets(self):
-        return BoringPage(_("bookmarklets"),
-                          show_sidebar = False, 
-                          content=Bookmarklets()).render()
+        return pages.BoringPage(_("bookmarklets"),
+                                show_sidebar=False, 
+                                content=pages.Bookmarklets()).render()
 

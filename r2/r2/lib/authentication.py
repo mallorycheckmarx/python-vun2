@@ -31,7 +31,9 @@ single website.)
 import bcrypt
 from pylons import g, c, request
 
-from r2.models import Account, NotFound
+from r2.models import Account
+
+from r2.lib.db.thing import NotFound
 from r2.lib.utils import constant_time_compare, parse_http_basic
 from r2.lib.require import RequirementException
 
