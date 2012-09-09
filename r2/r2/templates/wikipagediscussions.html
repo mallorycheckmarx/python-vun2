@@ -20,3 +20,15 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
+<%!
+   from r2.lib.template_helpers import get_domain
+%>
+
+${thing.listing}
+
+<div class="morelink discussionlink">
+<a href="/submit?url=http://${get_domain()}/wiki/${c.page}&resubmit=true&no_self=true&title=Check+out+this+wiki+page">${_("submit a discussion")}
+<div class="nub"></div>
+</a>
+</div>
+

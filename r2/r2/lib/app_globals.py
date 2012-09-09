@@ -34,6 +34,7 @@ from urlparse import urlparse
 import pytz
 from sqlalchemy import engine, event
 
+from r2.config import queues
 from r2.lib import cache
 from r2.lib.configparse import ConfigValue, ConfigValueParser
 from r2.lib.contrib import ipaddress
@@ -88,7 +89,6 @@ class Globals(object):
             'MIN_RATE_LIMIT_COMMENT_KARMA',
             'VOTE_AGE_LIMIT',
             'REPLY_AGE_LIMIT',
-            'WIKI_KARMA',
             'HOT_PAGE_AGE',
             'MODWINDOW',
             'RATELIMIT',
@@ -109,9 +109,15 @@ class Globals(object):
             'bcrypt_work_factor',
             'cassandra_pool_size',
             'sr_banned_quota',
+            'sr_wikibanned_quota',
+            'sr_wikicontributor_quota',
             'sr_moderator_quota',
             'sr_contributor_quota',
             'sr_quota_time',
+            'wiki_keep_recent_days',
+            'wiki_max_page_length_bytes',
+            'wiki_max_page_name_length',
+            'wiki_max_page_separators',
         ],
 
         ConfigValue.float: [
@@ -140,7 +146,7 @@ class Globals(object):
             'disable_ratelimit',
             'amqp_logging',
             'read_only_mode',
-            'allow_wiki_editing',
+            'wiki_disabled',
             'heavy_load_mode',
             's3_media_direct',
             'disable_captcha',
@@ -229,6 +235,7 @@ class Globals(object):
         self.config = ConfigValueParser(global_conf)
         self.config.add_spec(self.spec)
         self.plugins = PluginLoader(self.config.get("plugins", []))
+        self.queues = queues.declare_queues()
 
         self.paths = paths
 

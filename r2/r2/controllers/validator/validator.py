@@ -102,6 +102,7 @@ def can_comment_link(article):
             visible_promo(article))
 
 
+@export
 class Validator(object):
     default_param = None
     def __init__(self, param=None, default=None, post=True, get=True, url=True,
@@ -115,7 +116,7 @@ class Validator(object):
         self.post, self.get, self.url, self.docs = post, get, url, docs
         self.has_errors = False
 
-    def set_error(self, error, msg_params = {}, field = False):
+    def set_error(self, error, msg_params={}, field=False, code=None):
         """
         Adds the provided error to c.errors and flags that it is come
         from the validator's param
@@ -123,7 +124,7 @@ class Validator(object):
         if field is False:
             field = self.param
 
-        c.errors.add(error, msg_params = msg_params, field = field)
+        c.errors.add(error, msg_params=msg_params, field=field, code=code)
         self.has_errors = True
 
     def param_docs(self):
@@ -194,6 +195,7 @@ def set_api_docs(fn, simple_vals, param_vals):
         param_info.update(validator.param_docs())
     doc['parameters'] = param_info
 
+make_validated_kw = _make_validated_kw
 
 @export
 def validate(*simple_vals, **param_vals):

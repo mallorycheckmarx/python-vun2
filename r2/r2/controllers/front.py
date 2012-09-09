@@ -612,13 +612,17 @@ class FrontController(RedditController):
             pane = pages.ModList(editable=is_moderator)
         elif is_moderator and location == 'banned':
             pane = pages.BannedList(editable=is_moderator)
+        elif is_moderator and location == 'wikibanned':
+            pane = pages.WikiBannedList(editable=is_moderator)
+        elif is_moderator and location == 'wikicontributors':
+            pane = pages.WikiMayContributeList(editable=is_moderator)
         elif (location == 'contributors' and
               # On public reddits, only moderators can see the whitelist.
               # On private reddits, all contributors can see each other.
               (c.site.type != 'public' or
                (c.user_is_loggedin and
                 (c.site.is_moderator(c.user) or c.user_is_admin)))):
-                pane = pages.ContributorList(editable = is_moderator)
+                pane = pages.ContributorList(editable=is_moderator)
         elif (location == 'stylesheet'
               and c.site.can_change_stylesheet(c.user)
               and not g.css_killswitch):
@@ -914,18 +918,21 @@ class FrontController(RedditController):
         captcha = pages.Captcha() if c.user.needs_captcha() else None
         sr_names = (models.Subreddit.submit_sr_names(c.user) or
                     models.Subreddit.submit_sr_names(None))
-
-        return pages.FormPage(_("submit"),
-                              show_sidebar=True,
-                              page_classes=['submit-page'],
-                              content=pages.NewLink(url=url or '',
-                                                    title=title or '',
-                                                    text=text or '',
-                                                    selftext=selftext or '',
-                                                    subreddits = sr_names,
-                                                    captcha=captcha,
-                                                    resubmit=resubmit,
-                                                    then=then)).render()
+        
+        never_show_self = request.get.get('no_self')
+        
+        return FormPage(_("submit"),
+                        show_sidebar = True,
+                        page_classes=['submit-page'],
+                        content=pages.NewLink(url=url or '',
+                                              title=title or '',
+                                              text=text or '',
+                                              selftext=selftext or '',
+                                              subreddits=sr_names,
+                                              captcha=captcha,
+                                              resubmit=resubmit,
+                                              never_show_self=never_show_self,
+                                              then=then)).render()
 
     def GET_frame(self):
         """used for cname support.  makes a frame and
@@ -1237,7 +1244,7 @@ class FormsController(RedditController):
         returns their user name"""
         c.response_content_type = 'text/plain'
         if c.user_is_loggedin:
-            perm = str(g.allow_wiki_editing and c.user.can_wiki())
+            perm = str(c.user.can_wiki())
             c.response.content = c.user.name + "," + perm
         else:
             c.response.content = ''

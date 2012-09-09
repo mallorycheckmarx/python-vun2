@@ -101,6 +101,10 @@ class ModActionListing(TableListing): pass
 
 
 @export
+class WikiRevisionListing(TableListing): pass
+
+
+@export
 class LinkListing(Listing):
     def __init__(self, *a, **kw):
         Listing.__init__(self, *a, **kw)

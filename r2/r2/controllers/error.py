@@ -20,11 +20,12 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import json
 import os.path
 import random as rand
 
 import pylons
-from pylons import c, request, g
+from pylons import g, c, request
 from pylons.i18n import _
 from paste.httpexceptions import HTTPFound, HTTPMovedPermanently
 
@@ -166,7 +167,8 @@ class ErrorController(RedditController):
                      c.response.content = str(code)
                 return c.response
             elif c.render_style == "api":
-                c.response.content = "{\"error\": %s}" % code
+                data = request.environ.get('extra_error_data', {'error': code})
+                c.response.content = json.dumps(data)
                 return c.response
             elif takedown and code == 404:
                 link = Link._by_fullname(takedown)

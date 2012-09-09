@@ -70,18 +70,9 @@ def load_controllers():
     from r2.controllers.front import FrontController
     from r2.controllers.health import HealthController
     from r2.controllers.buttons import ButtonsController
-    from r2.controllers.captcha import CaptchaController
-    from r2.controllers.embed import EmbedController
-    from r2.controllers.error import ErrorController
-    from r2.controllers.post import PostController
-    from r2.controllers.toolbar import ToolbarController
-    from r2.controllers.awards import AwardsController
-    from r2.controllers.ads import AdsController
-    from r2.controllers.usage import UsageController
-    from r2.controllers.errorlog import ErrorlogController
-    from r2.controllers.promotecontroller import PromoteController
-    from r2.controllers.mediaembed import MediaembedController
-    from r2.controllers.mediaembed import AdController
+    
+    from r2.controllers.wiki import WikiController
+    from r2.controllers.wiki import WikiApiController
 
     from r2.controllers.querycontroller import QueryController
 

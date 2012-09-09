@@ -20,8 +20,10 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import os
 import base64
 import time
+import traceback
 
 from urllib import unquote_plus
 from urllib2 import urlopen
@@ -1036,21 +1038,23 @@ def filter_links(links, filter_spam = False, multiple = True):
     return links if multiple else links[0]
 
 def link_duplicates(article):
-    from r2.models import Link, NotFound
-
     # don't bother looking it up if the link doesn't have a URL anyway
     if getattr(article, 'is_self', False):
         return []
 
+    return url_links(article.url, exclude = article._fullname)
+
+def url_links(url, exclude=None):
+    from r2.models import Link, NotFound
+
     try:
-        links = tup(Link._by_url(article.url, None))
+        links = tup(Link._by_url(url, None))
     except NotFound:
         links = []
 
-    duplicates = [ link for link in links
-                   if link._fullname != article._fullname ]
-
-    return duplicates
+    links = [ link for link in links
+                   if link._fullname != exclude ]
+    return links
 
 class TimeoutFunctionException(Exception):
     pass
@@ -1428,3 +1432,15 @@ def parse_http_basic(authorization_header):
     except TypeError:
         raise RequirementException
     return require_split(auth_data, 2, ":")
+
+
+def simple_traceback():
+    """Generate a pared-down traceback that's human readable but small."""
+
+    stack_trace = traceback.extract_stack(limit=7)[:-2]
+    return "\n".join(":".join((os.path.basename(filename),
+                               function_name,
+                               str(line_number),
+                              ))
+                     for filename, line_number, function_name, text
+                     in stack_trace)

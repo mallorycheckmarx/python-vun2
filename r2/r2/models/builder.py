@@ -20,6 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import datetime
+
 from pylons import g, c
 from pylons.i18n import _
 
@@ -32,6 +34,7 @@ from r2.models.account import Account
 from r2.models.listing import Listing
 from r2.models.subreddit import Subreddit
 from r2.models.admintools import admintools, compute_votes, ip_span
+from r2.models.wiki import WIKI_RECENT_DAYS
 
 __all__ = [
            #Constants Only, use @export for functions/classes

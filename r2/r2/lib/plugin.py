@@ -23,6 +23,8 @@
 import sys
 import os.path
 import pkg_resources
+from collections import OrderedDict
+
 from pylons import config
 
 
@@ -45,9 +47,9 @@ class Plugin(object):
         return os.path.dirname(module.__file__)
 
     @property
-    def template_dirs(self):
+    def template_dir(self):
         """Add module/templates/ as a template directory."""
-        return [os.path.join(self.path, 'templates')]
+        return os.path.join(self.path, 'templates')
 
     @property
     def static_dir(self):
@@ -67,6 +69,9 @@ class Plugin(object):
             else:
                 module_registry[name].extend(module)
 
+    def declare_queues(self, queues):
+        pass
+
     def add_routes(self, mc):
         pass
 
@@ -76,8 +81,6 @@ class Plugin(object):
 
 class PluginLoader(object):
     def __init__(self, plugin_names=None):
-        self.plugins = {}
-
         if plugin_names is None:
             entry_points = self.available_plugins()
         else:
@@ -92,6 +95,7 @@ class PluginLoader(object):
                 else:
                     entry_points.append(entry_point)
 
+        self.plugins = OrderedDict()
         for entry_point in entry_points:
             plugin_cls = entry_point.load()
             self.plugins[entry_point.name] = plugin_cls(entry_point)
@@ -102,12 +106,19 @@ class PluginLoader(object):
     def __iter__(self):
         return self.plugins.itervalues()
 
+    def __reversed__(self):
+        return reversed(self.plugins.values())
+
     def __getitem__(self, key):
         return self.plugins[key]
 
     @staticmethod
     def available_plugins(name=None):
         return pkg_resources.iter_entry_points('r2.plugin', name)
+
+    def declare_queues(self, queues):
+        for plugin in self:
+            plugin.declare_queues(queues)
 
     def load_plugins(self):
         g = config['pylons.g']
@@ -119,7 +130,7 @@ class PluginLoader(object):
 
             # Load plugin
             g.config.add_spec(plugin.config)
-            config['pylons.paths']['templates'].extend(plugin.template_dirs)
+            config['pylons.paths']['templates'].insert(0, plugin.template_dir)
             plugin.add_js()
             plugin.on_load()
 

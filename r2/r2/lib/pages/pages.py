@@ -212,7 +212,33 @@ class Reddit(Templated):
             self._content = content
 
         self.toolbars = self.build_toolbars()
-
+    
+    def wiki_actions_menu(self, moderator=False):
+        buttons = []
+        
+        buttons.append(NamedButton("wikirecentrevisions", 
+                                   css_class="wikiaction-revisions",
+                                   dest="/wiki/revisions"))
+        
+        buttons.append(NamedButton("wikipageslist", 
+                           css_class="wikiaction-pages",
+                           dest="/wiki/pages"))
+        if moderator:
+            buttons += [NamedButton('wikibanned', css_class='reddit-ban', 
+                                    dest='/about/wikibanned'),
+                        NamedButton('wikicontributors', 
+                                    css_class='reddit-contributors', 
+                                    dest='/about/wikicontributors')
+                        ]
+                           
+        return SideContentBox(_('wiki tools'),
+                      [NavMenu(buttons,
+                               type="flat_vert",
+                               css_class="icon-menu",
+                               separator="")],
+                      _id="wikiactions",
+                      collapsible=True)
+    
     def sr_admin_menu(self):
         buttons = []
         is_single_subreddit = not isinstance(c.site, 
@@ -287,9 +313,8 @@ class Reddit(Templated):
         no_ads_yet = True
         if (isinstance(c.site, (models.MultiReddit, models.ModSR)) and 
             c.user_is_loggedin):
-            srs = models.Subreddit._byID(c.site.sr_ids, data=True,
+            srs = models.Subreddit._byID(c.site.sr_ids,data=True,
                                          return_dict=False)
-
             if c.user_is_admin or c.site.is_moderator(c.user):
                 ps.append(self.sr_admin_menu())
 
@@ -300,12 +325,17 @@ class Reddit(Templated):
         if (not isinstance(c.site, models.FakeSubreddit) and 
             (not c.cname or c.site.show_cname_sidebar)):
             ps.append(SubredditInfoBar())
-            if c.user_is_loggedin and (c.user_is_admin or
-                                       c.site.is_moderator(c.user)):
+            moderator = c.user_is_loggedin and (c.user_is_admin or 
+                                          c.site.is_moderator(c.user))
+            if c.show_wiki_actions:
+                ps.append(self.wiki_actions_menu(moderator=moderator))
+            if moderator:
                 ps.append(self.sr_admin_menu())
             if (c.user.pref_show_adbox or not c.user.gold) and not g.disable_ads:
                 ps.append(Ads())
             no_ads_yet = False
+        elif c.show_wiki_actions:
+            ps.append(self.wiki_actions_menu())
 
         user_banned = c.user_is_loggedin and c.site.is_banned(c.user)
         if self.submit_box and (c.user_is_loggedin or not g.read_only_mode) and not user_banned:
@@ -417,6 +447,13 @@ class Reddit(Templated):
 
             if c.user_is_loggedin:
                 main_buttons.append(menus.NamedButton('saved', False))
+
+            mod = False
+            if c.user_is_loggedin:
+                mod = bool(c.user_is_admin or c.site.is_moderator(c.user))
+            if c.site._should_wiki and (c.site.wikimode != 'disabled' or mod):
+                if not g.wiki_disabled:
+                    main_buttons.append(NavButton('wiki', 'wiki'))
 
         more_buttons = []
 
@@ -1843,6 +1880,8 @@ class PermalinkMessage(Templated):
     def __init__(self, comments_url):
         Templated.__init__(self, comments_url = comments_url)
 
+
+@export
 class PaneStack(Templated):
     """Utility class for storing and rendering a list of block elements."""
 
@@ -1989,7 +2028,7 @@ class FrameToolbar(Wrapped):
 class NewLink(Templated):
     """Render the link submission form"""
     def __init__(self, captcha = None, url = '', title= '', text = '', selftext = '',
-                 subreddits = (), then = 'comments', resubmit=False):
+                 subreddits = (), then = 'comments', resubmit=False, never_show_self=False):
 
         self.show_link = self.show_self = False
 
@@ -1999,7 +2038,7 @@ class NewLink(Templated):
             self.show_link = True
         if c.default_sr or c.site.link_type != 'link':
             tabs.append(('text', ('text-desc', 'text-field')))
-            self.show_self = True
+            self.show_self = not never_show_self
 
         if self.show_self and self.show_link:
             all_fields = set(chain(*(parts for (tab, parts) in tabs)))
@@ -3052,6 +3091,28 @@ class BannedList(UserList):
 
     def user_ids(self):
         return c.site.banned
+ 
+class WikiBannedList(BannedList):
+    """List of users banned from editing a given wiki"""
+    type = 'wikibanned'
+
+    def user_ids(self):
+        return c.site.wikibanned
+
+class WikiMayContributeList(UserList):
+    """List of users allowed to contribute to a given wiki"""
+    type = 'wikicontributor'
+
+    @property
+    def form_title(self):
+        return _('add a wiki contributor')
+
+    @property
+    def table_title(self):
+        return _('wiki page contributors')
+
+    def user_ids(self):
+        return c.site.wikicontributor
 
 
 class DetailsPage(LinkInfoPage):

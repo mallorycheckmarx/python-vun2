@@ -38,6 +38,7 @@ exclusions = [
               "r2.public",
               "r2.orig",
               "r2.templates",
+              "r2.models.types"
               ]
 
 def excluded_module(module):

@@ -34,7 +34,7 @@ from r2.lib.utils import tup
 from r2.models.account import Account
 from r2.models.link import Link, Comment
 from r2.models.printable import Printable
-from r2.models.subreddit import Subreddit
+from r2.models.subreddit import DefaultSR, Subreddit
 
 __all__ = [
            #Constants Only, use @export for functions/classes
@@ -63,7 +63,9 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
     actions = ('banuser', 'unbanuser', 'removelink', 'approvelink', 
                'removecomment', 'approvecomment', 'addmoderator',
                'removemoderator', 'addcontributor', 'removecontributor',
-               'editsettings', 'editflair', 'distinguish', 'marknsfw')
+               'editsettings', 'editflair', 'distinguish', 'marknsfw', 
+               'wikibanned', 'wikicontributor', 'wikiunbanned',
+               'removewikicontributor', 'wikirevise', 'wikipermlevel')
 
     _menu = {'banuser': _('ban user'),
              'unbanuser': _('unban user'),
@@ -78,9 +80,19 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
              'editsettings': _('edit settings'),
              'editflair': _('edit flair'),
              'distinguish': _('distinguish'),
-             'marknsfw': _('mark nsfw')}
+             'marknsfw': _('mark nsfw'),
+             'wikibanned': _('ban from wiki'),
+             'wikiunbanned': _('unban from wiki'),
+             'wikicontributor': _('add wiki contributor'),
+             'removewikicontributor': _('remove wiki contributor'),
+             'wikirevise': _('wiki revise page'),
+             'wikipermlevel': _('wiki page permlevel')}
 
     _text = {'banuser': _('banned'),
+             'wikibanned': _('wiki banned'),
+             'wikiunbanned': _('unbanned from wiki'),
+             'wikicontributor': _('added wiki contributor'),
+             'removewikicontributor': _('removed wiki contributor'),
              'unbanuser': _('unbanned'),
              'removelink': _('removed'),
              'approvelink': _('approved'),
@@ -92,6 +104,8 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
              'removecontributor': _('removed approved contributor'),
              'editsettings': _('edited settings'),
              'editflair': _('edited flair'),
+             'wikirevise': _('edited wiki page'),
+             'wikipermlevel': _('changed wiki page permission level'),
              'distinguish': _('distinguished'),
              'marknsfw': _('marked nsfw')}
 
@@ -175,7 +189,10 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
         # Split this off into separate function to check for valid actions?
         if not action in cls.actions:
             raise ValueError("Invalid ModAction: %s" % action)
-
+        
+        # Front page should insert modactions into the base sr
+        sr = sr._base if isinstance(sr, DefaultSR) else sr
+        
         kw = dict(sr_id36=sr._id36, mod_id36=mod._id36, action=action)
 
         if target:

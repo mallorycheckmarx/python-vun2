@@ -56,6 +56,11 @@ api('organiclisting',       jtmpl.OrganicListingJsonTemplate)
 api('subreddittraffic', jtmpl.TrafficJsonTemplate)
 api('takedownpane', jtmpl.TakedownJsonTemplate)
 
+api('wikibasepage', jtmpl.WikiJsonTemplate)
+api('wikipagerevisions', jtmpl.WikiJsonTemplate)
+api('wikiview', jtmpl.WikiViewJsonTemplate)
+api('wikirevision', jtmpl.WikiRevisionJsonTemplate)
+
 api('flairlist', jtmpl.FlairListJsonTemplate)
 api('flaircsv', jtmpl.FlairCsvJsonTemplate)
 

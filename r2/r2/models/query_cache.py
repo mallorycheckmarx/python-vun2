@@ -20,6 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import json
 import random
 import datetime
 import collections
@@ -44,15 +45,6 @@ CONNECTION_POOL = g.cassandra_pools['main']
 PRUNE_CHANCE = g.querycache_prune_chance
 MAX_CACHED_ITEMS = 1000
 LOG = g.log
-
-# if cjson is installed, use it. it's faster.
-try:
-    import cjson as json
-except ImportError:
-    LOG.warning("Couldn't import cjson. Using (slower) python implementation.")
-    import json
-else:
-    json.dumps, json.loads = json.encode, json.decode
 
 
 @export

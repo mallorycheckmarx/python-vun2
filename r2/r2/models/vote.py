@@ -34,7 +34,7 @@ from r2.lib.db.tdb_cassandra import (#Classes
 from r2.lib.export import export
 from r2.lib.db import thing
 from r2.lib.db.sorts import epoch_seconds
-from r2.lib.utils import SimpleSillyStub
+from r2.lib.utils import SimpleSillyStub, Storage
 from r2.lib.utils._utils import flatten
 
 from r2.models.account import Account
@@ -177,6 +177,10 @@ VotesByComment._view_of = CassandraCommentVote
 class VotesByAccount(tdb_cassandra.DenormalizedRelation):
     _use_db = False
     _thing1_cls = Account
+    _read_consistency_level = tdb_cassandra.CL.ONE
+
+    # TODO: enable writes when CassandraVote is phased out
+    _write_last_modified = False
 
     @classmethod
     def rel(cls, thing1_cls, thing2_cls):
@@ -202,12 +206,20 @@ class LinkVotesByAccount(VotesByAccount):
     _use_db = True
     _thing2_cls = Link
     _views = []
+    _last_modified_name = "LinkVote"
+
+    @classmethod
+    def _fast_query(cls, subject, objects, properties=None):
+        # this is a compatibility shim for transition
+        return {k: Storage(name=v)
+                for k, v in cls.fast_query(subject, objects).iteritems()}
 
 
 class CommentVotesByAccount(VotesByAccount):
     _use_db = True
     _thing2_cls = Comment
     _views = []
+    _last_modified_name = "CommentVote"
 
 
 class VoteDetailsByThing(tdb_cassandra.View):
@@ -350,7 +362,10 @@ class Vote(MultiRelation('vote',
         rels = {}
         for obj in objs:
             try:
-                types = CassandraVote._rel(sub.__class__, obj.__class__)
+                if obj.__class__ == Link:
+                    types = VotesByAccount.rel(sub.__class__, obj.__class__)
+                else:
+                    types = CassandraVote._rel(sub.__class__, obj.__class__)
             except TdbException:
                 # for types for which we don't have a vote rel, we'll
                 # skip them

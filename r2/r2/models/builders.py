@@ -383,3 +383,29 @@ class UserMessageBuilder(MessageBuilder):
             return conversation(self.user, self.parent)
         return user_messages(self.user)
 
+
+@export
+class WikiRevisionBuilder(QueryBuilder):
+    def wrap_items(self, items):
+        types = {}
+        wrapped = []
+        for item in items:
+            w = self.wrap(item)
+            types.setdefault(w.render_class, []).append(w)
+            wrapped.append(w)
+        
+        user = c.user
+        for cls in types.keys():
+            cls.add_props(user, types[cls])
+
+        return wrapped
+    
+    def keep_item(self, item):
+        return not item.is_hidden
+
+
+@export
+class WikiRecentRevisionBuilder(WikiRevisionBuilder):
+    def must_skip(self, item):
+        return (datetime.datetime.now(g.tz) - item.date).days >= WIKI_RECENT_DAYS
+

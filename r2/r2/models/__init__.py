@@ -44,3 +44,4 @@ from subreddit import *
 from token import *
 from trial import *
 from vote import *
+from wiki import *

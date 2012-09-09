@@ -24,3 +24,4 @@ from admin_pages import *
 from pages import *
 from things import *
 from trafficpages import *
+from wiki import *
