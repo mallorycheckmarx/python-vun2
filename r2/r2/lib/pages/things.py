@@ -25,6 +25,7 @@ from datetime import datetime
 from pylons import c, g
 
 from r2.lib.menus import Styled
+from r2.lib.promote import is_promoted
 from r2.lib.utils import tup
 
 __all__ = [

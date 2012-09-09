@@ -76,7 +76,11 @@ from r2.controllers.reddit_base import (#Classes
                                         paginated_listing,
                                         prevent_framing_and_css
                                         )
-from r2.controllers.validator import validate
+from r2.controllers.validator import (#Functions
+                                      can_comment_link,
+                                      can_view_link_comments,
+                                      validate,
+                                      )
 
 __all__ = [
            #Constants Only, use @export for functions/classes

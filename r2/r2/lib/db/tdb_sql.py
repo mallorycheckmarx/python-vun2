@@ -28,7 +28,7 @@ import random
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgres
 
-from r2.lib.utils import storage, storify, iters, Results, tup, TransSet
+from r2.lib.utils.utils import storage, storify, iters, Results, tup, TransSet
 import operators
 from pylons import g, c
 dbm = g.dbm

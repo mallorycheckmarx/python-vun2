@@ -22,6 +22,7 @@
 
 from pylons import g
 from r2.lib import utils
+from r2.lib.db.thing import NotFound
 from r2.lib.memoize import memoize
 import simplejson as json
 
@@ -1768,7 +1769,7 @@ test_urls = [
     ]
 
 def submit_all():
-    from r2.models import Subreddit, Account, Link, NotFound
+    from r2.models import Subreddit, Account, Link
     from r2.lib.media import set_media
     from r2.lib.db import queries
     sr = Subreddit._by_name('testmedia')

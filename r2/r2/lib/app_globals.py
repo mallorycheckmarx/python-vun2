@@ -348,7 +348,7 @@ class Globals(object):
                                           read_consistency_level=
                                               self.cassandra_rcl,
                                           write_consistency_level=
-                                              self.cassandra_wcl),
+                                              self.cassandra_wcl)
         self.permacache = cache.CassandraCacheChain(localcache_cls(),
                                                     cass_cache,
                                                     memcache=perma_memcache,

@@ -364,18 +364,18 @@ class HotController(FixListing, ListingController):
 
         if isinstance(c.site, models.DefaultSR):
             if c.user_is_loggedin:
-                srlimit = Subreddit.DEFAULT_LIMIT
+                srlimit = models.Subreddit.DEFAULT_LIMIT
                 over18 = c.user.has_subscribed and c.over18
             else:
                 srlimit = g.num_default_reddits
                 over18 = False
 
-            sr_ids = Subreddit.user_subreddits(c.user,
+            sr_ids = models.Subreddit.user_subreddits(c.user,
                                                limit=srlimit,
                                                over18=over18)
             return normalized_hot(sr_ids)
 
-        elif isinstance(c.site, pages.MultiReddit):
+        elif isinstance(c.site, models.MultiReddit):
             return normalized_hot(c.site.kept_sr_ids, obey_age_limit=False)
 
         #if not using the query_cache we still want cached front pages
@@ -841,8 +841,9 @@ class MessageController(ListingController):
             q = queries.get_unread_subreddit_messages_multi(c.site.kept_sr_ids)
         elif self.where == 'moderator' and self.subwhere == 'unread':
             if c.default_sr:
-                srids = Subreddit.reverse_moderator_ids(c.user)
-                srs = Subreddit._byID(srids, data = False, return_dict = False)
+                srids = models.Subreddit.reverse_moderator_ids(c.user)
+                srs = models.Subreddit._byID(srids, data=False,
+                                             return_dict=False)
                 q = queries.get_unread_subreddit_messages_multi(srs)
             else:
                 q = queries.get_unread_subreddit_messages(c.site)
@@ -913,22 +914,22 @@ class RedditsController(ListingController):
 
     def query(self):
         if self.where == 'banned' and c.user_is_admin:
-            reddits = Subreddit._query(Subreddit.c._spam == True,
-                                       sort = desc('_date'),
-                                       write_cache = True,
-                                       read_cache = True,
-                                       cache_time = 5 * 60)
+            reddits = models.Subreddit._query(models.Subreddit.c._spam == True,
+                                              sort=desc('_date'),
+                                              write_cache=True,
+                                              read_cache=True,
+                                              cache_time=5 * 60)
         else:
             reddits = None
             if self.where == 'new':
-                reddits = Subreddit._query( write_cache = True,
-                                            read_cache = True,
-                                            cache_time = 5 * 60)
+                reddits = models.Subreddit._query(write_cache=True,
+                                                  read_cache=True,
+                                                  cache_time=5 * 60)
                 reddits._sort = desc('_date')
             else:
-                reddits = Subreddit._query( write_cache = True,
-                                            read_cache = True,
-                                            cache_time = 60 * 60)
+                reddits = models.Subreddit._query(write_cache=True,
+                                                  read_cache=True,
+                                                  cache_time=60 * 60)
                 reddits._sort = desc('_downs')
             # Consider resurrecting when it is not the World Cup
             #if c.content_langs != 'all':
@@ -986,7 +987,7 @@ class MyredditsController(ListingController, OAuth2ResourceController):
 
     def content(self):
         user = c.user if c.user_is_loggedin else None
-        num_subscriptions = len(Subreddit.reverse_subscriber_ids(user))
+        num_subscriptions = len(models.Subreddit.reverse_subscriber_ids(user))
         if self.where == 'subscriber' and num_subscriptions == 0:
             message = strings.sr_messages['empty']
         else:

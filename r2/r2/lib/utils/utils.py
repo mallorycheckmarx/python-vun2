@@ -512,7 +512,9 @@ class UrlParser(object):
         On failure to find a subreddit, returns None.
         """
         from pylons import g
-        from r2.models import Subreddit, Sub, NotFound, DefaultSR
+        from r2.models import Subreddit, Sub, DefaultSR
+        #Prevents a cycle with r2/lib/utils/__init__.py
+        from r2.lib.db.thing import NotFound
         try:
             if not self.hostname or self.hostname.startswith(g.domain):
                 if self.path.startswith('/r/'):
@@ -992,7 +994,9 @@ def interleave_lists(*args):
 
 def link_from_url(path, filter_spam = False, multiple = True):
     from pylons import c
-    from r2.models import IDBuilder, Link, Subreddit, NotFound
+    from r2.models import IDBuilder, Link, Subreddit
+    #Prevents a cycle with r2/lib/utils/__init__.py
+    from r2.lib.db.thing import NotFound
 
     if not path:
         return
@@ -1009,7 +1013,7 @@ def filter_links(links, filter_spam = False, multiple = True):
     # run the list through a builder to remove any that the user
     # isn't allowed to see
     from pylons import c
-    from r2.models import IDBuilder, Link, Subreddit, NotFound
+    from r2.models import IDBuilder, Link, Subreddit
     links = IDBuilder([link._fullname for link in links],
                       skip = False).get_items()[0]
     if not links:
@@ -1045,7 +1049,9 @@ def link_duplicates(article):
     return url_links(article.url, exclude = article._fullname)
 
 def url_links(url, exclude=None):
-    from r2.models import Link, NotFound
+    from r2.models import Link
+    #Prevents a cycle with r2/lib/utils/__init__.py
+    from r2.lib.db.thing import NotFound
 
     try:
         links = tup(Link._by_url(url, None))

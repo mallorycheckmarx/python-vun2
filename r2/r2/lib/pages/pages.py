@@ -453,7 +453,7 @@ class Reddit(Templated):
                 mod = bool(c.user_is_admin or c.site.is_moderator(c.user))
             if c.site._should_wiki and (c.site.wikimode != 'disabled' or mod):
                 if not g.wiki_disabled:
-                    main_buttons.append(NavButton('wiki', 'wiki'))
+                    main_buttons.append(menus.NavButton('wiki', 'wiki'))
 
         more_buttons = []
 
@@ -472,7 +472,7 @@ class Reddit(Templated):
 
         toolbar = [menus.NavMenu(main_buttons, type='tabmenu')]
         if more_buttons:
-            toolbar.append(menux.NavMenu(more_buttons, title=menu.more,
+            toolbar.append(menus.NavMenu(more_buttons, title=menu.more,
                                          type='tabdrop'))
 
         if not isinstance(c.site, models.DefaultSR) and not c.cname:
@@ -517,14 +517,21 @@ class Reddit(Templated):
 
         return classes
 
+
+@export
 class AccountActivityBox(Templated):
     def __init__(self):
         super(AccountActivityBox, self).__init__()
 
+
+@export
 class RedditHeader(Templated):
     def __init__(self):
         pass
 
+
+
+@export
 class RedditFooter(CachedTemplate):
     def cachable_attrs(self):
         return [('path', request.path),
@@ -616,6 +623,7 @@ class RedditMin(Reddit):
     show_sidebar = False
     show_firsttext = False
 
+@export
 class LoginFormWide(CachedTemplate):
     """generates a login form suitable for the 300px rightbox."""
     def __init__(self):
@@ -623,6 +631,9 @@ class LoginFormWide(CachedTemplate):
         self.auth_cname = c.authorized_cname
         CachedTemplate.__init__(self)
 
+
+
+@export
 class SubredditInfoBar(CachedTemplate):
     """When not on Default, renders a sidebox which gives info about
     the current reddit, including links to the moderator and
@@ -670,9 +681,13 @@ class SubredditInfoBar(CachedTemplate):
         return [menus.NavMenu(buttons, type="flat_vert", base_path="/about/",
                         separator='')]
 
+
+@export
 class SponsorshipBox(Templated):
     pass
 
+
+@export
 class SideContentBox(Templated):
     def __init__(self, title, content, helplink=None, _id=None, extra_class=None,
                  more_href = None, more_text = "more", collapsible=False):
@@ -681,6 +696,8 @@ class SideContentBox(Templated):
                            more_href = more_href, more_text = more_text,
                            collapsible=collapsible)
 
+
+@export
 class SideBox(CachedTemplate):
     """
     Generic sidebox used to generate the 'submit' and 'create a reddit' boxes.
@@ -925,6 +942,7 @@ class AdminModeInterstitial(BoringPage):
         return PasswordVerificationForm(dest=self.dest)
 
 
+@export
 class PasswordVerificationForm(Templated):
     def __init__(self, dest):
         self.dest = dest
@@ -938,6 +956,8 @@ class Login(Templated):
         Templated.__init__(self, user_reg = user_reg, user_login = user_login,
                            dest = dest, captcha = Captcha())
 
+
+@export
 class Register(Login):
     pass
 
@@ -954,9 +974,13 @@ class OAuth2AuthorizationPage(BoringPage):
         BoringPage.__init__(self, _("request for permission"),
                 show_sidebar=False, content=content)
 
+
+@export
 class OAuth2Authorization(Templated):
     pass
 
+
+@export
 class SearchPage(BoringPage):
     """Search results page"""
     searchbox = False
@@ -981,6 +1005,8 @@ class SearchPage(BoringPage):
         return self.content_stack((self.searchbar, self.infobar,
                                    self.nav_menu, self._content))
 
+
+@export
 class TakedownPage(BoringPage):
     def __init__(self, link):
         BoringPage.__init__(self, getattr(link, "takedown_title", _("bummer")), 
@@ -991,6 +1017,7 @@ class TakedownPage(BoringPage):
         return response
 
 
+@export
 class TakedownPane(Templated):
     def __init__(self, link, *a, **kw):
         self.link = link
@@ -1011,6 +1038,8 @@ class CommentsPanel(Templated):
 
         Templated.__init__(self, *a, **kw)
 
+
+@export
 class CommentVisitsBox(Templated):
     def __init__(self, visits, *a, **kw):
         self.visits = []
@@ -1019,6 +1048,8 @@ class CommentVisitsBox(Templated):
             self.visits.append(pretty)
         Templated.__init__(self, *a, **kw)
 
+
+@export
 class LinkInfoPage(Reddit):
     """Renders the varied /info pages for a link.  The Link object is
     passed via the link argument and the content passed to this class
@@ -1135,9 +1166,13 @@ class LinkInfoPage(Reddit):
             rb.insert(1, LinkInfoBar(a = self.link))
         return rb
 
+
+@export
 class LinkCommentSep(Templated):
     pass
 
+
+@export
 class CommentPane(Templated):
     def cache_key(self):
         num = self.article.num_comments
@@ -1255,10 +1290,13 @@ class CommentPane(Templated):
     def render(self, *a, **kw):
         return self.rendered
 
+
+@export
 class ThingUpdater(Templated):
     pass
 
 
+@export
 class LinkInfoBar(Templated):
     """Right box for providing info about a link."""
     def __init__(self, a = None):
@@ -1266,6 +1304,8 @@ class LinkInfoBar(Templated):
             a = Wrapped(a)
         Templated.__init__(self, a = a, datefmt = datefmt)
 
+
+@export
 class EditReddit(Reddit):
     """Container for the about page for a reddit"""
     extension_handling= False
@@ -1432,6 +1472,8 @@ class ProfilePage(Reddit):
 
         return rb
 
+
+@export
 class TrophyCase(Templated):
     def __init__(self, user):
         self.user = user
@@ -1453,6 +1495,8 @@ class TrophyCase(Templated):
         self.cup_info = user.cup_info()
         Templated.__init__(self)
 
+
+@export
 class ProfileBar(Templated):
     """Draws a right box for info about the user (karma, etc)"""
     def __init__(self, user):
@@ -1497,16 +1541,22 @@ class ProfileBar(Templated):
             self.my_fullname = c.user._fullname
             self.is_friend = self.user._id in c.user.friends
 
+
+@export
 class MenuArea(Templated):
     """Draws the gray box at the top of a page for sort menus"""
     def __init__(self, menus = []):
         Templated.__init__(self, menus = menus)
 
+
+@export
 class InfoBar(Templated):
     """Draws the yellow box at the top of a page for info"""
     def __init__(self, message = '', extra_class = ''):
         Templated.__init__(self, message = message, extra_class = extra_class)
 
+
+@export
 class ClientInfoBar(InfoBar):
     """Draws the message the top of a login page before OAuth2 authorization"""
     def __init__(self, client, *args, **kwargs):
@@ -1514,6 +1564,8 @@ class ClientInfoBar(InfoBar):
         InfoBar.__init__(self, *args, **kwargs)
         self.client = client
 
+
+@export
 class RedditError(BoringPage):
     site_tracking = False
     def __init__(self, title, message, image=None, sr_description=None,
@@ -1526,6 +1578,8 @@ class RedditError(BoringPage):
                                               sr_description=sr_description,
                                               explanation=explanation))
 
+
+@export
 class ErrorPage(Templated):
     """Wrapper for an error message"""
     def __init__(self, title, message, image=None, explanation=None, **kwargs):
@@ -1548,6 +1602,8 @@ class Over18(Templated):
     """The creepy 'over 18' check page for nsfw content."""
     pass
 
+
+@export
 class SubredditTopBar(CachedTemplate):
 
     """The horizontal strip at the top of most pages for navigating
@@ -1648,6 +1704,8 @@ class SubredditTopBar(CachedTemplate):
 
         return menus
 
+
+@export
 class SubscriptionBox(Templated):
     """The list of reddits a user is currently subscribed to to go in
     the right pane."""
@@ -1691,11 +1749,17 @@ class SubscriptionBox(Templated):
     def reddits(self):
         return wrap_links(self.srs)
 
+
+
+@export
 class CreateSubreddit(Templated):
     """reddit creation form."""
     def __init__(self, site = None, name = ''):
         Templated.__init__(self, site = site, name = name)
 
+
+
+@export
 class SubredditStylesheet(Templated):
     """form for editing or creating subreddit stylesheets"""
     def __init__(self, site = None,
@@ -1720,6 +1784,8 @@ class UploadedImage(Templated):
         Templated.__init__(self, status=status, img_src=img_src, name = name,
                            form_id = form_id)
 
+
+@export
 class Thanks(Templated):
     """The page to claim reddit gold trophies"""
     def __init__(self, secret=None):
@@ -1740,6 +1806,8 @@ class Thanks(Templated):
         Templated.__init__(self, status=status, secret=secret,
                            lounge_html=lounge_html)
 
+
+@export
 class Gold(Templated):
     def __init__(self, goldtype, period, months, signed,
                  recipient, recipient_name):
@@ -1757,6 +1825,7 @@ class Gold(Templated):
                            bool(recipient_name and not recipient))
 
 
+@export
 class GoldPayment(Templated):
     def __init__(self, goldtype, period, months, signed,
                  recipient, giftmessage, passthrough):
@@ -1834,6 +1903,8 @@ class GoldPayment(Templated):
                            google_id=google_id,
                            paypal_buttonid=paypal_buttonid)
 
+
+@export
 class GiftGold(Templated):
     """The page to gift reddit gold trophies"""
     def __init__(self, recipient):
@@ -1843,23 +1914,33 @@ class GiftGold(Templated):
             gold_creddits = c.user.gold_creddits
         Templated.__init__(self, recipient=recipient, gold_creddits=gold_creddits)
 
+
+@export
 class Password(Templated):
     """Form encountered when 'recover password' is clicked in the LoginFormWide."""
     def __init__(self, success=False):
         Templated.__init__(self, success = success)
 
+
+@export
 class PasswordReset(Templated):
     """Template for generating an email to the user who wishes to
     reset their password (step 2 of password recovery, after they have
     entered their user name in Password.)"""
     pass
 
+
+@export
 class VerifyEmail(Templated):
     pass
 
+
+@export
 class Promo_Email(Templated):
     pass
 
+
+@export
 class ResetPassword(Templated):
     """Form for actually resetting a lost password, after the user has
     clicked on the link provided to them in the Password_Reset email
@@ -1867,6 +1948,7 @@ class ResetPassword(Templated):
     pass
 
 
+@export
 class Captcha(Templated):
     """Container for rendering robot detection device."""
     def __init__(self, error=None):
@@ -1874,6 +1956,8 @@ class Captcha(Templated):
         self.iden = get_captcha()
         Templated.__init__(self)
 
+
+@export
 class PermalinkMessage(Templated):
     """renders the box on comment pages that state 'you are viewing a
     single comment's thread'"""
@@ -1909,6 +1993,7 @@ class PaneStack(Templated):
         return self.stack.insert(*a)
 
 
+@export
 class SearchForm(Templated):
     """The simple search form in the header of the page.  prev_search
     is the previous search."""
@@ -1921,6 +2006,7 @@ class SearchForm(Templated):
                            subreddit_search=subreddit_search, syntax=syntax)
 
 
+@export
 class SearchBar(Templated):
     """More detailed search box for /search and /reddits pages.
     Displays the previous search as well as info of the elapsed_time
@@ -2024,7 +2110,7 @@ class FrameToolbar(Wrapped):
         models.Printable.add_props(user, nonempty)
 
 
-
+@export
 class NewLink(Templated):
     """Render the link submission form"""
     def __init__(self, captcha = None, url = '', title= '', text = '', selftext = '',
@@ -2075,6 +2161,8 @@ class NewLink(Templated):
                          title = title, text = text, subreddits = subreddits,
                          then = then)
 
+
+@export
 class ShareLink(CachedTemplate):
     def __init__(self, link_name = "", emails = None):
         self.captcha = c.user.needs_captcha()
@@ -2084,10 +2172,12 @@ class ShareLink(CachedTemplate):
                            emails = c.user.recent_share_emails())
 
         
-
+@export
 class Share(Templated):
     pass
 
+
+@export
 class Mail_Opt(Templated):
     pass
 
@@ -2128,20 +2218,30 @@ class Button(Wrapped):
         res = Wrapped.render(self, *a, **kw)
         return responsive(res, True)
 
+
+@export
 class ButtonLite(Button):
     def render(self, *a, **kw):
         return Wrapped.render(self, *a, **kw)
 
+
+@export
 class ButtonDemoPanel(Templated):
     """The page for showing the different styles of embedable voting buttons"""
     pass
 
+
+@export
 class SelfServeBlurb(Templated):
     pass
 
+
+@export
 class FeedbackBlurb(Templated):
     pass
 
+
+@export
 class Feedback(Templated):
     """The feedback and ad inquery form(s)"""
     def __init__(self, title, action):
@@ -2162,10 +2262,13 @@ class Feedback(Templated):
                          name = name)
 
 
+@export
 class WidgetDemoPanel(Templated):
     """Demo page for the .embed widget."""
     pass
 
+
+@export
 class Bookmarklets(Templated):
     """The bookmarklets page."""
     def __init__(self, buttons=None):
@@ -2178,6 +2281,7 @@ class Bookmarklets(Templated):
         Templated.__init__(self, buttons = buttons)
 
 
+@export
 class UserAwards(Templated):
     """For drawing the regular-user awards page."""
     def __init__(self):
@@ -2203,6 +2307,8 @@ class UserAwards(Templated):
             else:
                 raise NotImplementedError
 
+
+@export
 class AdminErrorLog(Templated):
     """The admin page for viewing the error log"""
     def __init__(self):
@@ -2314,6 +2420,8 @@ class AdminAdSRs(Templated):
 
         Templated.__init__(self, ad = ad)
 
+
+@export
 class AdminAwards(Templated):
     """The admin page for editing awards"""
     def __init__(self):
@@ -2321,6 +2429,8 @@ class AdminAwards(Templated):
         Templated.__init__(self)
         self.awards = Award._all_awards()
 
+
+@export
 class AdminAwardGive(Templated):
     """The interface for giving an award"""
     def __init__(self, award, recipient='', desc='', url='', hours=''):
@@ -2337,6 +2447,8 @@ class AdminAwardGive(Templated):
 
         Templated.__init__(self, award = award)
 
+
+@export
 class AdminAwardWinners(Templated):
     """The list of winners of an award"""
     def __init__(self, award):
@@ -2524,6 +2636,8 @@ class AdminUsage(Templated):
 
         Templated.__init__(self)
 
+
+@export
 class Ads(Templated):
     pass
 
@@ -2631,6 +2745,7 @@ class WrappedUser(CachedTemplate):
 # Classes for dealing with friend/moderator/contributor/banned lists
 
 
+@export
 class UserTableItem(Templated):
     """A single row in a UserList of type 'type' and of name
     'container_name' for a given user.  The provided list of 'cells'
@@ -2649,6 +2764,8 @@ class UserTableItem(Templated):
     def __repr__(self):
         return '<UserTableItem "%s">' % self.user.name
 
+
+@export
 class UserList(Templated):
     """base class for generating a list of users"""    
     form_title     = ''
@@ -2703,6 +2820,8 @@ class UserList(Templated):
     def container_name(self):
         return c.site._fullname
 
+
+@export
 class FlairPane(Templated):
     def __init__(self, num, after, reverse, name, user):
         # Make sure c.site isn't stale before rendering.
@@ -2778,6 +2897,7 @@ class FlairList(Templated):
         return result + links
 
 
+@export
 class FlairListRow(Templated):
     def __init__(self, user):
         get_flair_attr = lambda a: getattr(user,
@@ -2787,6 +2907,7 @@ class FlairListRow(Templated):
                            flair_css_class=get_flair_attr('css_class'))
 
 
+@export
 class FlairNextLink(Templated):
     def __init__(self, after, reverse=False, needs_border=False):
         Templated.__init__(self, after=after, reverse=reverse,
@@ -2815,6 +2936,8 @@ class FlairCsv(Templated):
         self.results_by_line.append(self.LineResult())
         return self.results_by_line[-1]
 
+
+@export
 class FlairTemplateList(Templated):
     def __init__(self, flair_type):
         Templated.__init__(self, flair_type=flair_type)
@@ -2846,6 +2969,8 @@ class FlairTemplateEditor(Templated):
             res = spaceCompress(res)
         return res
 
+
+@export
 class FlairTemplateSample(Templated):
     """Like a read-only version of FlairTemplateEditor."""
     def __init__(self, flair_template, flair_type):
@@ -2859,6 +2984,8 @@ class FlairTemplateSample(Templated):
                            flair_template=flair_template,
                            wrapped_user=wrapped_user, flair_type=flair_type)
 
+
+@export
 class FlairPrefs(CachedTemplate):
     def __init__(self):
         sr_flair_enabled = getattr(c.site, 'flair_enabled', False)
@@ -2876,6 +3003,8 @@ class FlairPrefs(CachedTemplate):
             user_flair_enabled=user_flair_enabled,
             wrapped_user=wrapped_user)
 
+
+@export
 class FlairSelectorLinkSample(CachedTemplate):
     def __init__(self, link, site, flair_template):
         flair_position = getattr(site, 'link_flair_position', 'right')
@@ -3002,6 +3131,7 @@ class FriendList(UserList):
         return c.user._fullname
 
 
+@export
 class EnemyList(UserList):
     """Blacklist on /pref/friends"""
     type = 'enemy'
@@ -3091,7 +3221,9 @@ class BannedList(UserList):
 
     def user_ids(self):
         return c.site.banned
- 
+
+
+@export
 class WikiBannedList(BannedList):
     """List of users banned from editing a given wiki"""
     type = 'wikibanned'
@@ -3099,6 +3231,8 @@ class WikiBannedList(BannedList):
     def user_ids(self):
         return c.site.wikibanned
 
+
+@export
 class WikiMayContributeList(UserList):
     """List of users allowed to contribute to a given wiki"""
     type = 'wikicontributor'
@@ -3115,6 +3249,7 @@ class WikiMayContributeList(UserList):
         return c.site.wikicontributor
 
 
+@export
 class DetailsPage(LinkInfoPage):
     extension_handling= False
 
@@ -3145,6 +3280,8 @@ class DetailsPage(LinkInfoPage):
         kwargs['content'] = content
         LinkInfoPage.__init__(self, link, comment, *args, **kwargs)
 
+
+@export
 class Cnameframe(Templated):
     """The frame page."""
     def __init__(self, original_path, subreddit, sub_domain):
@@ -3160,9 +3297,13 @@ class Cnameframe(Templated):
             self.title = ""
             self.frame_target = None
 
+
+@export
 class FrameBuster(Templated):
     pass
 
+
+@export
 class SelfServiceOatmeal(Templated):
     pass
 
@@ -3200,6 +3341,8 @@ class PromotePage(Reddit):
         kw['show_sidebar'] = False
         Reddit.__init__(self, title, nav_menus = nav_menus, *a, **kw)
 
+
+@export
 class PromoteLinkForm(Templated):
     def __init__(self, sr = None, link = None, listing = '',
                  timedeltatext = '', *a, **kw):
@@ -3256,6 +3399,8 @@ class PromoteLinkForm(Templated):
                            listing = listing, bids = bids, 
                            *a, **kw)
 
+
+@export
 class PromoteLinkFormOld(PromoteLinkForm):
     def __init__(self, **kw):
         PromoteLinkForm.__init__(self, **kw)
@@ -3271,6 +3416,8 @@ class PromoteLinkFormOld(PromoteLinkForm):
         self.complete = campaign.get("status",{}).get("complete", False)
         self.paid = campaign.get("status",{}).get("paid", False)
 
+
+@export
 class Roadblocks(Templated):
     def __init__(self):
         self.roadblocks = promote.get_roadblocks()
@@ -3289,6 +3436,8 @@ class Roadblocks(Templated):
         self.default_sr = self.subreddits[0] if self.subreddits \
                           else g.default_sr
 
+
+@export
 class TabbedPane(Templated):
     def __init__(self, tabs, linkable=False):
         """Renders as tabbed area where you can choose which tab to
@@ -3304,6 +3453,8 @@ class TabbedPane(Templated):
 
         Templated.__init__(self, linkable=linkable)
 
+
+@export
 class LinkChild(object):
     def __init__(self, link, load = False, expand = False, nofollow = False):
         self.link = link
@@ -3314,6 +3465,8 @@ class LinkChild(object):
     def content(self):
         return ''
 
+
+@export
 def make_link_child(item):
     link_child = None
     editable = False
@@ -3356,6 +3509,8 @@ def make_link_child(item):
 
     return link_child, editable
 
+
+@export
 class MediaChild(LinkChild):
     """renders when the user hits the expando button to expand media
        objects, like embedded videos"""
@@ -3369,11 +3524,14 @@ class MediaChild(LinkChild):
             return self._content
         return self._content.render()
 
+
+@export
 class MediaEmbed(Templated):
     """The actual rendered iframe for a media child"""
     pass
 
 
+@export
 class SelfTextChild(LinkChild):
     css_style = "selftext"
 
@@ -3385,6 +3543,8 @@ class SelfTextChild(LinkChild):
                      expunged=self.link.expunged)
         return u.render()
 
+
+@export
 class UserText(CachedTemplate):
     def __init__(self,
                  item,
@@ -3433,6 +3593,8 @@ class MediaEmbedBody(CachedTemplate):
         res = CachedTemplate.render(self, *a, **kw)
         return responsive(res, True)
 
+
+@export
 class RedditAds(Templated):
     def __init__(self, **kw):
         self.sr_name = c.site.name
@@ -3455,6 +3617,8 @@ class RedditAds(Templated):
 
         Templated.__init__(self, **kw)
 
+
+@export
 class PaymentForm(Templated):
     def __init__(self, link, indx, **kw):
         self.countries = [pycountry.countries.get(name=n) 
@@ -3464,6 +3628,8 @@ class PaymentForm(Templated):
         self.indx = indx
         Templated.__init__(self, **kw)
 
+
+@export
 class Promotion_Summary(Templated):
     def __init__(self, ndays):
         end_date = promote.promo_datetime_now().date()
@@ -3532,6 +3698,7 @@ def force_datetime(d):
     return datetime.datetime.combine(d, datetime.time())
 
 
+@export
 class Promote_Graph(Templated):
     
     @classmethod
@@ -3691,6 +3858,8 @@ class InnerToolbarFrame(Templated):
     def __init__(self, link, expanded = False):
         Templated.__init__(self, link = link, expanded = expanded)
 
+
+@export
 class RawString(Templated):
    def __init__(self, s):
        self.s = s
@@ -3698,6 +3867,8 @@ class RawString(Templated):
    def render(self, *a, **kw):
        return unsafe(self.s)
 
+
+@export
 class Dart_Ad(CachedTemplate):
     def __init__(self, dartsite, tag, custom_keyword=None):
         tag = tag or "homepage"
@@ -3711,6 +3882,8 @@ class Dart_Ad(CachedTemplate):
         res = CachedTemplate.render(self, *a, **kw)
         return responsive(res, False)
 
+
+@export
 class HouseAd(CachedTemplate):
     def __init__(self, rendering, linkurl, submit_link):
         Templated.__init__(self, rendering=rendering,
@@ -3787,6 +3960,8 @@ def render_ad(reddit_name=None, codename=None, keyword=None):
 
     return Dart_Ad(dartsite, reddit_name).render()
 
+
+@export
 class TryCompact(Reddit):
     def __init__(self, dest, **kw):
         dest = dest or "/"
@@ -3801,6 +3976,8 @@ class TryCompact(Reddit):
         self.mobile = u.unparse()
         Reddit.__init__(self, **kw)
 
+
+@export
 class AccountActivityPage(BoringPage):
     def __init__(self):
         super(AccountActivityPage, self).__init__(_("account activity"))
@@ -3808,6 +3985,8 @@ class AccountActivityPage(BoringPage):
     def content(self):
         return UserIPHistory()
 
+
+@export
 class UserIPHistory(Templated):
     def __init__(self):
         from r2.controllers.oauth2 import scope_info
@@ -3823,9 +4002,14 @@ class ApiHelp(Templated):
         self.api_docs = api_docs
         super(ApiHelp, self).__init__(*a, **kw)
 
+
+@export
 class RulesPage(Templated):
     pass
 
+
+
+@export
 class TimeSeriesChart(Templated):
     def __init__(self, id, title, interval, columns, rows,
                  latest_available_data=None, classes=[]):
@@ -3840,6 +4024,8 @@ class TimeSeriesChart(Templated):
 
         Templated.__init__(self)
 
+
+@export
 class InterestBar(Templated):
     def __init__(self, has_subscribed):
         self.has_subscribed = has_subscribed
