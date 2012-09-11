@@ -108,7 +108,6 @@ class Globals(object):
             'sr_quota_time',
             'wiki_keep_recent_days',
             'wiki_max_page_length_bytes',
-            'wiki_edit_ratelimit_seconds',
             'wiki_max_page_name_length',
             'wiki_max_page_separators',
         ],

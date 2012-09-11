@@ -67,8 +67,6 @@ import json
 page_descriptions = {'config/stylesheet':_("This page is the subreddit stylesheet, changes here apply to the subreddit css"),
                      'config/sidebar':_("The contents of this page appear on the subreddit sidebar")}
 
-EDIT_RATELIMIT_SECONDS = g.wiki_edit_ratelimit_seconds
-
 class WikiController(RedditController):
     allow_stylesheets = True
     
