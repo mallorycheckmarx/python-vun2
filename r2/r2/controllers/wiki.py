@@ -117,7 +117,7 @@ class WikiController(RedditController):
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing).render()
     
-    @validate(may_create = VWikiPageCreate('page'))
+    @validate(may_create=VWikiPageCreate('page'))
     def GET_wiki_create(self, may_create, page, view=False):
         api = c.extension == 'json'
         
@@ -174,7 +174,7 @@ class WikiController(RedditController):
         return redirect_to(str("%s/%s" % (c.wiki_base_url, page)), _code=301)
     
     @base_listing
-    @validate(page = VWikiPage('page', restricted=True))
+    @validate(page=VWikiPage('page', restricted=True))
     def GET_wiki_discussions(self, page, num, after, reverse, count):
         page_url = add_sr("%s/%s" % (c.wiki_base_url, page.name))
         links = url_links(page_url)
@@ -228,8 +228,8 @@ class WikiController(RedditController):
                 c.wikidisabled = True
 
 class WikiApiController(WikiController):
-    @validate(pageandprevious = VWikiPageRevise(('page', 'previous'), restricted=True),
-              content = VMarkdown(('content')))
+    @validate(pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
+              content=VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
         page, previous = pageandprevious
         previous = previous._id if previous else None
