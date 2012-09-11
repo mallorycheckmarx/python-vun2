@@ -140,7 +140,7 @@ class WikiController(RedditController):
         elif view:
             return WikiNotFound().render()
         elif may_create:
-            WikiPage.create(c.wiki_id, page)
+            WikiPage.create(c.site, page)
             url = join_urls(c.wiki_base_url, '/edit/', page)
             return self.redirect(url)
     
@@ -155,7 +155,7 @@ class WikiController(RedditController):
     
     @paginated_listing(max_page_size=100, backend='cassandra')
     def GET_wiki_recent(self, num, after, reverse, count):
-        revisions = WikiRevision.get_recent(c.wiki_id)
+        revisions = WikiRevision.get_recent(c.site)
         builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
                                             reverse=reverse, after=after,
                                             wrap=default_thing_wrapper(),
@@ -167,7 +167,7 @@ class WikiController(RedditController):
         def check_hidden(page):
             g.log.debug("Got here %s" % str(this_may_view(page)))
             return this_may_view(page)
-        pages = WikiPage.get_listing(c.wiki_id, filter_check=check_hidden)
+        pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
         return WikiListing(pages).render()
     
     def GET_wiki_redirect(self, page):

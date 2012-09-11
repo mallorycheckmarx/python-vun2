@@ -32,7 +32,6 @@ from r2.models.account import Account
 from collections import OrderedDict
 
 # Used for the key/id for pages,
-#   must not be a character allowed in subreddit name
 PAGE_ID_SEP = '\t'
 
 # Number of days to keep recent revisions for
@@ -174,13 +173,12 @@ class WikiPage(tdb_cassandra.Thing):
     
     @classmethod
     def get(cls, sr, name):
-        return cls._byID(wiki_id(sr, name))
+        return cls._byID(wiki_id(sr._id36, name))
     
     @classmethod
     def create(cls, sr, name):
         name = name.lower()
-        sr = sr.lower()
-        kw = dict(sr=sr, name=name, permlevel=0, content='', listed_=False)
+        kw = dict(sr=sr._id36, name=name, permlevel=0, content='', listed_=False)
         page = cls(**kw)
         page._commit()
         return page
@@ -219,7 +217,7 @@ class WikiPage(tdb_cassandra.Thing):
     @classmethod
     def get_pages(cls, sr, after=None):
         NUM_AT_A_TIME = 1000
-        pages = WikiPagesBySR.query([sr], after=after, count=NUM_AT_A_TIME)
+        pages = WikiPagesBySR.query([sr._id36], after=after, count=NUM_AT_A_TIME)
         pages = list(pages)
         if len(pages) >= NUM_AT_A_TIME:
             return pages + cls.get_pages(sr, after=pages[-1])

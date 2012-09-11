@@ -210,42 +210,42 @@ class Subreddit(Thing, Printable):
     @property
     def stylesheet_contents_user(self):
         try:
-            return WikiPage.get(self.name, 'config/stylesheet')._get('content','')
+            return WikiPage.get(self, 'config/stylesheet')._get('content','')
         except tdb_cassandra.NotFound:
            return  self._t.get('stylesheet_contents_user')
     
     @property
     def prev_stylesheet(self):
         try:
-            return WikiPage.get(self.name, 'config/stylesheet')._get('revision','')
+            return WikiPage.get(self, 'config/stylesheet')._get('revision','')
         except tdb_cassandra.NotFound:
             return ''
     
     @property
     def description(self):
         try:
-            return WikiPage.get(self.name, 'config/sidebar')._get('content','')
+            return WikiPage.get(self, 'config/sidebar')._get('content','')
         except tdb_cassandra.NotFound:
             return self._t.get('description')
     
     @property
     def public_description(self):
         try:
-            return WikiPage.get(self.name, 'config/description')._get('content','')
+            return WikiPage.get(self, 'config/description')._get('content','')
         except tdb_cassandra.NotFound:
             return self._t.get('public_description')
     
     @property
     def prev_description_id(self):
         try:
-            return WikiPage.get(self.name, 'config/sidebar')._get('revision','')
+            return WikiPage.get(self, 'config/sidebar')._get('revision','')
         except tdb_cassandra.NotFound:
             return ''
     
     @property
     def prev_public_description_id(self):
         try:
-            return WikiPage.get(self.name, 'config/description')._get('revision','')
+            return WikiPage.get(self, 'config/description')._get('revision','')
         except tdb_cassandra.NotFound:
             return ''
     
@@ -360,9 +360,9 @@ class Subreddit(Thing, Printable):
         if content is None:
             content = ''
         try:
-            wiki = WikiPage.get(self.name, 'config/stylesheet')
+            wiki = WikiPage.get(self, 'config/stylesheet')
         except tdb_cassandra.NotFound:
-            wiki = WikiPage.create(self.name, 'config/stylesheet')
+            wiki = WikiPage.create(self, 'config/stylesheet')
         wiki.revise(content, previous=prev, author=author, reason=reason, force=force)
         self.stylesheet_contents = parsed
         self.stylesheet_hash = md5(parsed).hexdigest()
@@ -1017,6 +1017,10 @@ class DefaultSR(_DefaultSR):
     @property
     def _fullname(self):
         return "t5_6"
+    
+    @property
+    def _id36(self):
+        return self._base._id36
 
     @property
     def type(self):

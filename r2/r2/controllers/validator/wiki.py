@@ -189,7 +189,7 @@ class VWikiPage(Validator):
     
     def validpage(self, page):
         try:
-            wp = WikiPage.get(c.wiki_id, page)
+            wp = WikiPage.get(c.site, page)
             if self.restricted and wp.restricted:
                 if not wp.special:
                     apiabort(403, 'RESTRICTED_PAGE')
@@ -243,7 +243,7 @@ class VWikiPageCreate(Validator):
             c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
         else:
             try:
-                WikiPage.get(c.wiki_id, page)
+                WikiPage.get(c.site, page)
                 c.error = {'reason': 'PAGE_EXISTS'}
             except tdb_cassandra.NotFound:
                 pass
