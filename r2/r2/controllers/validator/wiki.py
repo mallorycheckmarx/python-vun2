@@ -27,17 +27,24 @@ from pylons.controllers.util import redirect_to
 from pylons import c, g, request
 
 from r2.models.wiki import WikiPage, WikiRevision
-from r2.controllers.validator import Validator
+from r2.controllers.validator import Validator, validate, make_validated_kw
 from r2.lib.db import tdb_cassandra
-from r2.lib.base import abort
-from r2.controllers.errors import WikiError
 
 MAX_PAGE_NAME_LENGTH = g.wiki_max_page_name_length
 
 MAX_SEPARATORS = g.wiki_max_page_separators
 
-def apiabort(code, reason, **data):
-    abort(WikiError(code, reason, **data))
+def wiki_validate(*simple_vals, **param_vals):
+    def val(fn):
+        def newfn(self, *a, **env):
+            kw = make_validated_kw(fn, simple_vals, param_vals, env)
+            for e in c.errors:
+                e = c.errors[e]
+                if e.code:
+                    self.handle_error(e.code, e.name)
+            return fn(self, *a, **kw)
+        return newfn
+    return val
 
 def this_may_revise(page=None):
     if not c.user_is_loggedin:
@@ -152,6 +159,9 @@ def normalize_page(page):
     
     return page
 
+class AbortWikiError(Exception):
+    pass
+
 class VWikiPage(Validator):
     def __init__(self, param, required=True, restricted=True, modonly=False, **kw):
         self.restricted = restricted
@@ -167,7 +177,7 @@ class VWikiPage(Validator):
         try:
             page = str(page)
         except UnicodeEncodeError:
-            apiabort(400, 'INVALID_PAGE_NAME')
+            return self.set_error('INVALID_PAGE_NAME', code=400)
         
         if ' ' in page:
             new_name = page.replace(' ', '_')
@@ -178,9 +188,12 @@ class VWikiPage(Validator):
         
         c.page = page
         if (not c.is_wiki_mod) and self.modonly:
-            apiabort(403, 'MOD_REQUIRED')
+            return self.set_error('MOD_REQUIRED', code=403)
         
-        wp = self.validpage(page)
+        try:
+            wp = self.validpage(page)
+        except AbortWikiError:
+            return
         
         # TODO: MAKE NOT REQUIRED
         c.page_obj = wp
@@ -192,13 +205,16 @@ class VWikiPage(Validator):
             wp = WikiPage.get(c.site, page)
             if self.restricted and wp.restricted:
                 if not wp.special:
-                    apiabort(403, 'RESTRICTED_PAGE')
+                    self.set_error('RESTRICTED_PAGE', code=403)
+                    raise AbortWikiError
             if not this_may_view(wp):
-                apiabort(403, 'MAY_NOT_VIEW')
+                self.set_error('MAY_NOT_VIEW', code=403)
+                raise AbortWikiError
             return wp
         except tdb_cassandra.NotFound:
             if self.required:
-                apiabort(404, 'PAGE_NOT_FOUND')
+                self.set_error('PAGE_NOT_FOUND', code=404)
+                raise AbortWikiError
             return None
     
     def validversion(self, version, pageid=None):
@@ -207,28 +223,36 @@ class VWikiPage(Validator):
         try:
             r = WikiRevision.get(version, pageid)
             if r.is_hidden and not c.is_wiki_mod:
-                apiabort(403, 'HIDDEN_REVISION')
+                self.set_error('HIDDEN_REVISION', code=403)
+                raise AbortWikiError
             return r
         except (tdb_cassandra.NotFound, ValueError):
-            apiabort(404, 'INVALID_REVISION')
+            self.set_error('INVALID_REVISION', code=404)
+            raise AbortWikiError
 
 class VWikiPageAndVersion(VWikiPage):    
     def run(self, page, *versions):
         wp = VWikiPage.run(self, page)
         validated = []
         for v in versions:
-            validated += [self.validversion(v, wp._id) if v and wp else None]
+            try:
+                validated += [self.validversion(v, wp._id) if v and wp else None]
+            except AbortWikiError:
+                return
         return tuple([wp] + validated)
 
 class VWikiPageRevise(VWikiPage):
     def run(self, page, previous=None):
         wp = VWikiPage.run(self, page)
         if not wp:
-            apiabort(404, 'INVALID_PAGE')
+            return self.set_error('INVALID_PAGE', code=404)
         if not this_may_revise(wp):
-            apiabort(403, 'MAY_NOT_REVISE')
+            return self.set_error('MAY_NOT_REVISE', code=403)
         if previous:
-            prev = self.validversion(previous, wp._id)
+            try:
+                prev = self.validversion(previous, wp._id)
+            except AbortWikiError:
+                return
             return (wp, prev)
         return (wp, None)
 

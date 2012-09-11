@@ -112,12 +112,13 @@ errors = Storage([(e, e) for e in error_list.keys()])
 
 class Error(object):
 
-    def __init__(self, name, i18n_message, msg_params, field = None):
+    def __init__(self, name, i18n_message, msg_params, field=None, code=None):
         self.name = name
         self.i18n_message = i18n_message
         self.msg_params = msg_params
         # list of fields in the original form that caused the error
         self.fields = tup(field) if field else []
+        self.code = code
         
     @property
     def message(self):
@@ -153,10 +154,10 @@ class ErrorSet(object):
     def __len__(self):
         return len(self.errors)
         
-    def add(self, error_name, msg_params = {}, field = None):
-        msg = error_list[error_name]
+    def add(self, error_name, msg_params={}, field=None, code=None):
+        msg = error_list.get(error_name)
         for field_name in tup(field):
-            e = Error(error_name, msg, msg_params, field = field_name)
+            e = Error(error_name, msg, msg_params, field=field_name, code=code)
             self.errors[(error_name, field_name)] = e
 
     def remove(self, pair):
