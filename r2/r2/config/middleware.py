@@ -63,7 +63,7 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
 
     if global_conf is None:
         global_conf = {}
-    codes = [304, 401, 403, 404, 429, 503]
+    codes = [304, 401, 403, 404, 415, 429, 503]
     if not asbool(global_conf.get('debug')):
         codes.append(500)
     if code in codes:
@@ -73,7 +73,10 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
         exception = environ.get('r2.controller.exception')
         if exception:
             d['explanation'] = exception.explanation
-
+            error_data = getattr(exception, 'error_data', None)
+            if error_data:
+                environ['extra_error_data'] = error_data
+        
         if environ.get('REDDIT_CNAME'):
             d['cnameframe'] = 1
         if environ.get('REDDIT_NAME'):

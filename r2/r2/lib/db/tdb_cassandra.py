@@ -40,6 +40,7 @@ from uuid import uuid1, UUID
 from itertools import chain
 import cPickle as pickle
 from pycassa.util import OrderedDict
+import base64
 
 connection_pools = g.cassandra_pools
 default_connection_pool = g.cassandra_default_pool
@@ -54,6 +55,8 @@ write_consistency_level = g.cassandra_wcl
 debug = g.debug
 make_lock = g.make_lock
 db_create_tables = g.db_create_tables
+
+import json
 
 thing_types = {}
 
@@ -483,7 +486,7 @@ class ThingBase(object):
             return val
 
         # otherwise we'll assume that it's a utf-8 string
-        return val.decode('utf-8')
+        return val if isinstance(val, unicode) else val.decode('utf-8')
 
     @classmethod
     def _serialize_column(cls, attr, val):
@@ -627,6 +630,8 @@ class ThingBase(object):
 
         if not self._committed:
             self._on_create()
+        else:
+            self._on_commit()
 
         self._committed = True
 
@@ -740,6 +745,10 @@ class ThingBase(object):
         """A hook executed on creation, good for creation of static
            Views. Subclasses should call their parents' hook(s) as
            well"""
+        pass
+
+    def _on_commit(self):
+        """Executed on _commit other than creation."""
         pass
 
     @classmethod
@@ -1456,6 +1465,76 @@ class View(ThingBase):
 
         # can we be smarter here?
         thing_cache.delete(cls._cache_key_id(row_key))
+    
+    @classmethod
+    @will_write
+    def _remove(cls, key, columns):
+        cls._cf.remove(key, columns)
+        thing_cache.delete(cls._cache_key_id(key))
+
+class DenormalizedView(View):
+    """Store the entire underlying object inside the View column."""
+
+    @classmethod
+    def is_date_prop(cls, attr):
+        view_cls = cls._view_of
+        return (view_cls._value_type == 'date' or
+                attr in view_cls._date_props or
+                view_cls._timestamp_prop and attr == view_cls._timestamp_prop)
+
+    @classmethod
+    def _thing_dumper(cls, thing):
+        serialize_fn = cls._view_of._serialize_column
+        serialized_columns = dict((attr, serialize_fn(attr, val)) for
+            (attr, val) in thing._orig.iteritems())
+
+        # Encode date props which may be binary
+        for attr, val in serialized_columns.items():
+            if cls.is_date_prop(attr):
+                serialized_columns[attr] = base64.b64encode(val)
+
+        dump = json.dumps(serialized_columns)
+        return dump
+
+    @classmethod
+    def _thing_loader(cls, _id, dump):
+        serialized_columns = json.loads(dump)
+
+        # Decode date props
+        for attr, val in serialized_columns.items():
+            if cls.is_date_prop(attr):
+                serialized_columns[attr] = base64.b64decode(val)
+
+        obj = cls._view_of._from_serialized_columns(_id, serialized_columns)
+        return obj
+
+    @classmethod
+    def _obj_to_column(cls, objs):
+        objs = tup(objs)
+        columns = []
+        for o in objs:
+            _id = o._id
+            dump = cls._thing_dumper(o)
+            columns.append({_id: dump})
+
+        if len(columns) == 1:
+            return columns[0]
+        else:
+            return columns
+
+    @classmethod
+    def _column_to_obj(cls, columns):
+        columns = tup(columns)
+        objs = []
+        for column in columns:
+            _id, dump = column.items()[0]
+            obj = cls._thing_loader(_id, dump)
+            objs.append(obj)
+
+        if len(objs) == 1:
+            return objs[0]
+        else:
+            return objs
 
 def schema_report():
     manager = get_manager()
