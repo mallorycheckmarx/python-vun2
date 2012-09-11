@@ -1454,8 +1454,6 @@ class View(ThingBase):
 class DenormalizedView(View):
     """Store the entire underlying object inside the View column."""
 
-    # Do we need to check for _dirty?
-
     @classmethod
     def is_date_prop(cls, attr):
         view_cls = cls._view_of
