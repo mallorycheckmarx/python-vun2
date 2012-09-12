@@ -1217,6 +1217,8 @@ class ApiController(RedditController, OAuth2ResourceController):
             form.set_html(".status", _('validation errors'))
             form.set_html(".errors ul", ''.join(error_items))
             form.find('.errors').show()
+            c.errors.add(errors.BAD_CSS, field = "stylesheet_contents")
+            form.has_errors("stylesheet_contents", errors.BAD_CSS)
             return
         else:
             form.find('.errors').hide()
@@ -1239,6 +1241,8 @@ class ApiController(RedditController, OAuth2ResourceController):
             except ConflictException as e:
                 form.set_html(".status", _('conflict error'))
                 form.set_html(".errors ul", _('There was a conflict while editing the stylesheet'))
+                c.errors.add(errors.CSS_CONFLICT, field = "stylesheet_contents")
+                form.has_errors("stylesheet_contents", errors.CSS_CONFLICT)
                 form.find('#conflict_box').show()
                 form.set_inputs(conflict_old=e.your,
                                 prevstyle=e.new_id, stylesheet_contents=e.new)
