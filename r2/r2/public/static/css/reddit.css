@@ -413,6 +413,10 @@ ul.flat-vert {text-align: left;}
 
     -moz-border-radius-topleft: 6px;
     -moz-border-radius-bottomleft: 6px;
+    -webkit-border-top-left-radius: 6px;
+    -webkit-border-bottom-left-radius: 6px;
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
 
     border: 1px solid #c4dbf1;
 
@@ -988,7 +992,10 @@ a.author { margin-right: 0.5em; }
 }
 
 .wiki-page-content {
-    margin-right: 315px;
+    overflow: hidden;
+}
+#editform {
+    margin-right: 10px;
 }
 .discussionlink {
     display: inline-block;
