@@ -26,6 +26,7 @@ from validator import *
 
 from r2.models import *
 from r2.models.query_cache import CachedQuery, MergedCachedQuery
+from r2.config import extensions
 from r2.config.extensions import is_api
 from r2.lib.pages import *
 from r2.lib.pages.things import wrap_links
@@ -922,7 +923,9 @@ class RedditsController(ListingController):
                 # don't try to render special subreddits (like promos)
                 reddits._filter(Subreddit.c.author_id != -1)
 
-            if not c.over18:
+            # Always show NSFW to API users unless obey_over18=true in querystring
+            is_api_client = c.render_style in extensions.API_TYPES
+            if not c.over18 or (is_api_client and c.obey_over18):
                 reddits._filter(Subreddit.c.over_18 == False)
 
         if self.where == 'popular':
