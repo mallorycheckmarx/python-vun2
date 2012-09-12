@@ -992,7 +992,10 @@ a.author { margin-right: 0.5em; }
 }
 
 .wiki-page-content {
-    margin-right: 315px;
+    overflow: hidden;
+}
+#editform {
+    margin-right: 10px;
 }
 .discussionlink {
     display: inline-block;
