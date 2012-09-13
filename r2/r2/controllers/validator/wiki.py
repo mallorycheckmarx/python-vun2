@@ -276,6 +276,8 @@ class VWikiPageCreate(VWikiPage):
         VWikiPage.__init__(self, param, required=False, **kw)
     
     def run(self, page):
+        if not page:
+            return
         wp = VWikiPage.run(self, page)
         if c.errors:
             return

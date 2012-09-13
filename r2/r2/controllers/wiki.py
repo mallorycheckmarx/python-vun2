@@ -58,7 +58,7 @@ from r2.lib.merge import ConflictException, make_htmldiff
 from pylons.i18n import _
 from r2.lib.pages import PaneStack
 from r2.lib.utils import timesince
-
+from r2.config import extensions
 from r2.lib.base import abort
 from r2.controllers.errors import WikiError
 
@@ -70,14 +70,14 @@ page_descriptions = {'config/stylesheet':_("This page is the subreddit styleshee
 class WikiController(RedditController):
     allow_stylesheets = True
     
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), required=False, 
-                                                          restricted=False))
+    @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), 
+                                          required=False, restricted=False))
     def GET_wiki_page(self, pv):
         page, version, version2 = pv
         message = None
         
         if not page:
-            return self.GET_wiki_create(page=c.page, view=True)
+            return self.redirect(join_urls(c.wiki_base_url, '/notfound/', c.page))
         
         if version:
             edit_by = version.author_name()
@@ -118,8 +118,8 @@ class WikiController(RedditController):
         return WikiRevisions(listing).render()
     
     @wiki_validate(may_create=VWikiPageCreate('page'))
-    def GET_wiki_create(self, may_create, page, view=False):
-        api = c.extension == 'json'
+    def GET_wiki_notfound(self, may_create, page):
+        api = c.render_style in extensions.API_TYPES
         
         if c.error and c.error['reason'] == 'PAGE_EXISTS':
             return self.redirect(join_urls(c.wiki_base_url, page))
@@ -137,12 +137,8 @@ class WikiController(RedditController):
             elif c.error['reason'] == 'PAGE_NAME_MAX_SEPARATORS':
                 error = _('a max of %d separators "/" are allowed in a wiki page name.') % c.error['MAX_SEPARATORS']
             return BoringPage(_("Wiki error"), infotext=error).render()
-        elif view:
+        else:
             return WikiNotFound().render()
-        elif may_create:
-            WikiPage.create(c.site, page)
-            url = join_urls(c.wiki_base_url, '/edit/', page)
-            return self.redirect(url)
     
     @wiki_validate(page=VWikiPageRevise('page', restricted=True))
     def GET_wiki_revise(self, page, message=None, **kw):
@@ -202,8 +198,8 @@ class WikiController(RedditController):
         ModAction.create(c.site, c.user, 'wikipermlevel', description=description)
         return self.GET_wiki_settings(page=page.name)
     
-    def handle_error(self, code, error=None, **data):
-        abort(WikiError(code, error, **data))
+    def handle_error(self, code, reason=None, **data):
+        abort(WikiError(code, reason, **data))
     
     def pre(self):
         RedditController.pre(self)
@@ -212,7 +208,9 @@ class WikiController(RedditController):
         if not c.site._should_wiki:
             self.handle_error(404, 'NOT_WIKIABLE') # /r/mod for an example
         frontpage = isinstance(c.site, DefaultSR)
-        c.wiki_base_url = '/wiki' if frontpage else '/r/%s/wiki' % c.site.name
+        base = '' if frontpage else '/r/%s' % c.site.name
+        c.wiki_base_url = '%s/wiki' % base
+        c.wiki_api_url = '%s/wiki/api' % base
         c.wiki_id = g.default_sr if frontpage else c.site.name
         c.page = None
         c.show_wiki_actions = True
@@ -272,7 +270,20 @@ class WikiApiController(WikiController):
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
         return json.dumps({'status': revision.toggle_hide()})
-   
+    
+    @wiki_validate(may_create=VWikiPageCreate('page'))
+    def GET_wiki_create(self, may_create):
+        if not c.page:
+            self.handle_error(400, 'NO_PAGE_SPECIFIED')
+        if not may_create:
+            self.handle_error(403, 'MAY_NOT_CREATE')
+        elif c.error:
+            self.handle_error(403, **c.error)
+        else:
+            WikiPage.create(c.site, c.page)
+            url = join_urls(c.wiki_base_url, '/edit/', c.page)
+            return self.redirect(url)
+    
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_revert(self, pv, page, revision):
         if not c.is_wiki_mod:
