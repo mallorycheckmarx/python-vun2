@@ -171,9 +171,32 @@ def normalize_page(page):
     return page
 
 class AbortWikiError(Exception):
-    pass
+    def __init__(self, reason=None, error=None):
+        self.reason = reason
+        self.error = error
 
 page_match_regex = re.compile(r'^[\w_/]+\Z')
+
+
+def validate_page_name(page):
+    if not page:
+        # If no page is specified, give the index page
+        page = "index"
+    
+    try:
+        page = str(page)
+    except UnicodeEncodeError:
+        raise AbortWikiError('INVALID_PAGE_NAME', 400)
+    
+    if ' ' in page:
+        page = page.replace(' ', '_')
+    
+    if not page_match_regex.match(page):
+        raise AbortWikiError('INVALID_PAGE_NAME', code=400)
+    
+    page = normalize_page(page)
+     
+    return page
 
 class VWikiPage(Validator):
     def __init__(self, param, required=True, restricted=True, modonly=False, **kw):
@@ -183,54 +206,30 @@ class VWikiPage(Validator):
         Validator.__init__(self, param, **kw)
 
     def run(self, page):
-        if not page:
-            # If no page is specified, give the index page
-            page = "index"
-
-        try:
-            page = str(page)
-        except UnicodeEncodeError:
-            return self.set_error('INVALID_PAGE_NAME', code=400)
-
-        if ' ' in page:
-            new_name = page.replace(' ', '_')
-            url = '%s/%s' % (c.wiki_base_url, new_name)
-            redirect_to(url)
-
-        if not page_match_regex.match(page):
-            return self.set_error('INVALID_PAGE_NAME', code=400)
-
-        page = normalize_page(page)
-
-        c.wiki_page = page
         if (not c.is_wiki_mod) and self.modonly:
             return self.set_error('MOD_REQUIRED', code=403)
-
-        try:
-            wp = self.validpage(page)
-        except AbortWikiError:
-            return
-
-        c.wiki_may_revise = this_may_revise(wp)
-
-        return wp
-
-    def validpage(self, page):
-        try:
-            wp = WikiPage.get(c.site, page)
-            if self.restricted and wp.restricted:
-                if not wp.special:
-                    self.set_error('RESTRICTED_PAGE', code=403)
-                    raise AbortWikiError
-            if not this_may_view(wp):
-                self.set_error('MAY_NOT_VIEW', code=403)
-                raise AbortWikiError
-            return wp
-        except tdb_cassandra.NotFound:
-            if self.required:
-                self.set_error('PAGE_NOT_FOUND', code=404)
-                raise AbortWikiError
-            return None
+        
+        if not isinstance(page, WikiPage):
+            try:
+                page = validate_page_name(page)
+            except AbortWikiError as e:
+                return self.set_error(e.reason, e.code)
+            
+            try:
+                page = WikiPage.get(c.site, page)
+            except tdb_cassandra.NotFound:
+                if self.required:
+                    return self.set_error('PAGE_NOT_FOUND', code=404)
+                return None
+        
+        if self.restricted and page.restricted:
+            if not page.special:
+                return self.set_error('RESTRICTED_PAGE', code=403)
+        
+        if not this_may_view(page):
+            return self.set_error('MAY_NOT_VIEW', code=403)
+        
+        return page
 
     def validversion(self, version, pageid=None):
         if not version:
@@ -282,7 +281,7 @@ class VWikiPageRevise(VWikiPage):
             return
         if not wp:
             return self.set_error('INVALID_PAGE', code=404)
-        if not c.wiki_may_revise:
+        if not this_may_revise(wp):
             return self.set_error('MAY_NOT_REVISE', code=403)
         if previous:
             try:
@@ -303,8 +302,6 @@ class VWikiPageCreate(VWikiPage):
         VWikiPage.__init__(self, param, required=False, **kw)
 
     def run(self, page):
-        if not page:
-            return
         wp = VWikiPage.run(self, page)
         if c.errors:
             return
@@ -319,7 +316,7 @@ class VWikiPageCreate(VWikiPage):
             c.error = {'reason': 'PAGE_NAME_MAX_SEPARATORS', 'MAX_SEPARATORS': MAX_SEPARATORS}
         elif len(page) > MAX_PAGE_NAME_LENGTH:
             c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
-        return c.wiki_may_revise
+        return this_may_revise(wp)
     
     def param_docs(self):
         return {

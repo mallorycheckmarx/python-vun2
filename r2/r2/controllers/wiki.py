@@ -38,7 +38,9 @@ from r2.controllers.validator import VMarkdown, VModhash
 
 from r2.controllers.validator.wiki import (VWikiPage, VWikiPageAndVersion,
                                            VWikiPageRevise, VWikiPageCreate,
-                                           this_may_view, wiki_validate)
+                                           this_may_view, this_may_revise, 
+                                           wiki_validate, AbortWikiError,
+                                           validate_page_name)
 
 from r2.controllers.api_docs import api_doc, api_section
 
@@ -70,6 +72,7 @@ page_descriptions = {'config/stylesheet':_("This page is the subreddit styleshee
                      'config/sidebar':_("The contents of this page appear on the subreddit sidebar")}
 
 class WikiController(RedditController):
+    wiki_setup_page_cvars = True
     allow_stylesheets = True
 
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'),
@@ -188,7 +191,7 @@ class WikiController(RedditController):
         return WikiSettings(settings, mayedit, show_settings=not page.special).render()
 
     @wiki_validate(page=VWikiPage('page', restricted=True, modonly=True),\
-              permlevel=VInt('permlevel'))
+                   permlevel=VInt('permlevel'))
     def POST_wiki_settings(self, page, permlevel):
         oldpermlevel = page.permlevel
         try:
@@ -213,7 +216,20 @@ class WikiController(RedditController):
         c.wiki_base_url = '%s/wiki' % base
         c.wiki_api_url = '%s/api/wiki' % base
         c.wiki_id = g.default_sr if frontpage else c.site.name
-        c.wiki_page = None
+        
+        if self.wiki_setup_page_cvars:
+            try:
+                page = request.environ["pylons.routes_dict"].get('page')
+                c.wiki_page = validate_page_name(page)
+                try:
+                    wp = WikiPage.get(c.site, page)
+                    c.wiki_may_revise = this_may_revise(wp)
+                    request.environ["pylons.routes_dict"]['page'] = wp
+                except tdb_cassandra.NotFound:
+                    pass
+            except AbortWikiError as e:
+                self.handle_error(e.code, e.reason)
+        
         c.show_wiki_actions = True
         self.editconflict = False
         c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
@@ -227,6 +243,8 @@ class WikiController(RedditController):
                 c.wikidisabled = True
 
 class WikiApiController(WikiController):
+    wiki_setup_page_cvars = False
+    
     @wiki_validate(VModhash(),
                    pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
                    content=VMarkdown(('content')))
@@ -292,8 +310,9 @@ class WikiApiController(WikiController):
         elif c.error:
             self.handle_error(403, **c.error)
         else:
-            WikiPage.create(c.site, c.wiki_page)
-            url = join_urls(c.wiki_base_url, '/edit/', c.wiki_page)
+            page = request.get['page']
+            WikiPage.create(c.site, page)
+            url = join_urls(c.wiki_base_url, '/edit/', page)
             return self.redirect(url)
 
     @wiki_validate(VModhash(),
