@@ -53,7 +53,7 @@ from r2.lib.pages.things import default_thing_wrapper
 from r2.lib.pages import BoringPage
 from reddit_base import base_listing
 from r2.models import IDBuilder, LinkListing, DefaultSR
-from validator.validator import VInt, VExistingUname, VRatelimit
+from validator.validator import VInt, VExistingUname, VRatelimit, VOneOf
 from r2.lib.merge import ConflictException, make_htmldiff
 from pylons.i18n import _
 from r2.lib.pages import PaneStack
@@ -209,7 +209,7 @@ class WikiController(RedditController):
         frontpage = isinstance(c.site, DefaultSR)
         base = '' if frontpage else '/r/%s' % c.site.name
         c.wiki_base_url = '%s/wiki' % base
-        c.wiki_api_url = '%s/wiki/api' % base
+        c.wiki_api_url = '%s/api/wiki' % base
         c.wiki_id = g.default_sr if frontpage else c.site.name
         c.page = None
         c.show_wiki_actions = True
@@ -226,7 +226,7 @@ class WikiController(RedditController):
 
 class WikiApiController(WikiController):
     @wiki_validate(pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
-              content=VMarkdown(('content')))
+                   content=VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
         page, previous = pageandprevious
         previous = previous._id if previous else None
@@ -251,29 +251,32 @@ class WikiApiController(WikiController):
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         return json.dumps({})
     
-    @wiki_validate(page=VWikiPage('page'), user=VExistingUname('username'))
+    @wiki_validate(page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')), 
+                   user=VExistingUname('username'))
     def POST_wiki_allow_editor(self, act, page, user):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
-        if act == 'del':
-            page.remove_editor(c.username)
-        else:
-            if not user:
-                self.handle_error(404, 'UNKNOWN_USER')
+        elif act == 'del':
+            page.remove_editor(request.post.get('username'))
+        elif not user:
+            self.handle_error(404, 'UNKNOWN_USER')
+        elif act == 'add':
             page.add_editor(user.name)
+        else:
+            self.handle_error(400, 'INVALID_ACTION')
         return json.dumps({})
     
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
-    def POST_wiki_revision_hide(self, pv, page, revision):
+    def POST_wiki_revision_hide(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
+        if not revision:
+            self.handle_error(400, 'INVALID_REVISION')
         return json.dumps({'status': revision.toggle_hide()})
     
     @wiki_validate(may_create=VWikiPageCreate('page'))
     def GET_wiki_create(self, may_create):
-        if not c.page:
-            self.handle_error(400, 'NO_PAGE_SPECIFIED')
         if not may_create:
             self.handle_error(403, 'MAY_NOT_CREATE')
         elif c.error:
@@ -284,10 +287,12 @@ class WikiApiController(WikiController):
             return self.redirect(url)
     
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
-    def POST_wiki_revision_revert(self, pv, page, revision):
+    def POST_wiki_revision_revert(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
+        if not revision:
+            self.handle_error(400, 'INVALID_REVISION')
         content = revision.content
         author = revision._get('author')
         reason = 'reverted back %s' % timesince(revision.date)
