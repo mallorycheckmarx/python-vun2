@@ -99,7 +99,7 @@ class WikiNotFound(WikiPageView):
     def __init__(self, **context):
         context['alert'] = _("page %s does not exist in this subreddit") % c.wiki_page
         context['actionless'] = True
-        create_link = '%s/create?page=%s' % (c.wiki_api_url, c.wiki_page)
+        create_link = '%s/create?page=%s&uh=%s' % (c.wiki_api_url, c.wiki_page, c.modhash)
         text =  _("a page with that name does not exist in this subreddit.\n\n[Create a page called %s](%s)") % (c.wiki_page, create_link)
         WikiPageView.__init__(self, text, **context)
 

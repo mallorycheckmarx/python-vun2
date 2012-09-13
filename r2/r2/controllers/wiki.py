@@ -225,7 +225,8 @@ class WikiController(RedditController):
                 c.wikidisabled = True
 
 class WikiApiController(WikiController):
-    @wiki_validate(pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
+    @wiki_validate(VModhash(),
+                   pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
                    content=VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
         page, previous = pageandprevious
@@ -251,7 +252,8 @@ class WikiApiController(WikiController):
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         return json.dumps({})
 
-    @wiki_validate(page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')),
+    @wiki_validate(VModhash(),
+                   page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')),
                    user=VExistingUname('username'))
     def POST_wiki_allow_editor(self, act, page, user):
         if not c.is_wiki_mod:
@@ -266,7 +268,8 @@ class WikiApiController(WikiController):
             self.handle_error(400, 'INVALID_ACTION')
         return json.dumps({})
 
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
+    @wiki_validate(VModhash(),
+                   pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_hide(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
@@ -275,7 +278,8 @@ class WikiApiController(WikiController):
             self.handle_error(400, 'INVALID_REVISION')
         return json.dumps({'status': revision.toggle_hide()})
 
-    @wiki_validate(may_create=VWikiPageCreate('page'))
+    @wiki_validate(VModhash(),
+                   may_create=VWikiPageCreate('page'))
     def GET_wiki_create(self, may_create):
         if not may_create:
             self.handle_error(403, 'MAY_NOT_CREATE')
@@ -286,7 +290,8 @@ class WikiApiController(WikiController):
             url = join_urls(c.wiki_base_url, '/edit/', c.wiki_page)
             return self.redirect(url)
 
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
+    @wiki_validate(VModhash(),
+                   pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_revert(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')

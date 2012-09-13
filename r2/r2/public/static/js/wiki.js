@@ -1,4 +1,10 @@
 r.wiki = {
+    request: function(req) {
+        if (reddit.logged)
+            req.data.uh = reddit.modhash;
+        $.ajax(req)
+    },
+    
     baseUrl: function(api) {
         var base_url = '';
         if (api) {
@@ -21,7 +27,7 @@ r.wiki = {
             url = r.wiki.baseUrl(true) + '/hide',
             $this_parent = $this.parents('.revision')
         $this_parent.toggleClass('hidden')
-        $.ajax({
+        r.wiki.request({
             url: url,
             type: 'POST',
             dataType: 'json',
@@ -47,7 +53,7 @@ r.wiki = {
         $('#usereditallowerror').hide()
         var $this = $(event.target),
             url = r.wiki.baseUrl(true) + '/alloweditor/add'
-        $.ajax({
+        r.wiki.request({
             url: url,
             type: 'POST',
             data: {
@@ -76,7 +82,7 @@ r.wiki = {
             url: url,
             type: 'POST',
             dataType: 'json',
-            data: $this.serialize(),
+            data: $this.serializeArray(),
             success: function() {
                 window.location = r.wiki.baseUrl() + '/' + r.config.wiki_page
             },
