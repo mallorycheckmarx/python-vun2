@@ -211,8 +211,7 @@ class VWikiPage(Validator):
         except AbortWikiError:
             return
 
-        # TODO: MAKE NOT REQUIRED
-        c.wiki_page_obj = wp
+        c.wiki_may_revise = this_may_revise(wp)
 
         return wp
 
@@ -283,7 +282,7 @@ class VWikiPageRevise(VWikiPage):
             return
         if not wp:
             return self.set_error('INVALID_PAGE', code=404)
-        if not this_may_revise(wp):
+        if not c.wiki_may_revise:
             return self.set_error('MAY_NOT_REVISE', code=403)
         if previous:
             try:
@@ -320,7 +319,7 @@ class VWikiPageCreate(VWikiPage):
             c.error = {'reason': 'PAGE_NAME_MAX_SEPARATORS', 'MAX_SEPARATORS': MAX_SEPARATORS}
         elif len(page) > MAX_PAGE_NAME_LENGTH:
             c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
-        return this_may_revise()
+        return c.wiki_may_revise
     
     def param_docs(self):
         return {
