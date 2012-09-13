@@ -38,7 +38,7 @@ from r2.controllers.validator import VMarkdown, VModhash
 
 from r2.controllers.validator.wiki import (VWikiPage, VWikiPageAndVersion,
                                            VWikiPageRevise, VWikiPageCreate,
-                                           this_may_view, this_may_revise, 
+                                           this_may_view, this_may_revise,
                                            wiki_validate, AbortWikiError,
                                            validate_page_name)
 
@@ -216,7 +216,7 @@ class WikiController(RedditController):
         c.wiki_base_url = '%s/wiki' % base
         c.wiki_api_url = '%s/api/wiki' % base
         c.wiki_id = g.default_sr if frontpage else c.site.name
-        
+
         if self.wiki_setup_page_cvars:
             try:
                 page = request.environ["pylons.routes_dict"].get('page')
@@ -229,7 +229,7 @@ class WikiController(RedditController):
                     pass
             except AbortWikiError as e:
                 self.handle_error(e.code, e.reason)
-        
+
         c.show_wiki_actions = True
         self.editconflict = False
         c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
@@ -244,7 +244,7 @@ class WikiController(RedditController):
 
 class WikiApiController(WikiController):
     wiki_setup_page_cvars = False
-    
+
     @wiki_validate(VModhash(),
                    pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
                    content=VMarkdown(('content')))

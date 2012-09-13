@@ -30,7 +30,7 @@ from pylons.controllers.util import redirect_to
 from pylons import c, g, request
 
 from r2.models.wiki import WikiPage, WikiRevision
-from r2.controllers.validator import (Validator, set_api_docs, 
+from r2.controllers.validator import (Validator, set_api_docs,
                                       validate, make_validated_kw)
 from r2.lib.db import tdb_cassandra
 from r2.lib.utils import wraps_api
@@ -182,20 +182,20 @@ def validate_page_name(page):
     if not page:
         # If no page is specified, give the index page
         page = "index"
-    
+
     try:
         page = str(page)
     except UnicodeEncodeError:
         raise AbortWikiError('INVALID_PAGE_NAME', 400)
-    
+
     if ' ' in page:
         page = page.replace(' ', '_')
-    
+
     if not page_match_regex.match(page):
         raise AbortWikiError('INVALID_PAGE_NAME', code=400)
-    
+
     page = normalize_page(page)
-     
+
     return page
 
 class VWikiPage(Validator):
@@ -208,27 +208,27 @@ class VWikiPage(Validator):
     def run(self, page):
         if (not c.is_wiki_mod) and self.modonly:
             return self.set_error('MOD_REQUIRED', code=403)
-        
+
         if not isinstance(page, WikiPage):
             try:
                 page = validate_page_name(page)
             except AbortWikiError as e:
                 return self.set_error(e.reason, e.code)
-            
+
             try:
                 page = WikiPage.get(c.site, page)
             except tdb_cassandra.NotFound:
                 if self.required:
                     return self.set_error('PAGE_NOT_FOUND', code=404)
                 return None
-        
+
         if self.restricted and page.restricted:
             if not page.special:
                 return self.set_error('RESTRICTED_PAGE', code=403)
-        
+
         if not this_may_view(page):
             return self.set_error('MAY_NOT_VIEW', code=403)
-        
+
         return page
 
     def validversion(self, version, pageid=None):
@@ -243,10 +243,10 @@ class VWikiPage(Validator):
         except (tdb_cassandra.NotFound, ValueError):
             self.set_error('INVALID_REVISION', code=404)
             raise AbortWikiError
-    
+
     def docstring_page(self):
         return _('the name of an existing wiki page')
-    
+
     def param_docs(self):
         return {
             self.param: self.docstring_page()
@@ -264,7 +264,7 @@ class VWikiPageAndVersion(VWikiPage):
             except AbortWikiError:
                 return
         return tuple([wp] + validated)
-    
+
     def param_docs(self):
         doc = {}
         for param in self.param:
@@ -290,7 +290,7 @@ class VWikiPageRevise(VWikiPage):
                 return
             return (wp, prev)
         return (wp, None)
-    
+
     def param_docs(self):
         return {
             'page': self.docstring_page(),
@@ -317,7 +317,7 @@ class VWikiPageCreate(VWikiPage):
         elif len(page) > MAX_PAGE_NAME_LENGTH:
             c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
         return this_may_revise(wp)
-    
+
     def param_docs(self):
         return {
             'page': 'the name of the page you wish to create'

@@ -63,7 +63,7 @@ class WikiBase(Reddit):
 
     def __init__(self, content, actionless=False, alert=None, **context):
         pageactions = []
-        
+
         title = c.site.name
         if not actionless and c.wiki_page:
             title = '%s - %s' % (title, c.wiki_page)
@@ -76,9 +76,9 @@ class WikiBase(Reddit):
                 pageactions += [('settings', _("settings"), True)]
 
         action = context.get('wikiaction', (c.wiki_page, 'wiki'))
-        
+
         context['title'] = title
-        
+
         if alert:
             context['infotext'] = alert
         elif c.wikidisabled:
