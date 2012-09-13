@@ -190,7 +190,8 @@ class WikiController(RedditController):
         mayedit = page.get_editors()
         return WikiSettings(settings, mayedit, show_settings=not page.special).render()
 
-    @wiki_validate(page=VWikiPage('page', restricted=True, modonly=True),\
+    @wiki_validate(VModhash(),
+                   page=VWikiPage('page', restricted=True, modonly=True),
                    permlevel=VInt('permlevel'))
     def POST_wiki_settings(self, page, permlevel):
         oldpermlevel = page.permlevel
