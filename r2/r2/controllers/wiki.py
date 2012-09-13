@@ -72,9 +72,54 @@ page_descriptions = {'config/stylesheet':_("This page is the subreddit styleshee
                      'config/sidebar':_("The contents of this page appear on the subreddit sidebar")}
 
 class WikiController(RedditController):
-    wiki_setup_page_cvars = True
     allow_stylesheets = True
+    
+    @paginated_listing(max_page_size=100, backend='cassandra')
+    def GET_wiki_recent(self, num, after, reverse, count):
+        revisions = WikiRevision.get_recent(c.site)
+        builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
+                                            reverse=reverse, after=after,
+                                            wrap=default_thing_wrapper(),
+                                            skip=not c.is_wiki_mod)
+        listing = WikiRevisionListing(builder).listing()
+        return WikiRecent(listing).render()
 
+    def GET_wiki_listing(self):
+        def check_hidden(page):
+            return this_may_view(page)
+        pages, linear_pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
+        return WikiListing(pages, linear_pages).render()
+    
+    def handle_error(self, code, reason=None, **data):
+        abort(WikiError(code, reason, **data))
+    
+    def pre(self):
+        RedditController.pre(self)
+        
+        if g.disable_wiki and not c.user_is_admin:
+            self.handle_error(403, 'WIKI_DOWN')
+        if not c.site._should_wiki:
+            self.handle_error(404, 'NOT_WIKIABLE') # /r/mod for an example
+
+        frontpage = isinstance(c.site, DefaultSR)
+        base = '' if frontpage else '/r/%s' % c.site.name
+        c.wiki_base_url = '%s/wiki' % base
+        c.wiki_api_url = '%s/api/wiki' % base
+        c.wiki_id = g.default_sr if frontpage else c.site.name
+
+        c.show_wiki_actions = True
+        self.editconflict = False
+        c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
+        c.wikidisabled = False
+
+        mode = c.site.wikimode
+        if not mode or mode == 'disabled':
+            if not c.is_wiki_mod:
+                self.handle_error(403, 'WIKI_DISABLED')
+            else:
+                c.wikidisabled = True
+
+class WikiPageController(WikiController):
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'),
                                           required=False, restricted=False))
     def GET_wiki_page(self, pv):
@@ -154,22 +199,6 @@ class WikiController(RedditController):
             message = page_descriptions[page.name]
         return WikiEdit(content, previous, alert=message).render()
 
-    @paginated_listing(max_page_size=100, backend='cassandra')
-    def GET_wiki_recent(self, num, after, reverse, count):
-        revisions = WikiRevision.get_recent(c.site)
-        builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
-                                            reverse=reverse, after=after,
-                                            wrap=default_thing_wrapper(),
-                                            skip=not c.is_wiki_mod)
-        listing = WikiRevisionListing(builder).listing()
-        return WikiRecent(listing).render()
-
-    def GET_wiki_listing(self):
-        def check_hidden(page):
-            return this_may_view(page)
-        pages, linear_pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
-        return WikiListing(pages, linear_pages).render()
-
     def GET_wiki_redirect(self, page):
         return redirect_to(str("%s/%s" % (c.wiki_base_url, page)), _code=301)
 
@@ -203,49 +232,22 @@ class WikiController(RedditController):
         ModAction.create(c.site, c.user, 'wikipermlevel', description=description)
         return self.GET_wiki_settings(page=page.name)
 
-    def handle_error(self, code, reason=None, **data):
-        abort(WikiError(code, reason, **data))
-
     def pre(self):
-        RedditController.pre(self)
-        if g.disable_wiki and not c.user_is_admin:
-            self.handle_error(403, 'WIKI_DOWN')
-        if not c.site._should_wiki:
-            self.handle_error(404, 'NOT_WIKIABLE') # /r/mod for an example
-        frontpage = isinstance(c.site, DefaultSR)
-        base = '' if frontpage else '/r/%s' % c.site.name
-        c.wiki_base_url = '%s/wiki' % base
-        c.wiki_api_url = '%s/api/wiki' % base
-        c.wiki_id = g.default_sr if frontpage else c.site.name
-
-        if self.wiki_setup_page_cvars:
+        WikiController.pre(self)
+        
+        try:
+            page = request.environ["pylons.routes_dict"].get('page')
+            c.wiki_page = validate_page_name(page)
             try:
-                page = request.environ["pylons.routes_dict"].get('page')
-                c.wiki_page = validate_page_name(page)
-                try:
-                    wp = WikiPage.get(c.site, page)
-                    c.wiki_may_revise = this_may_revise(wp)
-                    request.environ["pylons.routes_dict"]['page'] = wp
-                except tdb_cassandra.NotFound:
-                    pass
-            except AbortWikiError as e:
-                self.handle_error(e.code, e.reason)
-
-        c.show_wiki_actions = True
-        self.editconflict = False
-        c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
-        c.wikidisabled = False
-
-        mode = c.site.wikimode
-        if not mode or mode == 'disabled':
-            if not c.is_wiki_mod:
-                self.handle_error(403, 'WIKI_DISABLED')
-            else:
-                c.wikidisabled = True
+                wp = WikiPage.get(c.site, page)
+                c.wiki_may_revise = this_may_revise(wp)
+                request.environ["pylons.routes_dict"]['page'] = wp
+            except tdb_cassandra.NotFound:
+                pass
+        except AbortWikiError as e:
+            self.handle_error(e.code, e.reason)
 
 class WikiApiController(WikiController):
-    wiki_setup_page_cvars = False
-
     @wiki_validate(VModhash(),
                    pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
                    content=VMarkdown(('content')))
