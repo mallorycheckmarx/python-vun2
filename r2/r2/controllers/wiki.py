@@ -69,23 +69,23 @@ page_descriptions = {'config/stylesheet':_("This page is the subreddit styleshee
 
 class WikiController(RedditController):
     allow_stylesheets = True
-    
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), 
+
+    @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'),
                                           required=False, restricted=False))
     def GET_wiki_page(self, pv):
         page, version, version2 = pv
         message = None
-        
+
         if not page:
             return self.redirect(join_urls(c.wiki_base_url, '/notfound/', c.page))
-        
+
         if version:
             edit_by = version.author_name()
             edit_date = version.date
         else:
             edit_by = page.author_name()
             edit_date = page._get('last_edit_date')
-        
+
         diffcontent = None
         if not version:
             content = page.content
@@ -105,10 +105,10 @@ class WikiController(RedditController):
             else:
                 message = _("viewing revision from %s ago") % timesince(version.date)
                 content = version.content
-        
+
         return WikiPageView(content, alert=message, v=version, diff=diffcontent,
                             edit_by=edit_by, edit_date=edit_date).render()
-    
+
     @paginated_listing(max_page_size=100, backend='cassandra')
     @wiki_validate(page=VWikiPage(('page'), restricted=False))
     def GET_wiki_revisions(self, num, after, reverse, count, page):
@@ -116,11 +116,11 @@ class WikiController(RedditController):
         builder = WikiRevisionBuilder(revisions, num=num, reverse=reverse, count=count, after=after, skip=not c.is_wiki_mod, wrap=default_thing_wrapper())
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing).render()
-    
+
     @wiki_validate(may_create=VWikiPageCreate('page'))
     def GET_wiki_notfound(self, may_create, page):
         api = c.render_style in extensions.API_TYPES
-        
+
         if c.error and c.error['reason'] == 'PAGE_EXISTS':
             return self.redirect(join_urls(c.wiki_base_url, page))
         elif not may_create or api:
@@ -139,7 +139,7 @@ class WikiController(RedditController):
             return BoringPage(_("Wiki error"), infotext=error).render()
         else:
             return WikiNotFound().render()
-    
+
     @wiki_validate(page=VWikiPageRevise('page', restricted=True))
     def GET_wiki_revise(self, page, message=None, **kw):
         page = page[0]
@@ -148,7 +148,7 @@ class WikiController(RedditController):
         if not message and page.name in page_descriptions:
             message = page_descriptions[page.name]
         return WikiEdit(content, previous, alert=message).render()
-    
+
     @paginated_listing(max_page_size=100, backend='cassandra')
     def GET_wiki_recent(self, num, after, reverse, count):
         revisions = WikiRevision.get_recent(c.site)
@@ -158,16 +158,16 @@ class WikiController(RedditController):
                                             skip=not c.is_wiki_mod)
         listing = WikiRevisionListing(builder).listing()
         return WikiRecent(listing).render()
-    
+
     def GET_wiki_listing(self):
         def check_hidden(page):
             return this_may_view(page)
         pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
         return WikiListing(pages).render()
-    
+
     def GET_wiki_redirect(self, page):
         return redirect_to(str("%s/%s" % (c.wiki_base_url, page)), _code=301)
-    
+
     @base_listing
     @wiki_validate(page=VWikiPage('page', restricted=True))
     def GET_wiki_discussions(self, page, num, after, reverse, count):
@@ -178,13 +178,13 @@ class WikiController(RedditController):
                             count = count, skip = False)
         listing = LinkListing(builder).listing()
         return WikiDiscussions(listing).render()
-    
+
     @wiki_validate(page=VWikiPage('page', restricted=True, modonly=True))
     def GET_wiki_settings(self, page):
         settings = {'permlevel': page._get('permlevel', 0)}
         mayedit = page.get_editors()
         return WikiSettings(settings, mayedit, show_settings=not page.special).render()
-    
+
     @wiki_validate(page=VWikiPage('page', restricted=True, modonly=True),\
               permlevel=VInt('permlevel'))
     def POST_wiki_settings(self, page, permlevel):
@@ -196,10 +196,10 @@ class WikiController(RedditController):
         description = 'Page: %s, Changed from %s to %s' % (page.name, oldpermlevel, permlevel)
         ModAction.create(c.site, c.user, 'wikipermlevel', description=description)
         return self.GET_wiki_settings(page=page.name)
-    
+
     def handle_error(self, code, reason=None, **data):
         abort(WikiError(code, reason, **data))
-    
+
     def pre(self):
         RedditController.pre(self)
         if g.disable_wiki and not c.user_is_admin:
@@ -216,7 +216,7 @@ class WikiController(RedditController):
         self.editconflict = False
         c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
         c.wikidisabled = False
-        
+
         mode = c.site.wikimode
         if not mode or mode == 'disabled':
             if not c.is_wiki_mod:
@@ -250,8 +250,8 @@ class WikiApiController(WikiController):
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         return json.dumps({})
-    
-    @wiki_validate(page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')), 
+
+    @wiki_validate(page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')),
                    user=VExistingUname('username'))
     def POST_wiki_allow_editor(self, act, page, user):
         if not c.is_wiki_mod:
@@ -265,7 +265,7 @@ class WikiApiController(WikiController):
         else:
             self.handle_error(400, 'INVALID_ACTION')
         return json.dumps({})
-    
+
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_hide(self, pv):
         if not c.is_wiki_mod:
@@ -274,7 +274,7 @@ class WikiApiController(WikiController):
         if not revision:
             self.handle_error(400, 'INVALID_REVISION')
         return json.dumps({'status': revision.toggle_hide()})
-    
+
     @wiki_validate(may_create=VWikiPageCreate('page'))
     def GET_wiki_create(self, may_create):
         if not may_create:
@@ -285,7 +285,7 @@ class WikiApiController(WikiController):
             WikiPage.create(c.site, c.page)
             url = join_urls(c.wiki_base_url, '/edit/', c.page)
             return self.redirect(url)
-    
+
     @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
     def POST_wiki_revision_revert(self, pv):
         if not c.is_wiki_mod:
@@ -307,7 +307,7 @@ class WikiApiController(WikiController):
             except ContentLengthError as e:
                 self.handle_error(403, 'CONTENT_LENGTH_ERROR', e.max_length)
         return json.dumps({})
-    
+
     def pre(self):
         WikiController.pre(self)
         c.render_style = 'api'
