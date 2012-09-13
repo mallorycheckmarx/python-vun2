@@ -584,6 +584,11 @@ class WikiSettingsJsonTemplate(ThingJsonTemplate):
         return ObjectTemplate(dict(permlevel=thing.permlevel,
                                    editors=thing.mayedit))
 
+class WikiEditPageJsonTemplate(ThingJsonTemplate):
+     def render(self, thing, *a, **kw):
+        return ObjectTemplate(dict(page_content=thing.page_content,
+                                   previous=thing.previous))
+
 class WikiRevisionJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
         timestamp = time.mktime(thing.date.timetuple()) if thing.date else None

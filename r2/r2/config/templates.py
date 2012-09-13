@@ -60,7 +60,7 @@ api('wikibasepage', WikiJsonTemplate)
 api('wikipagerevisions', WikiJsonTemplate)
 api('wikiview', WikiViewJsonTemplate)
 api('wikirevision', WikiRevisionJsonTemplate)
-
+api('wikieditpage', WikiEditPageJsonTemplate)
 api('wikipagelisting', WikiPageListingJsonTemplate)
 api('wikipagediscussions', WikiJsonTemplate)
 api('wikipagesettings', WikiSettingsJsonTemplate)
