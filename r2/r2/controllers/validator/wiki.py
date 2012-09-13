@@ -24,13 +24,16 @@ from os.path import normpath
 import datetime
 import re
 
+from pylons.i18n import _
+
 from pylons.controllers.util import redirect_to
 from pylons import c, g, request
 
 from r2.models.wiki import WikiPage, WikiRevision
-from r2.controllers.validator import Validator, validate, make_validated_kw
+from r2.controllers.validator import (Validator, set_api_docs, 
+                                      validate, make_validated_kw)
 from r2.lib.db import tdb_cassandra
-
+from r2.lib.utils import wraps_api
 
 MAX_PAGE_NAME_LENGTH = g.wiki_max_page_name_length
 
@@ -38,6 +41,7 @@ MAX_SEPARATORS = g.wiki_max_page_separators
 
 def wiki_validate(*simple_vals, **param_vals):
     def val(fn):
+        @wraps_api(fn)
         def newfn(self, *a, **env):
             kw = make_validated_kw(fn, simple_vals, param_vals, env)
             for e in c.errors:
@@ -45,6 +49,7 @@ def wiki_validate(*simple_vals, **param_vals):
                 if e.code:
                     self.handle_error(e.code, e.name)
             return fn(self, *a, **kw)
+        set_api_docs(newfn, simple_vals, param_vals)
         return newfn
     return val
 
@@ -240,6 +245,14 @@ class VWikiPage(Validator):
         except (tdb_cassandra.NotFound, ValueError):
             self.set_error('INVALID_REVISION', code=404)
             raise AbortWikiError
+    
+    def docstring_page(self):
+        return _('the name of an existing wiki page')
+    
+    def param_docs(self):
+        return {
+            self.param: self.docstring_page()
+        }
 
 class VWikiPageAndVersion(VWikiPage):
     def run(self, page, *versions):
@@ -253,6 +266,15 @@ class VWikiPageAndVersion(VWikiPage):
             except AbortWikiError:
                 return
         return tuple([wp] + validated)
+    
+    def param_docs(self):
+        doc = {}
+        for param in self.param:
+            if param == 'page':
+                doc[param] = self.docstring_page()
+            else:
+                doc[param] = _('a wiki revision ID')
+        return doc
 
 class VWikiPageRevise(VWikiPage):
     def run(self, page, previous=None):
@@ -270,6 +292,12 @@ class VWikiPageRevise(VWikiPage):
                 return
             return (wp, prev)
         return (wp, None)
+    
+    def param_docs(self):
+        return {
+            'page': self.docstring_page(),
+            'previous': _('the starting point revision for this edit')
+        }
 
 class VWikiPageCreate(VWikiPage):
     def __init__(self, param, **kw):
@@ -293,4 +321,8 @@ class VWikiPageCreate(VWikiPage):
         elif len(page) > MAX_PAGE_NAME_LENGTH:
             c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
         return this_may_revise()
-
+    
+    def param_docs(self):
+        return {
+            'page': 'the name of the page you wish to create'
+        }

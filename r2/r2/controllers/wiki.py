@@ -34,11 +34,13 @@ from r2.models.builder import WikiRevisionBuilder, WikiRecentRevisionBuilder
 from r2.lib.template_helpers import join_urls
 
 
-from r2.controllers.validator import VMarkdown
+from r2.controllers.validator import VMarkdown, VModhash
 
 from r2.controllers.validator.wiki import (VWikiPage, VWikiPageAndVersion,
                                            VWikiPageRevise, VWikiPageCreate,
                                            this_may_view, wiki_validate)
+
+from r2.controllers.api_docs import api_doc, api_section
 
 from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
                               WikiEdit, WikiSettings, WikiRecent,
@@ -228,6 +230,7 @@ class WikiApiController(WikiController):
     @wiki_validate(VModhash(),
                    pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
                    content=VMarkdown(('content')))
+    @api_doc(api_section.wiki)
     def POST_wiki_edit(self, pageandprevious, content):
         page, previous = pageandprevious
         previous = previous._id if previous else None
@@ -255,6 +258,7 @@ class WikiApiController(WikiController):
     @wiki_validate(VModhash(),
                    page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')),
                    user=VExistingUname('username'))
+    @api_doc(api_section.wiki)
     def POST_wiki_allow_editor(self, act, page, user):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
@@ -270,6 +274,7 @@ class WikiApiController(WikiController):
 
     @wiki_validate(VModhash(),
                    pv=VWikiPageAndVersion(('page', 'revision')))
+    @api_doc(api_section.wiki)
     def POST_wiki_revision_hide(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
@@ -280,6 +285,7 @@ class WikiApiController(WikiController):
 
     @wiki_validate(VModhash(),
                    may_create=VWikiPageCreate('page'))
+    @api_doc(api_section.wiki)
     def GET_wiki_create(self, may_create):
         if not may_create:
             self.handle_error(403, 'MAY_NOT_CREATE')
@@ -292,6 +298,7 @@ class WikiApiController(WikiController):
 
     @wiki_validate(VModhash(),
                    pv=VWikiPageAndVersion(('page', 'revision')))
+    @api_doc(api_section.wiki)
     def POST_wiki_revision_revert(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
