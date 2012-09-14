@@ -20,12 +20,29 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from builder import Builder, MAX_RECURSION, empty_listing
-from r2.lib.wrapped import Wrapped
-from r2.lib.comment_tree import link_comments, link_comments_and_sort, tree_sort_fn, MAX_ITERATIONS
-from r2.models.link import *
+from pylons import g, c, request
+
+from r2.lib.comment_tree import link_comments_and_sort, tree_sort_fn, MAX_ITERATIONS
 from r2.lib.db import operators
+from r2.lib.wrapped import Wrapped
 from r2.lib import utils
+
+from r2.models.builder import Builder, MAX_RECURSION, empty_listing
+from r2.models.link import (Comment,
+                            Message,
+                            MoreChildren,
+                            MoreMessages,
+                            MoreRecursion,
+                            )
+
+__all__ = [
+           #Constants
+           #Classes
+           "_CommentBuilder",
+           "_MessageBuilder",
+           #Exceptions
+           #Functions
+           ]
 
 class _CommentBuilder(Builder):
     def __init__(self, link, sort, comment = None, context = None,

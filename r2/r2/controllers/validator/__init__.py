@@ -20,7 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from validator import *
+from r2.controllers.validator.validator import *
+from r2.controllers.validator.wiki import *
 
 try:
     from r2admin.controllers.validator import *

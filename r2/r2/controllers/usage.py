@@ -20,10 +20,10 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import request, g
-from reddit_base import RedditController
 from r2.lib.pages import AdminPage, AdminUsage
-from validator import *
+
+from r2.controllers.validator import VAdmin, validate
+from r2.controllers.reddit_base import RedditController
 
 class UsageController(RedditController):
 

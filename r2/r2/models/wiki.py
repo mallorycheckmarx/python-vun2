@@ -20,16 +20,24 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from collections import OrderedDict
 from datetime import datetime
+
+from pycassa.system_manager import TIME_UUID_TYPE
+from pylons import g
+
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import NotFound
-from r2.lib.merge import *
-from pycassa.system_manager import TIME_UUID_TYPE
-from pylons import c, g
-from pylons.controllers.util import abort
+from r2.lib.export import export
+
 from r2.models.printable import Printable
 from r2.models.account import Account
-from collections import OrderedDict
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           "modactions",
+           ]
+
 
 # Used for the key/id for pages,
 PAGE_ID_SEP = '\t'
@@ -56,6 +64,8 @@ modactions = {'config/sidebar': "Updated subreddit sidebar"}
 def wiki_id(sr, page):
     return ('%s%s%s' % (sr, PAGE_ID_SEP, page)).lower()
 
+
+@export
 class ContentLengthError(Exception):
     def __init__(self, max_length):
         Exception.__init__(self)
@@ -77,6 +87,8 @@ def get_author_name(author_name):
     except NotFound:
         return '[deleted]'
 
+
+@export
 class WikiRevision(tdb_cassandra.UuidThing, Printable):
     """ Contains content (markdown), author of the edit, page the edit belongs to, and datetime of the edit """
     
@@ -153,6 +165,7 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
         return self.info['sr']
 
 
+@export
 class WikiPage(tdb_cassandra.Thing):
     """ Contains permissions, current content (markdown), subreddit, and current revision (ID)
         Key is subreddit-pagename """

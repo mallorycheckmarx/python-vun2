@@ -20,22 +20,29 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from os.path import normpath
 import datetime
 import re
+from os.path import normpath
 
-from pylons.controllers.util import redirect_to
 from pylons import c, g, request
+from pylons.controllers.util import redirect_to
 
-from r2.models.wiki import WikiPage, WikiRevision
-from r2.controllers.validator import Validator, validate, make_validated_kw
 from r2.lib.db import tdb_cassandra
+from r2.lib.export import export
+from r2.models import WikiPage, WikiRevision
 
+from r2.controllers.validator.validator import Validator, make_validated_kw
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 MAX_PAGE_NAME_LENGTH = g.wiki_max_page_name_length
 
 MAX_SEPARATORS = g.wiki_max_page_separators
 
+
+@export
 def wiki_validate(*simple_vals, **param_vals):
     def val(fn):
         def newfn(self, *a, **env):
@@ -48,6 +55,8 @@ def wiki_validate(*simple_vals, **param_vals):
         return newfn
     return val
 
+
+@export
 def this_may_revise(page=None):
     if not c.user_is_loggedin:
         return False
@@ -57,6 +66,8 @@ def this_may_revise(page=None):
     
     return may_revise(c.site, c.user, page)
 
+
+@export
 def this_may_view(page):
     user = c.user if c.user_is_loggedin else None
     return may_view(c.site, user, page)
@@ -170,6 +181,8 @@ class AbortWikiError(Exception):
 
 page_match_regex = re.compile(r'^[\w_/]+\Z')
 
+
+@export
 class VWikiPage(Validator):
     def __init__(self, param, required=True, restricted=True, modonly=False, **kw):
         self.restricted = restricted
@@ -241,6 +254,8 @@ class VWikiPage(Validator):
             self.set_error('INVALID_REVISION', code=404)
             raise AbortWikiError
 
+
+@export
 class VWikiPageAndVersion(VWikiPage):    
     def run(self, page, *versions):
         wp = VWikiPage.run(self, page)
@@ -254,6 +269,8 @@ class VWikiPageAndVersion(VWikiPage):
                 return
         return tuple([wp] + validated)
 
+
+@export
 class VWikiPageRevise(VWikiPage):
     def run(self, page, previous=None):
         wp = VWikiPage.run(self, page)
@@ -271,6 +288,8 @@ class VWikiPageRevise(VWikiPage):
             return (wp, prev)
         return (wp, None)
 
+
+@export
 class VWikiPageCreate(VWikiPage):
     def __init__(self, param, **kw):
         VWikiPage.__init__(self, param, required=False, **kw)

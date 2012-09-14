@@ -1,10 +1,17 @@
-from r2.lib.pages.pages import Reddit
 from pylons import c
-from r2.lib.wrapped import Templated
-from r2.lib.menus import PageNameNav
-from r2.controllers.validator.wiki import this_may_revise
-from r2.lib.filters import wikimarkdown
 from pylons.i18n import _
+
+from r2.controllers.validator import this_may_revise
+
+from r2.lib.export import export
+from r2.lib.filters import wikimarkdown
+from r2.lib.pages.pages import Reddit
+from r2.lib.wrapped import Templated
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class WikiView(Templated):
     def __init__(self, content, edit_by, edit_date, diff=None):
@@ -86,6 +93,8 @@ class WikiBase(Reddit):
         context['content'] = WikiBasePage(content, action, pageactions, **context)
         Reddit.__init__(self, **context)
 
+
+@export
 class WikiPageView(WikiBase):
     def __init__(self, content, diff=None, **context):
         if not content and not context.get('alert'):
@@ -94,6 +103,8 @@ class WikiPageView(WikiBase):
         content = WikiView(content, context.get('edit_by'), context.get('edit_date'), diff=diff)
         WikiBase.__init__(self, content, **context)
 
+
+@export
 class WikiNotFound(WikiPageView):
     def __init__(self, **context):
         context['alert'] = _("page %s does not exist in this subreddit") % c.page
@@ -102,36 +113,48 @@ class WikiNotFound(WikiPageView):
         text =  _("a page with that name does not exist in this subreddit.\n\n[Create a page called %s](%s)") % (c.page, create_link)
         WikiPageView.__init__(self, text, **context)
 
+
+@export
 class WikiEdit(WikiBase):
     def __init__(self, content, previous, **context):
         content = WikiEditPage(content, previous)
         context['wikiaction'] = ('edit', _("editing"))
         WikiBase.__init__(self, content, **context)
 
+
+@export
 class WikiSettings(WikiBase):
     def __init__(self, settings, mayedit, **context):
         content = WikiPageSettings(settings, mayedit, **context)
         context['wikiaction'] = ('settings', _("settings"))
         WikiBase.__init__(self, content, **context)
 
+
+@export
 class WikiRevisions(WikiBase):
     def __init__(self, revisions, **context):
         content = WikiPageRevisions(revisions)
         context['wikiaction'] = ('revisions/%s' % c.page, _("revisions"))
         WikiBase.__init__(self, content, **context)
 
+
+@export
 class WikiRecent(WikiBase):
     def __init__(self, revisions, **context):
         content = WikiPageRevisions(revisions)
         context['wikiaction'] = ('revisions', _("Viewing recent revisions for /r/%s") % c.wiki_id)
         WikiBase.__init__(self, content, showtitle=True, **context)
 
+
+@export
 class WikiListing(WikiBase):
     def __init__(self, pages, **context):
         content = WikiPageListing(pages)
         context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % c.wiki_id)
         WikiBase.__init__(self, content, showtitle=True, **context)
 
+
+@export
 class WikiDiscussions(WikiBase):
     def __init__(self, listing, **context):
         content = WikiPageDiscussions(listing)

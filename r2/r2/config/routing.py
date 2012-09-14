@@ -23,9 +23,8 @@
 """
 Setup your Routes options here
 """
-import os
-from routes import Mapper
 from pylons import config
+from routes import Mapper
 
 def make_map():
     map = Mapper()

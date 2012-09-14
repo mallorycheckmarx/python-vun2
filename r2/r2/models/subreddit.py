@@ -20,37 +20,53 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from __future__ import with_statement
+import math
+import random
+from md5 import md5
 
 from pylons import c, g
 from pylons.i18n import _
 
-from r2.lib.db.thing import Thing, Relation, NotFound
-from account import Account, AccountsActiveBySR
-from printable import Printable
-from r2.lib.db.userrel import UserRel
-from r2.lib.db.operators import lower, or_, and_, desc
-from r2.lib.memoize import memoize
-from r2.lib.utils import tup, interleave_lists, last_modified_multi, flatten
-from r2.lib.utils import timeago, summarize_markdown
-from r2.lib.cache import sgm
-from r2.lib.strings import strings, Score
-from r2.lib.filters import _force_unicode
+from r2.lib.cache import sgm, CL_ONE
 from r2.lib.db import tdb_cassandra
-from r2.models.wiki import WikiPage
+from r2.lib.db.operators import lower, desc
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.db.userrel import UserRel
+from r2.lib.export import export
+from r2.lib.filters import _force_unicode
+from r2.lib.memoize import memoize
 from r2.lib.merge import ConflictException
-from r2.lib.cache import CL_ONE
+from r2.lib.strings import strings, Score
+from r2.lib.utils import (#Functions
+                          last_modified_multi,
+                          set_last_modified,
+                          summarize_markdown,
+                          tup,
+                          )
 
-import math
-
-from r2.lib.utils import set_last_modified
+from r2.models.account import Account
+from r2.models.account_subreddit import AccountsActiveBySR
+from r2.models.printable import Printable
 from r2.models.wiki import WikiPage
-from md5 import md5
-import os.path
-import random
 
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           "All",
+           "Contrib",
+           "Friends",
+           "Frontpage",
+           "Mod",
+           "Random",
+           "RandomNSFW",
+           "Sub",
+           ]
+
+
+@export
 class SubredditExists(Exception): pass
 
+
+@export
 class Subreddit(Thing, Printable):
     # Note: As of 2010/03/18, nothing actually overrides the static_path
     # attribute, even on a cname. So c.site.static_path should always be
@@ -794,6 +810,8 @@ class Subreddit(Thing, Printable):
         # is really slow
         return [rel._thing2_id for rel in list(merged)]
 
+
+@export
 class FakeSubreddit(Subreddit):
     over_18 = False
     _nodb = True
@@ -923,6 +941,8 @@ class FriendsSR(FakeSubreddit):
                                data = True)
             return q
 
+
+@export
 class AllSR(FakeSubreddit):
     name = 'all'
     title = 'all'
@@ -950,6 +970,7 @@ class AllSR(FakeSubreddit):
         return None
 
 
+@export
 class _DefaultSR(FakeSubreddit):
     #notice the space before reddit.com
     name = ' reddit.com'
@@ -988,7 +1009,9 @@ class _DefaultSR(FakeSubreddit):
     def title(self):
         return _(g.short_description)
 
+
 # This is the base class for the instantiated front page reddit
+@export
 class DefaultSR(_DefaultSR):
     def __init__(self):
         _DefaultSR.__init__(self)
@@ -1055,6 +1078,8 @@ class DefaultSR(_DefaultSR):
     def sponsorship_img(self):
         return self._base.sponsorship_img if self._base else ""
 
+
+@export
 class MultiReddit(_DefaultSR):
     name = 'multi'
     header = ""
@@ -1111,6 +1136,8 @@ class RandomNSFWReddit(FakeSubreddit):
     name = 'randnsfw'
     header = ""
 
+
+@export
 class ModContribSR(MultiReddit):
     name  = None
     title = None
@@ -1131,6 +1158,8 @@ class ModContribSR(MultiReddit):
     def kept_sr_ids(self):
         return self.sr_ids
 
+
+@export
 class ModSR(ModContribSR):
     name  = "subreddits you moderate"
     title = "subreddits you moderate"
@@ -1140,12 +1169,16 @@ class ModSR(ModContribSR):
     def is_moderator(self, user):
         return True
 
+
+@export
 class ContribSR(ModContribSR):
     name  = "contrib"
     title = "communities you're approved on"
     query_param = "contributor"
     real_path = "contrib"
 
+
+@export
 class SubSR(FakeSubreddit):
     stylesheet = 'subreddit.css'
     #this will make the javascript not send an SR parameter
@@ -1164,6 +1197,8 @@ class SubSR(FakeSubreddit):
     def path(self):
         return "/reddits/"
 
+
+@export
 class DomainSR(FakeSubreddit):
     @property
     def path(self):
@@ -1195,6 +1230,8 @@ Subreddit._specials.update(dict(friends = Friends,
                                 contrib = Contrib,
                                 all = All))
 
+
+@export
 class SRMember(Relation(Subreddit, Account)): pass
 Subreddit.__bases__ += (UserRel('moderator', SRMember),
                         UserRel('contributor', SRMember),
@@ -1203,6 +1240,8 @@ Subreddit.__bases__ += (UserRel('moderator', SRMember),
                         UserRel('wikibanned', SRMember),
                         UserRel('wikicontributor', SRMember))
 
+
+@export
 class SubredditPopularityByLanguage(tdb_cassandra.View):
     _use_db = True
     _value_type = 'pickle'

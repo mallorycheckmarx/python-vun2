@@ -20,7 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from email.MIMEText import MIMEText
+from email.mime.text import MIMEText
 from pylons.i18n import _
 from pylons import c, g
 from r2.lib.utils import timeago, query_string, randstr

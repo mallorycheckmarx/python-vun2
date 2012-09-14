@@ -20,23 +20,32 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.models import *
-from filters import unsafe, websafe, _force_unicode, _force_utf8
-from r2.lib.utils import vote_hash, UrlParser, timesince, is_subdomain
-
-from r2.lib.media import s3_direct_url
+import calendar
+import os.path
+import random
+import re
+import urlparse
 
 import babel.numbers
 from mako.filters import url_escape
-import simplejson
-import os.path
-from copy import copy
-import random
-import urlparse
-import calendar
-from pylons import g, c
+from pylons import g, c, request
 from pylons.i18n import _, ungettext
 from paste.util.mimeparse import desired_matches
+
+from r2.models import (Comment,
+                       FakeSubreddit,
+                       Link,
+                       Listing,
+                       Message,
+                       Subreddit,
+                      )
+
+from r2.lib import utils
+from r2.lib.filters import unsafe, _force_utf8
+from r2.lib.media import s3_direct_url
+from r2.lib.strings import strings
+from r2.lib.utils import vote_hash, UrlParser, timesince, is_subdomain
+
 
 def is_encoding_acceptable(encoding_to_check):
     "Check if a content encoding is acceptable to the user agent."

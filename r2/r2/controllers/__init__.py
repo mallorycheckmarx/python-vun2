@@ -20,9 +20,18 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from r2.lib.export import export
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
 _reddit_controllers = {}
 _plugin_controllers = {}
 
+
+@export
 def get_controller(name):
     name = name.lower() + 'controller'
     if name in _reddit_controllers:
@@ -32,56 +41,61 @@ def get_controller(name):
     else:
         raise KeyError(name)
 
+
+@export
 def add_controller(controller):
     name = controller.__name__.lower()
     assert name not in _plugin_controllers
     _plugin_controllers[name] = controller
     return controller
 
+
+@export
 def load_controllers():
-    from listingcontroller import ListingController
-    from listingcontroller import HotController
-    from listingcontroller import NewController
-    from listingcontroller import BrowseController
-    from listingcontroller import MessageController
-    from listingcontroller import RedditsController
-    from listingcontroller import ByIDController
-    from listingcontroller import RandomrisingController
-    from listingcontroller import UserController
-    from listingcontroller import CommentsController
+    from r2.controllers.listingcontroller import ListingController
+    from r2.controllers.listingcontroller import HotController
+    from r2.controllers.listingcontroller import NewController
+    from r2.controllers.listingcontroller import BrowseController
+    from r2.controllers.listingcontroller import MessageController
+    from r2.controllers.listingcontroller import RedditsController
+    from r2.controllers.listingcontroller import ByIDController
+    from r2.controllers.listingcontroller import RandomrisingController
+    from r2.controllers.listingcontroller import UserController
+    from r2.controllers.listingcontroller import CommentsController
 
-    from listingcontroller import MyredditsController
+    from r2.controllers.listingcontroller import MyredditsController
 
-    from feedback import FeedbackController
-    from front import FormsController
-    from front import FrontController
-    from health import HealthController
-    from buttons import ButtonsController
-    from captcha import CaptchaController
-    from embed import EmbedController
-    from error import ErrorController
-    from post import PostController
-    from toolbar import ToolbarController
-    from awards import AwardsController
-    from ads import AdsController
-    from usage import UsageController
-    from errorlog import ErrorlogController
-    from promotecontroller import PromoteController
-    from mediaembed import MediaembedController
-    from mediaembed import AdController
+    from r2.controllers.feedback import FeedbackController
+    from r2.controllers.front import FormsController
+    from r2.controllers.front import FrontController
+    from r2.controllers.health import HealthController
+    from r2.controllers.buttons import ButtonsController
+    from r2.controllers.captcha import CaptchaController
+    from r2.controllers.embed import EmbedController
+    from r2.controllers.error import ErrorController
+    from r2.controllers.post import PostController
+    from r2.controllers.toolbar import ToolbarController
+    from r2.controllers.awards import AwardsController
+    from r2.controllers.ads import AdsController
+    from r2.controllers.usage import UsageController
+    from r2.controllers.errorlog import ErrorlogController
+    from r2.controllers.promotecontroller import PromoteController
+    from r2.controllers.mediaembed import MediaembedController
+    from r2.controllers.mediaembed import AdController
     
-    from wiki import WikiController
-    from wiki import WikiApiController
+    from r2.controllers.wiki import WikiController
+    from r2.controllers.wiki import WikiApiController
 
-    from querycontroller import QueryController
+    from r2.controllers.querycontroller import QueryController
 
-    from api import ApiController
-    from api import ApiminimalController
-    from api_docs import ApidocsController
-    from apiv1 import APIv1Controller
-    from oauth2 import OAuth2FrontendController
-    from oauth2 import OAuth2AccessController
-    from redirect import RedirectController
-    from ipn import IpnController
+    from r2.controllers.api import ApiController
+    from r2.controllers.api import ApiminimalController
+    from r2.controllers.api_docs import ApidocsController
+    from r2.controllers.apiv1 import APIv1Controller
+    from r2.controllers.oauth2 import OAuth2FrontendController
+    from r2.controllers.oauth2 import OAuth2AccessController
+    from r2.controllers.redirect import RedirectController
+    from r2.controllers.ipn import IpnController
 
-    _reddit_controllers.update((name.lower(), obj) for name, obj in locals().iteritems())
+    controllers = [(name.lower(), obj) for name, obj in locals().iteritems()]
+    _reddit_controllers.update(controllers)

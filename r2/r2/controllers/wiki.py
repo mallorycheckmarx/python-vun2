@@ -20,49 +20,69 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import request, g, c, Response
+import json
+
+from pylons import g, c, request
 from pylons.controllers.util import redirect_to
-from reddit_base import RedditController
-from r2.lib.utils import url_links
-from reddit_base import paginated_listing
-from r2.models.wiki import (WikiPage, WikiRevision, ContentLengthError,
-                            modactions)
-from r2.models.subreddit import Subreddit
-from r2.models.modaction import ModAction
-from r2.models.builder import WikiRevisionBuilder, WikiRecentRevisionBuilder
-
-from r2.lib.template_helpers import join_urls
-
-
-from r2.controllers.validator import VMarkdown
-
-from r2.controllers.validator.wiki import (VWikiPage, VWikiPageAndVersion,
-                                           VWikiPageRevise, VWikiPageCreate,
-                                           this_may_view, wiki_validate)
-
-from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
-                              WikiEdit, WikiSettings, WikiRecent,
-                              WikiListing, WikiDiscussions)
+from pylons.i18n import _
 
 from r2.config.extensions import set_extension
-from r2.lib.template_helpers import add_sr
-from r2.lib.db import tdb_cassandra
-from r2.controllers.errors import errors
-from r2.models.listing import WikiRevisionListing
-from r2.lib.pages.things import default_thing_wrapper
-from r2.lib.pages import BoringPage
-from reddit_base import base_listing
-from r2.models import IDBuilder, LinkListing, DefaultSR
-from validator.validator import VInt, VExistingUname, VRatelimit
-from r2.lib.merge import ConflictException, make_htmldiff
-from pylons.i18n import _
-from r2.lib.pages import PaneStack
-from r2.lib.utils import timesince
-
 from r2.lib.base import abort
-from r2.controllers.errors import WikiError
+from r2.lib.db import tdb_cassandra
+from r2.lib.merge import ConflictException, make_htmldiff
+from r2.lib.pages import (#Classes
+                          BoringPage,
+                          PaneStack,
+                          WikiDiscussions,
+                          WikiEdit,
+                          WikiListing,
+                          WikiNotFound,
+                          WikiPageView,
+                          WikiRecent,
+                          WikiRevisions,
+                          WikiSettings,
+                        )
+from r2.lib.template_helpers import add_sr, join_urls
+from r2.lib.utils import timesince, url_links
+from r2.lib.wrapper import default_thing_wrapper
+from r2.models import (#Classes
+                      ContentLengthError,
+                      DefaultSR,
+                      IDBuilder,
+                      LinkListing,
+                      ModAction,
+                      WikiPage,
+                      WikiRevision,
+                      WikiRecentRevisionBuilder,
+                      WikiRevisionBuilder,
+                      WikiRevisionListing,
+                      #Functions
+                      modactions)
 
-import json
+from r2.controllers.errors import errors, WikiError
+from r2.controllers.reddit_base import (#Classes
+                                        RedditController,
+                                        #Functions
+                                        base_listing,
+                                        paginated_listing,
+                                        )
+from r2.controllers.validator import (#Classes
+                                      VInt,
+                                      VExistingUname,
+                                      VMarkdown,
+                                      VRatelimit,
+                                      VWikiPage,
+                                      VWikiPageAndVersion,
+                                      VWikiPageRevise,
+                                      VWikiPageCreate,
+                                      #Functions
+                                      this_may_view,
+                                      wiki_validate,
+                                      )
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 page_descriptions = {'config/stylesheet':_("This page is the subreddit stylesheet, changes here apply to the subreddit css"),
                      'config/sidebar':_("The contents of this page appear on the subreddit sidebar")}

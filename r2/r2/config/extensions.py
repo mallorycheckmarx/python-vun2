@@ -22,15 +22,30 @@
 
 from pylons import c
 
+from r2.lib.export import export
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           "API_TYPES",
+           "extension_mapping",
+           ]
+
+
+@export
 def api_type(subtype = ''):
     return 'api-' + subtype if subtype else 'api'
 
+
+@export
 def is_api(subtype = ''):
     return c.render_style and c.render_style.startswith(api_type(subtype))
 
+
+@export
 def get_api_subtype():
     if is_api() and c.render_style.startswith('api-'):
         return c.render_style[4:]
+
 
 extension_mapping = {
     "rss": ("xml", "text/xml; charset=UTF-8"),
@@ -50,8 +65,10 @@ extension_mapping = {
     "i": ("compact", "text/html; charset=UTF-8"),
 }
 
+
 API_TYPES = ('api', 'json')
 
+@export
 def set_extension(environ, ext):
     environ["extension"] = ext
     environ["render_style"], environ["content_type"] = extension_mapping[ext]

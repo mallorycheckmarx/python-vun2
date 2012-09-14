@@ -26,18 +26,22 @@ For talking to authorize.net credit card payments via their XML api.
 This file consists mostly of wrapper classes for dealing with their
 API, while the actual useful functions live in interaction.py
 """
-
-from pylons import g
+import re
+import socket
 from httplib import HTTPSConnection
 from urlparse import urlparse
-import socket, re
-from BeautifulSoup import BeautifulStoneSoup
-from r2.lib.utils import iters, Storage
-
-from r2.models import NotFound
-from r2.models.bidding import CustomerID, PayID, ShippingAddress
-
 from xml.sax.saxutils import escape
+
+from BeautifulSoup import BeautifulStoneSoup
+from pylons import g
+
+from r2.lib.utils import iters, Storage
+from r2.lib.db.thing import NotFound
+from r2.models import CustomerID, PayID, ShippingAddress
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 # list of the most common errors.
 Errors = Storage(TESTMODE = "E00009",

@@ -20,11 +20,16 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from paste.httpexceptions import HTTPForbidden, HTTPError
-from r2.lib.utils import Storage, tup
-from pylons import request
 from pylons.i18n import _
-from copy import copy
+
+from paste.httpexceptions import HTTPForbidden, HTTPError
+
+from r2.lib.utils import Storage, tup
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 error_list = dict((
         ('USER_REQUIRED', _("please login to do that")),

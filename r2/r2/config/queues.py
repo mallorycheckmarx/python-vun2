@@ -20,10 +20,12 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from r2.lib.export import export
 from r2.lib.utils import tup
 
-
-__all__ = ["MessageQueue", "declare_queues"]
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 class Queues(dict):
@@ -48,6 +50,7 @@ class Queues(dict):
         self.update(queues)
 
 
+@export
 class MessageQueue(object):
     """A representation of an AMQP message queue.
 
@@ -71,6 +74,7 @@ class MessageQueue(object):
             self._bind(routing_key)
 
 
+@export
 def declare_queues():
     queues = Queues({
         "scraper_q": MessageQueue(),

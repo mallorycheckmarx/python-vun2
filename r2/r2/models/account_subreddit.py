@@ -20,28 +20,41 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import json
+from pycassa.system_manager import ASCII_TYPE
 
-from pylons import c, g, response
-
-from r2.controllers.reddit_base import MinimalController
+from r2.lib.db import tdb_cassandra
+from r2.lib.export import export
+from r2.lib.memoize import memoize
 
 __all__ = [
            #Constants Only, use @export for functions/classes
            ]
 
 
-class HealthController(MinimalController):
-    def post(self):
-        pass
+#NOTE: this file exists to contain classes that might create a circular
+#dependency between account.py and subreddit.py
 
-    def try_pagecache(self):
-        pass
+@export
+class AccountsActiveBySR(tdb_cassandra.View):
+    _use_db = True
+    _connection_pool = 'main'
+    _ttl = 15*60
 
-    def pre(self):
-        pass
+    _extra_schema_creation_args = dict(key_validation_class=ASCII_TYPE)
 
-    def GET_health(self):
-        c.dontcache = True
-        response.headers['Content-Type'] = 'text/plain'
-        return json.dumps(g.versions, sort_keys=True, indent=4)
+    _read_consistency_level  = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.ANY
+
+    @classmethod
+    def touch(cls, account, sr):
+        cls._set_values(sr._id36,
+                        {account._id36: ''})
+
+    @classmethod
+    def get_count(cls, sr, cached=True):
+        return cls.get_count_cached(sr._id36, _update=not cached)
+
+    @classmethod
+    @memoize('accounts_active', time=60)
+    def get_count_cached(cls, sr_id):
+        return cls._cf.get_count(sr_id)

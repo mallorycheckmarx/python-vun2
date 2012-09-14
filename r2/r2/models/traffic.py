@@ -30,9 +30,15 @@ from sqlalchemy.types import DateTime, Integer, String, BigInteger
 from sqlalchemy.sql.expression import desc, distinct
 from sqlalchemy.sql.functions import sum
 
-from r2.lib.utils import timedelta_by_name
-from r2.models.link import Link
+from r2.lib.export import export
 from r2.lib.memoize import memoize
+from r2.lib.utils import timedelta_by_name
+
+from r2.models.link import Link
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 engine = g.dbm.get_engine("traffic")
@@ -80,6 +86,7 @@ class PeekableIterator(object):
         return item
 
 
+@export
 def zip_timeseries(*series, **kwargs):
     """Zip timeseries data while gracefully handling gaps in the data.
 
@@ -191,6 +198,7 @@ def time_range(interval):
     return start_time, stop_time
 
 
+@export
 def points_for_interval(interval):
     """Calculate the number of data points to render for a given interval."""
     range = time_range_by_interval[interval]
@@ -214,6 +222,7 @@ def make_history_query(cls, interval):
     return start_time, stop_time, q
 
 
+@export
 def top_last_month(cls, key):
     """Aggregate a listing of the top items (by pageviews) last month.
 
@@ -262,6 +271,7 @@ def promotion_history(cls, codename, start, stop):
     return [(r.date, (r.unique_count, r.pageview_count)) for r in q.all()]
 
 
+@export
 @memoize("traffic_last_modified", time=60 * 10)
 def get_traffic_last_modified():
     """Guess how far behind the traffic processing system is."""
@@ -271,6 +281,7 @@ def get_traffic_last_modified():
                    .one()).date
 
 
+@export
 class SitewidePageviews(Base):
     __tablename__ = "traffic_aggregate"
 
@@ -287,6 +298,7 @@ class SitewidePageviews(Base):
                          "unique_count", "pageview_count")
 
 
+@export
 class PageviewsBySubreddit(Base):
     __tablename__ = "traffic_subreddits"
 
@@ -320,6 +332,7 @@ class PageviewsBySubredditAndPath(Base):
     pageview_count = Column("total", Integer())
 
 
+@export
 class PageviewsByLanguage(Base):
     __tablename__ = "traffic_lang"
 
@@ -343,6 +356,7 @@ class PageviewsByLanguage(Base):
         return top_last_month(cls, "lang")
 
 
+@export
 class ClickthroughsByCodename(Base):
     __tablename__ = "traffic_click"
 
@@ -382,6 +396,7 @@ class TargetedClickthroughsByCodename(Base):
     pageview_count = Column("total", Integer())
 
 
+@export
 class AdImpressionsByCodename(Base):
     __tablename__ = "traffic_thing"
 
@@ -409,6 +424,7 @@ class AdImpressionsByCodename(Base):
     def historical_totals(cls, interval):
         return totals(cls, interval)
 
+    
     @classmethod
     @memoize_traffic(time=3600)
     def top_last_month(cls):
@@ -440,6 +456,7 @@ class TargetedImpressionsByCodename(Base):
     pageview_count = Column("total", Integer())
 
 
+@export
 class SubscriptionsBySubreddit(Base):
     __tablename__ = "traffic_subscriptions"
 

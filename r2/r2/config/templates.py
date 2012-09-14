@@ -20,8 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import r2.lib.jsontemplates as jtmpl
 from r2.lib.manager import tp_manager
-from r2.lib.jsontemplates import *
 
 tpm = tp_manager.tp_manager()
 
@@ -31,40 +31,40 @@ def api(type, cls):
     tpm.add_handler(type, 'api-compact', cls())
 
 # blanket fallback rule
-api('templated', NullJsonTemplate)
+api('templated', jtmpl.NullJsonTemplate)
 
 # class specific overrides
-api('link',          LinkJsonTemplate)
-api('promotedlink',  PromotedLinkJsonTemplate)
-api('comment',       CommentJsonTemplate)
-api('message',       MessageJsonTemplate)
-api('subreddit',     SubredditJsonTemplate)
-api('morerecursion', MoreCommentJsonTemplate)
-api('morechildren',  MoreCommentJsonTemplate)
-api('reddit',        RedditJsonTemplate)
-api('panestack',     PanestackJsonTemplate)
-api('listing',       ListingJsonTemplate)
-api('modlist',       UserListJsonTemplate)
-api('userlist',      UserListJsonTemplate)
-api('contributorlist', UserListJsonTemplate)
-api('bannedlist',    UserListJsonTemplate)
-api('friendlist',    UserListJsonTemplate)
-api('usertableitem', UserTableItemJsonTemplate)
-api('account',       AccountJsonTemplate)
+api('link',          jtmpl.LinkJsonTemplate)
+api('promotedlink',  jtmpl.PromotedLinkJsonTemplate)
+api('comment',       jtmpl.CommentJsonTemplate)
+api('message',       jtmpl.MessageJsonTemplate)
+api('subreddit',     jtmpl.SubredditJsonTemplate)
+api('morerecursion', jtmpl.MoreCommentJsonTemplate)
+api('morechildren',  jtmpl.MoreCommentJsonTemplate)
+api('reddit',        jtmpl.RedditJsonTemplate)
+api('panestack',     jtmpl.PanestackJsonTemplate)
+api('listing',       jtmpl.ListingJsonTemplate)
+api('modlist',       jtmpl.UserListJsonTemplate)
+api('userlist',      jtmpl.UserListJsonTemplate)
+api('contributorlist', jtmpl.UserListJsonTemplate)
+api('bannedlist',    jtmpl.UserListJsonTemplate)
+api('friendlist',    jtmpl.UserListJsonTemplate)
+api('usertableitem', jtmpl.UserTableItemJsonTemplate)
+api('account',       jtmpl.AccountJsonTemplate)
 
-api('organiclisting',       OrganicListingJsonTemplate)
-api('subreddittraffic', TrafficJsonTemplate)
-api('takedownpane', TakedownJsonTemplate)
+api('organiclisting',       jtmpl.OrganicListingJsonTemplate)
+api('subreddittraffic', jtmpl.TrafficJsonTemplate)
+api('takedownpane', jtmpl.TakedownJsonTemplate)
 
-api('wikibasepage', WikiJsonTemplate)
-api('wikipagerevisions', WikiJsonTemplate)
-api('wikiview', WikiViewJsonTemplate)
-api('wikirevision', WikiRevisionJsonTemplate)
+api('wikibasepage', jtmpl.WikiJsonTemplate)
+api('wikipagerevisions', jtmpl.WikiJsonTemplate)
+api('wikiview', jtmpl.WikiViewJsonTemplate)
+api('wikirevision', jtmpl.WikiRevisionJsonTemplate)
 
-api('flairlist', FlairListJsonTemplate)
-api('flaircsv', FlairCsvJsonTemplate)
+api('flairlist', jtmpl.FlairListJsonTemplate)
+api('flaircsv', jtmpl.FlairCsvJsonTemplate)
 
-api('subredditstylesheet', StylesheetTemplate)
-api('createsubreddit', SubredditSettingsTemplate)
+api('subredditstylesheet', jtmpl.StylesheetTemplate)
+api('createsubreddit', jtmpl.SubredditSettingsTemplate)
 
-tpm.add_handler('usertableitem', 'api-html', UserItemHTMLJsonTemplate())
+tpm.add_handler('usertableitem', 'api-html', jtmpl.UserItemHTMLJsonTemplate())

@@ -20,22 +20,32 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import request, g
-from reddit_base import RedditController
-from r2.lib.pages import AdminPage, AdminAds, AdminAdAssign, AdminAdSRs
-from validator import *
+from pylons.controllers.util import abort
 
+from r2.lib.export import export
+from r2.lib.pages import AdminPage, AdminAds, AdminAdAssign, AdminAdSRs
+
+import r2.controllers.validator as validator
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
+@export
 class AdsController(RedditController):
 
-    @validate(VSponsorAdmin())
+    @validate(validator.VSponsorAdmin())
     def GET_index(self):
         res = AdminPage(content = AdminAds(),
                         show_sidebar = False,
                         title = 'ads').render()
         return res
 
-    @validate(VSponsorAdmin(),
-              ad = VAdByCodename('adcn'))
+    @validate(validator.VSponsorAdmin(),
+              ad = validator.VAdByCodename('adcn'))
     def GET_assign(self, ad):
         if ad is None:
             abort(404, 'page not found')
@@ -45,8 +55,8 @@ class AdsController(RedditController):
                         title='assign an ad to a community').render()
         return res
 
-    @validate(VSponsorAdmin(),
-              ad = VAdByCodename('adcn'))
+    @validate(validator.VSponsorAdmin(),
+              ad = validator.VAdByCodename('adcn'))
     def GET_srs(self, ad):
         if ad is None:
             abort(404, 'page not found')

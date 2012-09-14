@@ -20,36 +20,49 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing     import Thing, Relation, NotFound
-from r2.lib.db.operators import lower
-from r2.lib.db.userrel   import UserRel
-from r2.lib.db           import tdb_cassandra
-from r2.lib.memoize      import memoize
-from r2.lib.utils        import modhash, valid_hash, randstr, timefromnow
-from r2.lib.utils        import UrlParser
-from r2.lib.utils        import constant_time_compare
-from r2.lib.cache        import sgm
-from r2.lib import filters
-from r2.lib.log import log_text
-from r2.models.last_modified import LastModified
+import hashlib
+import hmac
+import time
+from datetime import datetime, timedelta
 
+import bcrypt
 from pylons import c, g, request
 from pylons.i18n import _
-import time
-import hashlib
-from copy import copy
-from datetime import datetime, timedelta
-import bcrypt
-import hmac
-import hashlib
-from pycassa.system_manager import ASCII_TYPE
+
+from r2.lib import filters
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.db.operators import lower
+from r2.lib.db.userrel import UserRel
+from r2.lib.export import export
+from r2.lib.log import log_text
+from r2.lib.memoize import memoize
+from r2.lib.utils import (#Classes
+                          UrlParser,
+                          #Functions
+                          modhash,
+                          valid_hash,
+                          randstr,
+                          timefromnow,
+                          constant_time_compare,
+                          )
+
+
+from r2.models.account_subreddit import AccountsActiveBySR
+from r2.models.last_modified import LastModified
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 COOKIE_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
+@export
 class AccountExists(Exception): pass
 
+
+@export
 class Account(Thing):
     _data_int_props = Thing._data_int_props + ('link_karma', 'comment_karma',
                                                'report_made', 'report_correct',
@@ -379,13 +392,17 @@ class Account(Thing):
 
         # Remove OAuth2Client developer permissions.  This will delete any
         # clients for which this account is the sole developer.
-        from r2.models.token import OAuth2Client
+        # NOTE: this is a function level import to avoid circular dependencies
+        # with token.py
+        from r2.models import OAuth2Client
         for client in OAuth2Client._by_developer(self):
             client.remove_developer(self)
 
     @property
     def subreddits(self):
-        from subreddit import Subreddit
+        # NOTE: this is a function level import to avoid circular dependencies
+        # with subreddit.py
+        from r2.models import Subreddit
         return Subreddit.user_subreddits(self)
 
     def recent_share_emails(self):
@@ -463,7 +480,7 @@ class Account(Thing):
         g.hardcache.set(key, fnames, 86400 * 30)
 
     def quota_baskets(self, kind):
-        from r2.models.admintools import filter_quotas
+        from r2.models import filter_quotas
         key = self.quota_key(kind)
         fnames = g.hardcache.get(key)
 
@@ -602,11 +619,14 @@ class Account(Thing):
         if not self._spam:
             AccountsActiveBySR.touch(self, sr)
 
+
+@export
 class FakeAccount(Account):
     _nodb = True
     pref_no_profanity = True
 
 
+@export
 def valid_admin_cookie(cookie):
     if g.read_only_mode:
         return (False, None)
@@ -638,6 +658,7 @@ def valid_admin_cookie(cookie):
             first_login)
 
 
+@export
 def valid_otp_cookie(cookie):
     if g.read_only_mode:
         return False
@@ -663,6 +684,7 @@ def valid_otp_cookie(cookie):
     return constant_time_compare(cookie, expected_cookie)
 
 
+@export
 def valid_feed(name, feedhash, path):
     if name and feedhash and path:
         from r2.lib.template_helpers import add_sr
@@ -679,6 +701,8 @@ def make_feedhash(user, path):
     return hashlib.sha1("".join([user.name, user.password, g.FEEDSECRET])
                    ).hexdigest()
 
+
+@export
 def make_feedurl(user, path, ext = "rss"):
     u = UrlParser(path)
     u.update_query(user = user.name,
@@ -686,6 +710,8 @@ def make_feedurl(user, path, ext = "rss"):
     u.set_extension(ext)
     return u.unparse()
 
+
+@export
 def valid_login(name, password):
     try:
         a = Account._by_name(name)
@@ -695,6 +721,8 @@ def valid_login(name, password):
     if not a._loaded: a._load()
     return valid_password(a, password)
 
+
+@export
 def valid_password(a, password):
     # bail out early if the account or password's invalid
     if not hasattr(a, 'name') or not hasattr(a, 'password') or not password:
@@ -737,18 +765,24 @@ def bcrypt_password(password):
     salt = bcrypt.gensalt(log_rounds=g.bcrypt_work_factor)
     return bcrypt.hashpw(password, salt)
 
+
+@export
 def passhash(username, password, salt = ''):
     if salt is True:
         salt = randstr(3)
     tohash = '%s%s %s' % (salt, username, password)
     return salt + hashlib.sha1(tohash).hexdigest()
 
+
+@export
 def change_password(user, newpassword):
     user.password = bcrypt_password(newpassword)
     user._commit()
     return True
 
+
 #TODO reset the cache
+@export
 def register(name, password):
     try:
         a = Account._by_name(name)
@@ -770,6 +804,8 @@ class Friend(Relation(Account, Account)): pass
 Account.__bases__ += (UserRel('friend', Friend, disable_reverse_ids_fn=True),
                       UserRel('enemy', Friend, disable_reverse_ids_fn=False))
 
+
+@export
 class DeletedUser(FakeAccount):
     @property
     def name(self):
@@ -790,27 +826,3 @@ class DeletedUser(FakeAccount):
             pass
         else:
             object.__setattr__(self, attr, val)
-
-class AccountsActiveBySR(tdb_cassandra.View):
-    _use_db = True
-    _connection_pool = 'main'
-    _ttl = 15*60
-
-    _extra_schema_creation_args = dict(key_validation_class=ASCII_TYPE)
-
-    _read_consistency_level  = tdb_cassandra.CL.ONE
-    _write_consistency_level = tdb_cassandra.CL.ANY
-
-    @classmethod
-    def touch(cls, account, sr):
-        cls._set_values(sr._id36,
-                        {account._id36: ''})
-
-    @classmethod
-    def get_count(cls, sr, cached=True):
-        return cls.get_count_cached(sr._id36, _update=not cached)
-
-    @classmethod
-    @memoize('accounts_active', time=60)
-    def get_count_cached(cls, sr_id):
-        return cls._cf.get_count(sr_id)

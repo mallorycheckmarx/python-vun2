@@ -20,19 +20,42 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from xml.dom.minidom import Document
+import base64
+import urllib
+import urllib2
 from httplib import HTTPSConnection
 from urlparse import urlparse
-import base64
+from xml.dom.minidom import Document
 
-from pylons.controllers.util import abort
-from pylons import c, g, response
+from BeautifulSoup import BeautifulStoneSoup
+from pylons import c, g, request, response
 from pylons.i18n import _
 
-from validator import *
-from r2.models import *
+import r2.controllers.validator as validator
+from r2.lib.db.thing import NotFound
+from r2.lib.log import log_text
+from r2.lib.strings import strings
+from r2.lib.utils import tup
+from r2.models import (#Classes
+                       Account,
+                       #Functions
+                       account_by_payingid,
+                       accountid_from_paypalsubscription,
+                       cancel_subscription,
+                       create_claimed_gold,
+                       create_gift_gold,
+                       send_system_message,
+                       #Constants/Variables
+                       admintools,
+                       )
 
-from reddit_base import RedditController
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import textresponse, validatedForm
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 def get_blob(code):
     key = "payment_blob-" + code
@@ -122,7 +145,7 @@ def check_txn_type(txn_type, psl):
 
 
 def verify_ipn(parameters):
-    paraemeters['cmd'] = '_notify-validate'
+    parameters['cmd'] = '_notify-validate'
     try:
         safer = dict([k, v.encode('utf-8')] for k, v in parameters.items())
         params = urllib.urlencode(safer)
@@ -255,9 +278,10 @@ def _google_checkout_post(url, params):
 
 class IpnController(RedditController):
     # Used when buying gold with creddits
-    @validatedForm(VUser(),
-                   months = VInt("months"),
-                   passthrough = VPrintable("passthrough", max_length=50))
+    @validatedForm(validator.VUser(),
+                   months=validator.VInt("months"),
+                   passthrough=validator.VPrintable("passthrough",
+                                                    max_length=50))
     def POST_spendcreddits(self, form, jquery, months, passthrough):
         if months is None or months < 1:
             form.set_html(".status", _("nice try."))
@@ -311,7 +335,7 @@ class IpnController(RedditController):
         form.set_html(".status", _("the gold has been delivered!"))
         jquery("button").hide()
 
-    @textresponse(full_sn = VLength('serial-number', 100))
+    @textresponse(full_sn=validator.VLength('serial-number', 100))
     def POST_gcheckout(self, full_sn):
         if full_sn:
             short_sn = full_sn.split('-')[0]
@@ -372,14 +396,14 @@ class IpnController(RedditController):
             g.log.error("GOOGLE CHCEKOUT: didn't work")
             g.log.error(repr(list(request.POST.iteritems())))
 
-    @textresponse(paypal_secret = VPrintable('secret', 50),
-                  payment_status = VPrintable('payment_status', 20),
-                  txn_id = VPrintable('txn_id', 20),
-                  paying_id = VPrintable('payer_id', 50),
-                  payer_email = VPrintable('payer_email', 250),
-                  mc_currency = VPrintable('mc_currency', 20),
-                  mc_gross = VFloat('mc_gross'),
-                  custom = VPrintable('custom', 50))
+    @textresponse(paypal_secret=validator.VPrintable('secret', 50),
+                  payment_status=validator.VPrintable('payment_status', 20),
+                  txn_id=validator.VPrintable('txn_id', 20),
+                  paying_id=validator.VPrintable('payer_id', 50),
+                  payer_email=validator.VPrintable('payer_email', 250),
+                  mc_currency=validator.VPrintable('mc_currency', 20),
+                  mc_gross=validator.VFloat('mc_gross'),
+                  custom=validator.VPrintable('custom', 50))
     def POST_ipn(self, paypal_secret, payment_status, txn_id, paying_id,
                  payer_email, mc_currency, mc_gross, custom):
 

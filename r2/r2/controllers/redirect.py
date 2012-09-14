@@ -21,9 +21,15 @@
 ###############################################################################
 
 from pylons.controllers.util import abort, redirect_to
+
 from r2.lib.base import BaseController
-from pylons import c
-from validator import chkuser, chksrname
+
+from r2.controllers.validator import chkuser, chksrname
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class RedirectController(BaseController):
     def GET_redirect(self, dest):

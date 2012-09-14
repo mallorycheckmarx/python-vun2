@@ -21,22 +21,29 @@
 ###############################################################################
 
 import json
-import collections
 
 from r2.lib.db.thing import MultiRelation, Relation
 from r2.lib.db import tdb_cassandra
-from r2.lib.db.tdb_cassandra import TdbException, ASCII_TYPE, UTF8_TYPE
-from r2.lib.utils._utils import flatten
+from r2.lib.db.tdb_cassandra import (#Classes
+                                     CassandraException,
+                                     TdbException,
+                                     #Constants/Variables
+                                     ASCII_TYPE,
+                                     UTF8_TYPE,
+                                     )
+from r2.lib.export import export
+from r2.lib.db import thing
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.utils import SimpleSillyStub, Storage
+from r2.lib.utils._utils import flatten
 
-from account import Account
-from link import Link, Comment
+from r2.models.account import Account
+from r2.models.link import Comment, Link
 
-from pylons import g
-from datetime import datetime, timedelta
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
-__all__ = ['Vote', 'CassandraLinkVote', 'CassandraCommentVote', 'score_changes']
 
 def score_changes(amount, old_amount):
     uc = dc = 0
@@ -48,6 +55,7 @@ def score_changes(amount, old_amount):
     elif oa > 0 and a < 0: uc = -oa; dc = -a
     elif oa < 0 and a > 0: dc = oa; uc = a
     return uc, dc
+
 
 class CassandraVote(tdb_cassandra.Relation):
     _use_db = False
@@ -139,6 +147,8 @@ class CassandraThingVote(CassandraVote):
 
         return CassandraVote._on_create(self)
 
+
+@export
 class CassandraLinkVote(CassandraThingVote):
     _use_db = True
     _type_prefix = 'LinkVote'
@@ -151,6 +161,7 @@ class CassandraLinkVote(CassandraThingVote):
 VotesByLink._view_of = CassandraLinkVote
 
 
+@export
 class CassandraCommentVote(CassandraThingVote):
     _use_db = True
     _type_prefix = 'CommentVote'
@@ -246,6 +257,7 @@ class VoteDetailsByComment(VoteDetailsByThing):
     _use_db = True
 
 
+@export
 class Vote(MultiRelation('vote',
                          Relation(Account, Link),
                          Relation(Account, Comment))):
@@ -345,8 +357,6 @@ class Vote(MultiRelation('vote',
         if not sub or not objs:
             return {}
 
-        from r2.models import Account
-
         assert isinstance(sub, Account)
 
         rels = {}
@@ -376,7 +386,6 @@ class Vote(MultiRelation('vote',
         return ret
 
 def test():
-    from r2.models import Link, Account, Comment
     from r2.lib.db.tdb_cassandra import thing_cache
 
     assert CassandraVote._rel(Account, Link) == CassandraLinkVote
@@ -424,7 +433,7 @@ def test():
     try:
         CassandraLinkVote._byID('bacon')
         raise Exception("I shouldn't be able to look up items that don't exist")
-    except NotFound:
+    except thing.NotFound:
         pass
 
     print 'fast_query', CassandraLinkVote._fast_query('abc', ['def'])

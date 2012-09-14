@@ -19,4 +19,4 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-
+import r2.tests

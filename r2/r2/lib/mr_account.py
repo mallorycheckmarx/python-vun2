@@ -67,16 +67,17 @@ cat $GOLD $DTHING | sort -T. -S200m | paster --plugin=r2 run $INI r2/lib/mr_acco
 cat $THING |  sort -T. -S200m | paster --plugin=r2 run $INI r2/lib/mr_account.py -c "join_links()" | paster --plugin=r2 run $INI r2/lib/mr_account.py -c "time_listings($TIMES)" | sort -T. -S200m | paster --plugin=r2 run $INI r2/lib/mr_account.py -c "write_permacache()"
 
 """
+import datetime
 import sys
 
-from r2.models import Account, Subreddit, Link, Comment, NotFound
-from r2.lib.db.sorts import epoch_seconds, score, controversy, _hot
-from r2.lib.db import queries
 from r2.lib import mr_tools
-from r2.lib.utils import timeago, UrlParser
+from r2.lib.db import queries
+from r2.lib.db.sorts import epoch_seconds, score, controversy, _hot
+from r2.lib.db.thing import NotFound
 from r2.lib.jsontemplates import make_fullname # what a strange place
                                                # for this function
-import datetime
+from r2.lib.utils import timeago
+from r2.models import Link, Comment
 
 def join_links():
     mr_tools.join_things(('author_id',))

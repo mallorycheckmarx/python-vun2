@@ -20,20 +20,25 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from validator import *
-from reddit_base import MinimalController
+import random
 
 from r2.lib.scraper import get_media_embed
 from r2.lib.pages import MediaEmbedBody, render_ad
 
-from pylons import request
+from pylons import c, g, request
 from pylons.controllers.util import abort
 from r2.lib.cache import make_key
 
-import random
+from r2.controllers.reddit_base import MinimalController
+from r2.controllers.validator import VLink, validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class MediaembedController(MinimalController):
-    @validate(link = VLink('link'))
+    @validate(link=VLink('link'))
     def GET_mediaembed(self, link):
         if request.host != g.media_domain:
             # don't serve up untrusted content except on our

@@ -20,15 +20,28 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db import tdb_cassandra
-from r2.lib.utils import tup
-from r2.models import Account, Subreddit, Link, Comment, Printable
-from r2.models.subreddit import DefaultSR
-from pycassa.system_manager import TIME_UUID_TYPE
 from uuid import UUID
-from pylons.i18n import _
-from pylons import request
 
+from pycassa.system_manager import TIME_UUID_TYPE
+from pylons import request
+from pylons.i18n import _
+
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import Thing
+from r2.lib.export import export
+from r2.lib.utils import tup
+
+from r2.models.account import Account
+from r2.models.link import Link, Comment
+from r2.models.printable import Printable
+from r2.models.subreddit import DefaultSR, Subreddit
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
+@export
 class ModAction(tdb_cassandra.UuidThing, Printable):
     """
     Columns:
@@ -250,9 +263,7 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
 
     @classmethod
     def add_props(cls, user, wrapped):
-
         from r2.lib.menus import NavButton
-        from r2.lib.db.thing import Thing
         from r2.lib.pages import WrappedUser
         from r2.lib.filters import _force_unicode
 

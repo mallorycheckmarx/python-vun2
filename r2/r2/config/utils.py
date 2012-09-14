@@ -20,14 +20,6 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-iters = (list, tuple, set)
-
-def tup(item, ret_is_single=False):
-    if isinstance(item, iters):
-        return (item, False) if ret_is_single else item
-    else:
-        return ((item,), True) if ret_is_single else (item,)
-
 class Storage(dict):
     """
     A Storage object is like a dictionary except `obj.foo` can be used

@@ -20,16 +20,23 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.pages import *
-from reddit_base import cross_domain
-from api import ApiController
-from r2.lib.utils import Storage, query_string, UrlParser
-from r2.lib.emailer import opt_in, opt_out
-from pylons import request, c, g
-from validator import *
-from pylons.i18n import _
-from r2.models import *
 import hashlib
+
+from pylons import g, c, request
+from pylons.i18n import _
+
+from r2.lib.emailer import opt_in, opt_out
+from r2.lib.pages import BoringPage, LoginPage, OptOut, Over18
+from r2.lib.utils import Storage, query_string, UrlParser
+
+import r2.controllers.validator as validator
+from r2.controllers.api import ApiController
+from r2.controllers.validator import validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class PostController(ApiController):
     def api_wrapper(self, kw):
@@ -64,48 +71,54 @@ class PostController(ApiController):
         c.user._commit()
 
 
-    @validate(pref_lang = VLang('lang'),
-              all_langs = VOneOf('all-langs', ('all', 'some'), default='all'))
+    @validate(pref_lang=validator.VLang('lang'),
+              all_langs=validator.VOneOf('all-langs', ('all', 'some'),
+                                         default='all'))
     def POST_unlogged_options(self, all_langs, pref_lang):
         self.set_options( all_langs, pref_lang)
         return self.redirect(request.referer)
 
-    @validate(VUser(),
-              VModhash(),
-              pref_frame = VBoolean('frame'),
-              pref_clickgadget = VBoolean('clickgadget'),
-              pref_organic = VBoolean('organic'),
-              pref_newwindow = VBoolean('newwindow'),
-              pref_public_votes = VBoolean('public_votes'),
-              pref_hide_from_robots = VBoolean('hide_from_robots'),
-              pref_hide_ups = VBoolean('hide_ups'),
-              pref_hide_downs = VBoolean('hide_downs'),
-              pref_over_18 = VBoolean('over_18'),
-              pref_research = VBoolean('research'),
-              pref_numsites = VInt('numsites', 1, 100),
-              pref_lang = VLang('lang'),
-              pref_media = VOneOf('media', ('on', 'off', 'subreddit')),
-              pref_compress = VBoolean('compress'),
-              pref_min_link_score = VInt('min_link_score', -100, 100),
-              pref_min_comment_score = VInt('min_comment_score', -100, 100),
-              pref_num_comments = VInt('num_comments', 1, g.max_comments,
-                                       default = g.num_comments),
-              pref_show_stylesheets = VBoolean('show_stylesheets'),
-              pref_show_flair = VBoolean('show_flair'),
-              pref_show_link_flair = VBoolean('show_link_flair'),
-              pref_no_profanity = VBoolean('no_profanity'),
-              pref_label_nsfw = VBoolean('label_nsfw'),
-              pref_show_promote = VBoolean('show_promote'),
-              pref_mark_messages_read = VBoolean("mark_messages_read"),
-              pref_threaded_messages = VBoolean("threaded_messages"),
-              pref_collapse_read_messages = VBoolean("collapse_read_messages"),
-              pref_private_feeds = VBoolean("private_feeds"),
-              pref_local_js = VBoolean('local_js'),
-              pref_show_adbox = VBoolean("show_adbox"),
-              pref_show_sponsors = VBoolean("show_sponsors"),
-              pref_show_sponsorships = VBoolean("show_sponsorships"),
-              pref_highlight_new_comments = VBoolean("highlight_new_comments"),
-              all_langs = VOneOf('all-langs', ('all', 'some'), default='all'))
+    @validate(validator.VUser(),
+              validator.VModhash(),
+              pref_frame=validator.VBoolean('frame'),
+              pref_clickgadget=validator.VBoolean('clickgadget'),
+              pref_organic=validator.VBoolean('organic'),
+              pref_newwindow=validator.VBoolean('newwindow'),
+              pref_public_votes=validator.VBoolean('public_votes'),
+              pref_hide_from_robots=validator.VBoolean('hide_from_robots'),
+              pref_hide_ups=validator.VBoolean('hide_ups'),
+              pref_hide_downs=validator.VBoolean('hide_downs'),
+              pref_over_18=validator.VBoolean('over_18'),
+              pref_research=validator.VBoolean('research'),
+              pref_numsites=validator.VInt('numsites', 1, 100),
+              pref_lang=validator.VLang('lang'),
+              pref_media=validator.VOneOf('media', ('on', 'off', 'subreddit')),
+              pref_compress=validator.VBoolean('compress'),
+              pref_min_link_score=validator.VInt('min_link_score', -100, 100),
+              pref_min_comment_score=validator.VInt('min_comment_score',
+                                                    -100, 100),
+              pref_num_comments=validator.VInt('num_comments', 1,
+                                               g.max_comments,
+                                               default=g.num_comments),
+              pref_show_stylesheets=validator.VBoolean('show_stylesheets'),
+              pref_show_flair=validator.VBoolean('show_flair'),
+              pref_show_link_flair=validator.VBoolean('show_link_flair'),
+              pref_no_profanity=validator.VBoolean('no_profanity'),
+              pref_label_nsfw=validator.VBoolean('label_nsfw'),
+              pref_show_promote=validator.VBoolean('show_promote'),
+              pref_mark_messages_read=validator.VBoolean("mark_messages_read"),
+              pref_threaded_messages=validator.VBoolean("threaded_messages"),
+              pref_collapse_read_messages=
+                  validator.VBoolean("collapse_read_messages"),
+              pref_private_feeds=validator.VBoolean("private_feeds"),
+              pref_local_js=validator.VBoolean('local_js'),
+              pref_show_adbox=validator.VBoolean("show_adbox"),
+              pref_show_sponsors=validator.VBoolean("show_sponsors"),
+              pref_show_sponsorships=validator.VBoolean("show_sponsorships"),
+              pref_highlight_new_comments=
+                  validator.VBoolean("highlight_new_comments"),
+              all_langs=validator.VOneOf('all-langs', ('all', 'some'),
+                                         default='all'))
     def POST_options(self, all_langs, pref_lang, **kw):
         #temporary. eventually we'll change pref_clickgadget to an
         #integer preference
@@ -137,9 +150,9 @@ class PostController(ApiController):
         return BoringPage(_("over 18?"),
                           content = Over18()).render()
 
-    @validate(VModhash(fatal=False),
-              over18 = nop('over18'),
-              dest = VDestination(default = '/'))
+    @validate(validator.VModhash(fatal=False),
+              over18=validator.nop('over18'),
+              dest=validator.VDestination(default = '/'))
     def POST_over18(self, over18, dest):
         if over18 == 'yes':
             if c.user_is_loggedin and not c.errors:
@@ -155,7 +168,7 @@ class PostController(ApiController):
             return self.redirect('/')
 
 
-    @validate(msg_hash = nop('x'))
+    @validate(msg_hash=validator.nop('x'))
     def POST_optout(self, msg_hash):
         email, sent = opt_out(msg_hash)
         if not email:
@@ -165,7 +178,7 @@ class PostController(ApiController):
                                            sent = True,
                                            msg_hash = msg_hash)).render()
 
-    @validate(msg_hash = nop('x'))
+    @validate(msg_hash=validator.nop('x'))
     def POST_optin(self, msg_hash):
         email, sent = opt_in(msg_hash)
         if not email:
@@ -176,7 +189,7 @@ class PostController(ApiController):
                                            msg_hash = msg_hash)).render()
 
 
-    @validate(dest = VDestination(default = "/"))
+    @validate(dest=validator.VDestination(default = "/"))
     def POST_login(self, dest, *a, **kw):
         ApiController._handle_login(self, *a, **kw)
         c.render_style = "html"
@@ -188,7 +201,7 @@ class PostController(ApiController):
 
         return self.redirect(dest)
 
-    @validate(dest = VDestination(default = "/"))
+    @validate(dest=validator.VDestination(default = "/"))
     def POST_reg(self, dest, *a, **kw):
         ApiController._handle_register(self, *a, **kw)
         c.render_style = "html"

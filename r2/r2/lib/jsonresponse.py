@@ -20,18 +20,22 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.config.extensions import get_api_subtype
-from r2.lib.utils import tup
-from r2.lib.captcha import get_iden
-from r2.lib.wrapped import Wrapped, StringTemplate
-from r2.lib.filters import websafe_json, spaceCompress
-from r2.lib.base import BaseController
-from r2.lib.pages.things import wrap_links
-from r2.models import IDBuilder, Listing
-
 import simplejson
 from pylons import c, g
 
+from r2.lib.captcha import get_iden
+from r2.lib.export import export
+from r2.lib.filters import websafe_json, spaceCompress
+from r2.lib.utils import tup
+from r2.lib.wrapped import Wrapped
+from r2.lib.wrapper import wrap_links
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
+
+@export
 def json_respond(x):
     if g.debug:
         return websafe_json(simplejson.dumps(x or '',

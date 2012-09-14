@@ -20,6 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import functools
 from hashlib import md5
 
 from r2.config import cache
@@ -33,6 +34,7 @@ make_lock = g.make_lock
 def memoize(iden, time = 0, stale=False):
     def memoize_fn(fn):
         from r2.lib.memoize import NoneResult
+        @functools.wraps(fn)
         def new_fn(*a, **kw):
 
             #if the keyword param _update == True, the cache will be
@@ -63,7 +65,6 @@ def memoize(iden, time = 0, stale=False):
                 res = None
 
             return res
-
         return new_fn
     return memoize_fn
 

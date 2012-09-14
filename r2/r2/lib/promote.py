@@ -20,22 +20,35 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from __future__ import with_statement
+import random
+from datetime import datetime, timedelta
 
-from r2.models import *
-from r2.lib.wrapped import Wrapped
-from r2.lib import authorize
-from r2.lib import emailer, filters
+from pylons import g, c
+from pylons.i18n import ungettext
+
+from r2.models import (Account,
+                       DefaultSR, 
+                       FakeAccount,
+                       FakeSubreddit,
+                       IDBuilder,
+                       Link,
+                       MultiReddit,
+                       PromoCampaign,
+                       PromotedLink,
+                       PromotionWeights,
+                       Subreddit,
+                       )
+
+
+from r2.lib import authorize, emailer, filters
+from r2.lib.db.queries import make_results, db_sort, add_queries, merge_results
+from r2.lib.db.thing import NotFound
 from r2.lib.memoize import memoize
+from r2.lib.wrapped import Wrapped
 from r2.lib.template_helpers import get_domain
 from r2.lib.utils import Enum, UniqueIterator
-from organic import keep_fresh_links
-from pylons import g, c
-from datetime import datetime, timedelta
-from r2.lib.db.queries import make_results, db_sort, add_queries, merge_results
-import itertools
-
-import random
+from r2.lib.organic import keep_fresh_links
+from r2.lib.strings import strings
 
 promoted_memo_lifetime = 30
 promoted_memo_key = 'cached_promoted_links2'

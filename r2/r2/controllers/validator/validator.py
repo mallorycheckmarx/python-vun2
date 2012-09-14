@@ -20,32 +20,57 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request, response
+import functools
+import inspect
+import re
+from copy import copy
+from curses.ascii import isprint
+from datetime import datetime, timedelta
+from itertools import chain
+
+import pycountry
+from pylons import c, g, request
 from pylons.i18n import _
 from pylons.controllers.util import abort
+
 from r2.config.extensions import api_type
+from r2.lib.export import export
 from r2.lib import utils, captcha, promote, totp
-from r2.lib.filters import unkeep_space, websafe, _force_unicode
-from r2.lib.filters import markdown_souptest
-from r2.lib.db import tdb_cassandra
-from r2.lib.db.operators import asc, desc
-from r2.lib.template_helpers import add_sr
-from r2.lib.jsonresponse import json_respond, JQueryResponse, JsonResponse
-from r2.lib.log import log_text
-from r2.models import *
 from r2.lib.authorize import Address, CreditCard
-from r2.lib.utils import constant_time_compare
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.filters import unkeep_space, markdown_souptest
+from r2.lib.jsonresponse import JQueryResponse, JsonResponse
+from r2.lib.utils import tup, constant_time_compare, UrlParser
+from r2.lib.log import log_text
+from r2.models import (Account,
+                       Ad,
+                       Award,
+                       Comment,
+                       FakeSubreddit,
+                       FlairTemplateBySubredditIndex,
+                       Link,
+                       Message,
+                       OAuth2Client,
+                       Subreddit,
+                       Trophy,
+                       admin_ratelimit,
+                       login_throttle,
+                       is_shamed_domain,
+                       is_banned_IP,
+                       valid_password,
+                       valid_login,
+                      )
 
-from r2.controllers.errors import errors, UserRequiredException
-from r2.controllers.errors import VerifiedUserRequiredException
-from r2.controllers.errors import GoldRequiredException
+from r2.controllers.errors import (errors,
+                                   UserRequiredException,
+                                   VerifiedUserRequiredException,
+                                   )
 
-from copy import copy
-from datetime import datetime, timedelta
-from curses.ascii import isprint
-import re, inspect
-import pycountry
-from itertools import chain
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 def visible_promo(article):
     is_promo = getattr(article, "promoted", None) is not None
@@ -64,14 +89,20 @@ def visible_promo(article):
     # not a promo, therefore it is visible
     return True
 
+
+@export
 def can_view_link_comments(article):
     return (article.subreddit_slow.can_view(c.user) and
             visible_promo(article))
 
+
+@export
 def can_comment_link(article):
     return (article.subreddit_slow.can_comment(c.user) and
             visible_promo(article))
 
+
+@export
 class Validator(object):
     default_param = None
     def __init__(self, param=None, default=None, post=True, get=True, url=True,
@@ -127,6 +158,7 @@ class Validator(object):
                 raise
 
 
+@export
 def build_arg_list(fn, env):
     """given a fn and and environment the builds a keyword argument list
     for fn"""
@@ -146,6 +178,7 @@ def build_arg_list(fn, env):
                 kw[name] = env[name]
     return kw
 
+
 def _make_validated_kw(fn, simple_vals, param_vals, env):
     for validator in simple_vals:
         validator(env)
@@ -153,6 +186,7 @@ def _make_validated_kw(fn, simple_vals, param_vals, env):
     for var, validator in param_vals.iteritems():
         kw[var] = validator(env)
     return kw
+
 
 def set_api_docs(fn, simple_vals, param_vals):
     doc = fn._api_doc = getattr(fn, '_api_doc', {})
@@ -163,6 +197,7 @@ def set_api_docs(fn, simple_vals, param_vals):
 
 make_validated_kw = _make_validated_kw
 
+@export
 def validate(*simple_vals, **param_vals):
     def val(fn):
         @utils.wraps_api(fn)
@@ -189,6 +224,7 @@ def api_validate(response_type=None):
     a Json-y responder object.
     """
     def wrap(response_function):
+        @functools.wraps(response_function)
         def _api_validate(*simple_vals, **param_vals):
             def val(fn):
                 @utils.wraps_api(fn)
@@ -229,15 +265,20 @@ def api_validate(response_type=None):
     return wrap
 
 
+@export
 @api_validate("html")
 def noresponse(self, self_method, responder, simple_vals, param_vals, *a, **kw):
     self_method(self, *a, **kw)
     return self.api_wrapper({})
 
+
+@export
 @api_validate("html")
 def textresponse(self, self_method, responder, simple_vals, param_vals, *a, **kw):
     return self_method(self, *a, **kw)
 
+
+@export
 @api_validate()
 def json_validate(self, self_method, responder, simple_vals, param_vals, *a, **kw):
     if c.extension != 'json':
@@ -247,6 +288,7 @@ def json_validate(self, self_method, responder, simple_vals, param_vals, *a, **k
     if val is None:
         val = responder.make_response()
     return self.api_wrapper(val)
+
 
 def _validatedForm(self, self_method, responder, simple_vals, param_vals,
                   *a, **kw):
@@ -273,12 +315,16 @@ def _validatedForm(self, self_method, responder, simple_vals, param_vals,
     else:
         return self.api_wrapper(responder.make_response())
 
+
+@export
 @api_validate("html")
 def validatedForm(self, self_method, responder, simple_vals, param_vals,
                   *a, **kw):
     return _validatedForm(self, self_method, responder, simple_vals, param_vals,
                           *a, **kw)
 
+
+@export
 @api_validate("html")
 def validatedMultipartForm(self, self_method, responder, simple_vals,
                            param_vals, *a, **kw):
@@ -293,16 +339,21 @@ def validatedMultipartForm(self, self_method, responder, simple_vals,
 
 
 #### validators ####
+@export
 class nop(Validator):
     def run(self, x):
         return x
 
+
+@export
 class VLang(Validator):
     def run(self, lang):
         if lang in g.all_languages:
             return lang
         return g.lang
 
+
+@export
 class VRequired(Validator):
     def __init__(self, param, error, *a, **kw):
         Validator.__init__(self, param, *a, **kw)
@@ -318,6 +369,7 @@ class VRequired(Validator):
             self.error()
         else:
             return item
+
 
 class VThing(Validator):
     def __init__(self, param, thingclass, redirect = True, *a, **kw):
@@ -340,18 +392,26 @@ class VThing(Validator):
                 else:
                     return None
 
+
+@export
 class VLink(VThing):
     def __init__(self, param, redirect = True, *a, **kw):
         VThing.__init__(self, param, Link, redirect=redirect, *a, **kw)
 
+
+@export
 class VCommentByID(VThing):
     def __init__(self, param, redirect = True, *a, **kw):
         VThing.__init__(self, param, Comment, redirect=redirect, *a, **kw)
 
+
+@export
 class VAd(VThing):
     def __init__(self, param, redirect = True, *a, **kw):
         VThing.__init__(self, param, Ad, redirect=redirect, *a, **kw)
 
+
+@export
 class VAdByCodename(Validator):
     def run(self, codename, required_fullname=None):
         if not codename:
@@ -367,10 +427,14 @@ class VAdByCodename(Validator):
         else:
             return a
 
+
+@export
 class VAward(VThing):
     def __init__(self, param, redirect = True, *a, **kw):
         VThing.__init__(self, param, Award, redirect=redirect, *a, **kw)
 
+
+@export
 class VAwardByCodename(Validator):
     def run(self, codename, required_fullname=None):
         if not codename:
@@ -386,10 +450,14 @@ class VAwardByCodename(Validator):
         else:
             return a
 
+
+@export
 class VTrophy(VThing):
     def __init__(self, param, redirect = True, *a, **kw):
         VThing.__init__(self, param, Trophy, redirect=redirect, *a, **kw)
 
+
+@export
 class VMessage(Validator):
     def run(self, message_id):
         if message_id:
@@ -400,6 +468,7 @@ class VMessage(Validator):
                 abort(404, 'page not found')
 
 
+@export
 class VCommentID(Validator):
     def run(self, cid):
         if cid:
@@ -409,6 +478,8 @@ class VCommentID(Validator):
             except (NotFound, ValueError):
                 pass
 
+
+@export
 class VMessageID(Validator):
     def run(self, cid):
         if cid:
@@ -421,6 +492,8 @@ class VMessageID(Validator):
             except (NotFound, ValueError):
                 pass
 
+
+@export
 class VCount(Validator):
     def run(self, count):
         if count is None:
@@ -430,7 +503,7 @@ class VCount(Validator):
         except ValueError:
             return 0
 
-
+@export
 class VLimit(Validator):
     def __init__(self, param, default=25, max_limit=100, **kw):
         self.default_limit = default
@@ -459,6 +532,8 @@ class VCssMeasure(Validator):
 
 subreddit_rx = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_]{2,20}\Z")
 
+
+@export
 def chksrname(x):
     #notice the space before reddit.com
     if x in ('friends', 'all', ' reddit.com'):
@@ -470,6 +545,7 @@ def chksrname(x):
         return None
 
 
+@export
 class VLength(Validator):
     only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
 
@@ -491,6 +567,8 @@ class VLength(Validator):
         else:
             return text
 
+
+@export
 class VPrintable(VLength):
     def run(self, text, text2 = ''):
         text = VLength.run(self, text, text2)
@@ -508,10 +586,13 @@ class VPrintable(VLength):
         return None
 
 
+@export
 class VTitle(VLength):
     def __init__(self, param, max_length = 300, **kw):
         VLength.__init__(self, param, max_length, **kw)
 
+
+@export
 class VMarkdown(VLength):
     def __init__(self, param, max_length = 10000, **kw):
         VLength.__init__(self, param, max_length, **kw)
@@ -532,6 +613,8 @@ class VMarkdown(VLength):
             # reraise the original error with the original stack trace
             raise s[1], None, s[2]
 
+
+@export
 class VSelfText(VMarkdown):
 
     def set_max_length(self, val):
@@ -544,6 +627,8 @@ class VSelfText(VMarkdown):
 
     max_length = property(get_max_length, set_max_length)
 
+
+@export
 class VSubredditName(VRequired):
     def __init__(self, item, *a, **kw):
         VRequired.__init__(self, item, errors.BAD_SR_NAME, *a, **kw)
@@ -559,6 +644,7 @@ class VSubredditName(VRequired):
             except NotFound:
                 return name
 
+
 class VSubredditTitle(Validator):
     def run(self, title):
         if not title:
@@ -568,11 +654,13 @@ class VSubredditTitle(Validator):
         else:
             return title
 
+
 class VSubredditDesc(Validator):
     def run(self, description):
         if description and len(description) > 500:
             self.set_error(errors.DESC_TOO_LONG)
         return unkeep_space(description or '')
+
 
 class VAccountByName(VRequired):
     def __init__(self, param, error = errors.USER_DOESNT_EXIST, *a, **kw):
@@ -585,6 +673,8 @@ class VAccountByName(VRequired):
             except NotFound: pass
         return self.error()
 
+
+@export
 def fullname_regex(thing_cls = None, multiple = False):
     pattern = "[%s%s]" % (Relation._type_prefix, Thing._type_prefix)
     if thing_cls:
@@ -596,6 +686,8 @@ def fullname_regex(thing_cls = None, multiple = False):
         pattern = r"(%s *,? *)+" % pattern
     return re.compile(r"\A" + pattern + r"\Z")
 
+
+@export
 class VByName(Validator):
     # Lookup tdb_sql.Thing or tdb_cassandra.Thing objects by fullname. 
     splitter = re.compile('[ ,]+')
@@ -644,6 +736,8 @@ class VByName(Validator):
             self.param: _('an existing thing id')
         }
 
+
+@export
 class VByNameIfAuthor(VByName):
     def run(self, fullname):
         thing = VByName.run(self, fullname)
@@ -653,6 +747,8 @@ class VByNameIfAuthor(VByName):
                 return thing
         return self.set_error(errors.NOT_AUTHOR)
 
+
+@export
 class VCaptcha(Validator):
     default_param = ('iden', 'captcha')
     
@@ -663,6 +759,8 @@ class VCaptcha(Validator):
                 self.set_error(errors.BAD_CAPTCHA)
             g.stats.action_event_count("captcha", valid_captcha)
 
+
+@export
 class VUser(Validator):
     def run(self, password = None):
         if not c.user_is_loggedin:
@@ -671,6 +769,8 @@ class VUser(Validator):
         if (password is not None) and not valid_password(c.user, password):
             self.set_error(errors.WRONG_PASSWORD)
 
+
+@export
 class VModhash(Validator):
     default_param = 'uh'
     def __init__(self, param=None, fatal=True, *a, **kw):
@@ -685,15 +785,21 @@ class VModhash(Validator):
             self.param: _('a modhash')
         }
 
+
+@export
 class VVotehash(Validator):
     def run(self, vh, thing_name):
         return True
 
+
+@export
 class VAdmin(Validator):
     def run(self):
         if not c.user_is_admin:
             abort(404, "page not found")
 
+
+@export
 class VAdminOrAdminSecret(VAdmin):
     def run(self, secret):
         '''If validation succeeds, return True if the secret was used,
@@ -703,18 +809,23 @@ class VAdminOrAdminSecret(VAdmin):
         super(VAdminOrAdminSecret, self).run()
         return False
 
+
 class VVerifiedUser(VUser):
     def run(self):
         VUser.run(self)
         if not c.user.email_verified:
             raise VerifiedUserRequiredException
 
+
+@export
 class VGold(VUser):
     def run(self):
         VUser.run(self)
         if not c.user.gold:
             abort(403, 'forbidden')
 
+
+@export
 class VSponsorAdmin(VVerifiedUser):
     """
     Validator which checks c.user_is_sponsor
@@ -728,6 +839,8 @@ class VSponsorAdmin(VVerifiedUser):
             return
         abort(403, 'forbidden')
 
+
+@export
 class VSponsor(VVerifiedUser):
     """
     Not intended to be used as a check for c.user_is_sponsor, but
@@ -755,17 +868,23 @@ class VSponsor(VVerifiedUser):
                 pass
             abort(403, 'forbidden')
 
+
+@export
 class VTrafficViewer(VSponsor):
     def user_test(self, thing):
         return (VSponsor.user_test(self, thing) or
                 promote.is_traffic_viewer(thing, c.user))
 
+
+@export
 class VSrModerator(Validator):
     def run(self):
         if not (c.user_is_loggedin and c.site.is_moderator(c.user) 
                 or c.user_is_admin):
             abort(403, "forbidden")
 
+
+@export
 class VFlairManager(VSrModerator):
     """Validates that a user is permitted to manage flair for a subreddit.
        
@@ -774,6 +893,8 @@ class VFlairManager(VSrModerator):
     subreddit administration."""
     pass
 
+
+@export
 class VCanDistinguish(VByName):
     def run(self, thing_name, how):
         if c.user_is_admin:
@@ -792,6 +913,8 @@ class VCanDistinguish(VByName):
 
         abort(403,'forbidden')
 
+
+@export
 class VSrCanAlter(VByName):
     def run(self, thing_name):
         if c.user_is_admin:
@@ -809,6 +932,8 @@ class VSrCanAlter(VByName):
                     return True
         abort(403,'forbidden')
 
+
+@export
 class VSrCanBan(VByName):
     def run(self, thing_name):
         if c.user_is_admin:
@@ -825,6 +950,7 @@ class VSrCanBan(VByName):
             #     return 'contributor'
         abort(403,'forbidden')
 
+
 class VSrSpecial(VByName):
     def run(self, thing_name):
         if c.user_is_admin:
@@ -840,6 +966,7 @@ class VSrSpecial(VByName):
         abort(403,'forbidden')
 
 
+@export
 class VSubmitParent(VByName):
     def run(self, fullname, fullname2):
         #for backwards compatability (with iphone app)
@@ -870,6 +997,8 @@ class VSubmitParent(VByName):
             self.param[0]: _('id of parent thing')
         }
 
+
+@export
 class VSubmitSR(Validator):
     def __init__(self, srname_param, linktype_param=None, promotion=False):
         self.require_linktype = False
@@ -909,6 +1038,8 @@ class VSubmitSR(Validator):
 
         return sr
 
+
+@export
 class VSubscribeSR(VByName):
     def __init__(self, srid_param, srname_param):
         VByName.__init__(self, (srid_param, srname_param)) 
@@ -929,6 +1060,8 @@ class VSubscribeSR(VByName):
 
 MIN_PASSWORD_LENGTH = 3
 
+
+@export
 class VPassword(Validator):
     def run(self, password, verify):
         if not (password and len(password) >= MIN_PASSWORD_LENGTH):
@@ -940,6 +1073,8 @@ class VPassword(Validator):
 
 user_rx = re.compile(r"\A[\w-]{3,20}\Z", re.UNICODE)
 
+
+@export
 def chkuser(x):
     if x is None:
         return None
@@ -952,6 +1087,8 @@ def chkuser(x):
     except UnicodeEncodeError:
         return None
 
+
+@export
 class VUname(VRequired):
     def __init__(self, item, *a, **kw):
         VRequired.__init__(self, item, errors.BAD_USERNAME, *a, **kw)
@@ -963,11 +1100,12 @@ class VUname(VRequired):
             try:
                 a = Account._by_name(user_name, True)
                 if a._deleted:
-                   return self.error(errors.USERNAME_TAKEN_DEL)
+                    return self.error(errors.USERNAME_TAKEN_DEL)
                 else:
-                   return self.error(errors.USERNAME_TAKEN)
+                    return self.error(errors.USERNAME_TAKEN)
             except NotFound:
                 return user_name
+
 
 class VLogin(VRequired):
     def __init__(self, item, *a, **kw):
@@ -987,6 +1125,8 @@ class VLogin(VRequired):
             return False
         return user
 
+
+@export
 class VThrottledLogin(VLogin):
     def __init__(self, *args, **kwargs):
         VLogin.__init__(self, *args, **kwargs)
@@ -1009,6 +1149,8 @@ class VThrottledLogin(VLogin):
         else:
             return user
 
+
+@export
 class VSanitizedUrl(Validator):
     def run(self, url):
         return utils.sanitize_url(url)
@@ -1016,6 +1158,8 @@ class VSanitizedUrl(Validator):
     def param_docs(self):
         return {self.param: _("a valid URL")}
 
+
+@export
 class VUrl(VRequired):
     def __init__(self, item, allow_self = True, lookup = True, *a, **kw):
         self.allow_self = allow_self
@@ -1068,6 +1212,8 @@ class VUrl(VRequired):
             pass
         return params
 
+
+@export
 class VShamedDomain(Validator):
     def run(self, url):
         if not url:
@@ -1079,6 +1225,8 @@ class VShamedDomain(Validator):
             self.set_error(errors.DOMAIN_BANNED, dict(domain=domain,
                                                       reason=reason))
 
+
+@export
 class VExistingUname(VRequired):
     def __init__(self, item, *a, **kw):
         VRequired.__init__(self, item, errors.NO_USER, *a, **kw)
@@ -1107,6 +1255,8 @@ class VExistingUname(VRequired):
             self.param: _('the name of an existing user')
         }
 
+
+@export
 class VMessageRecipient(VExistingUname):
     def run(self, name):
         if not name:
@@ -1135,6 +1285,8 @@ class VMessageRecipient(VExistingUname):
             else:
                 return account
 
+
+@export
 class VUserWithEmail(VExistingUname):
     def run(self, name):
         user = VExistingUname.run(self, name)
@@ -1143,6 +1295,7 @@ class VUserWithEmail(VExistingUname):
         return user
 
 
+@export
 class VBoolean(Validator):
     def run(self, val):
         lv = str(val).lower()
@@ -1154,6 +1307,7 @@ class VBoolean(Validator):
         return {
             self.param: _('boolean value')
         }
+
 
 class VNumber(Validator):
     def __init__(self, param, min=None, max=None, coerce = True,
@@ -1187,13 +1341,18 @@ class VNumber(Validator):
             self.set_error(self.error, msg_params = dict(min=self.min,
                                                          max=self.max))
 
+
+@export
 class VInt(VNumber):
     def cast(self, val):
         return int(val)
 
+
+@export
 class VFloat(VNumber):
     def cast(self, val):
         return float(val)
+
 
 class VBid(VNumber):
     '''
@@ -1229,6 +1388,7 @@ class VBid(VNumber):
                 return float(bid)
 
 
+@export
 class VCssName(Validator):
     """
     returns a name iff it consists of alphanumeric characters and
@@ -1246,6 +1406,7 @@ class VCssName(Validator):
         return ''
 
 
+@export
 class VMenu(Validator):
 
     def __init__(self, param, menu_cls, remember = True, **kw):
@@ -1279,6 +1440,7 @@ class VMenu(Validator):
         return sort
 
 
+@export
 class VRatelimit(Validator):
     def __init__(self, rate_user = False, rate_ip = False,
                  prefix = 'rate_', error = errors.RATELIMIT, *a, **kw):
@@ -1290,7 +1452,6 @@ class VRatelimit(Validator):
         Validator.__init__(self, *a, **kw)
 
     def run (self):
-        from r2.models.admintools import admin_ratelimit
 
         if g.disable_ratelimit:
             return
@@ -1314,7 +1475,6 @@ class VRatelimit(Validator):
             # when errors have associated field parameters, we'll need
             # to add that here
             if self.error == errors.RATELIMIT:
-                from datetime import datetime
                 delta = expire_time - datetime.now(g.tz)
                 self.seconds = delta.total_seconds()
                 if self.seconds < 3:  # Don't ratelimit within three seconds
@@ -1336,6 +1496,7 @@ class VRatelimit(Validator):
         if rate_ip:
             to_set['ip' + str(request.ip)] = expire_time
         g.cache.set_multi(to_set, prefix = prefix, time = seconds)
+
 
 class VDelay(Validator):
     def __init__(self, category, *a, **kw):
@@ -1388,6 +1549,8 @@ class VDelay(Validator):
             else:
                 g.cache.set(key, prev_violations, max_duration)
 
+
+@export
 class VCommentIDs(Validator):
     #id_str is a comma separated list of id36's
     def run(self, id_str):
@@ -1408,6 +1571,8 @@ class CachedUser(object):
         if self.key and self.cache_prefix:
             g.cache.delete(str(self.cache_prefix + "_" + self.key))
 
+
+@export
 class VOneTimeToken(Validator):
     def __init__(self, model, param, *args, **kwargs):
         self.model = model
@@ -1422,6 +1587,8 @@ class VOneTimeToken(Validator):
             self.set_error(errors.EXPIRED)
             return None
 
+
+@export
 class VOneOf(Validator):
     def __init__(self, param, options = (), *a, **kw):
         Validator.__init__(self, param, *a, **kw)
@@ -1439,12 +1606,16 @@ class VOneOf(Validator):
             self.param: _('one of (%s)') % ', '.join(self.options)
         }
 
+
+@export
 class VImageType(Validator):
     def run(self, img_type):
         if not img_type in ('png', 'jpg'):
             return 'png'
         return img_type
 
+
+@export
 class VSubredditSponsorship(VInt):
     max = 1
     min = 0
@@ -1454,6 +1625,8 @@ class VSubredditSponsorship(VInt):
             abort(403, "forbidden")
         return s
 
+
+@export
 class ValidEmails(Validator):
     """Validates a list of email addresses passed in as a string and
     delineated by whitespace, ',' or ';'.  Also validates quantity of
@@ -1495,6 +1668,7 @@ class ValidEmails(Validator):
             return list(emails)[0] if self.num == 1 else emails
 
 
+@export
 class VCnameDomain(Validator):
     domain_re  = re.compile(r'\A([\w\-_]+\.)+[\w]+\Z')
 
@@ -1514,12 +1688,15 @@ class VCnameDomain(Validator):
 
 # NOTE: make sure *never* to have res check these are present
 # otherwise, the response could contain reference to these errors...!
+@export
 class ValidIP(Validator):
     def run(self):
         if is_banned_IP(request.ip):
             self.set_error(errors.BANNED_IP)
         return request.ip
 
+
+@export
 class VDate(Validator):
     """
     Date checker that accepts string inputs in %m/%d/%Y format.
@@ -1573,6 +1750,8 @@ class VDate(Validator):
         except (ValueError, TypeError):
             self.set_error(errors.BAD_DATE)
 
+
+@export
 class VDateRange(VDate):
     """
     Adds range validation to VDate.  In addition to satisfying
@@ -1593,6 +1772,7 @@ class VDateRange(VDate):
             self.set_error(errors.BAD_DATE_RANGE)
 
 
+@export
 class VDestination(Validator):
     def __init__(self, param = 'dest', default = "", **kw):
         self.default = default
@@ -1629,6 +1809,8 @@ class VDestination(Validator):
             self.param: _('destination url (must be same-domain)')
         }
 
+
+@export
 class ValidAddress(Validator):
     def __init__(self, param, allowed_countries = ["United States"]):
         self.allowed_countries = allowed_countries
@@ -1684,6 +1866,8 @@ class ValidAddress(Validator):
                            zip = zipCode, country = country.name,
                            phoneNumber = phoneNumber or "")
 
+
+@export
 class ValidCard(Validator):
     valid_ccn  = re.compile(r"\d{13,16}")
     valid_date = re.compile(r"\d\d\d\d-\d\d")
@@ -1725,12 +1909,16 @@ class ValidCard(Validator):
                               expirationDate = expirationDate,
                               cardCode = cardCode)
 
+
+@export
 class VTarget(Validator):
     target_re = re.compile("\A[\w_-]{3,20}\Z")
     def run(self, name):
         if name and self.target_re.match(name):
             return name
 
+
+@export
 class VFlairAccount(VRequired):
     def __init__(self, item, *a, **kw):
         VRequired.__init__(self, item, errors.BAD_FLAIR_TARGET, *a, **kw)
@@ -1749,6 +1937,8 @@ class VFlairAccount(VRequired):
             or self._lookup(name, True)
             or self.error())
 
+
+@export
 class VFlairLink(VRequired):
     def __init__(self, item, *a, **kw):
         VRequired.__init__(self, item, errors.BAD_FLAIR_TARGET, *a, **kw)
@@ -1761,6 +1951,8 @@ class VFlairLink(VRequired):
         except NotFound:
             return self.error()
 
+
+@export
 class VFlairCss(VCssName):
     def __init__(self, param, max_css_classes=10, **kw):
         self.max_css_classes = max_css_classes
@@ -1782,10 +1974,14 @@ class VFlairCss(VCssName):
 
         return css
 
+
+@export
 class VFlairText(VLength):
     def __init__(self, param, max_length=64, **kw):
         VLength.__init__(self, param, max_length, **kw)
 
+
+@export
 class VFlairTemplateByID(VRequired):
     def __init__(self, param, **kw):
         VRequired.__init__(self, param, None, **kw)
@@ -1797,6 +1993,8 @@ class VFlairTemplateByID(VRequired):
         except tdb_cassandra.NotFound:
             return None
 
+
+@export
 class VOneTimePassword(Validator):
     max_skew = 2  # check two periods to allow for some clock skew
     ratelimit = 3  # maximum number of tries per period
@@ -1857,6 +2055,8 @@ class VOneTimePassword(Validator):
         # if we got this far, their password was wrong, invalid or already used
         self.set_error(errors.WRONG_PASSWORD)
 
+
+@export
 class VOAuth2ClientID(VRequired):
     default_param = "client_id"
     default_param_doc = _("an app")
@@ -1875,6 +2075,8 @@ class VOAuth2ClientID(VRequired):
     def param_docs(self):
         return {self.default_param: self.default_param_doc}
 
+
+@export
 class VOAuth2ClientDeveloper(VOAuth2ClientID):
     default_param_doc = _("an app developed by the user")
 
@@ -1884,6 +2086,7 @@ class VOAuth2ClientDeveloper(VOAuth2ClientID):
             return self.error()
         return client
 
+@export
 class VOAuth2Scope(VRequired):
     default_param = "scope"
     def __init__(self, param=None, *a, **kw):

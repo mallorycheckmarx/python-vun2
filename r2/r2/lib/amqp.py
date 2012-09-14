@@ -20,20 +20,23 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from Queue import Queue
-from threading import local, Thread
-from datetime import datetime
-import os
+import errno
+import cPickle as pickle
+import socket
 import sys
 import time
-import errno
-import socket
-import itertools
-import cPickle as pickle
+from datetime import datetime
+from Queue import Queue
+from threading import local, Thread
 
 from amqplib import client_0_8 as amqp
-
 from pylons import g
+
+from r2.lib.export import export
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 amqp_host = g.amqp_host
 amqp_user = g.amqp_user
@@ -182,6 +185,8 @@ def _add_item(routing_key, body, message_id = None,
     else:
         stats.event_count(event_name, 'enqueue')
 
+
+@export
 def add_item(routing_key, body, message_id = None, delivery_mode = DELIVERY_DURABLE):
     if amqp_host and amqp_logging:
         log.debug("amqp: adding item %r to %r" % (body, routing_key))
@@ -189,9 +194,13 @@ def add_item(routing_key, body, message_id = None, delivery_mode = DELIVERY_DURA
     worker.do(_add_item, routing_key, body, message_id = message_id,
               delivery_mode = delivery_mode)
 
+
+@export
 def add_kw(routing_key, **kw):
     add_item(routing_key, pickle.dumps(kw))
 
+
+@export
 def consume_items(queue, callback, verbose=True):
     """A lighter-weight version of handle_items that uses AMQP's
        basic.consume instead of basic.get. Callback is only passed a
@@ -233,6 +242,8 @@ def consume_items(queue, callback, verbose=True):
         if chan.is_open:
             chan.close()
 
+
+@export
 def handle_items(queue, callback, ack=True, limit=1, min_size=0,
                  drain=False, verbose=True, sleep_time=1):
     """Call callback() on every item in a particular queue. If the

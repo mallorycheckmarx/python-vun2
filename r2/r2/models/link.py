@@ -20,34 +20,43 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import Thing, Relation, NotFound, MultiRelation, \
-     CreationError
-from r2.lib.db.operators import desc
-from r2.lib.utils import base_url, tup, domain, title_to_url, UrlParser
-from r2.lib.utils.trial_utils import trial_info
-from account import Account, DeletedUser
-from subreddit import Subreddit
-from printable import Printable
-from r2.config import cache, extensions
-from r2.lib.memoize import memoize
+import re
+from datetime import datetime
+
+from mako.filters import url_escape
+from pylons import c, g, request
+from pylons.i18n import _
+
+from r2.config import extensions
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import (#Classes
+                             CreationError,
+                             MultiRelation,
+                             NotFound,
+                             Relation,
+                             Thing,
+                             )
+from r2.lib.export import export
 from r2.lib.filters import _force_utf8
 from r2.lib import utils
-from r2.lib.log import log_text
-from mako.filters import url_escape
-from r2.lib.strings import strings, Score
-from r2.lib.db import tdb_cassandra
-from r2.models.subreddit import MultiReddit
+from r2.lib.strings import Score
+from r2.lib.utils import tup, domain, title_to_url, UrlParser
+from r2.lib.utils.trial_utils import trial_info
 
-from pylons import c, g, request
-from pylons.i18n import ungettext, _
-from datetime import datetime
-from hashlib import md5
+from r2.models.account import Account, DeletedUser
+from r2.models.subreddit import Subreddit, MultiReddit
+from r2.models.printable import Printable
 
-import random, re
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class LinkExists(Exception): pass
 
+
 # defining types
+@export
 class Link(Thing, Printable):
     _data_int_props = Thing._data_int_props + ('num_comments', 'reported')
     _defaults = dict(is_self = False,
@@ -583,6 +592,8 @@ class Link(Thing, Printable):
         when possible. """
         return Subreddit._byID(self.sr_id, True, return_dict = False)
 
+
+@export
 class LinksByUrl(tdb_cassandra.View):
     _use_db = True
     _connection_pool = 'main'
@@ -599,11 +610,12 @@ class LinksByUrl(tdb_cassandra.View):
             keyurl = _force_utf8(UrlParser.base_url(up.unparse()))
         return keyurl
 
+
 # Note that there are no instances of PromotedLink or LinkCompressed,
 # so overriding their methods here will not change their behaviour
 # (except for add_props). These classes are used to override the
 # render_class on a Wrapped to change the template used for rendering
-
+@export
 class PromotedLink(Link):
     _nodb = True
 
@@ -627,6 +639,8 @@ class PromotedLink(Link):
         # Run this last
         Printable.add_props(user, wrapped)
 
+
+@export
 class Comment(Thing, Printable):
     _data_int_props = Thing._data_int_props + ('reported',)
     _defaults = dict(reported=0,
@@ -877,6 +891,8 @@ class Comment(Thing, Printable):
         # Run this last
         Printable.add_props(user, wrapped)
 
+
+@export
 class CommentSortsCache(tdb_cassandra.View):
     """A cache of the sort-values of comments to avoid looking up all
        of the comments in a big tree at render-time just to determine
@@ -887,11 +903,15 @@ class CommentSortsCache(tdb_cassandra.View):
     _read_consistency_level = tdb_cassandra.CL.ONE
     _fetch_all_columns = True
 
+
+@export
 class StarkComment(Comment):
     """Render class for the comments in the top-comments display in
        the reddit toolbar"""
     _nodb = True
 
+
+@export
 class MoreMessages(Printable):
     cachable = False
     display = ""
@@ -976,12 +996,17 @@ class MoreComments(Printable):
         return utils.to36(self.children[0]) if self.children else '_'
 
 
+@export
 class MoreRecursion(MoreComments):
     pass
 
+
+@export
 class MoreChildren(MoreComments):
     pass
 
+
+@export
 class Message(Thing, Printable):
     _defaults = dict(reported=0,
                      was_comment=False,
@@ -1243,6 +1268,8 @@ class Message(Thing, Printable):
     def keep_item(self, wrapped):
         return True
 
+
+@export
 class SaveHide(Relation(Account, Link)): pass
 class Click(Relation(Account, Link)): pass
 
@@ -1315,11 +1342,15 @@ class CassandraHide(SimpleRelation):
     def _unhide(cls, *a, **kw):
         return cls._uncreate(*a, **kw)
 
+
+@export
 class SavesByAccount(tdb_cassandra.View):
     _use_db = True
     _cf_name = 'SavesByAccount'
     _connection_pool = 'main'
 
+
+@export
 class Inbox(MultiRelation('inbox',
                           Relation(Account, Comment),
                           Relation(Account, Message))):
@@ -1365,6 +1396,8 @@ class Inbox(MultiRelation('inbox',
                 res.append(i)
         return res
 
+
+@export
 class LinkOnTrial(Printable):
     @classmethod
     def add_props(cls, user, wrapped):
@@ -1374,6 +1407,8 @@ class LinkOnTrial(Printable):
         # Run this last
         Printable.add_props(user, wrapped)
 
+
+@export
 class ModeratorInbox(Relation(Subreddit, Message)):
     #TODO: shouldn't dupe this
     @classmethod

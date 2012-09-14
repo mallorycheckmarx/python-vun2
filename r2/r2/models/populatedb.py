@@ -20,14 +20,15 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.models import *
-from r2.lib.utils import fetch_things2
-from pylons import g
-from r2.lib.db import queries
-
-
 import string
 import random
+
+from pylons import g
+
+from r2.lib.db import queries
+from r2.lib.utils import fetch_things2
+
+from r2.models import *
 
 def random_word(min, max):
     return ''.join([ random.choice(string.letters)

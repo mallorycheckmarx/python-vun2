@@ -20,9 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from itertools import chain
+import re
+import types
 from datetime import datetime
-import re, types
 
 from hashlib import md5
 

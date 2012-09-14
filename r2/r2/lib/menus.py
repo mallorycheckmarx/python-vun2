@@ -20,15 +20,20 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from wrapped import CachedTemplate, Styled
-from pylons import c, request, g
-from utils import  query_string, timeago
-from strings import StringHandler, plurals
-from r2.lib.db import operators
-import r2.lib.search as search
-from r2.lib.filters import _force_unicode
+from pylons import c, request
 from pylons.i18n import _
 
+import r2.lib.search as search
+from r2.lib.db import operators
+from r2.lib.export import export
+from r2.lib.filters import _force_unicode
+from r2.lib.strings import StringHandler, plurals
+from r2.lib.utils import  query_string, timeago
+from r2.lib.wrapped import Styled
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
 
 
 class MenuHandler(StringHandler):
@@ -485,6 +490,8 @@ class RecSortMenu(SortMenu):
     default   = 'new'
     options   = ('hot', 'new', 'top', 'controversial', 'relevance')
 
+
+@export
 class NewMenu(SimplePostMenu):
     name      = 'sort'
     default   = 'rising'

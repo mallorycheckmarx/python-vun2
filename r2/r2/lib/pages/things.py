@@ -20,16 +20,18 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.menus import Styled
-from r2.lib.wrapped import Wrapped
-from r2.models import LinkListing, Link, PromotedLink
-from r2.models import make_wrapper, IDBuilder, Thing
-from r2.lib.utils import tup
-from r2.lib.strings import Score
-from r2.lib.promote import *
 from datetime import datetime
+
 from pylons import c, g
-from pylons.i18n import _, ungettext
+
+from r2.lib.menus import Styled
+from r2.lib.promote import is_promoted, promo_edit_url, promo_traffic_url
+from r2.lib.utils import tup
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class PrintableButtons(Styled):
     def __init__(self, style, thing,
@@ -180,36 +182,4 @@ class MessageButtons(PrintableButtons):
                                   parent_id = getattr(thing, "parent_id", None),
                                   show_report = True,
                                   show_delete = False)
-
-# formerly ListingController.builder_wrapper
-def default_thing_wrapper(**params):
-    def _default_thing_wrapper(thing):
-        w = Wrapped(thing)
-        style = params.get('style', c.render_style)
-        if isinstance(thing, Link):
-            if thing.promoted is not None:
-                w.render_class = PromotedLink
-                w.rowstyle = 'promoted link'
-            elif style == 'htmllite':
-                w.score_fmt = Score.points
-        return w
-    params['parent_wrapper'] = _default_thing_wrapper
-    return make_wrapper(**params)
-
-# TODO: move this into lib somewhere?
-def wrap_links(links, wrapper = default_thing_wrapper(),
-               listing_cls = LinkListing, 
-               num = None, show_nums = False, nextprev = False,
-               num_margin = None, mid_margin = None, **kw):
-    links = tup(links)
-    if not all(isinstance(x, str) for x in links):
-        links = [x._fullname for x in links]
-    b = IDBuilder(links, num = num, wrap = wrapper, **kw)
-    l = listing_cls(b, nextprev = nextprev, show_nums = show_nums)
-    if num_margin is not None:
-        l.num_margin = num_margin
-    if mid_margin is not None:
-        l.mid_margin = mid_margin
-    return l.listing()
-
 

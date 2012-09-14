@@ -20,15 +20,21 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from reddit_base import RedditController
-from validator import *
-from r2.lib.db.queries import CachedResults
-
 import cPickle as pickle
-from urllib import unquote
+
+from pylons import g
+from pylons.controllers.util import abort
+
+from r2.controllers.reddit_base import RedditController
+from r2.controllers.validator import nop, validate
+
+__all__ = [
+           #Constants Only, use @export for functions/classes
+           ]
+
 
 class QueryController(RedditController):
-    @validate(query = nop('query'))
+    @validate(query=nop('query'))
     def POST_doquery(self, query):
         if g.enable_doquery:
             cr = pickle.loads(query)
