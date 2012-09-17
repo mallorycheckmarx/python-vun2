@@ -146,6 +146,10 @@ def js_config():
         "uitracker_url": g.uitracker_url,
         "static_root": static(''),
     }
+
+    if c.wiki_page:
+        config["wiki_page"] = c.wiki_page
+
     return config
 
 def generateurl(context, path, **kw):

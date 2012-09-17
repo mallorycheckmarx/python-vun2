@@ -43,10 +43,10 @@ def make_htmldiff(a, b, adesc, bdesc):
                                   todesc=bdesc)
 
 def threewaymerge(original, a, b):
+    temp_dir = g.diff3_temp_location if g.diff3_temp_location else None
+    data = [a, original, b]
+    files = []
     try:
-        temp_dir = g.diff3_temp_location if g.diff3_temp_location else None
-        data = [a, original, b]
-        files = []
         for d in data:
             f = tempfile.NamedTemporaryFile(dir=temp_dir)
             f.write(d.encode('utf-8'))
@@ -64,15 +64,15 @@ def threewaymerge(original, a, b):
 if __name__ == "__main__":
     class test_globals:
         diff3_temp_location = None
-    
+
     g = test_globals()
-    
+
     original = "Hello people of the human rance\n\nHow are you tday"
     a = "Hello people of the human rance\n\nHow are you today"
     b = "Hello people of the human race\n\nHow are you tday"
-    
+
     print threewaymerge(original, a, b)
-    
+
     g.diff3_temp_location = '/dev/shm'
-    
+
     print threewaymerge(original, a, b)

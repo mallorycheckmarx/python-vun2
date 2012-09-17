@@ -34,11 +34,15 @@ from r2.models.builder import WikiRevisionBuilder, WikiRecentRevisionBuilder
 from r2.lib.template_helpers import join_urls
 
 
-from r2.controllers.validator import VMarkdown
+from r2.controllers.validator import VMarkdown, VModhash
 
 from r2.controllers.validator.wiki import (VWikiPage, VWikiPageAndVersion,
                                            VWikiPageRevise, VWikiPageCreate,
-                                           this_may_view, wiki_validate)
+                                           this_may_view, this_may_revise,
+                                           wiki_validate, AbortWikiError,
+                                           validate_page_name)
+
+from r2.controllers.api_docs import api_doc, api_section
 
 from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
                               WikiEdit, WikiSettings, WikiRecent,
@@ -53,12 +57,12 @@ from r2.lib.pages.things import default_thing_wrapper
 from r2.lib.pages import BoringPage
 from reddit_base import base_listing
 from r2.models import IDBuilder, LinkListing, DefaultSR
-from validator.validator import VInt, VExistingUname, VRatelimit
+from validator.validator import VInt, VExistingUname, VRatelimit, VOneOf
 from r2.lib.merge import ConflictException, make_htmldiff
 from pylons.i18n import _
 from r2.lib.pages import PaneStack
 from r2.lib.utils import timesince
-
+from r2.config import extensions
 from r2.lib.base import abort
 from r2.controllers.errors import WikiError
 
@@ -70,22 +74,68 @@ page_descriptions = {'config/stylesheet':_("This page is the subreddit styleshee
 class WikiController(RedditController):
     allow_stylesheets = True
     
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'), required=False, 
-                                                          restricted=False))
+    @paginated_listing(max_page_size=100, backend='cassandra')
+    def GET_wiki_recent(self, num, after, reverse, count):
+        revisions = WikiRevision.get_recent(c.site)
+        builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
+                                            reverse=reverse, after=after,
+                                            wrap=default_thing_wrapper(),
+                                            skip=not c.is_wiki_mod)
+        listing = WikiRevisionListing(builder).listing()
+        return WikiRecent(listing).render()
+
+    def GET_wiki_listing(self):
+        def check_hidden(page):
+            return this_may_view(page)
+        pages, linear_pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
+        return WikiListing(pages, linear_pages).render()
+    
+    def handle_error(self, code, reason=None, **data):
+        abort(WikiError(code, reason, **data))
+    
+    def pre(self):
+        RedditController.pre(self)
+        
+        if g.disable_wiki and not c.user_is_admin:
+            self.handle_error(403, 'WIKI_DOWN')
+        if not c.site._should_wiki:
+            self.handle_error(404, 'NOT_WIKIABLE') # /r/mod for an example
+
+        frontpage = isinstance(c.site, DefaultSR)
+        base = '' if frontpage else '/r/%s' % c.site.name
+        c.wiki_base_url = '%s/wiki' % base
+        c.wiki_api_url = '%s/api/wiki' % base
+        c.wiki_id = g.default_sr if frontpage else c.site.name
+
+        c.show_wiki_actions = True
+        self.editconflict = False
+        c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
+        c.wikidisabled = False
+
+        mode = c.site.wikimode
+        if not mode or mode == 'disabled':
+            if not c.is_wiki_mod:
+                self.handle_error(403, 'WIKI_DISABLED')
+            else:
+                c.wikidisabled = True
+
+class WikiPageController(WikiController):
+    @wiki_validate(pv=VWikiPageAndVersion(('page', 'v', 'v2'),
+                                          required=False, restricted=False))
     def GET_wiki_page(self, pv):
         page, version, version2 = pv
         message = None
-        
+
         if not page:
-            return self.GET_wiki_create(page=c.page, view=True)
-        
+            return self.redirect(join_urls(c.wiki_base_url, '/notfound/', c.wiki_page))
+
         if version:
             edit_by = version.author_name()
             edit_date = version.date
         else:
             edit_by = page.author_name()
             edit_date = page._get('last_edit_date')
-        
+
         diffcontent = None
         if not version:
             content = page.content
@@ -105,10 +155,10 @@ class WikiController(RedditController):
             else:
                 message = _("viewing revision from %s ago") % timesince(version.date)
                 content = version.content
-        
+
         return WikiPageView(content, alert=message, v=version, diff=diffcontent,
                             edit_by=edit_by, edit_date=edit_date).render()
-    
+
     @paginated_listing(max_page_size=100, backend='cassandra')
     @wiki_validate(page=VWikiPage(('page'), restricted=False))
     def GET_wiki_revisions(self, num, after, reverse, count, page):
@@ -116,11 +166,11 @@ class WikiController(RedditController):
         builder = WikiRevisionBuilder(revisions, num=num, reverse=reverse, count=count, after=after, skip=not c.is_wiki_mod, wrap=default_thing_wrapper())
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing).render()
-    
+
     @wiki_validate(may_create=VWikiPageCreate('page'))
-    def GET_wiki_create(self, may_create, page, view=False):
-        api = c.extension == 'json'
-        
+    def GET_wiki_notfound(self, may_create, page):
+        api = c.render_style in extensions.API_TYPES
+
         if c.error and c.error['reason'] == 'PAGE_EXISTS':
             return self.redirect(join_urls(c.wiki_base_url, page))
         elif not may_create or api:
@@ -137,13 +187,9 @@ class WikiController(RedditController):
             elif c.error['reason'] == 'PAGE_NAME_MAX_SEPARATORS':
                 error = _('a max of %d separators "/" are allowed in a wiki page name.') % c.error['MAX_SEPARATORS']
             return BoringPage(_("Wiki error"), infotext=error).render()
-        elif view:
+        else:
             return WikiNotFound().render()
-        elif may_create:
-            WikiPage.create(c.site, page)
-            url = join_urls(c.wiki_base_url, '/edit/', page)
-            return self.redirect(url)
-    
+
     @wiki_validate(page=VWikiPageRevise('page', restricted=True))
     def GET_wiki_revise(self, page, message=None, **kw):
         page = page[0]
@@ -152,27 +198,10 @@ class WikiController(RedditController):
         if not message and page.name in page_descriptions:
             message = page_descriptions[page.name]
         return WikiEdit(content, previous, alert=message).render()
-    
-    @paginated_listing(max_page_size=100, backend='cassandra')
-    def GET_wiki_recent(self, num, after, reverse, count):
-        revisions = WikiRevision.get_recent(c.site)
-        builder = WikiRecentRevisionBuilder(revisions,  num=num, count=count,
-                                            reverse=reverse, after=after,
-                                            wrap=default_thing_wrapper(),
-                                            skip=not c.is_wiki_mod)
-        listing = WikiRevisionListing(builder).listing()
-        return WikiRecent(listing).render()
-    
-    def GET_wiki_listing(self):
-        def check_hidden(page):
-            g.log.debug("Got here %s" % str(this_may_view(page)))
-            return this_may_view(page)
-        pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
-        return WikiListing(pages).render()
-    
+
     def GET_wiki_redirect(self, page):
         return redirect_to(str("%s/%s" % (c.wiki_base_url, page)), _code=301)
-    
+
     @base_listing
     @wiki_validate(page=VWikiPage('page', restricted=True))
     def GET_wiki_discussions(self, page, num, after, reverse, count):
@@ -183,15 +212,16 @@ class WikiController(RedditController):
                             count = count, skip = False)
         listing = LinkListing(builder).listing()
         return WikiDiscussions(listing).render()
-    
+
     @wiki_validate(page=VWikiPage('page', restricted=True, modonly=True))
     def GET_wiki_settings(self, page):
         settings = {'permlevel': page._get('permlevel', 0)}
         mayedit = page.get_editors()
         return WikiSettings(settings, mayedit, show_settings=not page.special).render()
-    
-    @wiki_validate(page=VWikiPage('page', restricted=True, modonly=True),\
-              permlevel=VInt('permlevel'))
+
+    @wiki_validate(VModhash(),
+                   page=VWikiPage('page', restricted=True, modonly=True),
+                   permlevel=VInt('permlevel'))
     def POST_wiki_settings(self, page, permlevel):
         oldpermlevel = page.permlevel
         try:
@@ -201,35 +231,27 @@ class WikiController(RedditController):
         description = 'Page: %s, Changed from %s to %s' % (page.name, oldpermlevel, permlevel)
         ModAction.create(c.site, c.user, 'wikipermlevel', description=description)
         return self.GET_wiki_settings(page=page.name)
-    
-    def handle_error(self, code, error=None, **data):
-        abort(WikiError(code, error, **data))
-    
+
     def pre(self):
-        RedditController.pre(self)
-        if g.wiki_disabled and not c.user_is_admin:
-            self.handle_error(403, 'WIKI_DOWN')
-        if not c.site._should_wiki:
-            self.handle_error(404, 'NOT_WIKIABLE') # /r/mod for an example
-        frontpage = isinstance(c.site, DefaultSR)
-        c.wiki_base_url = '/wiki' if frontpage else '/r/%s/wiki' % c.site.name
-        c.wiki_id = g.default_sr if frontpage else c.site.name
-        c.page = None
-        c.show_wiki_actions = True
-        self.editconflict = False
-        c.is_wiki_mod = (c.user_is_admin or c.site.is_moderator(c.user)) if c.user_is_loggedin else False
-        c.wikidisabled = False
+        WikiController.pre(self)
         
-        mode = c.site.wikimode
-        if not mode or mode == 'disabled':
-            if not c.is_wiki_mod:
-                self.handle_error(403, 'WIKI_DISABLED')
-            else:
-                c.wikidisabled = True
+        try:
+            page = request.environ["pylons.routes_dict"].get('page')
+            c.wiki_page = validate_page_name(page)
+            try:
+                wp = WikiPage.get(c.site, page)
+                c.wiki_may_revise = this_may_revise(wp)
+                request.environ["pylons.routes_dict"]['page'] = wp
+            except tdb_cassandra.NotFound:
+                pass
+        except AbortWikiError as e:
+            self.handle_error(e.code, e.reason)
 
 class WikiApiController(WikiController):
-    @wiki_validate(pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
-              content=VMarkdown(('content')))
+    @wiki_validate(VModhash(),
+                   pageandprevious=VWikiPageRevise(('page', 'previous'), restricted=True),
+                   content=VMarkdown(('content')))
+    @api_doc(api_section.wiki)
     def POST_wiki_edit(self, pageandprevious, content):
         page, previous = pageandprevious
         previous = previous._id if previous else None
@@ -253,31 +275,58 @@ class WikiApiController(WikiController):
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         return json.dumps({})
-    
-    @wiki_validate(page=VWikiPage('page'), user=VExistingUname('username'))
+
+    @wiki_validate(VModhash(),
+                   page=VWikiPage('page'), act=VOneOf('act', ('del', 'add')),
+                   user=VExistingUname('username'))
+    @api_doc(api_section.wiki)
     def POST_wiki_allow_editor(self, act, page, user):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
-        if act == 'del':
-            page.remove_editor(c.username)
-        else:
-            if not user:
-                self.handle_error(404, 'UNKNOWN_USER')
+        elif act == 'del':
+            page.remove_editor(request.post.get('username'))
+        elif not user:
+            self.handle_error(404, 'UNKNOWN_USER')
+        elif act == 'add':
             page.add_editor(user.name)
+        else:
+            self.handle_error(400, 'INVALID_ACTION')
         return json.dumps({})
-    
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
-    def POST_wiki_revision_hide(self, pv, page, revision):
+
+    @wiki_validate(VModhash(),
+                   pv=VWikiPageAndVersion(('page', 'revision')))
+    @api_doc(api_section.wiki)
+    def POST_wiki_revision_hide(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
+        if not revision:
+            self.handle_error(400, 'INVALID_REVISION')
         return json.dumps({'status': revision.toggle_hide()})
-   
-    @wiki_validate(pv=VWikiPageAndVersion(('page', 'revision')))
-    def POST_wiki_revision_revert(self, pv, page, revision):
+
+    @wiki_validate(VModhash(),
+                   may_create=VWikiPageCreate('page'))
+    @api_doc(api_section.wiki)
+    def GET_wiki_create(self, may_create):
+        if not may_create:
+            self.handle_error(403, 'MAY_NOT_CREATE')
+        elif c.error:
+            self.handle_error(403, **c.error)
+        else:
+            page = request.get['page']
+            WikiPage.create(c.site, page)
+            url = join_urls(c.wiki_base_url, '/edit/', page)
+            return self.redirect(url)
+
+    @wiki_validate(VModhash(),
+                   pv=VWikiPageAndVersion(('page', 'revision')))
+    @api_doc(api_section.wiki)
+    def POST_wiki_revision_revert(self, pv):
         if not c.is_wiki_mod:
             self.handle_error(403, 'MOD_REQUIRED')
         page, revision = pv
+        if not revision:
+            self.handle_error(400, 'INVALID_REVISION')
         content = revision.content
         author = revision._get('author')
         reason = 'reverted back %s' % timesince(revision.date)
@@ -292,7 +341,7 @@ class WikiApiController(WikiController):
             except ContentLengthError as e:
                 self.handle_error(403, 'CONTENT_LENGTH_ERROR', e.max_length)
         return json.dumps({})
-    
+
     def pre(self):
         WikiController.pre(self)
         c.render_style = 'api'

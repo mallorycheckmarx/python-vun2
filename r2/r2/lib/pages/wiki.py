@@ -3,23 +3,21 @@ from pylons import c
 from r2.lib.wrapped import Templated
 from r2.lib.menus import PageNameNav
 from r2.controllers.validator.wiki import this_may_revise
-from r2.lib.filters import wikimarkdown
 from pylons.i18n import _
 
 class WikiView(Templated):
     def __init__(self, content, edit_by, edit_date, diff=None):
-        self.page_content = wikimarkdown(content) if content else ''
         self.page_content_md = content
         self.diff = diff
         self.edit_by = edit_by
         self.edit_date = edit_date
         self.base_url = c.wiki_base_url
-        self.may_revise = this_may_revise(c.page_obj)
         Templated.__init__(self)
 
 class WikiPageListing(Templated):
-    def __init__(self, pages):
+    def __init__(self, pages, linear_pages):
         self.pages = pages
+        self.linear_pages = linear_pages
         self.base_url = c.wiki_base_url
         Templated.__init__(self)
 
@@ -40,7 +38,7 @@ class WikiPageSettings(Templated):
 
 class WikiPageRevisions(Templated):
     def __init__(self, revisions):
-        self.revisions = revisions
+        self.listing = revisions
         Templated.__init__(self)
 
 class WikiPageDiscussions(Templated):
@@ -63,22 +61,25 @@ class WikiBasePage(Templated):
 
 class WikiBase(Reddit):
     extra_page_classes = ['wiki-page']
-    
+
     def __init__(self, content, actionless=False, alert=None, **context):
         pageactions = []
-        
-        if not actionless and c.page:
-            pageactions += [(c.page, _("view"), False)]
-            if this_may_revise(c.page_obj):
+
+        title = c.site.name
+        if not actionless and c.wiki_page:
+            title = '%s - %s' % (title, c.wiki_page)
+            pageactions += [(c.wiki_page, _("view"), False)]
+            if c.wiki_may_revise:
                 pageactions += [('edit', _("edit"), True)]
-            pageactions += [('revisions/%s' % c.page, _("history"), False)]
+            pageactions += [('revisions/%s' % c.wiki_page, _("history"), False)]
             pageactions += [('discussions', _("talk"), True)]
             if c.is_wiki_mod:
                 pageactions += [('settings', _("settings"), True)]
 
-        action = context.get('wikiaction', (c.page, 'wiki'))
-        
-        context['title'] = c.site.name
+        action = context.get('wikiaction', (c.wiki_page, 'wiki'))
+
+        context['title'] = title
+
         if alert:
             context['infotext'] = alert
         elif c.wikidisabled:
@@ -89,17 +90,17 @@ class WikiBase(Reddit):
 class WikiPageView(WikiBase):
     def __init__(self, content, diff=None, **context):
         if not content and not context.get('alert'):
-            if this_may_revise(c.page_obj):
+            if c.wiki_may_revise:
                 context['alert'] = _("this page is empty, edit it to add some content.")
         content = WikiView(content, context.get('edit_by'), context.get('edit_date'), diff=diff)
         WikiBase.__init__(self, content, **context)
 
 class WikiNotFound(WikiPageView):
     def __init__(self, **context):
-        context['alert'] = _("page %s does not exist in this subreddit") % c.page
+        context['alert'] = _("page %s does not exist in this subreddit") % c.wiki_page
         context['actionless'] = True
-        create_link = '%s/create/%s' % (c.wiki_base_url, c.page)
-        text =  _("a page with that name does not exist in this subreddit.\n\n[Create a page called %s](%s)") % (c.page, create_link)
+        create_link = '%s/create?page=%s&uh=%s' % (c.wiki_api_url, c.wiki_page, c.modhash)
+        text =  _("a page with that name does not exist in this subreddit.\n\n[Create a page called %s](%s)") % (c.wiki_page, create_link)
         WikiPageView.__init__(self, text, **context)
 
 class WikiEdit(WikiBase):
@@ -117,7 +118,7 @@ class WikiSettings(WikiBase):
 class WikiRevisions(WikiBase):
     def __init__(self, revisions, **context):
         content = WikiPageRevisions(revisions)
-        context['wikiaction'] = ('revisions/%s' % c.page, _("revisions"))
+        context['wikiaction'] = ('revisions/%s' % c.wiki_page, _("revisions"))
         WikiBase.__init__(self, content, **context)
 
 class WikiRecent(WikiBase):
@@ -127,16 +128,17 @@ class WikiRecent(WikiBase):
         WikiBase.__init__(self, content, showtitle=True, **context)
 
 class WikiListing(WikiBase):
-    def __init__(self, pages, **context):
-        content = WikiPageListing(pages)
+    def __init__(self, pages, linear_pages, **context):
+        content = WikiPageListing(pages, linear_pages)
         context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % c.wiki_id)
-        WikiBase.__init__(self, content, showtitle=True, **context)
+        description = [_("Below is a list of pages in this wiki visible to you in this subreddit.")]
+        WikiBase.__init__(self, content, description=description, showtitle=True, **context)
 
 class WikiDiscussions(WikiBase):
     def __init__(self, listing, **context):
         content = WikiPageDiscussions(listing)
         context['wikiaction'] = ('discussions', _("discussions"))
-        description = _("Discussions are site-wide links to this wiki page.<br/>\
-        Submit a link to this wiki page or see other discussions about this wiki page.")
+        description = [_("Discussions are site-wide links to this wiki page."),
+                       _("Submit a link to this wiki page or see other discussions about this wiki page.")]
         WikiBase.__init__(self, content, description=description, **context)
 

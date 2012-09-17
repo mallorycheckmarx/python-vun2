@@ -185,25 +185,27 @@ def make_map():
     mc('/:action', controller='embed',
        requirements=dict(action="help|blog|faq"))
     mc('/help/*anything', controller='embed', action='help')
-    
-    mc('/wiki/create/*page', controller='wiki', action='wiki_create')
-    mc('/wiki/edit/*page', controller='wiki', action='wiki_revise')
-    mc('/wiki/revisions/*page', controller='wiki', action='wiki_revisions')
-    mc('/wiki/settings/*page', controller='wiki', action='wiki_settings')
-    mc('/wiki/discussions/*page', controller='wiki', action='wiki_discussions')
+
+    mc('/wiki/notfound/*page', controller='wikipage', action='wiki_notfound')
+    mc('/wiki/edit/*page', controller='wikipage', action='wiki_revise')
+    mc('/wiki/revisions/*page', controller='wikipage', action='wiki_revisions')
+    mc('/wiki/settings/*page', controller='wikipage', action='wiki_settings')
+    mc('/wiki/discussions/*page', controller='wikipage', action='wiki_discussions')
+
     mc('/wiki/revisions', controller='wiki', action='wiki_recent')
     mc('/wiki/pages', controller='wiki', action='wiki_listing')
-    
-    mc('/wiki/api/edit/*page', controller='wikiapi', action='wiki_edit')
-    mc('/wiki/api/hide/:revision/*page', controller='wikiapi', action='wiki_revision_hide')
-    mc('/wiki/api/revert/:revision/*page', controller='wikiapi', action='wiki_revision_revert')
-    mc('/wiki/api/alloweditor/:act/:username/*page', controller='wikiapi', action='wiki_allow_editor')
-    
-    mc('/wiki/*page', controller='wiki', action='wiki_page')
-    mc('/wiki/', controller='wiki', action='wiki_page')
-    
-    mc('/w/*page', controller='wiki', action='wiki_redirect')
-    
+
+    mc('/api/wiki/create', controller='wikiapi', action='wiki_create')
+    mc('/api/wiki/edit', controller='wikiapi', action='wiki_edit')
+    mc('/api/wiki/hide', controller='wikiapi', action='wiki_revision_hide')
+    mc('/api/wiki/revert', controller='wikiapi', action='wiki_revision_revert')
+    mc('/api/wiki/alloweditor/:act', controller='wikiapi', action='wiki_allow_editor')
+
+    mc('/wiki/*page', controller='wikipage', action='wiki_page')
+    mc('/wiki/', controller='wikipage', action='wiki_page')
+
+    mc('/w/*page', controller='wikipage', action='wiki_redirect')
+
     mc('/goto', controller='toolbar', action='goto')
     mc('/tb/:id', controller='toolbar', action='tb')
     mc('/toolbar/:action', controller='toolbar',

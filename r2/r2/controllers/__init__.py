@@ -71,6 +71,7 @@ def load_controllers():
     from mediaembed import AdController
     
     from wiki import WikiController
+    from wiki import WikiPageController
     from wiki import WikiApiController
 
     from querycontroller import QueryController

@@ -26,10 +26,12 @@ from utils import to36, tup, iters
 from wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Templated
 from mako.template import Template
 from r2.config.extensions import get_api_subtype
-from r2.lib.filters import spaceCompress, safemarkdown
+from r2.lib.filters import spaceCompress, safemarkdown, wikimarkdown
 import time, pytz
 from pylons import c, g
 from pylons.i18n import _
+
+
 
 def make_typename(typ):
     return 't%s' % to36(typ._type_id)
@@ -560,21 +562,36 @@ class WikiJsonTemplate(JsonTemplate):
         try:
             content = thing.content
         except AttributeError:
-            content = thing.revisions
+            content = thing.listing
         return ObjectTemplate(content.render() if thing else {})
 
-class WikiViewJsonTemplate(ThingJsonTemplate):
+class WikiPageListingJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
-        edit_date = time.mktime(thing.edit_date.timetuple())
+        pages = [p.name for p in thing.linear_pages]
+        return ObjectTemplate(dict(pages=pages))
+
+class WikiViewJsonTemplate(JsonTemplate):
+    def render(self, thing, *a, **kw):
+        edit_date = time.mktime(thing.edit_date.timetuple()) if thing.edit_date else None
         return ObjectTemplate(dict(content_md=thing.page_content_md,
-                                   content_html=thing.page_content,
+                                   content_html=wikimarkdown(thing.page_content_md),
                                    revision_by=thing.edit_by,
                                    revision_date=edit_date,
-                                   may_revise=thing.may_revise))
+                                   may_revise=c.wiki_may_revise))
+
+class WikiSettingsJsonTemplate(ThingJsonTemplate):
+     def render(self, thing, *a, **kw):
+        return ObjectTemplate(dict(permlevel=thing.permlevel,
+                                   editors=thing.mayedit))
+
+class WikiEditPageJsonTemplate(ThingJsonTemplate):
+     def render(self, thing, *a, **kw):
+        return ObjectTemplate(dict(page_content=thing.page_content,
+                                   previous=thing.previous))
 
 class WikiRevisionJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
-        timestamp = time.mktime(thing.date.timetuple())
+        timestamp = time.mktime(thing.date.timetuple()) if thing.date else None
         return ObjectTemplate(dict(author=thing._get('author'),
                                    id=str(thing._id),
                                    timestamp=timestamp,
@@ -646,6 +663,9 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
                         show_media = 'site.show_media',
                         domain = 'site.domain',
                         domain_css = 'site.css_on_cname',
+                        wikimode = 'site.wikimode',
+                        wiki_edit_karma = 'site.wiki_edit_karma',
+                        wiki_edit_age = 'site.wiki_edit_age',
                         domain_sidebar = 'site.show_cname_sidebar',
                         header_hover_text = 'site.header_title')
 

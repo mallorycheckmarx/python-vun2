@@ -28,7 +28,7 @@
         %endif
         "
         %if action[2]:
-            href="${thing.base_url}/${action[0]}/${c.page}"
+            href="${thing.base_url}/${action[0]}/${c.wiki_page}"
         %else:
             href="${thing.base_url}/${action[0]}"
         %endif
@@ -41,8 +41,8 @@
         %if thing.title:
             ${thing.title}
         %endif
-        %if c.page:
-            <strong>${c.page}</strong>
+        %if c.wiki_page:
+            <strong>${c.wiki_page}</strong>
         %endif
     </h1>
     
@@ -53,14 +53,14 @@
     %endif
 </span>
     
-<br/>
-
-%if thing.description:
-    <br/>
-    <span><h2>${unsafe(thing.description)}</h2></span>
-%endif
-
 <div class="wiki-page-content">
+    %if thing.description:
+        <div class="description">
+            %for desc in thing.description:
+                <h2>${desc}</h2>
+            %endfor
+        </div>
+    %endif
     ${thing.content}
 </div>
 
