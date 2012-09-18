@@ -925,18 +925,19 @@ class FrontController(RedditController):
         
         never_show_self = request.get.get('no_self')
         
-        return FormPage(_("submit"),
-                        show_sidebar = True,
-                        page_classes=['submit-page'],
-                        content=pages.NewLink(url=url or '',
-                                              title=title or '',
-                                              text=text or '',
-                                              selftext=selftext or '',
-                                              subreddits=sr_names,
-                                              captcha=captcha,
-                                              resubmit=resubmit,
-                                              never_show_self=never_show_self,
-                                              then=then)).render()
+        return pages.FormPage(_("submit"),
+                              show_sidebar=True,
+                              page_classes=['submit-page'],
+                              content=pages.NewLink(url=url or '',
+                                                    title=title or '',
+                                                    text=text or '',
+                                                    selftext=selftext or '',
+                                                    subreddits=sr_names,
+                                                    captcha=captcha,
+                                                    resubmit=resubmit,
+                                                    never_show_self=
+                                                        never_show_self,
+                                                    then=then)).render()
 
     def GET_frame(self):
         """used for cname support.  makes a frame and
@@ -1044,7 +1045,7 @@ class FormsController(RedditController):
               reason=validator.nop('reason'))
     def GET_verify(self, dest, reason):
         if c.user.email_verified:
-            content = InfoBar(message = strings.email_verified)
+            content = pages.InfoBar(message = strings.email_verified)
             if dest:
                 return self.redirect(dest)
         else:
@@ -1173,9 +1174,10 @@ class FormsController(RedditController):
         elif location == 'update':
             content = pages.PrefUpdate()
         elif location == 'apps':
-            content = pages.PrefApps(my_apps=OAuth2Client._by_user(c.user),
+            content = pages.PrefApps(my_apps=
+                                         models.OAuth2Client._by_user(c.user),
                                      developed_apps=
-                                        models.OAuth2Client._by_developer(c.user))
+                                         models.OAuth2Client._by_developer(c.user))
         elif location == 'feeds' and c.user.pref_private_feeds:
             content = pages.PrefFeeds()
         elif location == 'delete':
@@ -1351,11 +1353,14 @@ class FormsController(RedditController):
 
             g.log.info("just set payment_blob-%s" % passthrough)
 
-            return BoringPage(_("reddit gold"),
-                              show_sidebar = False,
-                              content=pages.GoldPayment(goldtype, period,
-                                                        months, signed,
-                                                        recipient, giftmessage,
-                                                        passthrough)
+            return pages.BoringPage(_("reddit gold"),
+                                    show_sidebar=False,
+                                    content=pages.GoldPayment(goldtype,
+                                                              period,
+                                                              months,
+                                                              signed,
+                                                              recipient,
+                                                              giftmessage,
+                                                              passthrough)
                               ).render()
 

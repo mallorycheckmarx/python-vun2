@@ -216,26 +216,26 @@ class Reddit(Templated):
     def wiki_actions_menu(self, moderator=False):
         buttons = []
         
-        buttons.append(NamedButton("wikirecentrevisions", 
-                                   css_class="wikiaction-revisions",
-                                   dest="/wiki/revisions"))
+        buttons.append(menus.NamedButton("wikirecentrevisions", 
+                                         css_class="wikiaction-revisions",
+                                         dest="/wiki/revisions"))
         
-        buttons.append(NamedButton("wikipageslist", 
-                           css_class="wikiaction-pages",
-                           dest="/wiki/pages"))
+        buttons.append(menus.NamedButton("wikipageslist", 
+                                         css_class="wikiaction-pages",
+                                         dest="/wiki/pages"))
         if moderator:
-            buttons += [NamedButton('wikibanned', css_class='reddit-ban', 
-                                    dest='/about/wikibanned'),
-                        NamedButton('wikicontributors', 
-                                    css_class='reddit-contributors', 
-                                    dest='/about/wikicontributors')
+            buttons += [menus.NamedButton('wikibanned', css_class='reddit-ban', 
+                                          dest='/about/wikibanned'),
+                        menus.NamedButton('wikicontributors', 
+                                          css_class='reddit-contributors', 
+                                          dest='/about/wikicontributors')
                         ]
                            
         return SideContentBox(_('wiki tools'),
-                      [NavMenu(buttons,
-                               type="flat_vert",
-                               css_class="icon-menu",
-                               separator="")],
+                      [menus.NavMenu(buttons,
+                                     type="flat_vert",
+                                     css_class="icon-menu",
+                                     separator="")],
                       _id="wikiactions",
                       collapsible=True)
     
@@ -1664,7 +1664,7 @@ class SubredditTopBar(CachedTemplate):
 
     def popular_reddits(self, exclude=[]):
         exclusions = set(exclude)
-        buttons = [menux.SubredditButton(sr)
+        buttons = [menus.SubredditButton(sr)
                    for sr in self.pop_reddits if sr not in exclusions]
 
         return menus.NavMenu(buttons,
@@ -1711,7 +1711,8 @@ class SubscriptionBox(Templated):
     the right pane."""
     def __init__(self, srs=None, make_multi=False):
         if srs is None:
-            srs = modelsSubreddit.user_subreddits(c.user, ids=False, limit=None)
+            srs = models.Subreddit.user_subreddits(c.user, ids=False,
+                                                   limit=None)
         srs.sort(key = lambda sr: sr.name.lower())
         self.srs = srs
         self.goldlink = None
@@ -2946,7 +2947,7 @@ class FlairTemplateList(Templated):
     def templates(self):
         ids = models.FlairTemplateBySubredditIndex.get_template_ids(
                 c.site._id, flair_type=self.flair_type)
-        fts = FlairTemplate._byID(ids)
+        fts = models.FlairTemplate._byID(ids)
         return [FlairTemplateEditor(fts[i], self.flair_type) for i in ids]
 
 
@@ -3082,7 +3083,7 @@ class FlairSelector(CachedTemplate):
     def _get_templates(self, site, flair_type, text, css_class):
         ids = models.FlairTemplateBySubredditIndex.get_template_ids(site._id,
                                                                     flair_type)
-        template_dict = FlairTemplate._byID(ids)
+        template_dict = models.FlairTemplate._byID(ids)
         templates = [template_dict[i] for i in ids]
         for template in templates:
             if template.covers((text, css_class)):

@@ -21,6 +21,7 @@
 ###############################################################################
 
 from pylons import request, g
+from pylons.controllers.util import abort
 
 from r2.lib import pages
 

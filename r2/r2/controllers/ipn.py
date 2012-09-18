@@ -36,7 +36,9 @@ from r2.lib.db.thing import NotFound
 from r2.lib.log import log_text
 from r2.lib.strings import strings
 from r2.lib.utils import tup
-from r2.models import (#Functions
+from r2.models import (#Classes
+                       Account,
+                       #Functions
                        account_by_payingid,
                        accountid_from_paypalsubscription,
                        cancel_subscription,
@@ -180,7 +182,7 @@ def existing_subscription(subscr_id, paying_id, custom):
             return None
 
     try:
-        account = models.Account._byID(account_id, data=True)
+        account = Account._byID(account_id, data=True)
 
         if account._deleted:
             g.log.info("Just got IPN renewal for deleted account #%d"
@@ -307,7 +309,7 @@ class IpnController(RedditController):
                              c.user._id)
 
         try:
-            recipient = models.Account._by_name(recipient_name)
+            recipient = Account._by_name(recipient_name)
         except NotFound:
             raise ValueError("Invalid username %s in spendcreddits, buyer = %s"
                              % (recipient_name, c.user.name))
@@ -487,7 +489,7 @@ class IpnController(RedditController):
             dump_parameters(parameters)
             raise ValueError("No buyer_id in IPN/GC with custom='%s'" % custom)
         try:
-            buyer = models.Account._byID(buyer_id)
+            buyer = Account._byID(buyer_id)
         except NotFound:
             dump_parameters(parameters)
             raise ValueError("Invalid buyer_id %d in IPN/GC with custom='%s'"
@@ -515,7 +517,7 @@ class IpnController(RedditController):
         elif payment_blob['goldtype'] == 'gift':
             recipient_name = payment_blob.get('recipient', None)
             try:
-                recipient = models.Account._by_name(recipient_name)
+                recipient = Account._by_name(recipient_name)
             except NotFound:
                 dump_parameters(parameters)
                 raise ValueError("Invalid recipient_name %s in IPN/GC with custom='%s'"

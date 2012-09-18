@@ -34,7 +34,7 @@ import r2.models as models
 from r2.lib import amqp, media, promote, cssfilter, emailer, totp
 from r2.lib.captcha import get_iden
 from r2.lib.comment_tree import delete_comment
-from r2.lib.db import queries
+from r2.lib.db import queries, tdb_cassandra
 from r2.lib.db.queries import changed
 from r2.lib.db.thing import CreationError, NotFound
 from r2.lib.filters import (#Functions
@@ -46,6 +46,7 @@ from r2.lib.filters import (#Functions
                             )
 from r2.lib.log import log_text
 from r2.lib.menus import CommentSortMenu
+from r2.lib.merge import ConflictException
 from r2.lib.scraper import str_to_image
 from r2.lib.search import SearchQuery
 from r2.lib.strings import strings
@@ -1275,7 +1276,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 form.set_html(".status", _('saved'))
                 form.set_html(".errors ul", "")
                 if wr:
-                    description = wiki.modactions.get('config/stylesheet')
+                    description = models.modactions.get('config/stylesheet')
                     form.set_inputs(prevstyle=str(wr._id))
                     models.ModAction.create(c.site, c.user, 'wikirevise',
                                             description)
@@ -1444,10 +1445,11 @@ class ApiController(RedditController, OAuth2ResourceController):
                     kw = dict(details='upload_image_header')
                 else:
                     kw = dict(details='upload_image', description=name)
-                ModAction.create(c.site, c.user, action='editsettings', **kw)
+                models.ModAction.create(c.site, c.user,
+                                        action='editsettings', **kw)
 
-            return UploadedImage(_('saved'), new_url, name, 
-                                 errors=errors, form_id=form_id).render()
+            return pages.UploadedImage(_('saved'), new_url, name, 
+                                       errors=errors, form_id=form_id).render()
 
     @validatedForm(validator.VUser(),
                    validator.VModhash(),
@@ -1499,14 +1501,15 @@ class ApiController(RedditController, OAuth2ResourceController):
         
         def apply_wikid_field(sr, form, pagename, value, prev, field, error):
             try:
-                wikipage = wiki.WikiPage.get(sr, pagename)
+                wikipage = models.WikiPage.get(sr, pagename)
             except tdb_cassandra.NotFound:
-                wikipage = wiki.WikiPage.create(sr, pagename)
+                wikipage = models.WikiPage.create(sr, pagename)
             try:
                 wr = wikipage.revise(value, previous=prev, author=c.user.name)
                 if not wr:
                     return True
-                ModAction.create(c.site, c.user, 'wikirevise', details=wiki.modactions.get(pagename))
+                models.ModAction.create(c.site, c.user, 'wikirevise',
+                                        details=models.modactions.get(pagename))
                 return True
             except ConflictException as e:
                 c.errors.add(errors.CONFLICT, field = field)
