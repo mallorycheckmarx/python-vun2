@@ -235,7 +235,7 @@ class WikiApiController(WikiController):
               content=VMarkdown(('content')))
     def POST_wiki_edit(self, pageandprevious, content):
         page, previous = pageandprevious
-        previous = previous._id if previous else None
+        previous = previous._id if previous else previous
         try:
             if page.name == 'config/stylesheet':
                 report, parsed = c.site.parse_css(content, verify=False)

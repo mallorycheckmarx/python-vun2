@@ -269,7 +269,7 @@ class VWikiPageRevise(VWikiPage):
             except AbortWikiError:
                 return
             return (wp, prev)
-        return (wp, None)
+        return (wp, previous)
 
 class VWikiPageCreate(VWikiPage):
     def __init__(self, param, **kw):
