@@ -1214,13 +1214,14 @@ class ApiController(RedditController, OAuth2ResourceController):
                    op = VOneOf('op',['save','preview']))
     @api_doc(api_section.subreddits)
     def POST_subreddit_stylesheet(self, form, jquery,
-                                  stylesheet_contents = '', prevstyle='', op='save'):
+                                  stylesheet_contents = '', prevstyle=None, op='save'):
         
         report, parsed = c.site.parse_css(stylesheet_contents)
-        
+        prevstyle = request.post.get('prevstyle')
         if not report:
             return self.abort(403,'forbidden')
-        
+        if form.has_error():
+            return
         if report.errors:
             error_items = [ CssError(x).render(style='html')
                             for x in sorted(report.errors) ]
@@ -1489,17 +1490,16 @@ class ApiController(RedditController, OAuth2ResourceController):
         redir = False
         kw = dict((k, v) for k, v in kw.iteritems()
                   if k in ('name', 'title', 'domain', 'description',
-                           'prev_description_id', 'prev_public_description_id',
                            'show_media', 'show_cname_sidebar', 'type', 'link_type', 'lang',
                            'css_on_cname', 'header_title', 'over_18',
                            'wikimode', 'wiki_edit_karma', 'wiki_edit_age',
                            'allow_top', 'public_description'))
         
         description = kw.pop('description')
-        prev_desc = kw.pop('prev_description_id')
+        prev_desc = request.post.get('prev_description_id')
         
         public_description = kw.pop('public_description')
-        prev_pubdesc = kw.pop('prev_public_description_id')
+        prev_pubdesc = request.post.get('prev_public_description_id')
         
         
         #if a user is banned, return rate-limit errors
@@ -1530,7 +1530,8 @@ class ApiController(RedditController, OAuth2ResourceController):
               form.has_errors('public_description', errors.TOO_LONG) or
               form.has_errors('description', errors.TOO_LONG)):
             pass
-
+        elif form.has_error():
+            pass
         #creating a new reddit
         elif not sr:
             #sending kw is ok because it was sanitized above
