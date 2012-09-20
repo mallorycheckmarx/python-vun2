@@ -1220,7 +1220,8 @@ class ApiController(RedditController, OAuth2ResourceController):
         
         if not report:
             return self.abort(403,'forbidden')
-        
+        if form.has_error():
+            return
         if report.errors:
             error_items = [ CssError(x).render(style='html')
                             for x in sorted(report.errors) ]
