@@ -270,6 +270,7 @@ class WikiPage(tdb_cassandra.Thing):
         return bool(self.get_editors(properties=[editor]))
     
     def revise(self, content, previous = None, author=None, force=False, reason=None):
+        content = content or ''
         if self.content == content:
             return
         max_length = special_length_restrictions_bytes.get(self.name, MAX_PAGE_LENGTH_BYTES)
