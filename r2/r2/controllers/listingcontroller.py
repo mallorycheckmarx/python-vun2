@@ -925,7 +925,7 @@ class RedditsController(ListingController):
 
             # Always show NSFW to API users unless obey_over18=true in querystring
             is_api_client = c.render_style in extensions.API_TYPES
-            if (not is_api_client and not c.over18) or (is_api_client and c.obey_over18):
+            if not c.over18 and (not is_api_client or c.obey_over18):
                 reddits._filter(Subreddit.c.over_18 == False)
 
         if self.where == 'popular':
