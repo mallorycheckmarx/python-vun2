@@ -94,10 +94,7 @@ class Link(Thing, Printable):
         links = [l for l in links if not l._deleted]
 
         if links and sr:
-            for link in links:
-                if sr._id == link.sr_id:
-                    # n.b. returns the first one if there are multiple
-                    return link
+            return next(l for l in links if l.sr_id == sr._id)
         elif links:
             return links
 
@@ -226,7 +223,7 @@ class Link(Thing, Printable):
         if is_api and not c.obey_over18:
             return True
 
-        # hide NSFW links from non-logged users and under 18 logged users 
+        # hide NSFW links from non-logged users and under 18 logged users
         # if they're not explicitly visiting an NSFW subreddit or a multireddit
         if (((not c.user_is_loggedin and c.site != wrapped.subreddit)
             or (c.user_is_loggedin and not c.over18))
