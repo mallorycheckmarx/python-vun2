@@ -92,7 +92,7 @@ class Link(Thing, Printable):
         link_id36s = lbu._values()
 
         links = Link._byID36(link_id36s, data=True, return_dict=False)
-        links = [l for l in links if not l._deleted]
+        links = [link for link in links if not link._deleted]
 
         if links and sr:
             for link in links:
@@ -732,12 +732,12 @@ class Comment(Thing, Printable):
         from r2.lib.pages import WrappedUser
 
         #fetch parent links
-        links = Link._byID(set(l.link_id for l in wrapped), data=True,
+        links = Link._byID(set(link.link_id for link in wrapped), data=True,
                            return_dict=True, stale=True)
 
         # fetch authors
-        authors = Account._byID(set(l.author_id for l in links.values()), data=True,
-                                return_dict=True, stale=True)
+        authors = Account._byID(set(link.author_id for link in links.values()),
+                                data=True, return_dict=True, stale=True)
 
         #get srs for comments that don't have them (old comments)
         for cm in wrapped:
@@ -1119,15 +1119,16 @@ class Message(Thing, Printable):
         m_subreddits = Subreddit._byID(sr_ids, data=True, return_dict=True)
 
         # load the links and their subreddits (if comment-as-message)
-        links = Link._byID(set(l.link_id for l in wrapped if l.was_comment),
-                           data=True,
-                           return_dict=True)
+        links = Link._byID(
+            set(link.link_id for link in wrapped if link.was_comment),
+            data=True, return_dict=True)
         # subreddits of the links (for comment-as-message)
-        l_subreddits = Subreddit._byID(set(l.sr_id for l in links.values()),
-                                       data=True, return_dict=True)
+        l_subreddits = Subreddit._byID(
+            set(link.sr_id for link in links.values()),
+            data=True, return_dict=True)
 
-        parents = Comment._byID(set(l.parent_id for l in wrapped
-                                  if l.parent_id and l.was_comment),
+        parents = Comment._byID(set(link.parent_id for link in wrapped
+                                    if link.parent_id and link.was_comment),
                                 data=True, return_dict=True)
 
         # load the unread list to determine message newness
