@@ -1,4 +1,4 @@
-# The contents of this file are subject to the Common Public Attribution
+©# The contents of this file are subject to the Common Public Attribution
 # License Version 1.0. (the "License"); you may not use this file except in
 # compliance with the License. You may obtain a copy of the License at
 # http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
@@ -737,7 +737,7 @@ class EmbedlyOEmbed(OEmbed):
         'brizzly.com', 'cbsnews.com', 'channelfrederator.com', 'chart.ly',
         'cl.ly', 'clikthrough.com', 'clipfish.de', 'clipshack.com', 'cnbc.com',
         'cnn.com', 'colbertnation.com', 'collegehumor.com', 'color.com',
-        'comedycentral.com', 'compete.com', 'confreaks.net', 'crackle.com',
+        'comedycentral.com', 'compete.com', 'confreaks.net', 'coub.com', 'crackle.com',
         'craigslist.org', 'crocodoc.com', 'crunchbase.com', 'dailybooth.com',
         'dailymile.com', 'dailymotion.com', 'deviantart.com', 'digg.com',
         'dipdive.com', 'discovery.com', 'dotsub.com', 'dribbble.com',
@@ -1326,7 +1326,8 @@ class EmbedlyOEmbed(OEmbed):
         'http:\\/\\/science\\.discovery\\.com\\/videos\\/.*|' +
         'http:\\/\\/tlc\\.discovery\\.com\\/videos\\/.*|' +
         'http:\\/\\/video\\.forbes\\.com\\/fvn\\/.*|' + 
-        'http:\\/\\/recordsetter\\.com\\/*\\/*\\/*'
+        'http:\\/\\/recordsetter\\.com\\/*\\/*\\/*|' +
+        'http:\\/\\/coub\\.com\\/view\\/.*' 
         , re.I
     )
     
