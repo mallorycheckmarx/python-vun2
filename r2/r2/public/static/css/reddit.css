@@ -103,10 +103,10 @@ label.disabled { color: gray; }
     border-radius: 7px;
     -webkit-background-clip: padding-box;
     -moz-background-clip: padding-box;
+    background-clip: padding-box;
     color: #2E6399;
     text-shadow: 0px 1px 0px hsla(0, 0%, 100%, .7);
     -webkit-box-shadow: inset 0px 1px 0px hsla(0, 0%, 100%, .8);
-    -moz-box-shadow: inset 0px 1px 0px hsla(0,0%, 100%, .8);
     box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8);
     text-decoration: none;
     font-weight: bold;
@@ -121,7 +121,6 @@ label.disabled { color: gray; }
     background: -moz-linear-gradient(top, hsl(210, 54%, 79%), hsl(210, 54%, 89%));
     background-color: #D4E3F2;
     -webkit-box-shadow: inset 0px -1px 0px hsla(0,0%,100%,.7);
-    -moz-box-shadow: inset 0px -1px 0px hsla(0,0%,100%, .7);
     box-shadow: inset 0px -1px 0px hsla(0,0%, 100%, .7);
 }
 
@@ -745,6 +744,7 @@ a.author { margin-right: 0.5em; }
 .flairrow:hover .flairdeletebtn { opacity: 1.0; }
 
 .flairselector {
+    -webkit-box-shadow: 4px 4px 4px #ccc;
     box-shadow: 4px 4px 4px #ccc;
     font-size: x-small;
     position: absolute;
@@ -899,6 +899,7 @@ a.author { margin-right: 0.5em; }
     color: #333;
     border: 1px solid gray;
     padding: 3px;
+    -webkit-box-shadow: 0 2px 10px rgba(0,0,0,.25);
     box-shadow: 0 2px 10px rgba(0,0,0,.25);
 }
 
@@ -932,7 +933,6 @@ a.author { margin-right: 0.5em; }
     border: 1px solid #369;
     background-color: #EFF7FF;
     -webkit-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8), 0px 1px 0px hsla(0,0%,100%,.6);
-    -moz-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8), 0px 1px 0px hsla(0,0%,100%,.6);
     box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8), 0px 1px 0px hsla(0,0%,100%,.6);
 }
 
@@ -998,11 +998,10 @@ a.author { margin-right: 0.5em; }
 }
 
 .wiki-page .revision {
-    transition: opacity 500ms;
-    -o-transition: opacity 500ms;
-    -ms-transition: opacity 500ms;
-    -moz-transition: opacity 500ms;
     -webkit-transition: opacity 500ms;
+    -moz-transition: opacity 500ms;
+    -o-transition: opacity 500ms;
+    transition: opacity 500ms;
 }
 
 .wiki-page .revision.hidden {
@@ -2031,6 +2030,7 @@ label + #moresearchinfo {
   border: 1px solid gray;
   padding: 10px;
   margin-top: -6px;
+  -webkit-box-shadow: 0 4px 6px -1px #ccc inset;
   box-shadow: 0 4px 6px -1px #ccc inset;
   background: #fefefe;
 }
@@ -2173,6 +2173,7 @@ li.searchfacet {
     text-align: left;
     z-index: 1001;
     padding: 10px;
+    -webkit-box-shadow: 0 5px 15px rgba(0,0,0,.5);
     box-shadow: 0 5px 15px rgba(0,0,0,.5);
     border-radius: 10px;
 }
@@ -3108,7 +3109,6 @@ form input[type=radio] {margin: 2px .5em 0 0; }
     padding: 2px;
     
     -webkit-box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
-    -moz-box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
     box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
 }
 
@@ -3950,7 +3950,6 @@ ul.tabmenu.formtab {
     background-color: #EFF7FF;
     padding: 5px;
     -webkit-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8), 0px 1px 0px hsla(0,0%,100%,.6);
-    -moz-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8), 0px 1px 0px hsla(0,0%,100%,.6);
     box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.8), 0px 1px 0px hsla(0,0%,100%,.6);
 }
 
@@ -4407,7 +4406,6 @@ table.lined-table {
     display: none;
     border-radius: 6px;
     -webkit-box-shadow: 0px 4px 6px 3px hsla(0, 0%, 0%, .2), inset 0px 1px 0px 0px hsla(0, 0%, 100%, .9);
-    -moz-box-shadow: 0px 4px 6px 3px hsla(0, 0%, 0%, .2), inset 0px 1px 0px 0px hsla(0, 0%, 100%, .9);
     box-shadow: 0px 4px 6px 3px hsla(0, 0%, 0%, .2), inset 0px 1px 0px 0px hsla(0, 0%, 100%, .9);
     text-shadow:  0px 1px 0px hsla(0,0%,100%,.8);
  }
@@ -4455,7 +4453,6 @@ table.lined-table {
     font-size:  1.3em;
     text-shadow: 0px 1px 0px hsla(0,0%,100%,.7);
     -webkit-box-shadow: inset 0px 1px 0px hsla(0,100%,100%,.8);
-    -moz-box-shadow: inset 0px 1px 0px hsla(0,100%,100%,.8);
     box-shadow: inset 0px 1px 0px hsla(0,100%,100%,.8);
 }
 .ui-datepicker-inline .ui-datepicker-prev {float: left; }
@@ -4502,9 +4499,9 @@ table.lined-table {
     padding: 0px;
     border: 1px solid #5E96CF;
     -webkit-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.7);
-    -moz-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.7);
     box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.7);
-    }
+}
+
 .ui-datepicker-calendar th {
     font-size: 1.1em;
 }
@@ -4525,7 +4522,6 @@ table.lined-table {
     font-size: 1.5em;
     font-weight: bold;
     -webkit-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.7);
-    -moz-box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.7);
     box-shadow: inset 0px 1px 0px hsla(0,0%,100%,.7);
 }
 
@@ -4543,7 +4539,6 @@ table.lined-table {
     background: -moz-linear-gradient(top, hsl(210, 54%, 65%), hsl(210, 54%, 45%));
     background-color: #4F8AC9;
     -webkit-box-shadow: inset 0px 2px 3px hsla(0,0%,0%,.6);
-    -moz-box-shadow: inset 0px 2px 3px hsla(0,0%,0%,.6);
     box-shadow: inset 0px 2px 3px hsla(0,0%,0%,.6);
     text-shadow: 0px -1px 0px hsla(0,0%,0%,.8);
 }
@@ -4752,8 +4747,8 @@ dd { margin-left: 20px;  }
 
 .calendar .blob.link:hover { 
     border: 1px solid red;
+    -webkit-box-shadow: 2px 2px 2px #000;
     box-shadow: 2px 2px 2px #000;
-    -moz-box-shadow: 2px 2px 2px #000;
     z-index: 100; 
 }
 
@@ -5480,7 +5475,6 @@ tr.gold-accent + tr > td {
     padding: 2px;
     
     -webkit-box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
-    -moz-box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
     box-shadow: inset 0px 1px 1px hsla(0,0%,0%,.3), 0px 1px 0px hsla(0,0%,100%,.6);
 }
 
@@ -5606,6 +5600,7 @@ tr.gold-accent + tr > td {
     color: white;
     background: #ff4500;
     border-color: #541700;
+    -webkit-box-shadow: inset 0px 1px 0px rgba(255, 255, 255, .25);
     box-shadow: inset 0px 1px 0px rgba(255, 255, 255, .25);
     text-shadow: 0px 1px 0px rgba(0, 0, 0, .7);
 }
@@ -5616,6 +5611,7 @@ tr.gold-accent + tr > td {
 
 .oauth2-authorize .fancybutton.allow:active {
     background: #eb3f00;
+    -webkit-box-shadow: inset 0px -1px 0px rgba(255, 255, 255, .25);
     box-shadow: inset 0px -1px 0px rgba(255, 255, 255, .25);
 }
 
@@ -5623,6 +5619,7 @@ tr.gold-accent + tr > td {
     color: black;
     background: #eee;
     border-color: #555;
+    -webkit-box-shadow: inset 0px 1px 0px rgba(255, 255, 255, .5);
     box-shadow: inset 0px 1px 0px rgba(255, 255, 255, .5);
     text-shadow: 0px 1px 0px rgba(255, 255, 255, .7);
 }
@@ -5633,6 +5630,7 @@ tr.gold-accent + tr > td {
 
 .oauth2-authorize .fancybutton.decline:active {
     background: #e4e4e4;
+    -webkit-box-shadow: inset 0px -1px 0px white;
     box-shadow: inset 0px -1px 0px white;
 }
 
