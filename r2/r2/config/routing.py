@@ -196,7 +196,7 @@ def make_map():
     mc('/help/gold', controller='redirect', action='redirect', dest='/gold/about')
     mc('/help/*anything', controller='embed', action='help')
     
-    mc('/wiki/create/*page', controller='wiki', action='wiki_create')
+    mc('/wiki/notfound/*page', controller='wiki', action='wiki_notfound')
     mc('/wiki/edit/*page', controller='wiki', action='wiki_revise')
     mc('/wiki/revisions/*page', controller='wiki', action='wiki_revisions')
     mc('/wiki/settings/*page', controller='wiki', action='wiki_settings')
@@ -204,10 +204,11 @@ def make_map():
     mc('/wiki/revisions', controller='wiki', action='wiki_recent')
     mc('/wiki/pages', controller='wiki', action='wiki_listing')
     
-    mc('/wiki/api/edit/*page', controller='wikiapi', action='wiki_edit')
-    mc('/wiki/api/hide/:revision/*page', controller='wikiapi', action='wiki_revision_hide')
-    mc('/wiki/api/revert/:revision/*page', controller='wikiapi', action='wiki_revision_revert')
-    mc('/wiki/api/alloweditor/:act/:username/*page', controller='wikiapi', action='wiki_allow_editor')
+    mc('/api/wiki/create', controller='wikiapi', action='wiki_create')
+    mc('/api/wiki/edit', controller='wikiapi', action='wiki_edit')
+    mc('/api/wiki/hide', controller='wikiapi', action='wiki_revision_hide')
+    mc('/api/wiki/revert', controller='wikiapi', action='wiki_revision_revert')
+    mc('/api/wiki/alloweditor/:act', controller='wikiapi', action='wiki_allow_editor')
     
     mc('/wiki/*page', controller='wiki', action='wiki_page')
     mc('/wiki/', controller='wiki', action='wiki_page')

@@ -632,6 +632,7 @@ class FrontController(RedditController, OAuth2ResourceController):
             return self.abort404()
 
         return EditReddit(content=pane,
+                          show_wiki_actions='wiki' in location,
                           location=location,
                           extension_handling=extension_handling).render()
 
@@ -1216,7 +1217,7 @@ class FormsController(RedditController):
         returns their user name"""
         c.response_content_type = 'text/plain'
         if c.user_is_loggedin:
-            perm = str(c.user.can_wiki())
+            perm = str(c.user.can_wiki(default=None))
             c.response.content = c.user.name + "," + perm
         else:
             c.response.content = ''

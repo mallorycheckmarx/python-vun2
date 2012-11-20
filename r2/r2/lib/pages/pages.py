@@ -137,12 +137,14 @@ class Reddit(Templated):
     def __init__(self, space_compress = True, nav_menus = None, loginbox = True,
                  infotext = '', content = None, short_description='', title = '', robots = None, 
                  show_sidebar = True, footer = True, srbar = True, page_classes = None,
-                 **context):
+                 show_wiki_actions = False, extra_js_config = {}, **context):
         Templated.__init__(self, **context)
         self.title          = title
         self.short_description = short_description
         self.robots         = robots
         self.infotext       = infotext
+        self.extra_js_config = extra_js_config
+        self.show_wiki_actions = show_wiki_actions
         self.loginbox       = True
         self.show_sidebar   = show_sidebar
         self.space_compress = space_compress and not g.template_debug
@@ -312,14 +314,14 @@ class Reddit(Templated):
             ps.append(SubredditInfoBar())
             moderator = c.user_is_loggedin and (c.user_is_admin or 
                                           c.site.is_moderator(c.user))
-            if c.show_wiki_actions:
+            if self.show_wiki_actions:
                 ps.append(self.wiki_actions_menu(moderator=moderator))
             if moderator:
                 ps.append(self.sr_admin_menu())
             if (c.user.pref_show_adbox or not c.user.gold) and not g.disable_ads:
                 ps.append(Ads())
             no_ads_yet = False
-        elif c.show_wiki_actions:
+        elif self.show_wiki_actions:
             ps.append(self.wiki_actions_menu())
 
         user_banned = c.user_is_loggedin and c.site.is_banned(c.user)
@@ -434,7 +436,7 @@ class Reddit(Templated):
             if c.user_is_loggedin:
                 mod = bool(c.user_is_admin or c.site.is_moderator(c.user))
             if c.site._should_wiki and (c.site.wikimode != 'disabled' or mod):
-                if not g.wiki_disabled:
+                if not g.disable_wiki:
                     main_buttons.append(NavButton('wiki', 'wiki'))
 
         more_buttons = []
