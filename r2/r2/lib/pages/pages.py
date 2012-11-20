@@ -484,6 +484,11 @@ class Reddit(Templated):
                     classes.add('contributor')
                 if c.cname:
                     classes.add('cname')
+                flair = wrapped_flair(c.user, c.site, False)
+                flair_enabled, _pos, _text, flair_css_class = flair
+                if flair_enabled and flair_css_class:
+                    for flair_css_class in flair_css_class.split():
+                        classes.add('userflair-%s' % flair_css_class)
             if c.site.is_moderator(c.user):
                 classes.add('moderator')
             if c.user.gold:
