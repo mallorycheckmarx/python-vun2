@@ -24,13 +24,16 @@ from os.path import normpath
 import datetime
 import re
 
+from pylons.i18n import _
+
 from pylons.controllers.util import redirect_to
 from pylons import c, g, request
 
 from r2.models.wiki import WikiPage, WikiRevision
-from r2.controllers.validator import Validator, validate, make_validated_kw
+from r2.controllers.validator import (Validator, validate, VSrModerator,
+                                      make_validated_kw, set_api_docs)
 from r2.lib.db import tdb_cassandra
-
+from functools import wraps
 
 MAX_PAGE_NAME_LENGTH = g.wiki_max_page_name_length
 
@@ -38,6 +41,7 @@ MAX_SEPARATORS = g.wiki_max_page_separators
 
 def wiki_validate(*simple_vals, **param_vals):
     def val(fn):
+        @wraps(fn)
         def newfn(self, *a, **env):
             kw = make_validated_kw(fn, simple_vals, param_vals, env)
             for e in c.errors:
@@ -45,6 +49,7 @@ def wiki_validate(*simple_vals, **param_vals):
                 if e.code:
                     self.handle_error(e.code, e.name)
             return fn(self, *a, **kw)
+        set_api_docs(newfn, simple_vals, param_vals)
         return newfn
     return val
 
@@ -59,16 +64,14 @@ def this_may_revise(page=None):
 
 def this_may_view(page):
     user = c.user if c.user_is_loggedin else None
+    if user and c.user_is_admin:
+        return True
     return may_view(c.site, user, page)
 
 def may_revise(sr, user, page=None):    
     if sr.is_moderator(user):
         # Mods may always contribute
         return True
-    elif sr.wikimode != 'anyone':
-        # If the user is not a mod and the mode is not anyone,
-        # then the user may not edit.
-        return False
     
     if page and page.restricted and not page.special:
         # People may not contribute to restricted pages
@@ -83,13 +86,18 @@ def may_revise(sr, user, page=None):
         # Users who are not allowed to view the page may not contribute to the page
         return False
     
-    if not user.can_wiki():
-        # Global wiki contributute ban
+    if not user.can_wiki(default=True):
+        # Global wiki contribute ban
         return False
     
-    if page and page.has_editor(user.name):
+    if page and page.has_editor(user._id36):
         # If the user is an editor on the page, they may edit
         return True
+    
+    if sr.wikimode != 'anyone':
+        # If the user is not a page editor and the mode is not everyone,
+        # the user may not edit.
+        return False
     
     if not sr.can_submit(user):
         # If the user can not submit to the subreddit
@@ -112,12 +120,12 @@ def may_revise(sr, user, page=None):
         return True
     
     karma = max(user.karma('link', sr), user.karma('comment', sr))
-    if karma < sr.wiki_edit_karma:
+    if karma < (sr.wiki_edit_karma or 0):
         # If the user has too few karma, they should not contribute
         return False
     
     age = (datetime.datetime.now(g.tz) - user._date).days
-    if age < sr.wiki_edit_age:
+    if age < (sr.wiki_edit_age or 0):
         # If they user's account is too young
         # They should not contribute
         return False
@@ -170,14 +178,13 @@ class AbortWikiError(Exception):
 
 page_match_regex = re.compile(r'^[\w_/]+\Z')
 
-class VWikiPage(Validator):
-    def __init__(self, param, required=True, restricted=True, modonly=False, **kw):
-        self.restricted = restricted
-        self.modonly = modonly
-        self.required = required
-        Validator.__init__(self, param, **kw)
-    
+class VWikiModerator(VSrModerator):
+    def __init__(self, fatal=False, *a, **kw):
+        VSrModerator.__init__(self, fatal=fatal, *a, **kw)
+
+class VWikiPageName(Validator):
     def run(self, page):
+        original_page = page
         if not page:
             # If no page is specified, give the index page
             page = "index"
@@ -188,16 +195,35 @@ class VWikiPage(Validator):
             return self.set_error('INVALID_PAGE_NAME', code=400)
         
         if ' ' in page:
-            new_name = page.replace(' ', '_')
-            url = '%s/%s' % (c.wiki_base_url, new_name)
-            redirect_to(url)
+            page = page.replace(' ', '_')
         
         if not page_match_regex.match(page):
             return self.set_error('INVALID_PAGE_NAME', code=400)
         
         page = normalize_page(page)
         
-        c.page = page
+        if WikiPage.is_impossible(page):
+            return self.set_error('INVALID_PAGE_NAME', code=400)
+        
+        return (page, page != original_page)
+
+class VWikiPage(VWikiPageName):
+    def __init__(self, param, required=True, restricted=True, modonly=False,
+                 allow_hidden_revision=True, **kw):
+        self.restricted = restricted
+        self.modonly = modonly
+        self.allow_hidden_revision = allow_hidden_revision
+        self.required = required
+        Validator.__init__(self, param, **kw)
+    
+    def run(self, page):
+        page = VWikiPageName.run(self, page)
+        
+        if self.has_errors:
+            return
+        
+        page = page[0]
+        
         if (not c.is_wiki_mod) and self.modonly:
             return self.set_error('MOD_REQUIRED', code=403)
         
@@ -205,17 +231,14 @@ class VWikiPage(Validator):
             wp = self.validpage(page)
         except AbortWikiError:
             return
-        
-        # TODO: MAKE NOT REQUIRED
-        c.page_obj = wp
-        
+
         return wp
     
     def validpage(self, page):
         try:
             wp = WikiPage.get(c.site, page)
             if self.restricted and wp.restricted:
-                if not wp.special:
+                if (not c.is_wiki_mod) and not wp.special:
                     self.set_error('RESTRICTED_PAGE', code=403)
                     raise AbortWikiError
             if not this_may_view(wp):
@@ -233,7 +256,7 @@ class VWikiPage(Validator):
             return
         try:
             r = WikiRevision.get(version, pageid)
-            if r.is_hidden and not c.is_wiki_mod:
+            if not self.allow_hidden_revision and (r.is_hidden and not c.is_wiki_mod):
                 self.set_error('HIDDEN_REVISION', code=403)
                 raise AbortWikiError
             return r
@@ -241,10 +264,13 @@ class VWikiPage(Validator):
             self.set_error('INVALID_REVISION', code=404)
             raise AbortWikiError
 
+    def param_docs(self):
+        return dict(page=_('the name of an existing wiki page'))
+
 class VWikiPageAndVersion(VWikiPage):    
     def run(self, page, *versions):
         wp = VWikiPage.run(self, page)
-        if c.errors:
+        if self.has_errors:
             return
         validated = []
         for v in versions:
@@ -253,16 +279,41 @@ class VWikiPageAndVersion(VWikiPage):
             except AbortWikiError:
                 return
         return tuple([wp] + validated)
+    
+    def param_docs(self):
+        doc = dict.fromkeys(self.param, _('a wiki revision ID'))
+        doc.update(VWikiPage.param_docs(self))
+        return doc
 
 class VWikiPageRevise(VWikiPage):
+    def __init__(self, param, required=False, *k, **kw):
+        VWikiPage.__init__(self, param, required=required, *k, **kw)
+    
+    def may_not_create(self, page):
+        if c.is_wiki_mod and WikiPage.is_special(page):
+            return {'reason': 'PAGE_CREATED_ELSEWHERE'}
+        elif (not c.user_is_admin) and WikiPage.is_restricted(page):
+            self.set_error('RESTRICTED_PAGE', code=403)
+            return
+        elif page.count('/') > MAX_SEPARATORS:
+            return {'reason': 'PAGE_NAME_MAX_SEPARATORS', 'max_separators': MAX_SEPARATORS}
+        elif len(page) > MAX_PAGE_NAME_LENGTH:
+            return {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
+    
     def run(self, page, previous=None):
         wp = VWikiPage.run(self, page)
-        if c.errors:
+        if self.has_errors:
             return
-        if not wp:
-            return self.set_error('INVALID_PAGE', code=404)
         if not this_may_revise(wp):
+            if not wp:
+                return self.set_error('PAGE_NOT_FOUND', code=404)
             return self.set_error('MAY_NOT_REVISE', code=403)
+        if not wp:
+            # No abort code on purpose, controller will handle
+            error = self.may_not_create(page)
+            if error:
+                self.set_error('WIKI_CREATE_ERROR', msg_params=error)
+            return (None, None)
         if previous:
             try:
                 prev = self.validversion(previous, wp._id)
@@ -270,25 +321,9 @@ class VWikiPageRevise(VWikiPage):
                 return
             return (wp, prev)
         return (wp, None)
-
-class VWikiPageCreate(VWikiPage):
-    def __init__(self, param, **kw):
-        VWikiPage.__init__(self, param, required=False, **kw)
     
-    def run(self, page):
-        wp = VWikiPage.run(self, page)
-        if c.errors:
-            return
-        if wp:
-            c.error = {'reason': 'PAGE_EXISTS'}
-        elif c.is_wiki_mod and WikiPage.is_special(page):
-            c.error = {'reason': 'PAGE_CREATED_ELSEWHERE'}
-        elif WikiPage.is_restricted(page):
-            self.set_error('RESTRICTED_PAGE', code=403)
-            return
-        elif page.count('/') > MAX_SEPARATORS:
-            c.error = {'reason': 'PAGE_NAME_MAX_SEPARATORS', 'MAX_SEPARATORS': MAX_SEPARATORS}
-        elif len(page) > MAX_PAGE_NAME_LENGTH:
-            c.error = {'reason': 'PAGE_NAME_LENGTH', 'max_length': MAX_PAGE_NAME_LENGTH}
-        return this_may_revise()
-               
+    def param_docs(self):
+        docs = dict(page=_('the name of an existing page or a new page to create'))
+        if 'previous' in self.param:
+            docs['previous'] = _('the starting point revision for this edit')
+        return docs

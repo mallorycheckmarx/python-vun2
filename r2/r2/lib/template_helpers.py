@@ -116,7 +116,7 @@ def s3_https_if_secure(url):
          replace = "https://%s/" % s3_direct_url
     return url.replace("http://", replace)
 
-def js_config():
+def js_config(extra_config=None):
     config = {
         # is the user logged in?
         "logged": c.user_is_loggedin and c.user.name,
@@ -150,6 +150,10 @@ def js_config():
         "uitracker_url": g.uitracker_url,
         "static_root": static(''),
     }
+
+    if extra_config:
+        config.update(extra_config)
+
     return config
 
 
