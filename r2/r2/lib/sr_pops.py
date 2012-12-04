@@ -11,21 +11,23 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.models import Subreddit, SubredditPopularityByLanguage
 from r2.lib.db.operators import desc
 from r2.lib import count
 from r2.lib.utils import fetch_things2, flatten
+from r2.lib.memoize import memoize
 
 # the length of the stored per-language list
-limit = 1000
+limit = 2500
 
 def set_downs():
     sr_counts = count.get_sr_counts()
@@ -88,6 +90,8 @@ def run():
     set_downs()
     cache_lists()
 
+# this relies on c.content_langs being sorted to increase cache hit rate
+@memoize('sr_pops.pop_reddits', time=3600, stale=True)
 def pop_reddits(langs, over18, over18_only, filter_allow_top = False):
     if not over18:
         over18_state = 'no_over18'

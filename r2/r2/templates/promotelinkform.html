@@ -4,21 +4,22 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%!
   from r2.lib.utils import to36
   from r2.lib.media import thumbnail_url
@@ -34,11 +35,19 @@
 <%namespace name="utils" file="utils.html"/>
 
 ${unsafe(js.use('sponsored'))}
+
+<%def name="javascript_setup()">
 <script type="text/javascript">
   $(function() { update_bid("*[name=bid]"); }); 
 </script>
+</%def>
 
+${self.javascript_setup()}
 
+## Create a datepicker for a form. min/maxDateSrc are the id of the
+## element containing the min/max date - the '#' is added automatically
+## here (as a workaround for babel message extraction not handling it
+## properly if passed in when the function is called
 <%def name="datepicker(name, value, minDateSrc = '', maxDateSrc ='', initfuncname = '', min_date_offset=0)">
   <div class="date-input">
     <input name="${name}"
@@ -46,7 +55,7 @@ ${unsafe(js.use('sponsored'))}
     <div id="datepicker-${name}" class="datepicker"></div>
     <script type="text/javascript">
       ${initfuncname} = function() {
-          attach_calendar("#${name}", "${minDateSrc}", "${maxDateSrc}",
+          attach_calendar("#${name}", "#${minDateSrc}", "#${maxDateSrc}",
                           ${caller.body()}, ${min_date_offset})
       };
     </script>
@@ -79,7 +88,7 @@ ${unsafe(js.use('sponsored'))}
         </p></div>
       <div class="clear"></div>
    </div>
-    <div id="campaign" style="${'display:none' if thing.link.campaigns else ''}"
+    <div id="campaign" style="${'display:none' if thing.campaigns else ''}"
          class="campaign infotext rounded" method="post" action="/api/add_campaign">
 
 
@@ -87,7 +96,7 @@ ${unsafe(js.use('sponsored'))}
     <%
        start_title = "Date when your sponsored link will start running.  We start new campaigns at midnight UTC+5"
        end_title = "Date when your sponsored link will end (at midnight UTC+5)"
-       targeting_title = "name of the community that you are targeting. A blank entry here means that the ad is untargeted and will run site-wise "
+       targeting_title = "name of the community that you are targeting. A blank entry here means that the ad is untargeted and will run site-wide "
        newcamp_title = "click to create a new campaign.  To edit an existing campaing in the table below, click the 'edit' button."
      %>
     <table class="preftable">
@@ -101,7 +110,7 @@ ${unsafe(js.use('sponsored'))}
 	      %>
           <input type="hidden" id="date-min" name="date-min" value="${mindate}" />
           <%self:datepicker name="startdate", value="${thing.startdate}"
-                            minDateSrc="#date-min" initfuncname="init_startdate">
+                            minDateSrc="date-min" initfuncname="init_startdate">
           function(elem) {
             var other = $("#enddate");
             if(dateFromInput("#startdate") >= dateFromInput("#enddate")) {
@@ -116,7 +125,7 @@ ${unsafe(js.use('sponsored'))}
           </%self:datepicker>
           -
           <%self:datepicker name="enddate", value="${thing.enddate}"
-                            minDateSrc="#startdate" initfuncname="init_enddate" min_date_offset="86400000">
+                            minDateSrc="startdate" initfuncname="init_enddate" min_date_offset="86400000">
             function(elem) { update_bid(elem); }
           </%self:datepicker>
           
@@ -131,12 +140,14 @@ ${unsafe(js.use('sponsored'))}
         <th>total bid</th>
         <td class="prefright">
           ${error_field("BAD_BID", "bid", "div")}
+          ${error_field("BID_LIVE", "bid", "div")}
           $<input id="bid" name="bid" size="7" type="text" class="rounded styled-input"
                   style="width:auto"
                   onchange="update_bid(this)"
                   onkeyup="update_bid(this)"
-                  title="Minimum is $${'%.2f' % g.min_promote_bid} per day, or $${'%.2f' % (g.min_promote_bid * 1.5)} per day targeted"
-                  value="${'%.2f' % (g.min_promote_bid * 5)}"
+                  title="Minimum is $${'%.2f' % thing.min_daily_bid} per day, or $${'%.2f' % (thing.min_daily_bid * 1.5)} per day targeted"
+                  value="${'%.2f' % (thing.min_daily_bid * 5)}"
+                  data-min_daily_bid="${thing.min_daily_bid}"
                   />
           <span class="bid-info gray"></span>
         </td>
@@ -178,7 +189,7 @@ ${unsafe(js.use('sponsored'))}
           init_startdate();
           init_enddate();
           $("#campaign").find("button[name=create]").show().end()
-               .find("button[name=edit]").hide().end();
+               .find("button[name=save]").hide().end();
           update_bid("*[name=bid]");
        })
      </script>
@@ -192,15 +203,15 @@ ${unsafe(js.use('sponsored'))}
        ${reddit_selector(thing.default_sr, thing.sr_searches, thing.subreddits)}
      </div>
      <div class="buttons">
-       <input type="hidden" name="indx" value="" />
+       <input type="hidden" name="campaign_id36" value="" />
        <span class="status error"></span>
        <button name="cancel"
           onclick="return cancel_edit()" class="fancybutton">
          cancel
        </button>
-       <button name="edit"
+       <button name="save"
           onclick="return post_pseudo_form('.campaign', 'edit_campaign')" class="fancybutton">
-         edit
+         save
        </button>
        <button name="create"
           onclick="return post_pseudo_form('.campaign', 'edit_campaign')" class="fancybutton">
@@ -210,7 +221,7 @@ ${unsafe(js.use('sponsored'))}
      <div class="clear"></div>
     </div>
    <div class="existing-campaigns infotext rounded">
-      <table style="${'display:none' if not thing.link.campaigns else ''}">
+      <table style="${'display:none' if not thing.campaigns else ''}">
         <tr>
           <th title="${start_title}">start</th>
           <th title="${end_title}">end</th>
@@ -226,15 +237,16 @@ ${unsafe(js.use('sponsored'))}
       </table>
       <script type="text/javascript">
         $(function() {
-           %for campaign in sorted(thing.link.campaigns.values(), \
-                                   key = lambda x: x.start_date):
-            $.new_campaign(${unsafe(','.join(simplejson.dumps(x) for x in campaign))});
+           %for rc in sorted(thing.campaigns, key=lambda rc: rc.start_date):
+            $.new_campaign(${unsafe(','.join(simplejson.dumps(attr) for attr in
+                [rc.campaign_id36, rc.start_date, rc.end_date, rc.duration,
+                 rc.bid, rc.sr, rc.status]))});
            %endfor
            $.set_up_campaigns();
           });
       </script>
       <p class="error" 
-         style="${'display:none' if thing.link.campaigns else ''}">
+         style="${'display:none' if thing.campaigns else ''}">
         You don't have any campaigns for this link yet.  You should add one.
       </p>
    </div>
@@ -277,8 +289,8 @@ ${unsafe(js.use('sponsored'))}
   %if c.user_is_sponsor:
   <label style="display:block; text-align:right" for="domain">Override display domain:</label>
   <input id="domain" name="domain" type="text" 
-         %if getattr(link, "domain_override", False):
-           value="${link.domain_override}" class="rounded"
+         %if getattr(thing.link, "domain_override", False):
+           value="${thing.link.domain_override}" class="rounded"
          %else:
            class="gray rounded" value="optional" 
          %endif
@@ -291,7 +303,7 @@ ${unsafe(js.use('sponsored'))}
 
 %if thing.link and (trusted or not promote.is_promoted(thing.link)):
   <%utils:line_field title="${_('look and feel')}"
-                     description="images will be resized if large than 70 x 70 pixels" css_class="rounded">
+                     description="images will be resized if larger than 70 x 70 pixels" css_class="rounded">
     <div class="delete-field">
       <%utils:image_upload post_target="/api/link_thumb" 
                            current_image="${thumb}"
@@ -387,7 +399,7 @@ ${unsafe(js.use('sponsored'))}
 <div class="save-button">
   <%
       if thing.link:
-          name = "edit"
+          name = "save"
           text = _("save options")
       else:
           name = "create"
@@ -405,6 +417,7 @@ ${unsafe(js.use('sponsored'))}
 </div>
 </div>
 
+<%def name="right_panel()">
 %if thing.link and not c.user_is_sponsor:
   <div class="bidding-history" style="padding-top: 0px;">
     <%utils:line_field title="${_('promotion history')}" css_class="rounded">
@@ -449,6 +462,9 @@ ${unsafe(js.use('sponsored'))}
 </%utils:line_field>
   </div>
 %endif
+</%def>
+
+${self.right_panel()}
 
 %if thing.link and c.user_is_sponsor:
   <div class="spacer bidding-history">
@@ -503,7 +519,7 @@ ${unsafe(js.use('sponsored'))}
       <input id="promote_note" name="note" value="" type="text" size="40" />
       <button type="submit">save</button>
       <div class="notes">
-        %for line in getattr(thing.link, "promotion_log", []):
+        %for line in thing.promotion_log:
           <p>${line}</p>
         %endfor
       </div>

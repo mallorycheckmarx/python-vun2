@@ -11,30 +11,41 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+import os
+import base64
+import traceback
+import ConfigParser
+
 from urllib import unquote_plus
 from urllib2 import urlopen
 from urlparse import urlparse, urlunparse
-from threading import local
 import signal
 from copy import deepcopy
 import cPickle as pickle
 import re, math, random
+import boto
+from decimal import Decimal
 
-from BeautifulSoup import BeautifulSoup
+from BeautifulSoup import BeautifulSoup, SoupStrainer
 
 from time import sleep
 from datetime import datetime, timedelta
+from pylons import g
 from pylons.i18n import ungettext, _
-from r2.lib.filters import _force_unicode
+from r2.lib.filters import _force_unicode, _force_utf8
 from mako.filters import url_escape
+from r2.lib.contrib import ipaddress
+from r2.lib.require import require, require_split
+import snudown
  
 from r2.lib.utils._utils import *
         
@@ -50,10 +61,6 @@ def randstr(len, reallyrandom = False):
         alphabet += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!#$%&\()*+,-./:;<=>?@[\\]^_{|}~'
     return ''.join(random.choice(alphabet)
                    for i in range(len))
-
-def is_authorized_cname(domain, cnames):
-    return any((domain == cname or domain.endswith('.' + cname))
-               for cname in cnames)
 
 class Storage(dict):
     """
@@ -206,6 +213,16 @@ class Results():
         else:
             raise StopIteration
 
+def strip_www(domain):
+    if domain.count('.') >= 2 and domain.startswith("www."):
+        return domain[4:]
+    else:
+        return domain
+
+def is_subdomain(subdomain, base):
+    """Check if a domain is equal to or a subdomain of a base domain."""
+    return subdomain == base or (subdomain is not None and subdomain.endswith('.' + base))
+
 r_base_url = re.compile("(?i)(?:.+?://)?(?:www[\d]*\.)?([^#]*[^#/])/?")
 def base_url(url):
     res = r_base_url.findall(url)
@@ -233,29 +250,41 @@ def path_component(s):
 def get_title(url):
     """Fetches the contents of url and extracts (and utf-8 encodes)
        the contents of <title>"""
-    if not url or not url.startswith('http://'):
+    if not url or not (url.startswith('http://') or url.startswith('https://')):
         return None
 
     try:
-        # if we don't find it in the first kb of the resource, we
-        # probably won't find it
         opener = urlopen(url, timeout=15)
-        text = opener.read(1024)
+        
+        # Attempt to find the title in the first 1kb
+        data = opener.read(1024)
+        title = extract_title(data)
+        
+        # Title not found in the first kb, try searching an additional 2kb
+        if not title:
+            data += opener.read(2048)
+            title = extract_title(data)
+        
         opener.close()
-        bs = BeautifulSoup(text)
-        if not bs:
-            return
-
-        title_bs = bs.html.head.title
-
-        if not title_bs or not title_bs.string:
-            return
-
-        return title_bs.string.encode('utf-8')
+        
+        return title
 
     except:
         return None
 
+def extract_title(data):
+    """Tries to extract the value of the title element from a string of HTML"""
+    bs = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
+    if not bs:
+        return
+    
+    title_bs = bs.html.head.title
+
+    if not title_bs or not title_bs.string:
+        return
+
+    return title_bs.string.encode('utf-8').strip()
+    
 valid_schemes = ('http', 'https', 'ftp', 'mailto')
 valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
 def sanitize_url(url, require_scheme = False):
@@ -275,11 +304,14 @@ def sanitize_url(url, require_scheme = False):
     if url.lower() == 'self':
         return url
 
-    u = urlparse(url)
-    # first pass: make sure a scheme has been specified
-    if not require_scheme and not u.scheme:
-        url = 'http://' + url
+    try:
         u = urlparse(url)
+        # first pass: make sure a scheme has been specified
+        if not require_scheme and not u.scheme:
+            url = 'http://' + url
+            u = urlparse(url)
+    except ValueError:
+        return
 
     if u.scheme and u.scheme in valid_schemes:
         # if there is a scheme and no hostname, it is a bad url.
@@ -323,7 +355,7 @@ def trunc_time(time, mins, hours=None):
                         microsecond = 0)
 
 def long_datetime(datetime):
-    return datetime.ctime() + " GMT"
+    return datetime.astimezone(g.tz).ctime() + " " + str(g.tz)
 
 def median(l):
     if l:
@@ -336,8 +368,8 @@ def query_string(dict):
     for k,v in dict.iteritems():
         if v is not None:
             try:
-                k = url_escape(unicode(k).encode('utf-8'))
-                v = url_escape(unicode(v).encode('utf-8'))
+                k = url_escape(_force_unicode(k))
+                v = url_escape(_force_unicode(v))
                 pairs.append(k + '=' + v)
             except UnicodeDecodeError:
                 continue
@@ -504,10 +536,9 @@ class UrlParser(object):
         """
         from pylons import g
         return (not self.hostname or
-                self.hostname.endswith(g.domain) or
-                is_authorized_cname(self.hostname, g.authorized_cnames) or
+                is_subdomain(self.hostname, g.domain) or
                 (subreddit and subreddit.domain and
-                 self.hostname.endswith(subreddit.domain)))
+                 is_subdomain(self.hostname, subreddit.domain)))
 
     def path_add_subreddit(self, subreddit):
         """
@@ -608,9 +639,7 @@ class UrlParser(object):
         u = cls(url)
 
         # strip off any www and lowercase the hostname:
-        netloc = u.netloc.lower()
-        if len(netloc.split('.')) > 2 and netloc.startswith("www."):
-            netloc = netloc[4:]
+        netloc = strip_www(u.netloc.lower())
 
         # http://code.google.com/web/ajaxcrawling/docs/specification.html
         fragment = u.fragment if u.fragment.startswith("!") else ""
@@ -627,37 +656,6 @@ def to_js(content, callback="document.write", escape=True):
     if escape:
         content = string2js(content)
     return before + content + after
-
-class TransSet(local):
-    def __init__(self, items = ()):
-        self.set = set(items)
-        self.trans = False
-
-    def begin(self):
-        self.trans = True
-
-    def add_engine(self, engine):
-        if self.trans:
-            return self.set.add(engine.begin())
-
-    def clear(self):
-        return self.set.clear()
-
-    def __iter__(self):
-        return self.set.__iter__()
-
-    def commit(self):
-        for t in self:
-            t.commit()
-        self.clear()
-
-    def rollback(self):
-        for t in self:
-            t.rollback()
-        self.clear()
-
-    def __del__(self):
-        self.commit()
 
 def pload(fname, default = None):
     "Load a pickled object from a file"
@@ -800,7 +798,7 @@ def fix_if_broken(thing, delete = True, fudge_links = False):
 
             if not tried_loading:
                 tried_loading = True
-                thing._load(check_essentials=False)
+                thing._load()
 
             try:
                 getattr(thing, attr)
@@ -1008,21 +1006,23 @@ def filter_links(links, filter_spam = False, multiple = True):
     return links if multiple else links[0]
 
 def link_duplicates(article):
-    from r2.models import Link, NotFound
-
     # don't bother looking it up if the link doesn't have a URL anyway
     if getattr(article, 'is_self', False):
         return []
 
+    return url_links(article.url, exclude = article._fullname)
+
+def url_links(url, exclude=None):
+    from r2.models import Link, NotFound
+
     try:
-        links = tup(Link._by_url(article.url, None))
+        links = tup(Link._by_url(url, None))
     except NotFound:
         links = []
 
-    duplicates = [ link for link in links
-                   if link._fullname != article._fullname ]
-
-    return duplicates
+    links = [ link for link in links
+                   if link._fullname != exclude ]
+    return links
 
 class TimeoutFunctionException(Exception):
     pass
@@ -1075,14 +1075,10 @@ def make_offset_date(start_date, interval, future = True,
         return start_date - timedelta(interval)
     return start_date
 
-def to_csv(table):
-    # commas and linebreaks must result in a quoted string
-    def quote_commas(x):
-        if ',' in x or '\n' in x:
-            return u'"%s"' % x.replace('"', '""')
-        return x
-    return u"\n".join(u','.join(quote_commas(y) for y in x)
-                      for x in table)
+def to_date(d):
+    if isinstance(d, datetime):
+        return d.date()
+    return d
 
 def in_chunks(it, size=25):
     chunk = []
@@ -1096,21 +1092,6 @@ def in_chunks(it, size=25):
     except StopIteration:
         if chunk:
             yield chunk
-
-r_subnet = re.compile("\A(\d+\.\d+)\.\d+\.\d+\Z")
-def ip_and_slash16(req):
-    ip = req.ip
-
-    if ip is None:
-        raise ValueError("request.ip is None")
-
-    m = r_subnet.match(ip)
-    if m is None:
-        raise ValueError("Couldn't parse IP %s" % ip)
-
-    slash16 = m.group(1) + '.x.x'
-
-    return (ip, slash16)
 
 def spaceout(items, targetseconds,
              minsleep = 0, die = False,
@@ -1311,6 +1292,17 @@ class Bomb(object):
     def __repr__(cls):
         raise Hell()
 
+class SimpleSillyStub(object):
+    """A simple stub object that does nothing when you call its methods."""
+    def __nonzero__(self):
+        return False
+
+    def __getattr__(self, name):
+        return self.stub
+
+    def stub(self, *args, **kwargs):
+        pass
+
 def strordict_fullname(item, key='fullname'):
     """Sometimes we migrate AMQP queues from simple strings to pickled
     dictionaries. During the migratory period there may be items in
@@ -1350,7 +1342,7 @@ def constant_time_compare(actual, expected):
     """
     Returns True if the two strings are equal, False otherwise
     
-    The time taken is dependent on the number of charaters provided
+    The time taken is dependent on the number of characters provided
     instead of the number of characters that match.
     """
     actual_len   = len(actual)
@@ -1360,4 +1352,139 @@ def constant_time_compare(actual, expected):
         for i in xrange(actual_len):
             result |= ord(actual[i]) ^ ord(expected[i % expected_len])
     return result == 0
+
+
+def extract_urls_from_markdown(md):
+    "Extract URLs that will be hot links from a piece of raw Markdown."
+
+    html = snudown.markdown(_force_utf8(md))
+    links = SoupStrainer("a")
+
+    for link in BeautifulSoup(html, parseOnlyThese=links):
+        url = link.get('href')
+        if url:
+            yield url
+
+
+def summarize_markdown(md):
+    """Get the first paragraph of some Markdown text, potentially truncated."""
+
+    first_graf, sep, rest = md.partition("\n\n")
+    return first_graf[:500]
+
+
+def find_containing_network(ip_ranges, address):
+    """Find an IP network that contains the given address."""
+    addr = ipaddress.ip_address(address)
+    for network in ip_ranges:
+        if addr in network:
+            return network
+    return None
+
+
+def is_throttled(address):
+    """Determine if an IP address is in a throttled range."""
+    return bool(find_containing_network(g.throttles, address))
+
+
+def parse_http_basic(authorization_header):
+    """Parse the username/credentials out of an HTTP Basic Auth header.
+
+    Raises RequirementException if anything is uncool.
+    """
+    auth_scheme, auth_token = require_split(authorization_header, 2)
+    require(auth_scheme.lower() == "basic")
+    try:
+        auth_data = base64.b64decode(auth_token)
+    except TypeError:
+        raise RequirementException
+    return require_split(auth_data, 2, ":")
+
+
+def simple_traceback(limit):
+    """Generate a pared-down traceback that's human readable but small.
+
+    `limit` is how many frames of the stack to put in the traceback.
+
+    """
+
+    stack_trace = traceback.extract_stack(limit=limit)[:-2]
+    return "\n".join(":".join((os.path.basename(filename),
+                               function_name,
+                               str(line_number),
+                              ))
+                     for filename, line_number, function_name, text
+                     in stack_trace)
+
+
+def weighted_lottery(weights, _random=random.random):
+    """Randomly choose a key from a dict where values are weights.
+
+    Weights should be non-negative numbers, and at least one weight must be
+    non-zero. The probability that a key will be selected is proportional to
+    its weight relative to the sum of all weights. Keys with zero weight will
+    be ignored.
+
+    Raises ValueError if weights is empty or contains a negative weight.
+    """
+
+    total = sum(weights.itervalues())
+    if total <= 0:
+        raise ValueError("total weight must be positive")
+
+    r = _random() * total
+    t = 0
+    for key, weight in weights.iteritems():
+        if weight < 0:
+            raise ValueError("weight for %r must be non-negative" % key)
+        t += weight
+        if t > r:
+            return key
+
+    # this point should never be reached
+    raise ValueError(
+        "weighted_lottery messed up: r=%r, t=%r, total=%r" % (r, t, total))
+
+
+def read_static_file_config(config_file):
+    parser = ConfigParser.RawConfigParser()
+    with open(config_file, "r") as cf:
+        parser.readfp(cf)
+    config = dict(parser.items("static_files"))
+
+    s3 = boto.connect_s3(config["aws_access_key_id"],
+                         config["aws_secret_access_key"])
+    bucket = s3.get_bucket(config["bucket"])
+
+    return bucket, config
+
+
+class GoldPrice(object):
+    """Simple price math / formatting type.
+
+    Prices are assumed to be USD at the moment.
+
+    """
+    def __init__(self, decimal):
+        self.decimal = Decimal(decimal)
+
+    def __mul__(self, other):
+        return type(self)(self.decimal * other)
+
+    def __div__(self, other):
+        return type(self)(self.decimal / other)
+
+    def __str__(self):
+        return "$%s" % self.decimal.quantize(Decimal("1.00"))
+
+    def __repr__(self):
+        return "%s(%s)" % (type(self).__name__, self)
+
+    @property
+    def pennies(self):
+        return int(self.decimal * 100)
+
+
+def config_gold_price(v, key=None, data=None):
+    return GoldPrice(v)
 

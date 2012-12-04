@@ -11,18 +11,20 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 import cgi
 import os
 import urllib
 import re
+import snudown
 from cStringIO import StringIO
 
 from xml.sax.handler import ContentHandler
@@ -40,6 +42,10 @@ SC_ON = "<!-- SC_ON -->"
 MD_START = '<div class="md">'
 MD_END = '</div>'
 
+WIKI_MD_START = '<div class="md wiki">'
+WIKI_MD_END = '</div>'
+
+custom_img_url = re.compile(r'\A%%([a-zA-Z0-9\-]+)%%$')
 
 def python_websafe(text):
     return text.replace('&', "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
@@ -87,6 +93,9 @@ def _force_unicode(text):
     if text == None:
         return u''
 
+    if isinstance(text, unicode):
+        return text
+
     try:
         text = unicode(text, 'utf-8')
     except UnicodeDecodeError:
@@ -123,13 +132,22 @@ def websafe(text=''):
     #wrap the response in _Unsafe so make_websafe doesn't unescape it
     return _Unsafe(c_websafe(text))
 
-from mako.filters import url_escape
-def edit_comment_filter(text = ''):
-    try:
-        text = unicode(text, 'utf-8')
-    except TypeError:
-        text = unicode(text)
-    return url_escape(text)
+
+valid_link_schemes = (
+    '/',
+    '#',
+    'http://',
+    'https://',
+    'ftp://',
+    'mailto:',
+    'steam://',
+    'irc://',
+    'ircs://',
+    'news://',
+    'mumble://',
+    'ssh://',
+    'git://',
+)
 
 class SouptestSaxHandler(ContentHandler):
     def __init__(self, ok_tags):
@@ -148,27 +166,27 @@ class SouptestSaxHandler(ContentHandler):
 
             if qname == 'a' and name == 'href':
                 lv = val.lower()
-                if not (lv.startswith('http://')
-                        or lv.startswith('https://')
-                        or lv.startswith('ftp://')
-                        or lv.startswith('mailto:')
-                        or lv.startswith('news:')
-                        or lv.startswith('/')):
+                if not any(lv.startswith(scheme) for scheme in valid_link_schemes):
                     raise ValueError('HAX: Unsupported link scheme %r' % val)
 
 markdown_ok_tags = {
     'div': ('class'),
     'a': set(('href', 'title', 'target', 'nofollow')),
-    'table': ("align", ),
-    'th': ("align", ),
-    'td': ("align", ),
+    
     }
+
 markdown_boring_tags =  ('p', 'em', 'strong', 'br', 'ol', 'ul', 'hr', 'li',
                          'pre', 'code', 'blockquote', 'center',
-                         'tbody', 'thead', 'tr', 'sup', 'del',
-                         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',)
+                          'sup', 'del', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',)
+
+markdown_user_tags = ('table', 'th', 'tr', 'td', 'tbody', 'img',
+                     'tbody', 'thead', 'tr', 'tfoot', 'caption')
+
 for bt in markdown_boring_tags:
     markdown_ok_tags[bt] = ()
+
+for bt in markdown_user_tags:
+    markdown_ok_tags[bt] = ('colspan', 'rowspan', 'cellspacing', 'cellpadding', 'align', 'scope')
 
 markdown_xhtml_dtd_path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -176,11 +194,11 @@ markdown_xhtml_dtd_path = os.path.join(
 
 markdown_dtd = '<!DOCTYPE div- SYSTEM "file://%s">' % markdown_xhtml_dtd_path
 
-def markdown_souptest(text, nofollow=False, target=None, lang=None):
+def markdown_souptest(text, nofollow=False, target=None):
     if not text:
         return text
 
-    smd = safemarkdown(text, nofollow, target, lang)
+    smd = safemarkdown(text, nofollow=nofollow, target=target)
 
     # Prepend a DTD reference so we can load up definitions of all the standard
     # XHTML entities (&nbsp;, etc.).
@@ -196,33 +214,52 @@ def markdown_souptest(text, nofollow=False, target=None, lang=None):
 
 #TODO markdown should be looked up in batch?
 #@memoize('markdown')
-def safemarkdown(text, nofollow=False, target=None, lang=None):
-    from r2.lib.c_markdown import c_markdown
-    from r2.lib.py_markdown import py_markdown
-
-    from contrib.markdown import markdown
-
-    if c.user.pref_no_profanity:
-        text = profanity_filter(text)
-
+def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
     if not text:
         return None
 
-    if c.cname and not target:
+    # this lets us skip the c.cname lookup (which is apparently quite
+    # slow) if target was explicitly passed to this function.
+    target = kwargs.get("target", None)
+    if "target" not in kwargs and c.cname:
         target = "_top"
 
-    if lang is None:
-        lang = g.markdown_backend
+    text = snudown.markdown(_force_utf8(text), nofollow, target)
 
-    if lang == "c":
-        text = c_markdown(text, nofollow, target)
-    elif lang == "py":
-        text = py_markdown(text, nofollow, target)
+    if wrap:
+        return SC_OFF + MD_START + text + MD_END + SC_ON
     else:
-        raise ValueError("weird lang [%s]" % lang)
+        return SC_OFF + text + SC_ON
 
-    return SC_OFF + MD_START + text + MD_END + SC_ON
-
+def wikimarkdown(text):
+    from r2.lib.cssfilter import legacy_s3_url
+    
+    def img_swap(tag):
+        name = tag.get('src')
+        name = custom_img_url.search(name)
+        name = name and name.group(1)
+        if name and c.site.images.has_key(name):
+            url = c.site.images[name]
+            url = legacy_s3_url(url, c.site)
+            tag['src'] = url
+        else:
+            tag.extract()
+    
+    nofollow = True
+    target = None
+    
+    text = snudown.markdown(_force_utf8(text), nofollow, target,
+                            renderer=snudown.RENDERER_WIKI, enable_toc=True)
+    
+    # TODO: We should test how much of a load this adds to the app
+    soup = BeautifulSoup(text)
+    images = soup.findAll('img')
+    
+    if images:
+        [img_swap(image) for image in images]
+        text = str(soup)
+    
+    return SC_OFF + WIKI_MD_START + text + WIKI_MD_END + SC_ON
 
 def keep_space(text):
     text = websafe(text)
@@ -233,16 +270,3 @@ def keep_space(text):
 
 def unkeep_space(text):
     return text.replace('&#32;', ' ').replace('&#10;', '\n').replace('&#09;', '\t')
-
-
-def profanity_filter(text):
-    def _profane(m):
-        x = m.group(1)
-        return ''.join(u"\u2731" for i in xrange(len(x)))
-
-    if g.profanities:
-        try:
-            return g.profanities.sub(_profane, text)
-        except UnicodeDecodeError:
-            return text
-    return text

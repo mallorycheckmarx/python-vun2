@@ -9,38 +9,49 @@
 #
 # Software distributed under the License is distributed on an "AS IS" basis,
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
-# the specific language governing rig and limitations under the License.
+# the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 """Pylons middleware initialization"""
+import re
+import urllib
+import tempfile
+import urlparse
+from threading import Lock
+
 from paste.cascade import Cascade
 from paste.registry import RegistryManager
-from paste.urlparser import URLParser, StaticURLParser
+from paste.urlparser import StaticURLParser
 from paste.deploy.converters import asbool
-from paste.gzipper import make_gzip_middleware
-
-from pylons import config, request, Response
+from pylons import config, Response
 from pylons.error import error_template
 from pylons.middleware import ErrorDocuments, ErrorHandler, StaticJavascripts
 from pylons.wsgiapp import PylonsApp, PylonsBaseWSGIApp
 
 from r2.config.environment import load_environment
 from r2.config.rewrites import rewrites
-from r2.lib.utils import rstrips, is_authorized_cname
-from r2.lib.jsontemplates import api_type
+from r2.config.extensions import extension_mapping, set_extension
+from r2.lib.utils import is_subdomain
 
-#middleware stuff
-from r2.lib.html_source import HTMLValidationParser
-from cStringIO import StringIO
-import sys, tempfile, urllib, re, os, sha, subprocess
-from httplib import HTTPConnection
+
+# hack in Paste support for HTTP 429 "Too Many Requests"
+from paste import httpexceptions, wsgiwrappers
+
+class HTTPTooManyRequests(httpexceptions.HTTPClientError):
+    code = 429
+    title = 'Too Many Requests'
+    explanation = ('The server has received too many requests from the client.')
+
+httpexceptions._exceptions[429] = HTTPTooManyRequests
+wsgiwrappers.STATUS_CODE_TEXT[429] = HTTPTooManyRequests.title
 
 #from pylons.middleware import error_mapper
 def error_mapper(code, message, environ, global_conf=None, **kw):
@@ -52,12 +63,20 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
 
     if global_conf is None:
         global_conf = {}
-    codes = [304, 401, 403, 404, 503]
+    codes = [304, 400, 401, 403, 404, 415, 429, 503]
     if not asbool(global_conf.get('debug')):
         codes.append(500)
     if code in codes:
         # StatusBasedForward expects a relative URL (no SCRIPT_NAME)
         d = dict(code = code, message = message)
+
+        exception = environ.get('r2.controller.exception')
+        if exception:
+            d['explanation'] = exception.explanation
+            error_data = getattr(exception, 'error_data', None)
+            if error_data:
+                environ['extra_error_data'] = error_data
+        
         if environ.get('REDDIT_CNAME'):
             d['cnameframe'] = 1
         if environ.get('REDDIT_NAME'):
@@ -83,252 +102,88 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
             url = '/error/document/?%s' % (urllib.urlencode(d))
         return url
 
-class DebugMiddleware(object):
-    def __init__(self, app, keyword):
+
+class ProfilingMiddleware(object):
+    def __init__(self, app, directory):
         self.app = app
-        self.keyword = keyword
+        self.directory = directory
 
     def __call__(self, environ, start_response):
-        def foo(*a, **kw):
-            self.res = self.app(environ, start_response)
-            return self.res
-        debug = config['global_conf']['debug'].lower() == 'true'
-        args = {}
-        for x in environ['QUERY_STRING'].split('&'):
-            x = x.split('=')
-            args[x[0]] = x[1] if x[1:] else None
-        if debug and self.keyword in args.keys():
-            prof_arg = args.get(self.keyword)
-            prof_arg = urllib.unquote(prof_arg) if prof_arg else None
-            r = self.filter(foo, prof_arg = prof_arg)
-            if isinstance(r, Response):
-                return r(environ, start_response)
-            return r
-        return self.app(environ, start_response)
+        import cProfile
 
-    def filter(self, execution_func, prof_arg = None):
-        pass
-
-
-class ProfileGraphMiddleware(DebugMiddleware):
-    def __init__(self, app):
-        DebugMiddleware.__init__(self, app, 'profile-graph')
-        
-    def filter(self, execution_func, prof_arg = None):
-        # put thie imports here so the app doesn't choke if profiling
-        # is not present (this is a debug-only feature anyway)
-        import cProfile as profile
-        from pstats import Stats
-        from r2.lib.contrib import gprof2dot
-        # profiling needs an actual file to dump to.  Everything else
-        # can be mitigated with streams
-        tmpfile = tempfile.NamedTemporaryFile()
-        dotfile = StringIO()
-        # simple cutoff validation
         try:
-            cutoff = .01 if prof_arg is None else float(prof_arg)/100
-        except ValueError:
-            cutoff = .01
-        try:
-            # profile the code in the current context
-            profile.runctx('execution_func()',
-                           globals(), locals(), tmpfile.name)
-            # parse the data
-            parser = gprof2dot.PstatsParser(tmpfile.name)
-            prof = parser.parse()
-            # remove nodes and edges with less than cutoff work
-            prof.prune(cutoff, cutoff)
-            # make the dotfile
-            dot = gprof2dot.DotWriter(dotfile)
-            dot.graph(prof, gprof2dot.TEMPERATURE_COLORMAP)
-            # convert the dotfile to PNG in local stdout
-            proc = subprocess.Popen("dot -Tpng",
-                                    shell = True,
-                                    stdin =subprocess.PIPE,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            out, error =  proc.communicate(input = dotfile.getvalue())
-            # generate the response
-            r = Response()
-            r.status_code = 200
-            r.headers['content-type'] = "image/png"
-            r.content = out
-            return r
+            tmpfile = tempfile.NamedTemporaryFile(prefix='profile',
+                                                  dir=self.directory,
+                                                  delete=False)
+
+            profile = cProfile.Profile()
+            result = profile.runcall(self.app, environ, start_response)
+            profile.dump_stats(tmpfile.name)
+
+            return result
         finally:
             tmpfile.close()
 
-class ProfilingMiddleware(DebugMiddleware):
-    def __init__(self, app):
-        DebugMiddleware.__init__(self, app, 'profile')
-
-    def filter(self, execution_func, prof_arg = None):
-        # put thie imports here so the app doesn't choke if profiling
-        # is not present (this is a debug-only feature anyway)
-        import cProfile as profile
-        from pstats import Stats
-
-        tmpfile = tempfile.NamedTemporaryFile()
-        file = line = func = None
-        sort_order = 'time'
-        if prof_arg:
-            tokens = prof_arg.split(',')
-        else:
-            tokens = ()
-
-        for token in tokens:
-            if token == "cum":
-                sort_order = "cumulative"
-            elif token == "name":
-                sort_order = "name"
-            else:
-                try:
-                    file, line = prof_arg.split(':')
-                    line, func = line.split('(')
-                    func = func.strip(')')
-                except:
-                    file = line = func = None
-
-        try:
-            profile.runctx('execution_func()',
-                           globals(), locals(), tmpfile.name)
-            out = StringIO()
-            stats = Stats(tmpfile.name, stream=out)
-            stats.sort_stats(sort_order, 'calls')
-
-            def parse_table(t, ncol):
-                table = []
-                for s in t:
-                    t = [x for x in s.split(' ') if x]
-                    if len(t) > 1:
-                        table += [t[:ncol-1] + [' '.join(t[ncol-1:])]]
-                return table
-
-            def cmp(n):
-                def _cmp(x, y):
-                    return 0 if x[n] == y[n] else 1 if x[n] < y[n] else -1
-                return _cmp
-
-            if not file:
-                stats.print_stats()
-                stats_str = out.getvalue()
-                statdata = stats_str.split('\n')
-                headers = '\n'.join(statdata[:6])
-                table = parse_table(statdata[6:], 6)
-                from r2.lib.pages import Profiling
-                res = Profiling(header = headers, table = table,
-                                path = request.path).render()
-                return [unicode(res)]
-            else:
-                query = "%s:%s" % (file, line)
-                stats.print_callees(query)
-                stats.print_callers(query)
-                statdata = out.getvalue()
-
-                data =  statdata.split(query)
-                callee = data[2].split('->')[1].split('Ordered by')[0]
-                callee = parse_table(callee.split('\n'), 4)
-                callee.sort(cmp(1))
-                callee = [['ncalls', 'tottime', 'cputime']] + callee
-                i = 4
-                while '<-' not in data[i] and i < len(data): i+= 1
-                caller = data[i].split('<-')[1]
-                caller = parse_table(caller.split('\n'), 4)
-                caller.sort(cmp(1))
-                caller = [['ncalls', 'tottime', 'cputime']] + caller
-                from r2.lib.pages import Profiling
-                res = Profiling(header = prof_arg,
-                                caller = caller, callee = callee,
-                                path = request.path).render()
-                return [unicode(res)]
-        finally:
-            tmpfile.close()
-
-class SourceViewMiddleware(DebugMiddleware):
-    def __init__(self, app):
-        DebugMiddleware.__init__(self, app, 'chk_source')
-
-    def filter(self, execution_func, prof_arg = None):
-        output = execution_func()
-        output = [x for x in output]
-        parser = HTMLValidationParser()
-        res = parser.feed(output[-1])
-        return [res]
 
 class DomainMiddleware(object):
     lang_re = re.compile(r"\A\w\w(-\w\w)?\Z")
 
     def __init__(self, app):
         self.app = app
-        auth_cnames = config['global_conf'].get('authorized_cnames', '')
-        auth_cnames = [x.strip() for x in auth_cnames.split(',')]
-        # we are going to be matching with endswith, so make sure there
-        # are no empty strings that have snuck in
-        self.auth_cnames = filter(None, auth_cnames)
-
-    def is_auth_cname(self, domain):
-        return is_authorized_cname(domain, self.auth_cnames)
 
     def __call__(self, environ, start_response):
-        # get base domain as defined in INI file
-        base_domain = config['global_conf']['domain']
-        try:
-            sub_domains, request_port  = environ['HTTP_HOST'].split(':')
-            environ['request_port'] = int(request_port)
-        except ValueError:
-            sub_domains = environ['HTTP_HOST'].split(':')[0]
-        except KeyError:
-            sub_domains = "localhost"
+        g = config['pylons.g']
+        http_host = environ.get('HTTP_HOST', 'localhost').lower()
+        domain, s, port = http_host.partition(':')
 
-        #If the domain doesn't end with base_domain, assume
-        #this is a cname, and redirect to the frame controller.
-        #Ignore localhost so paster shell still works.
-        #If this is an error, don't redirect
-        if (not sub_domains.endswith(base_domain)
-            and (not sub_domains == 'localhost')):
-            environ['sub_domain'] = sub_domains
-            if not environ.get('extension'):
-                if environ['PATH_INFO'].startswith('/frame'):
-                    return self.app(environ, start_response)
-                elif self.is_auth_cname(sub_domains):
-                    environ['frameless_cname'] = True
-                    environ['authorized_cname'] = True
-                elif ("redditSession=cname" in environ.get('HTTP_COOKIE', '')
-                      and environ['REQUEST_METHOD'] != 'POST'
-                      and not environ['PATH_INFO'].startswith('/error')):
-                    environ['original_path'] = environ['PATH_INFO']
-                    environ['FULLPATH'] = environ['PATH_INFO'] = '/frame'
-                else:
-                    environ['frameless_cname'] = True
+        # remember the port
+        try:
+            environ['request_port'] = int(port)
+        except ValueError:
+            pass
+
+        # localhost is exempt so paster run/shell will work
+        # media_domain doesn't need special processing since it's just ads
+        if domain == "localhost" or is_subdomain(domain, g.media_domain):
             return self.app(environ, start_response)
 
-        sub_domains = sub_domains[:-len(base_domain)].strip('.')
-        sub_domains = sub_domains.split('.')
+        # tell reddit_base to redirect to the appropriate subreddit for
+        # a legacy CNAME
+        if not is_subdomain(domain, g.domain):
+            environ['legacy-cname'] = domain
+            return self.app(environ, start_response)
+
+        # figure out what subdomain we're on if any
+        subdomains = domain[:-len(g.domain) - 1].split('.')
+        extension_subdomains = dict(m="mobile",
+                                    i="compact",
+                                    api="api",
+                                    rss="rss",
+                                    xml="xml",
+                                    json="json")
 
         sr_redirect = None
-        for sd in list(sub_domains):
-            # subdomains to disregard completely
-            if sd in ('www', 'origin', 'beta', 'pay', 'buttons'):
+        for subdomain in subdomains[:]:
+            if subdomain in g.reserved_subdomains:
                 continue
-            # subdomains which change the extension
-            elif sd == 'm':
-                environ['reddit-domain-extension'] = 'mobile'
-            elif sd == 'I':
-                environ['reddit-domain-extension'] = 'compact'
-            elif sd == 'i':
-                environ['reddit-domain-extension'] = 'compact'
-            elif sd in ('api', 'rss', 'xml', 'json'):
-                environ['reddit-domain-extension'] = sd
-            elif (len(sd) == 2 or (len(sd) == 5 and sd[2] == '-')) and self.lang_re.match(sd):
-                environ['reddit-prefer-lang'] = sd
-                environ['reddit-domain-prefix'] = sd
-            else:
-                sr_redirect = sd
-                sub_domains.remove(sd)
 
+            extension = extension_subdomains.get(subdomain)
+            if extension:
+                environ['reddit-domain-extension'] = extension
+            elif self.lang_re.match(subdomain):
+                environ['reddit-prefer-lang'] = subdomain
+                environ['reddit-domain-prefix'] = subdomain
+            else:
+                sr_redirect = subdomain
+                subdomains.remove(subdomain)
+
+        # if there was a subreddit subdomain, redirect
         if sr_redirect and environ.get("FULLPATH"):
             r = Response()
-            sub_domains.append(base_domain)
-            redir = "%s/r/%s/%s" % ('.'.join(sub_domains),
+            if not subdomains and g.domain_prefix:
+                subdomains.append(g.domain_prefix)
+            subdomains.append(g.domain)
+            redir = "%s/r/%s/%s" % ('.'.join(subdomains),
                                     sr_redirect, environ['FULLPATH'])
             redir = "http://" + redir.replace('//', '/')
             r.status_code = 301
@@ -372,39 +227,25 @@ class DomainListingMiddleware(object):
 
 class ExtensionMiddleware(object):
     ext_pattern = re.compile(r'\.([^/]+)\Z')
-
-    extensions = (('rss' , ('xml', 'text/xml; charset=UTF-8')),
-                  ('xml' , ('xml', 'text/xml; charset=UTF-8')),
-                  ('js' , ('js', 'text/javascript; charset=UTF-8')),
-                  ('wired' , ('wired', 'text/javascript; charset=UTF-8')),
-                  ('embed' , ('htmllite', 'text/javascript; charset=UTF-8')),
-                  ('mobile' , ('mobile', 'text/html; charset=UTF-8')),
-                  ('png' , ('png', 'image/png')),
-                  ('css' , ('css', 'text/css')),
-                  ('csv' , ('csv', 'text/csv; charset=UTF-8')),
-                  ('api' , (api_type(), 'application/json; charset=UTF-8')),
-                  ('json-html' , (api_type('html'), 'application/json; charset=UTF-8')),
-                  ('json-compact' , (api_type('compact'), 'application/json; charset=UTF-8')),
-                  ('compact' , ('compact', 'text/html; charset=UTF-8')),
-                  ('json' , (api_type(), 'application/json; charset=UTF-8')),
-                  ('i' , ('compact', 'text/html; charset=UTF-8')),
-                  )
-
+    
     def __init__(self, app):
         self.app = app
 
     def __call__(self, environ, start_response):
         path = environ['PATH_INFO']
+        fname, sep, path_ext = path.rpartition('.')
         domain_ext = environ.get('reddit-domain-extension')
-        for ext, val in self.extensions:
-            if ext == domain_ext or path.endswith('.' + ext):
-                environ['extension'] = ext
-                environ['render_style'] = val[0]
-                environ['content_type'] = val[1]
-                #strip off the extension
-                if path.endswith('.' + ext):
-                    environ['PATH_INFO'] = path[:-(len(ext) + 1)]
-                break
+
+        ext = None
+        if path_ext in extension_mapping:
+            ext = path_ext
+            # Strip off the extension.
+            environ['PATH_INFO'] = path[:-(len(ext) + 1)]
+        elif domain_ext in extension_mapping:
+            ext = domain_ext
+
+        if ext:
+            set_extension(environ, ext)
         else:
             environ['render_style'] = 'html'
             environ['content_type'] = 'text/html; charset=UTF-8'
@@ -438,30 +279,17 @@ class RewriteMiddleware(object):
 
         return self.app(environ, start_response)
 
-class RequestLogMiddleware(object):
-    def __init__(self, log_path, process_iden, app):
-        self.log_path = log_path
+class StaticTestMiddleware(object):
+    def __init__(self, app, static_path, domain):
         self.app = app
-        self.process_iden = str(process_iden)
+        self.static_path = static_path
+        self.domain = domain
 
     def __call__(self, environ, start_response):
-        request = '\n'.join('%s: %s' % (k,v) for k,v in environ.iteritems()
-                           if k.isupper())
-        iden = self.process_iden + '-' + sha.new(request).hexdigest()
-
-        fname = os.path.join(self.log_path, iden)
-        f = open(fname, 'w')
-        f.write(request)
-        f.close()
-
-        r = self.app(environ, start_response)
-
-        if os.path.exists(fname):
-            try:
-                os.remove(fname)
-            except OSError:
-                pass
-        return r
+        if environ['HTTP_HOST'] == self.domain:
+            environ['PATH_INFO'] = self.static_path.rstrip('/') + environ['PATH_INFO']
+            return self.app(environ, start_response)
+        raise httpexceptions.HTTPNotFound()
 
 class LimitUploadSize(object):
     """
@@ -475,16 +303,41 @@ class LimitUploadSize(object):
     def __call__(self, environ, start_response):
         cl_key = 'CONTENT_LENGTH'
         if environ['REQUEST_METHOD'] == 'POST':
-            if ((cl_key not in environ)
-                or int(environ[cl_key]) > self.max_size):
+            if cl_key not in environ:
                 r = Response()
-                r.status_code = 500
-                r.content = '<html><head></head><body><script type="text/javascript">parent.too_big();</script>request too big</body></html>'
+                r.status_code = 411
+                r.content = '<html><head></head><body>length required</body></html>'
+                return r(environ, start_response)
+
+            try:
+                cl_int = int(environ[cl_key])
+            except ValueError:
+                r = Response()
+                r.status_code = 400
+                r.content = '<html><head></head><body>bad request</body></html>'
+                return r(environ, start_response)
+
+            if cl_int > self.max_size:
+                from r2.lib.strings import string_dict
+                error_msg = string_dict['css_validator_messages']['max_size'] % dict(max_size = self.max_size/1024)
+                r = Response()
+                r.status_code = 413
+                r.content = ("<html>"
+                             "<head>"
+                             "<script type='text/javascript'>"
+                             "parent.completedUploadImage('failed',"
+                             "''," 
+                             "''," 
+                             "[['BAD_CSS_NAME', ''], ['IMAGE_ERROR', '", error_msg,"']],"
+                             "'image-upload');"
+                             "</script></head><body>you shouldn\'t be here</body></html>")
                 return r(environ, start_response)
 
         return self.app(environ, start_response)
 
-
+# TODO CleanupMiddleware seems to exist because cookie headers are being duplicated
+# somewhere in the response processing chain. It should be removed as soon as we
+# find the underlying issue.
 class CleanupMiddleware(object):
     """
     Put anything here that should be called after every other bit of
@@ -501,25 +354,38 @@ class CleanupMiddleware(object):
             seen = set()
             for head, val in reversed(headers):
                 head = head.lower()
-                if head not in seen:
+                key = (head, val.split("=", 1)[0])
+                if key not in seen:
                     fixed.insert(0, (head, val))
-                    seen.add(head)
+                    seen.add(key)
             return start_response(status, fixed, exc_info)
         return self.app(environ, custom_start_response)
 
 #god this shit is disorganized and confusing
 class RedditApp(PylonsBaseWSGIApp):
-    def find_controller(self, controller):
-        if controller in self.controller_classes:
-            return self.controller_classes[controller]
+    def __init__(self, *args, **kwargs):
+        super(RedditApp, self).__init__(*args, **kwargs)
+        self._loading_lock = Lock()
+        self._controllers = None
 
-        full_module_name = self.package_name + '.controllers'
-        class_name = controller.capitalize() + 'Controller'
+    def load_controllers(self):
+        with self._loading_lock:
+            if not self._controllers:
+                controllers = __import__(self.package_name + '.controllers').controllers
+                controllers.load_controllers()
+                config['r2.plugins'].load_controllers()
+                self._controllers = controllers
 
-        __import__(self.package_name + '.controllers')
-        mycontroller = getattr(sys.modules[full_module_name], class_name)
-        self.controller_classes[controller] = mycontroller
-        return mycontroller
+        return self._controllers
+
+    def find_controller(self, controller_name):
+        if controller_name in self.controller_classes:
+            return self.controller_classes[controller_name]
+
+        controllers = self.load_controllers()
+        controller_cls = controllers.get_controller(controller_name)
+        self.controller_classes[controller_name] = controller_cls
+        return controller_cls
 
 def make_app(global_conf, full_stack=True, **app_conf):
     """Create a Pylons WSGI application and return it
@@ -541,6 +407,7 @@ def make_app(global_conf, full_stack=True, **app_conf):
 
     # Configure the Pylons environment
     load_environment(global_conf, app_conf)
+    g = config['pylons.g']
 
     # The Pylons WSGI app
     app = PylonsApp(base_wsgi_app=RedditApp)
@@ -551,22 +418,15 @@ def make_app(global_conf, full_stack=True, **app_conf):
     app = CleanupMiddleware(app)
 
     app = LimitUploadSize(app)
-    app = ProfileGraphMiddleware(app)
-    app = ProfilingMiddleware(app)
-    app = SourceViewMiddleware(app)
+
+    profile_directory = g.config.get('profile_directory')
+    if profile_directory:
+        app = ProfilingMiddleware(app, profile_directory)
 
     app = DomainListingMiddleware(app)
     app = SubredditMiddleware(app)
     app = ExtensionMiddleware(app)
     app = DomainMiddleware(app)
-
-    log_path = global_conf.get('log_path')
-    if log_path:
-        process_iden = global_conf.get('scgi_port', 'default')
-        app = RequestLogMiddleware(log_path, process_iden, app)
-
-    #TODO: breaks on 404
-    #app = make_gzip_middleware(app, app_conf)
 
     if asbool(full_stack):
         # Handle Python exceptions
@@ -583,11 +443,19 @@ def make_app(global_conf, full_stack=True, **app_conf):
     # Static files
     javascripts_app = StaticJavascripts()
     static_app = StaticURLParser(config['pylons.paths']['static_files'])
-    app = Cascade([static_app, javascripts_app, app])
+    static_cascade = [static_app, javascripts_app, app]
 
-    app = make_gzip_middleware(app, app_conf)
+    if config['r2.plugins'] and g.config['uncompressedJS']:
+        plugin_static_apps = Cascade([StaticURLParser(plugin.static_dir)
+                                      for plugin in config['r2.plugins']])
+        static_cascade.insert(0, plugin_static_apps)
+    app = Cascade(static_cascade)
 
     #add the rewrite rules
     app = RewriteMiddleware(app)
+
+    if not g.config['uncompressedJS'] and g.config['debug']:
+        static_fallback = StaticTestMiddleware(static_app, g.config['static_path'], g.config['static_domain'])
+        app = Cascade([static_fallback, app])
 
     return app

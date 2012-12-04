@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 """
 One-time use functions to migrate from one reddit-version to another
 """
@@ -222,53 +223,6 @@ def pushup_permacache(verbosity=1000):
         print 'Done %d: %r' % (done, keys[-1])
         populate(keys)
 
-# alter table bids DROP constraint bids_pkey;
-# alter table bids add column campaign integer;
-# update bids set campaign = 0;
-# alter table bids ADD primary key (transaction, campaign);
-def promote_v2():
-    # alter table bids add column campaign integer;
-    # update bids set campaign = 0; 
-    from r2.models import Link, NotFound, PromoteDates, Bid
-    from datetime import datetime
-    from pylons import g
-    for p in PromoteDates.query():
-        try:
-            l = Link._by_fullname(p.thing_name,
-                                  data = True, return_dict = False)
-            if not l:
-                raise NotFound, p.thing_name
-
-            # update the promote status
-            l.promoted = True
-            l.promote_status = getattr(l, "promote_status", STATUS.unseen)
-            l._date = datetime(*(list(p.start_date.timetuple()[:7]) + [g.tz]))
-            set_status(l, l.promote_status)
-
-            # add new campaign
-            print (l, (p.start_date, p.end_date), p.bid, None)
-            if not p.bid:
-                print "no bid? ", l
-                p.bid = 20
-            new_campaign(l, (p.start_date, p.end_date), p.bid, None)
-            print "updated: %s (%s)" % (l, l._date)
-
-        except NotFound:
-            print "NotFound: %s" % p.thing_name
-
-    print "updating campaigns"
-    for b in Bid.query():
-        l = Link._byID(int(b.thing_id))
-        print "updating: ", l
-        campaigns = getattr(l, "campaigns", {}).copy()
-        indx = b.campaign
-        if indx in campaigns:
-            sd, ed, bid, sr, trans_id = campaigns[indx]
-            campaigns[indx] = sd, ed, bid, sr, b.transaction
-            l.campaigns = campaigns
-            l._commit()
-        else:
-            print "no campaign information: ", l
 
 def port_cassavotes():
     from r2.models import Vote, Account, Link, Comment
@@ -347,6 +301,25 @@ def port_cassaurls(after_id=None, estimate=15231317):
                 if k:
                     b.insert(k, {l._id36: l._id36})
 
+def port_deleted_links(after_id=None):
+    from r2.models import Link
+    from r2.lib.db.operators import desc
+    from r2.models.query_cache import CachedQueryMutator
+    from r2.lib.db.queries import get_deleted_links
+    from r2.lib.utils import fetch_things2, in_chunks, progress
+
+    q = Link._query(Link.c._deleted == True,
+                    Link.c._spam == (True, False),
+                    sort=desc('_date'), data=True)
+    q = fetch_things2(q, chunk_size=500)
+    q = progress(q, verbosity=1000)
+
+    for chunk in in_chunks(q):
+        with CachedQueryMutator() as m:
+            for link in chunk:
+                query = get_deleted_links(link.author_id)
+                m.insert(query, [link])
+
 def port_cassahides():
     from r2.models import SaveHide, CassandraHide
     from r2.lib.db.tdb_cassandra import CL
@@ -362,3 +335,43 @@ def port_cassahides():
     for sh in q:
         CassandraHide._hide(sh._thing1, sh._thing2,
                             write_consistency_level=CL.ONE)
+
+def convert_query_cache_to_json():
+    import cPickle
+    from r2.models.query_cache import json, UserQueryCache
+
+    with UserQueryCache._cf.batch() as m:
+        for key, columns in UserQueryCache._cf.get_range():
+            out = {}
+            for ckey, cvalue in columns.iteritems():
+                try:
+                    raw = cPickle.loads(cvalue)
+                except cPickle.UnpicklingError:
+                    continue
+                out[ckey] = json.dumps(raw)
+            m.insert(key, out)
+
+def populate_spam_filtered():
+    from r2.lib.db.queries import get_spam_links, get_spam_comments
+    from r2.lib.db.queries import get_spam_filtered_links, get_spam_filtered_comments
+    from r2.models.query_cache import CachedQueryMutator
+
+    def was_filtered(thing):
+        if thing._spam and not thing._deleted and \
+           getattr(thing, 'verdict', None) != 'mod-removed':
+            return True
+        else:
+            return False
+
+    q = Subreddit._query(sort = asc('_date'))
+    for sr in fetch_things2(q):
+        print 'Processing %s' % sr.name
+        links = Thing._by_fullname(get_spam_links(sr), data=True,
+                                   return_dict=False)
+        comments = Thing._by_fullname(get_spam_comments(sr), data=True,
+                                      return_dict=False)
+        insert_links = [l for l in links if was_filtered(l)]
+        insert_comments = [c for c in comments if was_filtered(c)]
+        with CachedQueryMutator() as m:
+            m.insert(get_spam_filtered_links(sr), insert_links)
+            m.insert(get_spam_filtered_comments(sr), insert_comments)

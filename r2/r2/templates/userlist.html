@@ -4,58 +4,61 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%namespace file="utils.html" import="error_field"/>
 <% from r2.lib.template_helpers import static %>
-<div class="${thing._class} usertable">
-  %if thing.addable:
-    <form action="/post/${thing.destination}"
-          method="post" class="pretty-form medium-text"
-          onsubmit="return post_form(this, '${thing.destination}');"
-          id="${thing.type}">
-      <h1>${thing.form_title}</h1>
 
-      <input type="hidden" name="action" value="add"/>
-      <input type="hidden" name="container" value="${thing.container_name}"/>
-      <input type="hidden" name="type" value="${thing.type}"/>
-      <input type="text" name="name" id="name"/>
-      <button class="btn" type="submit">${_("add")}</button>
-      <span class="status"></span>
-      ${error_field("USER_DOESNT_EXIST", "name")}
-    </form>
-  %endif
+<%def name="add_form(title, dest, add_type, container_name, verb=None)">
+  <form action="/post/${dest}"
+        method="post" class="pretty-form medium-text"
+        onsubmit="return post_form(this, '${dest}')"
+        id="${add_type}">
+    <h1>${title}</h1>
 
-  <div id="${thing.type}-table" 
-       ${"style='display:none'" if not thing.users else ""}>
-    <h1> 
-      ${thing.table_title}
+    <input type="hidden" name="action" value="add">
+    <input type="hidden" name="container" value="${container_name}">
+    <input type="hidden" name="type" value="${add_type}">
+    <input type="text" name="name" id="name">
+    <button class="btn" type="submit">${verb or _("add")}</button>
+    <span class="status"></span>
+    ${error_field("USER_DOESNT_EXIST", "name")}
+    %if caller:
+      ${caller.body()}
+    %endif
+  </form>
+</%def>
+
+<%def name="userlist(title, row_type, rows, headers=None)">
+  <div class="${row_type}-table">
+    <h1>
+      ${title}
     </h1>
 
     <table>
-      %if getattr(thing, "table_headers", None):
+      %if headers:
         <tr>
-        %for header in thing.table_headers:
+        %for header in headers:
            <th>${header}</th>
         %endfor
         </tr>
       %endif
-      %if thing.users:
-        %for item in thing.users:
+      %if rows:
+        %for item in rows:
           ${item}
         %endfor
       %else:
@@ -63,6 +66,12 @@
       %endif
     </table>
   </div>
+</%def>
 
+<div class="${thing._class} usertable">
+  %if thing.addable:
+    ${add_form(thing.form_title, thing.destination, thing.type, thing.container_name)}
+  %endif
+
+  ${userlist(thing.table_title, thing.type, thing.user_rows, thing.table_headers)}
 </div>
-

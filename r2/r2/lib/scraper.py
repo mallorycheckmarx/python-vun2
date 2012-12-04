@@ -11,14 +11,14 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
 
 from pylons import g
 from r2.lib import utils
@@ -96,7 +96,7 @@ def fetch_url(url, referer = None, retries = 1, dimension = False):
     nothing = None if dimension else (None, None)
     url = clean_url(url)
     #just basic urls
-    if not url.startswith('http://'):
+    if not (url.startswith('http://') or url.startswith('https://')):
         return nothing
     while True:
         try:
@@ -201,6 +201,10 @@ class Scraper:
         max_url = None
 
         if self.soup:
+            og_image = self.soup.find('meta', property='og:image')
+            if og_image and og_image['content']:
+                log.debug("Using og:image")
+                return og_image['content']
             thumbnail_spec = self.soup.find('link', rel = 'image_src')
             if thumbnail_spec and thumbnail_spec['href']:
                 log.debug("Using image_src")
@@ -760,8 +764,8 @@ class EmbedlyOEmbed(OEmbed):
         'polldaddy.com', 'polleverywhere.com', 'posterous.com', 'prezi.com',
         'qik.com', 'quantcast.com', 'questionablecontent.net', 'qwantz.com',
         'qwiki.com', 'radionomy.com', 'radioreddit.com', 'rdio.com',
-        'redux.com', 'revision3.com', 'revver.com', 'saynow.com',
-        'schooltube.com', 'sciencestage.com', 'scrapblog.com',
+        'recordsetter.com','redux.com', 'revision3.com', 'revver.com',
+        'saynow.com', 'schooltube.com', 'sciencestage.com', 'scrapblog.com',
         'screencast.com', 'screenr.com', 'scribd.com', 'sendables.jibjab.com',
         'share.ovi.com', 'shitmydadsays.com', 'shopstyle.com', 'skitch.com',
         'slideshare.net', 'smugmug.com', 'snotr.com', 'socialcam.com',
@@ -779,7 +783,8 @@ class EmbedlyOEmbed(OEmbed):
         'vodcars.com', 'washingtonpost.com', 'whitehouse.gov', 'whosay.com',
         'wikimedia.org', 'wikipedia.org', 'wistia.com', 'wordpress.tv',
         'worldstarhiphop.com', 'xiami.com', 'xkcd.com', 'xtranormal.com',
-        'yfrog.com', 'youku.com', 'youtube.com', 'zapiks.com', 'zero-inch.com']
+        'yfrog.com', 'youku.com', 'youtu.be', 'youtube.com', 'zapiks.com',
+        'zero-inch.com']
 
     url_re = re.compile(
         'http:\\/\\/.*youtube\\.com\\/watch.*|' +
@@ -1320,7 +1325,8 @@ class EmbedlyOEmbed(OEmbed):
         'http:\\/\\/planetgreen\\.discovery\\.com\\/videos\\/.*|' +
         'http:\\/\\/science\\.discovery\\.com\\/videos\\/.*|' +
         'http:\\/\\/tlc\\.discovery\\.com\\/videos\\/.*|' +
-        'http:\\/\\/video\\.forbes\\.com\\/fvn\\/.*|'
+        'http:\\/\\/video\\.forbes\\.com\\/fvn\\/.*|' + 
+        'http:\\/\\/recordsetter\\.com\\/*\\/*\\/*'
         , re.I
     )
     

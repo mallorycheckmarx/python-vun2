@@ -26,7 +26,7 @@ $(function() {
             }
         }
         function submit_url(url, sr, title) {
-            var submit = "http:///www.reddit.com";
+            var submit = "http://www.reddit.com";
             if (sr) {
                 submit += "/r/" + sr;
             }
@@ -155,16 +155,18 @@ $(function() {
             error: make_submit
         };
 
-        var target = "/button_info.json";
-        if (querydict.sr) {
-            target = "/r/" + querydict.sr + target;
+        var infoTarget = "/button_info.json";
+        if (querydict.sr && /^\w+$/.test(querydict.sr)) {
+            infoTarget = "/r/" + querydict.sr + infoTarget;
         }
 
+        var secure = 'https:' == document.location.protocol;
         if ($.cookie_read("session", "reddit_").data) {
-            options.url = target;
+            options.url = infoTarget;
             options.dataType = "json";
         } else {
-            options.url = "http://buttons.reddit.com" + target;
+            var prefix = secure ? "https://ssl.reddit.com" : "http://buttons.reddit.com";
+            options.url = prefix + infoTarget;
             options.dataType = options.jsonp = "jsonp";
             options.jsonpCallback = "buttonInfoCb";
             options.cache = true;
@@ -177,7 +179,10 @@ $(function() {
             options.data["id"] = querydict.id;
         }
 
-        $.ajax(options);
+        // Secure button info is disabled for now due to load.
+        if (!secure) {
+            $.ajax(options);
+        }
    }
   );
 

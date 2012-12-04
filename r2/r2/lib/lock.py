@@ -11,22 +11,23 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
 
 from __future__ import with_statement
 from time import sleep
 from datetime import datetime
 from threading import local
-from traceback import format_stack
 import os
 import socket
+
+from r2.lib.utils import simple_traceback
 
 # thread-local storage for detection of recursive locks
 locks = local()
@@ -41,10 +42,13 @@ class MemcacheLock(object):
     attempt to grab a lock by 'adding' the lock name. If the response
     is True, we have the lock. If it's False, someone else has it."""
 
-    def __init__(self, key, cache, time = 30, timeout = 30, verbose=True):
+    def __init__(self, stats, group, key, cache,
+                 time=30, timeout=30, verbose=True):
         # get a thread-local set of locks that we own
         self.locks = locks.locks = getattr(locks, 'locks', set())
 
+        self.stats = stats
+        self.group = group
         self.key = key
         self.cache = cache
         self.time = time
@@ -53,13 +57,22 @@ class MemcacheLock(object):
         self.verbose = verbose
 
     def __enter__(self):
+        self.acquire()
+
+    def __exit__(self, type, value, tb):
+        self.release()
+
+    def acquire(self):
         start = datetime.now()
 
-        my_info = (reddit_host, reddit_pid, ''.join(format_stack()))
+        my_info = (reddit_host, reddit_pid, simple_traceback(limit=7))
 
         #if this thread already has this lock, move on
         if self.key in self.locks:
             return
+
+        timer = self.stats.get_timer("lock_wait")
+        timer.start()
 
         #try and fetch the lock, looping until it's available
         while not self.cache.add(self.key, my_info, time = self.time):
@@ -79,18 +92,20 @@ class MemcacheLock(object):
 
             sleep(.01)
 
+        timer.stop(subname=self.group)
+
         #tell this thread we have this lock so we can avoid deadlocks
         #of requests for the same lock in the same thread
         self.locks.add(self.key)
         self.have_lock = True
 
-    def __exit__(self, type, value, tb):
+    def release(self):
         #only release the lock if we gained it in the first place
         if self.have_lock:
             self.cache.delete(self.key)
             self.locks.remove(self.key)
 
-def make_lock_factory(cache):
-    def factory(key, **kw):
-        return MemcacheLock(key, cache, **kw)
+def make_lock_factory(cache, stats):
+    def factory(group, key, **kw):
+        return MemcacheLock(stats, group, key, cache, **kw)
     return factory

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 # The contents of this file are subject to the Common Public Attribution
 # License Version 1.0. (the "License"); you may not use this file except in
 # compliance with the License. You may obtain a copy of the License at
@@ -13,151 +12,104 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
 
 from ez_setup import use_setuptools
 use_setuptools()
-from setuptools import find_packages#, setup
+
+from setuptools import find_packages
+from distutils.core import setup, Extension
+import os
+import fnmatch
+
+
+commands = {}
+
+
+try:
+    from Cython.Distutils import build_ext
+except ImportError:
+    pass
+else:
+    commands.update({
+        "build_ext": build_ext
+    })
+
 
 try:
     from babel.messages import frontend as babel
-except:
-    class null(): pass
-    babel = null()
-    babel.compile_catalog = None
-    babel.extract_messages = None
-    babel.init_catalog = None
-    babel.update_catalog = None
-
-from distutils.core import setup, Extension
-
-from setuptools.command.easy_install import main as easy_install
-import os
-
-# check the PIL is installed; since its package name isn't the same as
-# the distribution name, setuptools can't manage it as a dependency
-try:
-    import Image
+    commands.update({
+        "compile_catalog": babel.compile_catalog,
+        "extract_messages": babel.extract_messages,
+        "init_catalog": babel.init_catalog,
+        "update_catalog": babel.update_catalog,
+    })
 except ImportError:
-    print "Installing the Python Imaging Library"
-    easy_install(["http://effbot.org/downloads/Imaging-1.1.6.tar.gz"])
+    pass
 
-# same with the captcha library
-try:
-    import Captcha
-except ImportError:
-    print "Installing the PyCaptcha Module"
-    easy_install(["http://svn.navi.cx/misc/trunk/pycaptcha"])
 
-# ditto for pylons
-try:
-    import pylons
-    vers = pylons.__version__
-    assert vers.startswith('0.9.6.') or vers == '0.9.6', \
-           ("reddit is only compatible with pylons 0.9.6, not '%s'" % vers)
-except ImportError:
-    print "Installing Pylons 0.9.6.2 from the cheese shop"
-    easy_install(["http://pypi.python.org/packages/source/P/Pylons/Pylons-0.9.6.2.tar.gz"])
+# add the cython modules
+pyx_extensions = []
+for root, directories, files in os.walk('.'):
+    for f in fnmatch.filter(files, '*.pyx'):
+        path = os.path.join(root, f)
+        module_name, _ = os.path.splitext(path)
+        module_name = os.path.normpath(module_name)
+        module_name = module_name.replace(os.sep, '.')
+        pyx_extensions.append(Extension(module_name, [path]))
 
-# Install our special version of paste that dies on first zombie sighting
-try:
-    import paste
-    vers = getattr(paste, "__version__", "(undefined)")
-    assert vers == '1.7.2-reddit-0.2', \
-           ("reddit is only compatible with its own magical version of paste, not '%s'" % vers)
-except (ImportError, AssertionError):
-    print "Installing reddit's magical version of paste"
-    easy_install(["http://addons.reddit.com/paste/Paste-1.7.2-reddit-0.2.tar.gz"])
-
-#install the devel version of py-amqplib until the cheeseshop version is updated
-try:
-    import amqplib
-except ImportError:
-    print "Installing the py-amqplib"
-    easy_install(["http://addons.reddit.com/amqp/py-amqplib-0.6.1-devel.tgz"])
-
-# we're using a custom build of pylibmc at the moment, so we need to
-# be sure that we have the right version
-pylibmc_version = '1.1.1-reddit-0.1'
-try:
-    import pylibmc
-    assert pylibmc.__version__ == pylibmc_version
-except (ImportError, AssertionError):
-    print "Installing pylibmc"
-    easy_install(["https://github.com/downloads/reddit/pylibmc/pylibmc-1.1.1-reddit-0.1.tgz"])
-
-filtermod = Extension('Cfilters',
-                      sources = ['r2/lib/c/filters.c'])
 
 discount_path = "r2/lib/contrib/discount"
-discountmod = Extension('reddit-discount',
-                        include_dirs = [discount_path],
-                        define_macros = [("VERSION", '"1.6.8"')],
-                        sources = ([ "r2/lib/c/reddit-discount-wrapper.c" ]
-                                   + map(lambda x: os.path.join(discount_path, x),
-                                      ["Csio.c",
-                                       "css.c",
-                                       "docheader.c",
-                                       "dumptree.c",
-                                       "generate.c",
-                                       "main.c",
-                                       "markdown.c",
-                                       "mkdio.c",
-                                       "resource.c",
-                                       "html5.c",
-                                       "tags.c",
-                                       "toc.c",
-                                       "version.c",
-                                       "emmatch.c",
-                                       "basename.c",
-                                       "xml.c",
-                                       "xmlpage.c"])))
-
-ext_modules = [filtermod, discountmod]
 
 setup(
-    name='r2',
+    name="r2",
     version="",
-    #description="",
-    #author="",
-    #author_email="",
-    #url="",
-    install_requires=["Routes<=1.8",
-                      "Pylons<=0.9.6.2",
-                      "boto >= 1.9b",
-                      "pytz",
-                      "pycrypto",
-                      "Babel>=0.9.1",
-                      "flup",
-                      "cython==0.14",
-                      "simplejson", 
-                      "SQLAlchemy==0.5.3",
-                      "BeautifulSoup",
-                      "cssutils==0.9.5.1",
-                      "chardet",
-                      "psycopg2",
-                      "py_interface",
-                      "pycountry",
-                      "thrift05",
-                      "pycassa==1.1.0",
-                      ],
-    packages=find_packages(),
-    include_package_data=True,
-    test_suite = 'nose.collector',
-    package_data={'r2': ['i18n/*/LC_MESSAGES/*.mo']},
-    cmdclass = {'compile_catalog':      babel.compile_catalog,
-                'extract_messages':     babel.extract_messages,
-                'init_catalog':         babel.init_catalog,
-                'update_catalog':       babel.update_catalog,
-                },
-    ext_modules = ext_modules,
+    install_requires=[
+        "Routes<=1.8",
+        "Pylons==0.9.6.2",
+        "webhelpers==0.6.4",
+        "boto >= 2.0",
+        "pytz",
+        "pycrypto",
+        "Babel>=0.9.1",
+        "cython>=0.14",
+        "SQLAlchemy==0.7.4",
+        "BeautifulSoup",
+        "cssutils==0.9.5.1",
+        "chardet",
+        "psycopg2",
+        "pycountry",
+        "pycassa>=1.7.0",
+        "PIL",
+        "pycaptcha",
+        "amqplib",
+        "pylibmc>=1.2.1",
+        "py-bcrypt",
+        "snudown>=1.1.0",
+        "l2cs>=2.0.2",
+        "lxml",
+        "kazoo",
+    ],
+    dependency_links=[
+        "https://nodeload.github.com/reddit/snudown/tarball/v1.1.0#egg=snudown-1.1.0",
+    ],
+    packages=find_packages(exclude=["ez_setup"]),
+    cmdclass=commands,
+    ext_modules=pyx_extensions + [
+        Extension(
+            "Cfilters",
+            sources=[
+                "r2/lib/c/filters.c",
+            ]
+        ),
+    ],
     entry_points="""
     [paste.app_factory]
     main=r2:make_app
@@ -170,8 +122,3 @@ setup(
     restcontroller = pylons.commands:RestControllerCommand
     """,
 )
-
-# running setup.py always fucks up the build directory, which we don't
-# need anyway.
-import shutil
-shutil.rmtree("build")

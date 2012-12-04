@@ -154,6 +154,7 @@ function handleResponse(action) {
         }
     };
 };
+$.handleResponse = handleResponse;
 
 var api_loc = '/api/';
 $.request = function(op, parameters, worker_in, block, type, 
@@ -168,8 +169,16 @@ $.request = function(op, parameters, worker_in, block, type,
     var action = op;
     var worker = worker_in;
 
-    if (rate_limit(op) || (window != window.top && !reddit.cnameframe && !reddit.external_frame))
-        return;
+    if (rate_limit(op)) {
+        if (errorhandler) {
+            errorhandler('ratelimit')
+        }
+        return
+    }
+
+    if (window != window.top && !reddit.cnameframe && !reddit.external_frame) {
+        return
+    }
 
     /* we have a lock if we are not blocking or if we have gotten a lock */
     var have_lock = !$.with_default(block, false) || acquire_ajax_lock(action);
@@ -231,38 +240,37 @@ var upmod_cls = "upmod";
 var down_cls = "down";
 var downmod_cls = "downmod";
 
-rate_limit = function() {
-    /* default rate-limit duration (in milliseconds) */
-    var default_rate_limit = 333;
-    /* rate limit on a per-action basis (also in ms, 0 = don't rate limit) */
-    var rate_limits = {"vote": 333, "comment": 5000,
-                       "ignore": 0, "ban": 0, "unban": 0,
-                       "assignad": 0 };
-    var last_dates = {};
+rate_limit = (function() {
+    var default_rate_limit = 333,  // default rate-limit duration (in ms)
+        rate_limits = {  // rate limit per-action (in ms, 0 = don't rate limit)
+            "vote": 333,
+            "comment": 5000,
+            "ignore": 0,
+            "ban": 0,
+            "unban": 0,
+            "assignad": 0
+        },
+        last_dates = {}
 
-    /* paranoia: copy global functions used to avoid tampering.  */
-    var defined = $.defined;
-    var with_default = $.with_default;
-    var _Date = Date;
+    // paranoia: copy global functions used to avoid tampering.
+    var _Date = Date
 
-    return function(action) {
-        var now = new _Date();
-        var last_date = last_dates[action];
-        var allowed_interval = with_default(rate_limits[action], 
-                                            default_rate_limit);
-        last_dates[action] = now;
-        /* true = being rate limited */
-        return (defined(last_date) && now - last_date < allowed_interval)
+    return function rate_limit(action) {
+        var now = new _Date(),
+            allowed_interval = action in rate_limits ?
+                               rate_limits[action] : default_rate_limit,
+            last_date = last_dates[action],
+            rate_limited = last_date && (now - last_date) < allowed_interval
+
+        last_dates[action] = now
+        return rate_limited
     };
-}()
+})()
 
 
 $.fn.vote = function(vh, callback, event, ui_only) {
     /* for vote to work, $(this) should be the clicked arrow */
-    if (!reddit.logged) {
-        showcover(true, 'vote_' + $(this).thing_id());
-    }
-    else if($(this).hasClass("arrow")) {
+    if (reddit.logged && $(this).hasClass("arrow")) {
         var dir = ( $(this).hasClass(up_cls) ? 1 :
                     ( $(this).hasClass(down_cls) ? -1 : 0) );
         var things = $(this).all_things_by_id();
@@ -302,9 +310,6 @@ $.fn.vote = function(vh, callback, event, ui_only) {
         /* execute any callbacks passed in.  */
         if(callback) 
             callback(things, dir);
-    }
-    if(event) {
-        event.stopPropagation();
     }
 };
 
@@ -454,8 +459,6 @@ $.fn.replace_things = function(things, keep_children, reveal, stubs) {
      * case of a comment tree, flags whether or not the new thing has
      * the thread present) while "reveal" determines whether or not to
      * animate the transition from old to new. */
-    var midcol = $(".midcol:visible:first").css("width");
-    var numcol = $(".rank:visible:first").css("width");
     var self = this;
     return $.map(things, function(thing) {
             var data = thing.data;
@@ -471,10 +474,6 @@ $.fn.replace_things = function(things, keep_children, reveal, stubs) {
             }
             existing.after($.unsafe(data.content));
             var new_thing = existing.next();
-            if($.defined(midcol)) {
-                new_thing.find(".midcol").css("width", midcol).end()
-                    .find(".rank").css("width", midcol);
-            }
             if(keep_children) {
                 /* show the new thing */
                 new_thing.show()
@@ -521,15 +520,11 @@ $.insert_things = function(things, append) {
     /* Insert new things into a listing.*/
     return $.map(things, function(thing) {
             var data = thing.data;
-            var midcol = $(".midcol:visible:first").css("width");
-            var numcol = $(".rank:visible:first").css("width");
             var s = $.listing(data.parent);
             if(append)
                 s = s.append($.unsafe(data.content)).children(".thing:last");
             else
                 s = s.prepend($.unsafe(data.content)).children(".thing:first");
-            s.find(".midcol").css("width", midcol);
-            s.find(".rank").css("width", numcol);
             thing_init_func(s.hide().show());
             return s;
         });
@@ -579,19 +574,12 @@ $.fn.insert_table_rows = function(rows, index) {
     return this;
 };
 
-$.set_tracker = function(id, show_track, click_track) {
-    /* hook for api to pass back tracker information */
-    reddit.trackers[id] = {show: show_track, click: click_track};
-    $.things(id).filter(":visible").show();
-};
-
 
 $.fn.captcha = function(iden) {
     /*  */
     var c = this.find(".capimage");
     if(iden) {
-        c.attr("src", "http://" + reddit.ajax_domain 
-               + "/captcha/" + iden + ".png")
+        c.attr("src", "/captcha/" + iden + ".png")
             .parents("form").find('input[name="iden"]').val(iden);
     }
     return c;
@@ -689,8 +677,10 @@ $.apply_stylesheet = function(cssText) {
          * that has the old stylesheet, and delete it. Then we add a
          * <style> with the new one */
         $("head").children('*[title="' + sheet_title + '"]').remove();
-        $("head").append("<style type='text/css' media='screen' title='" + 
-                         sheet_title + "'>" + cssText + "</style>");
+        var stylesheet = $('<style type="text/css" media="screen"></style>')
+            .attr('title', sheet_title)
+            .text(cssText)
+            .appendTo('head')
   }
     
 };
@@ -704,85 +694,50 @@ $.rehighlight_new_comments = function() {
 }
 
 /* namespace globals for cookies -- default prefix and domain */
-var default_cookie_domain;
+var default_cookie_domain
 $.default_cookie_domain = function(domain) {
-    if($.defined(domain))
-        default_cookie_domain = domain;
-    return default_cookie_domain;
-};
+    if (domain) {
+        default_cookie_domain = domain
+    }
+}
 
-var cookie_name_prefix = "_";
+var cookie_name_prefix = "_"
 $.cookie_name_prefix = function(name) {
-    if($.defined(name))
-        cookie_name_prefix = name + "_";
-    return cookie_name_prefix;
-};
-
-
-/* cookie functions */
-$.cookie_test = function() {
-    /* tries to write a cookie and sees if it is allowed by making
-     * sure it can read back what it wrote */
-    var m = (Math.random() + "").split('.')[1];
-    var name = "test";
-    $.cookie_write({name: name, data: m})
-    if ($.cookie_read(name).data == m) {
-        $.cookie_erase(name);
-        return true;
+    if (name) {
+        cookie_name_prefix = name + "_"
     }
-};
+}
 
-$.cookie_erase = function(data) {
-    data.data = "";
-    data.expires = -1;
-    $.cookie_write(data);
-};
-
+/* old reddit-specific cookie functions */
 $.cookie_write = function(c) {
-    if(c.name) {
-        var data = $.with_default(c.data, "");
-        data = (typeof(data) == 'string') ? data : $.toJSON(data);
-        data = cookie_name_prefix + c.name+'='+ escape(data);
-        if($.defined(c.expires)) {
-            var expires = c.expires;
-            /* interpret numbers as number of days */
-            if(typeof(expires) == "number") {
-                var date = new Date();
-                date.setTime(date.getTime()+(expires*24*60*60*1000));
-                expires = date;
-            }
-            /* Dates will have a conversion function */
-            if($.defined(expires.toGMTString)) 
-                expires = expires.toGMTString();
-            data += '; expires=' + expires;
+    if (c.name) {
+        var options = {}
+        options.expires = c.expires
+        options.domain = c.domain || default_cookie_domain
+        options.path = c.path || '/'
+
+        var key = cookie_name_prefix + c.name,
+            value = c.data
+
+        if (value === null || value == '') {
+            value = null
+        } else if (typeof(value) != 'string') {
+            value = JSON.stringify(value)
         }
-        var domain = $.with_default(c.domain, default_cookie_domain);
-        if($.defined(domain))
-            data += '; domain=' + domain;
-        data += '; path=' + $.with_default(c.path, '/');
-        document.cookie=data;
+
+        $.cookie(key, value, options)
     }
-};
+}
 
 $.cookie_read = function(name, prefix) {
-    var nameEQ = (prefix || cookie_name_prefix) + name + '=';
-    var ca=document.cookie.split(';');
-    /* walk the list backwards so we always get the last cookie in the
-       list */
-    var data = '';
-    for(var i = ca.length-1; i >= 0; i--) { 
-        var c = ca[i]; 
-        while(c.charAt(0)==' ') c=c.substring(1,c.length);
-        if(c.indexOf(nameEQ)==0) {
-          /* we can unescape even if it's not escaped */
-          data = unescape(c.substring(nameEQ.length,c.length));
-          try {
-              data = $.secureEvalJSON(data);
-          } catch(e) {};
-          break;
-        }
-    }
-    return {name: name, data: data};
-};
+    var prefixedName = (prefix || cookie_name_prefix) + name,
+        data = $.cookie(prefixedName)
+
+    try {
+        data = JSON.parse(data)
+    } catch(e) {}
+
+    return {name: name, data: data}
+}
 
 })(jQuery);

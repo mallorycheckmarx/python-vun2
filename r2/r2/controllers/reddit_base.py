@@ -11,40 +11,52 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
-import r2.lib.helpers as h
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+from mako.filters import url_escape
 from pylons import c, g, request
-from pylons.controllers.util import abort, redirect_to
+from pylons.controllers.util import redirect_to
 from pylons.i18n import _
 from pylons.i18n.translation import LanguageError
-from r2.lib.base import BaseController, proxyurl
-from r2.lib import pages, utils, filters, amqp
-from r2.lib.utils import http_utils, UniqueIterator, ip_and_slash16
+from r2.lib import pages, utils, filters, amqp, stats
+from r2.lib.utils import (
+    SimpleSillyStub,
+    UniqueIterator,
+    http_utils,
+    is_subdomain,
+    is_throttled,
+)
 from r2.lib.cache import LocalCache, make_key, MemcachedError
 import random as rand
-from r2.models.account import valid_cookie, FakeAccount, valid_feed
-from r2.models.subreddit import Subreddit
+from r2.models.account import FakeAccount, valid_feed, valid_admin_cookie
+from r2.models.subreddit import Subreddit, Frontpage
 from r2.models import *
-from errors import ErrorSet
+from errors import ErrorSet, BadRequestError, ForbiddenError, errors
 from validator import *
 from r2.lib.template_helpers import add_sr
-from r2.lib.jsontemplates import api_type, is_api
+from r2.config.extensions import is_api
+from r2.lib.translation import set_lang
+from r2.lib.contrib import ipaddress
+from r2.lib.base import BaseController, proxyurl, abort
+from r2.lib.authentication import authenticate_user
 
 from Cookie import CookieError
 from copy import copy
 from Cookie import CookieError
-from datetime import datetime
+from datetime import datetime, timedelta
 from hashlib import sha1, md5
 from urllib import quote, unquote
 import simplejson
 import locale, socket
+import babel.core
+from functools import wraps
 
 from r2.lib.tracking import encrypt, decrypt
 from pylons import Response
@@ -56,13 +68,17 @@ cache_affecting_cookies = ('reddit_first','over18','_options')
 
 class Cookies(dict):
     def add(self, name, value, *k, **kw):
+        name = name.encode('utf-8')
         self[name] = Cookie(value, *k, **kw)
 
 class Cookie(object):
-    def __init__(self, value, expires = None, domain = None, dirty = True):
+    def __init__(self, value, expires=None, domain=None,
+                 dirty=True, secure=False, httponly=False):
         self.value = value
         self.expires = expires
         self.dirty = dirty
+        self.secure = secure
+        self.httponly = httponly
         if domain:
             self.domain = domain
         elif c.authorized_cname and not c.default_sr:
@@ -122,6 +138,9 @@ class UnloggedUser(FakeAccount):
     def _unsubscribe(self, sr):
         pass
 
+    def valid_hash(self, hash):
+        return False
+
     def _commit(self):
         if self._dirty:
             for k, (oldv, newv) in self._dirties.iteritems():
@@ -140,9 +159,10 @@ def read_user_cookie(name):
     else:
         return ''
 
-def set_user_cookie(name, val):
+def set_user_cookie(name, val, **kwargs):
     uname = c.user.name if c.user_is_loggedin else ""
-    c.cookies[uname + '_' + name] = Cookie(value = val)
+    c.cookies[uname + '_' + name] = Cookie(value=val,
+                                           **kwargs)
 
     
 valid_click_cookie = fullname_regex(Link, True).match
@@ -156,13 +176,18 @@ def set_recent_clicks():
         if valid_click_cookie(click_cookie):
             names = [ x for x in UniqueIterator(click_cookie.split(',')) if x ]
 
-            if len(click_cookie) > 1000:
-                names = names[:20]
+            if len(names) > 5:
+                names = names[:5]
                 set_user_cookie('recentclicks2', ','.join(names))
             #eventually this will look at the user preference
             names = names[:5]
-            c.recent_clicks = Link._by_fullname(names, data = True,
-                                                return_dict = False)
+
+            try:
+                c.recent_clicks = Link._by_fullname(names, data = True,
+                                                    return_dict = False)
+            except NotFound:
+                # clear their cookie because it's got bad links in it
+                set_user_cookie('recentclicks2', '')
         else:
             #if the cookie wasn't valid, clear it
             set_user_cookie('recentclicks2', '')
@@ -235,6 +260,10 @@ def over18():
             if cookie == sha1(request.ip).hexdigest():
                 return True
 
+def set_obey_over18():
+    "querystring parameter for API to obey over18 filtering rules"
+    c.obey_over18 = request.GET.get("obey_over18") == "true"
+
 def set_subreddit():
     #the r parameter gets added by javascript for POST requests so we
     #can reference c.site in api.py
@@ -243,44 +272,45 @@ def set_subreddit():
 
     can_stale = request.method.upper() in ('GET','HEAD')
 
-    default_sr = DefaultSR()
-    c.site = default_sr
+    c.site = Frontpage
     if not sr_name:
         #check for cnames
-        sub_domain = request.environ.get('sub_domain')
-        if sub_domain and not sub_domain.endswith(g.media_domain):
-            c.site = Subreddit._by_domain(sub_domain) or default_sr
+        cname = request.environ.get('legacy-cname')
+        if cname:
+            sr = Subreddit._by_domain(cname) or Frontpage
+            domain = g.domain
+            if g.domain_prefix:
+                domain = ".".join((g.domain_prefix, domain))
+            redirect_to('http://%s%s' % (domain, sr.path), _code=301)
     elif sr_name == 'r':
         #reddits
         c.site = Sub
+    elif '+' in sr_name:
+        sr_names = sr_name.split('+')
+        srs = set(Subreddit._by_name(sr_names, stale=can_stale).values())
+        if All in srs:
+            c.site = All
+        elif Friends in srs:
+            c.site = Friends
+        else:
+            srs = [sr for sr in srs if not isinstance(sr, FakeSubreddit)]
+            if len(srs) == 0:
+                c.site = MultiReddit([], sr_name)
+            elif len(srs) == 1:
+                c.site = srs.pop()    
+            else:
+                sr_ids = [sr._id for sr in srs]
+                c.site = MultiReddit(sr_ids, sr_name)
     else:
         try:
-            if '+' in sr_name:
-                srs = set()
-                sr_names = sr_name.split('+')
-                real_path = sr_name
-                srs = Subreddit._by_name(sr_names, stale=can_stale).values()
-                if len(srs) != len(sr_names):
-                    abort(404)
-                elif any(isinstance(sr, FakeSubreddit)
-                         for sr in srs):
-                    if All in srs:
-                        c.site = All
-                    elif Friend in srs:
-                        c.site = Friend
-                    else:
-                        abort(400)
-                else:
-                    sr_ids = [sr._id for sr in srs]
-                    c.site = MultiReddit(sr_ids, real_path)
-            else:
-                c.site = Subreddit._by_name(sr_name, stale=can_stale)
+            c.site = Subreddit._by_name(sr_name, stale=can_stale)
         except NotFound:
             sr_name = chksrname(sr_name)
             if sr_name:
                 redirect_to("/reddits/search?q=%s" % sr_name)
             elif not c.error_page and not request.path.startswith("/api/login/") :
                 abort(404)
+
     #if we didn't find a subreddit, check for a domain listing
     if not sr_name and isinstance(c.site, DefaultSR) and domain:
         c.site = DomainSR(domain)
@@ -295,8 +325,6 @@ def set_content_type():
 
     if e.has_key('extension'):
         c.extension = ext = e['extension']
-        if ext == 'api' or ext.startswith('json'):
-            c.response_access_control = 'allow <*>'
         if ext in ('embed', 'wired', 'widget'):
             def to_js(content):
                 return utils.to_js(content,callback = request.params.get(
@@ -321,9 +349,11 @@ def set_content_type():
                 c.cookies['reddit_mobility'] = Cookie(ext, expires = NEVER)
     # allow JSONP requests to generate callbacks, but do not allow
     # the user to be logged in for these 
-    if (is_api() and request.method.upper() == "GET" and
-        request.GET.get("jsonp")):
-        c.allowed_callback = request.GET['jsonp']
+    callback = request.GET.get("jsonp")
+    if is_api() and request.method.upper() == "GET" and callback:
+        if not valid_jsonp_callback(callback):
+            abort(BadRequestError(errors.BAD_JSONP_CALLBACK))
+        c.allowed_callback = callback
         c.user = UnloggedUser(get_browser_langs())
         c.user_is_loggedin = False
 
@@ -355,9 +385,6 @@ def set_host_lang():
         c.host_lang = host_lang
 
 def set_iface_lang():
-    # TODO: internationalize.  This seems the best place to put this
-    # (used for formatting of large numbers to break them up with ",").
-    # unfortunately, not directly compatible with gettext
     locale.setlocale(locale.LC_ALL, g.locale)
     lang = [g.lang]
     # GET param wins
@@ -366,6 +393,9 @@ def set_iface_lang():
     else:
         lang = [c.user.pref_lang]
 
+    if getattr(g, "lang_override") and lang[0] == "en":
+        lang.insert(0, g.lang_override)
+
     #choose the first language
     c.lang = lang[0]
 
@@ -373,12 +403,17 @@ def set_iface_lang():
     #one
     for l in lang:
         try:
-            h.set_lang(l)
+            set_lang(l, fallback_lang=g.lang)
             c.lang = l
             break
-        except h.LanguageError:
+        except LanguageError:
             #we don't have a translation for that language
-            h.set_lang(g.lang, graceful_fail = True)
+            set_lang(g.lang, graceful_fail=True)
+
+    try:
+        c.locale = babel.core.Locale.parse(c.lang, sep='-')
+    except (babel.core.UnknownLocaleError, ValueError):
+        c.locale = babel.core.Locale.parse(g.lang, sep='-')
 
     #TODO: add exceptions here for rtl languages
     if c.lang in ('ar', 'he', 'fa'):
@@ -404,17 +439,6 @@ def set_cnameframe():
     if hasattr(c.site, 'domain'):
         c.authorized_cname = request.environ.get('authorized_cname', False)
 
-def set_recent_reddits():
-    names = read_user_cookie('recent_reddits')
-    c.recent_reddits = []
-    if names:
-        names = filter(None, names.strip('[]').split(','))
-        try:
-            c.recent_reddits = Subreddit._by_fullname(names, data = True,
-                                                      return_dict = False)
-        except NotFound:
-            pass
-
 def set_colors():
     theme_rx = re.compile(r'')
     color_rx = re.compile(r'\A([a-fA-F0-9]){3}(([a-fA-F0-9]){3})?\Z')
@@ -424,35 +448,49 @@ def set_colors():
     if color_rx.match(request.get.get('bordercolor') or ''):
         c.bordercolor = request.get.get('bordercolor')
 
+def ratelimit_agent(agent):
+    key = 'rate_agent_' + agent
+    if g.cache.get(key):
+        request.environ['retry_after'] = 1
+        abort(429)
+    else:
+        g.cache.set(key, 't', time = 1)
+
+appengine_re = re.compile(r'AppEngine-Google; \(\+http://code.google.com/appengine; appid: s~([a-z0-9-]{6,30})\)\Z')
 def ratelimit_agents():
     user_agent = request.user_agent
-    for s in g.agents:
-        if s and user_agent and s in user_agent.lower():
-            key = 'rate_agent_' + s
-            if g.cache.get(s):
-                abort(503, 'service temporarily unavailable')
-            else:
-                g.cache.set(s, 't', time = 1)
 
-def throttled(key):
-    return g.cache.get("throttle_" + key)
+    if not user_agent:
+        return
+
+    # parse out the appid for appengine apps
+    appengine_match = appengine_re.match(user_agent)
+    if appengine_match:
+        appid = appengine_match.group(1)
+        ratelimit_agent(appid)
+        return
+
+    user_agent = user_agent.lower()
+    for s in g.agents:
+        if s and user_agent and s in user_agent:
+            ratelimit_agent(s)
 
 def ratelimit_throttled():
-    ip, slash16 = ip_and_slash16(request)
+    ip = request.ip.strip()
+    if is_throttled(ip):
+        abort(429)
 
-    if throttled(ip) or throttled(slash16):
-        abort(503, 'service temporarily unavailable')
 
-
-def paginated_listing(default_page_size=25, max_page_size=100):
+def paginated_listing(default_page_size=25, max_page_size=100, backend='sql'):
     def decorator(fn):
         @validate(num=VLimit('limit', default=default_page_size,
                              max_limit=max_page_size),
-                  after=VByName('after'),
-                  before=VByName('before'),
+                  after=VByName('after', backend=backend),
+                  before=VByName('before', backend=backend),
                   count=VCount('count'),
                   target=VTarget("target"),
                   show=VLength('show', 3))
+        @wraps(fn)
         def new_fn(self, before, **env):
             if c.render_style == "htmllite":
                 c.link_target = env.get("target")
@@ -479,6 +517,62 @@ def paginated_listing(default_page_size=25, max_page_size=100):
 def base_listing(fn):
     return paginated_listing()(fn)
 
+def is_trusted_origin(origin):
+    try:
+        origin = urlparse(origin)
+    except ValueError:
+        return False
+    
+    return any(is_subdomain(origin.hostname, domain) for domain in g.trusted_domains)
+
+def cross_domain(origin_check=is_trusted_origin, **options):
+    """Set up cross domain validation and hoisting for a request handler."""
+    def cross_domain_wrap(fn):
+        cors_perms = {
+            "origin_check": origin_check,
+            "allow_credentials": bool(options.get("allow_credentials"))
+        }
+
+        @wraps(fn)
+        def cross_domain_handler(self, *args, **kwargs):
+            if request.params.get("hoist") == "cookie":
+                # Cookie polling response
+                if cors_perms["origin_check"](g.origin):
+                    name = request.environ["pylons.routes_dict"]["action_name"]
+                    resp = fn(self, *args, **kwargs)
+                    c.cookies.add('hoist_%s' % name, ''.join(resp.content))
+                    c.response_content_type = 'text/html'
+                    resp.content = ''
+                    return resp
+                else:
+                    abort(403)
+            else:
+                self.check_cors()
+                return fn(self, *args, **kwargs)
+
+        cross_domain_handler.cors_perms = cors_perms
+        return cross_domain_handler
+    return cross_domain_wrap
+
+def require_https():
+    if not c.secure:
+        abort(ForbiddenError(errors.HTTPS_REQUIRED))
+
+def prevent_framing_and_css(allow_cname_frame=False):
+    def wrap(f):
+        @wraps(f)
+        def no_funny_business(*args, **kwargs):
+            c.allow_styles = False
+            if not (allow_cname_frame and c.cname and not c.authorized_cname):
+                c.deny_frames = True
+            return f(*args, **kwargs)
+        return no_funny_business
+    return wrap
+
+
+def request_timer_name(action):
+    return "service_time.web." + action
+
 
 class MinimalController(BaseController):
 
@@ -497,6 +591,7 @@ class MinimalController(BaseController):
                         c.lang,
                         c.content_langs,
                         request.host,
+                        c.secure,
                         c.cname,
                         request.fullpath,
                         c.over18,
@@ -509,19 +604,30 @@ class MinimalController(BaseController):
         return c.response
 
     def pre(self):
+        action = request.environ["pylons.routes_dict"].get("action")
+        if action:
+            c.request_timer = g.stats.get_timer(request_timer_name(action))
+        else:
+            c.request_timer = SimpleSillyStub()
 
+        c.response_wrappers = []
         c.start_time = datetime.now(g.tz)
+        c.request_timer.start()
         g.reset_caches()
 
         c.domain_prefix = request.environ.get("reddit-domain-prefix",
                                               g.domain_prefix)
+        c.secure = request.host in g.secure_domains
+
         #check if user-agent needs a dose of rate-limiting
         if not c.error_page:
-            ratelimit_agents()
             ratelimit_throttled()
+            ratelimit_agents()
 
         c.allow_loggedin_cache = False
-
+        
+        c.show_wiki_actions = False
+        
         # the domain has to be set before Cookies get initialized
         set_subreddit()
         c.errors = ErrorSet()
@@ -529,6 +635,7 @@ class MinimalController(BaseController):
         # if an rss feed, this will also log the user in if a feed=
         # GET param is included
         set_content_type()
+        c.request_timer.intermediate("minimal-pre")
 
     def try_pagecache(self):
         #check content cache
@@ -547,20 +654,24 @@ class MinimalController(BaseController):
                                             value   = cookie.value,
                                             domain  = cookie.get('domain',None),
                                             expires = cookie.get('expires',None),
-                                            path    = cookie.get('path',None))
+                                            path    = cookie.get('path',None),
+                                            secure  = cookie.get('secure', False),
+                                            httponly = cookie.get('httponly', False))
 
                 response.status_code = r.status_code
                 request.environ['pylons.routes_dict']['action'] = 'cached_response'
+                c.request_timer.name = request_timer_name("cached_response")
+
                 # make sure to carry over the content type
                 c.response_content_type = r.headers['content-type']
-                if r.headers.has_key('access-control'):
-                    c.response_access_control = r.headers['access-control']
                 c.used_cache = True
                 # response wrappers have already been applied before cache write
                 c.response_wrappers = []
 
 
     def post(self):
+        c.request_timer.intermediate("action")
+
         response = c.response
         content = filter(None, response.content)
         if isinstance(content, (list, tuple)):
@@ -570,12 +681,13 @@ class MinimalController(BaseController):
         response.content = content
         if c.response_content_type:
             response.headers['Content-Type'] = c.response_content_type
-        if c.response_access_control:
-            c.response.headers['Access-Control'] = c.response_access_control
 
         if c.user_is_loggedin and not c.allow_loggedin_cache:
             response.headers['Cache-Control'] = 'no-cache'
             response.headers['Pragma'] = 'no-cache'
+
+        if c.deny_frames:
+            response.headers["X-Frame-Options"] = "DENY"
 
         #return
         #set content cache
@@ -583,15 +695,17 @@ class MinimalController(BaseController):
             and request.method.upper() == 'GET'
             and (not c.user_is_loggedin or c.allow_loggedin_cache)
             and not c.used_cache
-            and response.status_code != 503
+            and response.status_code not in (429, 503)
             and response.content and response.content[0]):
             try:
                 g.rendercache.set(self.request_key(),
                                   (response, c.cookies),
                                   g.page_cache_time)
-            except MemcachedError:
-                # the key was too big to set in the rendercache
-                g.log.debug("Ignored too-big render cache")
+            except MemcachedError as e:
+                # this codepath will actually never be hit as long as
+                # the pagecache memcached client is in no_reply mode.
+                g.log.warning("Ignored exception (%r) on pagecache "
+                              "write for %r", e, request.path)
 
         # send cookies
         for k,v in c.cookies.iteritems():
@@ -599,31 +713,20 @@ class MinimalController(BaseController):
                 response.set_cookie(key     = k,
                                     value   = quote(v.value),
                                     domain  = v.domain,
-                                    expires = v.expires)
+                                    expires = v.expires,
+                                    secure  = getattr(v, 'secure', False),
+                                    httponly = getattr(v, 'httponly', False))
 
-        if g.logans_run_limit:
-            if c.start_time > g.logans_run_limit and not g.shutdown:
-                g.log.info("Time to restart. It's been an honor serving with you.")
-                g.shutdown = 'init'
+        end_time = datetime.now(g.tz)
 
-        if g.usage_sampling <= 0.0:
-            return
+        # update last_visit
+        if (c.user_is_loggedin and not g.disallow_db_writes and
+            request.method.upper() != "POST" and
+            not c.dont_update_last_visit and
+            request.path != '/validuser'):
+            c.user.update_last_visit(c.start_time)
 
-        if g.usage_sampling >= 1.0 or rand.random() < g.usage_sampling:
-            if ('pylons.routes_dict' in request.environ and
-                'action' in request.environ['pylons.routes_dict']):
-                action = str(request.environ['pylons.routes_dict']['action'])
-            else:
-                action = "unknown"
-                log_text("unknown action",
-                         "no action for %r" % path_info,
-                         "warning")
-
-            amqp.add_kw("usage_q",
-                        start_time = c.start_time,
-                        end_time = datetime.now(g.tz),
-                        sampling_rate = g.usage_sampling,
-                        action = action)
+        check_request(end_time)
 
         # this thread is probably going to be reused, but it could be
         # a while before it is. So we might as well dump the cache in
@@ -631,21 +734,45 @@ class MinimalController(BaseController):
         # around taking up memory
         g.reset_caches()
 
+        # push data to statsd
+        c.request_timer.stop()
+        g.stats.flush()
+
     def abort404(self):
         abort(404, "not found")
 
     def abort403(self):
         abort(403, "forbidden")
 
+    def check_cors(self):
+        origin = request.headers.get("Origin")
+        if not origin:
+            return
+
+        method = request.method
+        if method == 'OPTIONS':
+            # preflight request
+            method = request.headers.get("Access-Control-Request-Method")
+            if not method:
+                self.abort403()
+
+        action = request.environ["pylons.routes_dict"]["action_name"]
+
+        handler = self._get_action_handler(action, method)
+        cors = handler and getattr(handler, "cors_perms", None)
+
+        if cors and cors["origin_check"](origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            if cors.get("allow_credentials"):
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+
+    def OPTIONS(self):
+        """Return empty responses for CORS preflight requests"""
+        self.check_cors()
+
     def sendpng(self, string):
         c.response_content_type = 'image/png'
         c.response.content = string
-        return c.response
-
-    def sendstring(self,string):
-        '''sends a string and automatically escapes &, < and > to make sure no code injection happens'''
-        c.response.headers['Content-Type'] = 'text/html; charset=UTF-8'
-        c.response.content = filters.websafe_json(string)
         return c.response
 
     def update_qstring(self, dict):
@@ -655,26 +782,53 @@ class MinimalController(BaseController):
 
     def api_wrapper(self, kw):
         data = simplejson.dumps(kw)
-        if request.method.upper() == "GET" and request.GET.get("callback"):
-            return "%s(%s)" % (websafe_json(request.GET.get("callback")),
-                               websafe_json(data))
-        return self.sendstring(data)
+        c.response.content = filters.websafe_json(data)
+        return c.response
 
+    def iframe_api_wrapper(self, kw):
+        data = simplejson.dumps(kw)
+        c.response_content_type = 'text/html'
+        c.response.content = (
+            '<html><head><script type="text/javascript">\n'
+            'parent.$.handleResponse().call('
+            'parent.$("#" + window.frameElement.id).parent(), %s)\n'
+            '</script></head></html>') % filters.websafe_json(data)
+        return c.response
 
 
 class RedditController(MinimalController):
 
     @staticmethod
-    def login(user, admin = False, rem = False):
-        c.cookies[g.login_cookie] = Cookie(value = user.make_cookie(admin = admin),
-                                           expires = NEVER if rem else None)
+    def login(user, rem=False):
+        c.cookies[g.login_cookie] = Cookie(value = user.make_cookie(),
+                                           expires = NEVER if rem else None,
+                                           httponly=True)
 
     @staticmethod
-    def logout(admin = False):
+    def logout():
         c.cookies[g.login_cookie] = Cookie(value='', expires=DELETE)
 
+    @staticmethod
+    def enable_admin_mode(user, first_login=None):
+        # no expiration time so the cookie dies with the browser session
+        c.cookies[g.admin_cookie] = Cookie(value=user.make_admin_cookie(first_login=first_login))
+
+    @staticmethod
+    def remember_otp(user):
+        cookie = user.make_otp_cookie()
+        expiration = datetime.utcnow() + timedelta(seconds=g.OTP_COOKIE_TTL)
+        expiration = expiration.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        set_user_cookie(g.otp_cookie,
+                        cookie,
+                        secure=True,
+                        httponly=True,
+                        expires=expiration)
+
+    @staticmethod
+    def disable_admin_mode(user):
+        c.cookies[g.admin_cookie] = Cookie(value='', expires=DELETE)
+
     def pre(self):
-        c.response_wrappers = []
         MinimalController.pre(self)
 
         set_cnameframe()
@@ -692,21 +846,29 @@ class RedditController(MinimalController):
                 #can't handle broken cookies
                 request.environ['HTTP_COOKIE'] = ''
 
-        c.secure = request.host in g.secure_domains
         c.firsttime = firsttime()
 
         # the user could have been logged in via one of the feeds 
         maybe_admin = False
+        is_otpcookie_valid = False
 
         # no logins for RSS feed unless valid_feed has already been called
         if not c.user:
             if c.extension != "rss":
-                (c.user, maybe_admin) = \
-                         valid_cookie(c.cookies[g.login_cookie].value
-                                      if g.login_cookie in c.cookies
-                                      else '')
-                if c.user:
-                    c.user_is_loggedin = True
+                authenticate_user()
+
+                admin_cookie = c.cookies.get(g.admin_cookie)
+                if c.user_is_loggedin and admin_cookie:
+                    maybe_admin, first_login = valid_admin_cookie(admin_cookie.value)
+
+                    if maybe_admin:
+                        self.enable_admin_mode(c.user, first_login=first_login)
+                    else:
+                        self.disable_admin_mode(c.user)
+
+                otp_cookie = read_user_cookie(g.otp_cookie)
+                if c.user_is_loggedin and otp_cookie:
+                    is_otpcookie_valid = valid_otp_cookie(otp_cookie)
 
             if not c.user:
                 c.user = UnloggedUser(get_browser_langs())
@@ -725,24 +887,22 @@ class RedditController(MinimalController):
                 read_mod_cookie()
             if hasattr(c.user, 'msgtime') and c.user.msgtime:
                 c.have_messages = c.user.msgtime
-            if hasattr(c.user, 'modmsgtime'):
-                c.show_mod_mail = True
-                if c.user.modmsgtime:
-                    c.have_mod_messages = c.user.modmsgtime
-            else:
-                c.show_mod_mail = Subreddit.reverse_moderator_ids(c.user)
+            c.show_mod_mail = Subreddit.reverse_moderator_ids(c.user)
+            c.have_mod_messages = getattr(c.user, "modmsgtime", False)
             c.user_is_admin = maybe_admin and c.user.name in g.admins
+            c.user_special_distinguish = c.user.special_distinguish()
             c.user_is_sponsor = c.user_is_admin or c.user.name in g.sponsors
-            if request.path != '/validuser' and not g.disallow_db_writes:
-                c.user.update_last_visit(c.start_time)
+            c.otp_cached = is_otpcookie_valid
+            if not isinstance(c.site, FakeSubreddit) and not g.disallow_db_writes:
+                c.user.update_sr_activity(c.site)
 
         c.over18 = over18()
+        set_obey_over18()
 
         #set_browser_langs()
         set_host_lang()
         set_iface_lang()
         set_content_lang()
-        set_recent_reddits()
         set_recent_clicks()
         # used for HTML-lite templates
         set_colors()
@@ -760,13 +920,34 @@ class RedditController(MinimalController):
             redirect_to("/" + c.site.path.strip('/') + request.path)
         
         if not request.path.startswith("/api/login/"):
-            # check that the site is available:
+            # is the subreddit banned?
             if c.site.spammy() and not c.user_is_admin and not c.error_page:
-                abort(404, "not found")
+                ban_info = getattr(c.site, "ban_info", {})
+                if "message" in ban_info:
+                    message = ban_info['message']
+                else:
+                    sitelink = url_escape(add_sr("/"))
+                    subject = ("/r/%s has been incorrectly banned" %
+                                   c.site.name)
+                    link = ("/r/redditrequest/submit?url=%s&title=%s" %
+                                (sitelink, subject))
+                    message = strings.banned_subreddit_message % dict(
+                                                                    link=link)
+                errpage = pages.RedditError(strings.banned_subreddit_title,
+                                            message,
+                                            image="subreddit-banned.png")
+                request.environ['usable_error_content'] = errpage.render()
+                self.abort404()
 
             # check if the user has access to this subreddit
             if not c.site.can_view(c.user) and not c.error_page:
-                abort(403, "forbidden")
+                public_description = c.site.public_description
+                errpage = pages.RedditError(strings.private_subreddit_title,
+                                            strings.private_subreddit_message,
+                                            image="subreddit-private.png",
+                                            sr_description=public_description)
+                request.environ['usable_error_content'] = errpage.render()
+                self.abort403()
 
             #check over 18
             if (c.site.over_18 and not c.over18 and
@@ -775,29 +956,43 @@ class RedditController(MinimalController):
                 return self.intermediate_redirect("/over18")
 
         #check whether to allow custom styles
-        c.allow_styles = self.allow_stylesheets
+        c.allow_styles = True
+        c.can_apply_styles = self.allow_stylesheets
         if g.css_killswitch:
-            c.allow_styles = False
+            c.can_apply_styles = False
         #if the preference is set and we're not at a cname
         elif not c.user.pref_show_stylesheets and not c.cname:
-            c.allow_styles = False
+            c.can_apply_styles = False
         #if the site has a cname, but we're not using it
         elif c.site.domain and c.site.css_on_cname and not c.cname:
-            c.allow_styles = False
+            c.can_apply_styles = False
 
-    def check_modified(self, thing, action,
-                       private=True, max_age=0, must_revalidate=True):
+        c.request_timer.intermediate("base-pre")
+
+    def check_modified(self, thing, action):
+        # this is a legacy shim until the old last_modified system is dead
+        last_modified = utils.last_modified_date(thing, action)
+        return self.abort_if_not_modified(last_modified)
+
+    def abort_if_not_modified(self, last_modified, private=True,
+                              max_age=timedelta(0),
+                              must_revalidate=True):
+        """Check If-Modified-Since and abort(304) if appropriate."""
+
         if c.user_is_loggedin and not c.allow_loggedin_cache:
             return
 
-        last_modified = utils.last_modified_date(thing, action)
+        # HTTP timestamps round to nearest second. truncate this value for
+        # comparisons.
+        last_modified = last_modified.replace(microsecond=0)
+
         date_str = http_utils.http_date_str(last_modified)
         c.response.headers['last-modified'] = date_str
 
         cache_control = []
         if private:
             cache_control.append('private')
-        cache_control.append('max-age=%d' % max_age)
+        cache_control.append('max-age=%d' % max_age.total_seconds())
         if must_revalidate:
             cache_control.append('must-revalidate')
         c.response.headers['cache-control'] = ', '.join(cache_control)
@@ -807,29 +1002,13 @@ class RedditController(MinimalController):
             abort(304, 'not modified')
 
     def search_fail(self, exception):
-        from r2.lib.contrib.pysolr import SolrError
-        from r2.lib.indextank import IndextankException
-        if isinstance(exception, SolrError):
-            errmsg = "SolrError: %r" % exception
+        from r2.lib.search import SearchException
+        if isinstance(exception, SearchException + (socket.error,)):
+            g.log.error("Search Error: %s" % repr(exception))
 
-            if (str(exception) == 'None'):
-                # Production error logs only get non-None errors
-                g.log.debug(errmsg)
-            else:
-                g.log.error(errmsg)
-        elif isinstance(exception, (IndextankException, socket.error)):
-            g.log.error("IndexTank Error: %s" % repr(exception))
+        errpage = pages.RedditError(_("search failed"),
+                                    strings.search_failed)
 
-        sf = pages.SearchFail()
-
-        us = filters.unsafe(sf.render())
-
-        errpage = pages.RedditError(_('search failed'), us)
-
-        c.response = Response()
-        c.response.status_code = 503
         request.environ['usable_error_content'] = errpage.render()
         request.environ['retry_after'] = 60
-
         abort(503)
-

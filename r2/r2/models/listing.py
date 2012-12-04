@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from account import *
 from link import *
 from vote import *
@@ -44,13 +45,17 @@ class Listing(object):
         self.prev_link = True
         self.next = None
         self.prev = None
-        self.max_num = 1
+        self._max_num = 1
         self.vote_hash_type = vote_hash_type
 
     @property
     def max_score(self):
         scores = [x.score for x in self.things if hasattr(x, 'score')]
         return max(scores) if scores else 0
+
+    @property
+    def max_num(self):
+        return self._max_num
 
     def get_items(self, *a, **kw):
         """Wrapper around builder's get_items that caches the rendering."""
@@ -66,7 +71,7 @@ class Listing(object):
     def listing(self):
         self.things, prev, next, bcount, acount = self.get_items()
 
-        self.max_num = max(acount, bcount)
+        self._max_num = max(acount, bcount)
         self.after = None
         self.before = None
 
@@ -75,6 +80,9 @@ class Listing(object):
             p.update({'after':None, 'before':prev._fullname, 'count':bcount})
             self.before = prev._fullname
             self.prev = (request.path + utils.query_string(p))
+            p_first = request.get.copy()
+            p_first.update({'after':None, 'before':None, 'count':None})
+            self.first = (request.path + utils.query_string(p_first))
         if self.nextprev and self.next_link and next:
             p = request.get.copy()
             p.update({'after':next._fullname, 'before':None, 'count':acount})
@@ -85,6 +93,12 @@ class Listing(object):
 
     def __iter__(self):
         return iter(self.things)
+
+class TableListing(Listing): pass
+
+class ModActionListing(TableListing): pass
+
+class WikiRevisionListing(TableListing): pass
 
 class LinkListing(Listing):
     def __init__(self, *a, **kw):
@@ -119,20 +133,23 @@ class SpotlightListing(Listing):
         Listing.__init__(self, *a, **kw)
         self.nextprev   = False
         self.show_nums  = True
-        self._max_num   = kw.get('max_num', 0)
-        self._max_score = kw.get('max_score', 0)
-        self.spotlight_links  = kw.get('spotlight_links', [])
-        self.visible_link = kw.get('visible_link', '')
+        self._parent_max_num   = kw.get('max_num', 0)
+        self._parent_max_score = kw.get('max_score', 0)
+        self.spotlight_items  = kw.get('spotlight_items', [])
+        self.visible_item = kw.get('visible_item', '')
 
     @property
     def max_score(self):
-        return self._max_score
+        return self._parent_max_score
+
+    @property
+    def max_num(self):
+        return self._parent_max_num
 
     def listing(self):
         res = Listing.listing(self)
-        # override score fields
-        res.max_num = self._max_num
-        res.max_score = self._max_score
+        # suppress item numbering
         for t in res.things:
             t.num = ""
+        self.lookup = {t._fullname : t for t in self.things}
         return res

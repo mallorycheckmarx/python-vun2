@@ -11,18 +11,36 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
-from pylons.controllers.util import redirect_to
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+from pylons.controllers.util import abort, redirect_to
 from r2.lib.base import BaseController
 from pylons import c
+from validator import chkuser, chksrname
 
 class RedirectController(BaseController):
     def GET_redirect(self, dest):
         return redirect_to(str(dest))
+
+    def GET_user_redirect(self, username):
+        user = chkuser(username)
+        if not user:
+            abort(400)
+        return redirect_to("/user/" + user, _code=301)
+
+    def GET_timereddit_redirect(self, timereddit, rest=None):
+        tr_name = chksrname(timereddit)
+        if not tr_name:
+            abort(400)
+        if rest:
+            rest = str(rest)
+        else:
+            rest = ''
+        return redirect_to("/r/t:%s/%s" % (tr_name, rest), _code=301)

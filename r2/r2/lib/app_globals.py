@@ -11,115 +11,216 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
-from __future__ import with_statement
-from pylons import config
-import pytz, os, logging, sys, socket, re, subprocess, random
-import signal
-from datetime import timedelta, datetime
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+from datetime import datetime
 from urlparse import urlparse
+import ConfigParser
 import json
-from pycassa.pool import ConnectionPool as PycassaConnectionPool
-from r2.lib.cache import LocalCache, SelfEmptyingCache
-from r2.lib.cache import CMemcache, StaleCacheChain
-from r2.lib.cache import HardCache, MemcacheChain, MemcacheChain, HardcacheChain
-from r2.lib.cache import CassandraCache, CassandraCacheChain, CacheChain, CL_ONE, CL_QUORUM
-from r2.lib.utils import thread_dump
-from r2.lib.db.stats import QueryStats
-from r2.lib.translation import get_active_langs
+import logging
+import os
+import signal
+import socket
+import subprocess
+import sys
+
+from sqlalchemy import engine, event
+import pytz
+
+from r2.config import queues
+from r2.lib.cache import (
+    CacheChain,
+    CassandraCache,
+    CassandraCacheChain,
+    CL_ONE,
+    CL_QUORUM,
+    CMemcache,
+    HardCache,
+    HardcacheChain,
+    LocalCache,
+    MemcacheChain,
+    SelfEmptyingCache,
+    StaleCacheChain,
+)
+from r2.lib.configparse import ConfigValue, ConfigValueParser
+from r2.lib.contrib import ipaddress
 from r2.lib.lock import make_lock_factory
 from r2.lib.manager import db_manager
+from r2.lib.plugin import PluginLoader
+from r2.lib.stats import Stats, CacheStats, StatsCollectingConnectionPool
+from r2.lib.translation import get_active_langs, I18N_PATH
+from r2.lib.utils import config_gold_price, thread_dump
+
+
+LIVE_CONFIG_NODE = "/config/live"
+
+
+def extract_live_config(config, plugins):
+    """Gets live config out of INI file and validates it according to spec."""
+
+    # ConfigParser will include every value in DEFAULT (which paste abuses)
+    # if we do this the way we're supposed to. sorry for the horribleness.
+    live_config = config._sections["live_config"].copy()
+    del live_config["__name__"]  # magic value used by ConfigParser
+
+    # parse the config data including specs from plugins
+    parsed = ConfigValueParser(live_config)
+    parsed.add_spec(Globals.live_config_spec)
+    for plugin in plugins:
+        parsed.add_spec(plugin.live_config)
+
+    return parsed
+
 
 class Globals(object):
+    spec = {
 
-    int_props = ['db_pool_size',
-                 'db_pool_overflow_size',
-                 'page_cache_time',
-                 'solr_cache_time',
-                 'num_mc_clients',
-                 'MIN_DOWN_LINK',
-                 'MIN_UP_KARMA',
-                 'MIN_DOWN_KARMA',
-                 'MIN_RATE_LIMIT_KARMA',
-                 'MIN_RATE_LIMIT_COMMENT_KARMA',
-                 'VOTE_AGE_LIMIT',
-                 'REPLY_AGE_LIMIT',
-                 'WIKI_KARMA',
-                 'HOT_PAGE_AGE',
-                 'MODWINDOW',
-                 'RATELIMIT',
-                 'QUOTA_THRESHOLD',
-                 'LOGANS_RUN_LOW',
-                 'LOGANS_RUN_HIGH',
-                 'num_comments',
-                 'max_comments',
-                 'max_comments_gold',
-                 'num_default_reddits',
-                 'num_query_queue_workers',
-                 'max_sr_images',
-                 'num_serendipity',
-                 'sr_dropdown_threshold',
-                 'comment_visits_period',
-                  'min_membership_create_community',
-                 ]
+        ConfigValue.int: [
+            'db_pool_size',
+            'db_pool_overflow_size',
+            'page_cache_time',
+            'commentpane_cache_time',
+            'num_mc_clients',
+            'MIN_DOWN_LINK',
+            'MIN_UP_KARMA',
+            'MIN_DOWN_KARMA',
+            'MIN_RATE_LIMIT_KARMA',
+            'MIN_RATE_LIMIT_COMMENT_KARMA',
+            'VOTE_AGE_LIMIT',
+            'REPLY_AGE_LIMIT',
+            'REPORT_AGE_LIMIT',
+            'HOT_PAGE_AGE',
+            'RATELIMIT',
+            'QUOTA_THRESHOLD',
+            'ADMIN_COOKIE_TTL',
+            'ADMIN_COOKIE_MAX_IDLE',
+            'OTP_COOKIE_TTL',
+            'num_comments',
+            'max_comments',
+            'max_comments_gold',
+            'num_default_reddits',
+            'num_query_queue_workers',
+            'max_sr_images',
+            'num_serendipity',
+            'sr_dropdown_threshold',
+            'comment_visits_period',
+            'min_membership_create_community',
+            'bcrypt_work_factor',
+            'cassandra_pool_size',
+            'sr_banned_quota',
+            'sr_wikibanned_quota',
+            'sr_wikicontributor_quota',
+            'sr_moderator_quota',
+            'sr_contributor_quota',
+            'sr_quota_time',
+            'wiki_keep_recent_days',
+            'wiki_max_page_length_bytes',
+            'wiki_max_page_name_length',
+            'wiki_max_page_separators',
+        ],
 
-    float_props = ['min_promote_bid',
-                   'max_promote_bid',
-                   'usage_sampling',
-                   ]
+        ConfigValue.float: [
+            'min_promote_bid',
+            'max_promote_bid',
+            'statsd_sample_rate',
+            'querycache_prune_chance',
+        ],
 
-    bool_props = ['debug', 'translator',
-                  'log_start',
-                  'sqlprinting',
-                  'template_debug',
-                  'uncompressedJS',
-                  'enable_doquery',
-                  'use_query_cache',
-                  'write_query_queue',
-                  'css_killswitch',
-                  'db_create_tables',
-                  'disallow_db_writes',
-                  'exception_logging',
-                  'amqp_logging',
-                  'read_only_mode',
-                  'frontpage_dart',
-                  'allow_wiki_editing',
-                  'heavy_load_mode',
-                  'disable_captcha',
-                  'disable_ads',
-                  ]
+        ConfigValue.bool: [
+            'debug',
+            'translator',
+            'log_start',
+            'sqlprinting',
+            'template_debug',
+            'reload_templates',
+            'uncompressedJS',
+            'enable_doquery',
+            'use_query_cache',
+            'write_query_queue',
+            'css_killswitch',
+            'db_create_tables',
+            'disallow_db_writes',
+            'exception_logging',
+            'disable_ratelimit',
+            'amqp_logging',
+            'read_only_mode',
+            'wiki_disabled',
+            'heavy_load_mode',
+            's3_media_direct',
+            'disable_captcha',
+            'disable_ads',
+            'disable_require_admin_otp',
+            'static_pre_gzipped',
+            'static_secure_pre_gzipped',
+            'trust_local_proxies',
+            'shard_link_vote_queues',
+        ],
 
-    tuple_props = ['stalecaches',
-                   'memcaches',
-                   'permacache_memcaches',
-                   'rendercaches',
-                   'servicecaches',
-                   'cassandra_seeds',
-                   'admins',
-                   'sponsors',
-                   'monitored_servers',
-                   'automatic_reddits',
-                   'agents',
-                   'allowed_css_linked_domains',
-                   'authorized_cnames',
-                   'hardcache_categories',
-                   'proxy_addr',
-                   'allowed_pay_countries',
-                   'case_sensitive_domains']
+        ConfigValue.tuple: [
+            'plugins',
+            'stalecaches',
+            'memcaches',
+            'lockcaches',
+            'permacache_memcaches',
+            'rendercaches',
+            'cassandra_seeds',
+            'admins',
+            'sponsors',
+            'automatic_reddits',
+            'agents',
+            'allowed_css_linked_domains',
+            'authorized_cnames',
+            'hardcache_categories',
+            's3_media_buckets',
+            'allowed_pay_countries',
+            'case_sensitive_domains',
+            'reserved_subdomains',
+        ],
 
-    choice_props = {'cassandra_rcl': {'ONE':    CL_ONE,
-                                      'QUORUM': CL_QUORUM},
-                    'cassandra_wcl': {'ONE':    CL_ONE,
-                                      'QUORUM': CL_QUORUM},
-                    }
+        ConfigValue.choice: {
+             'cassandra_rcl': {
+                 'ONE': CL_ONE,
+                 'QUORUM': CL_QUORUM
+             },
+             'cassandra_wcl': {
+                 'ONE': CL_ONE,
+                 'QUORUM': CL_QUORUM
+             },
+        },
 
+        ConfigValue.days: [
+            'MODWINDOW',
+        ],
+
+        config_gold_price: [
+            'gold_month_price',
+            'gold_year_price',
+        ],
+    }
+
+    live_config_spec = {
+        ConfigValue.bool: [
+            'frontpage_dart',
+        ],
+        ConfigValue.float: [
+            'spotlight_interest_sub_p',
+            'spotlight_interest_nosub_p',
+        ],
+        ConfigValue.tuple: [
+            'sr_discovery_links',
+            'fastlane_links',
+        ],
+        ConfigValue.dict(ConfigValue.int, ConfigValue.float): [
+            'comment_tree_version_weights',
+        ],
+    }
 
     def __init__(self, global_conf, app_conf, paths, **extra):
         """
@@ -149,32 +250,23 @@ class Globals(object):
 
         global_conf.setdefault("debug", False)
 
-        # slop over all variables to start with
-        for k, v in  global_conf.iteritems():
-            if not k.startswith("_") and not hasattr(self, k):
-                if k in self.int_props:
-                    v = int(v)
-                elif k in self.float_props:
-                    v = float(v)
-                elif k in self.bool_props:
-                    v = self.to_bool(v)
-                elif k in self.tuple_props:
-                    v = tuple(self.to_iter(v))
-                elif k in self.choice_props:
-                    if v not in self.choice_props[k]:
-                        raise ValueError("Unknown option for %r: %r not in %r"
-                                         % (k, v, self.choice_props[k]))
-                    v = self.choice_props[k][v]
-                setattr(self, k, v)
+        self.config = ConfigValueParser(global_conf)
+        self.config.add_spec(self.spec)
+        self.plugins = PluginLoader(self.config.get("plugins", []))
+
+        self.stats = Stats(self.config.get('statsd_addr'),
+                           self.config.get('statsd_sample_rate'))
+        self.startup_timer = self.stats.get_timer("app_startup")
+        self.startup_timer.start()
 
         self.paths = paths
 
         self.running_as_script = global_conf.get('running_as_script', False)
         
         # turn on for language support
-        if not hasattr(self, 'lang'): self.lang = 'en'
+        self.lang = getattr(self, 'site_lang', 'en')
         self.languages, self.lang_name = \
-                        get_active_langs(default_lang= self.lang)
+            get_active_langs(default_lang=self.lang)
 
         all_languages = self.lang_name.keys()
         all_languages.sort()
@@ -187,105 +279,47 @@ class Globals(object):
         dtz = global_conf.get('display_timezone', tz)
         self.display_tz = pytz.timezone(dtz)
 
-    def setup(self, global_conf):
+        self.startup_timer.intermediate("init")
+
+    def __getattr__(self, name):
+        if not name.startswith('_') and name in self.config:
+            return self.config[name]
+        else:
+            raise AttributeError
+
+    def setup(self):
+        self.queues = queues.declare_queues(self)
+
+        ################# CONFIGURATION
+        # AMQP is required
+        if not self.amqp_host:
+            raise ValueError("amqp_host not set in the .ini")
+
+        # This requirement doesn't *have* to be a requirement, but there are
+        # bugs at the moment that will pop up if you violate it
+        # XXX: get rid of these options. new query cache is always on.
+        if self.write_query_queue and not self.use_query_cache:
+            raise Exception("write_query_queue requires use_query_cache")
+
+        if not self.cassandra_seeds:
+            raise ValueError("cassandra_seeds not set in the .ini")
+
         # heavy load mode is read only mode with a different infobar
         if self.heavy_load_mode:
             self.read_only_mode = True
 
-        if hasattr(signal, 'SIGUSR1'):
-            # not all platforms have user signals
-            signal.signal(signal.SIGUSR1, thread_dump)
-
-        # initialize caches. Any cache-chains built here must be added
-        # to cache_chains (closed around by reset_caches) so that they
-        # can properly reset their local components
-
-        localcache_cls = (SelfEmptyingCache if self.running_as_script
-                          else LocalCache)
-        num_mc_clients = self.num_mc_clients
-
-        self.cache_chains = []
-
-        self.memcache = CMemcache(self.memcaches, num_clients = num_mc_clients)
-        self.make_lock = make_lock_factory(self.memcache)
-
-        if not self.cassandra_seeds:
-            raise ValueError("cassandra_seeds not set in the .ini")
-        self.cassandra = PycassaConnectionPool('reddit',
-                                               server_list = self.cassandra_seeds,
-                                               pool_size = len(self.cassandra_seeds),
-                                               # TODO: .ini setting
-                                               timeout=15, max_retries=3,
-                                               prefill=False)
-        perma_memcache = (CMemcache(self.permacache_memcaches, num_clients = num_mc_clients)
-                          if self.permacache_memcaches
-                          else None)
-        self.permacache = CassandraCacheChain(localcache_cls(),
-                                              CassandraCache('permacache',
-                                                             self.cassandra,
-                                                             read_consistency_level = self.cassandra_rcl,
-                                                             write_consistency_level = self.cassandra_wcl),
-                                              memcache = perma_memcache,
-                                              lock_factory = self.make_lock)
-
-        self.cache_chains.append(self.permacache)
-
-        # hardcache is done after the db info is loaded, and then the
-        # chains are reset to use the appropriate initial entries
-
-        if self.stalecaches:
-            self.cache = StaleCacheChain(localcache_cls(),
-                                         CMemcache(self.stalecaches, num_clients=num_mc_clients),
-                                         self.memcache)
-        else:
-            self.cache = MemcacheChain((localcache_cls(), self.memcache))
-        self.cache_chains.append(self.cache)
-
-        self.rendercache = MemcacheChain((localcache_cls(),
-                                          CMemcache(self.rendercaches,
-                                                    noreply=True, no_block=True,
-                                                    num_clients = num_mc_clients)))
-        self.cache_chains.append(self.rendercache)
-
-        self.servicecache = MemcacheChain((localcache_cls(),
-                                           CMemcache(self.servicecaches,
-                                                     num_clients = num_mc_clients)))
-        self.cache_chains.append(self.servicecache)
-
-        self.thing_cache = CacheChain((localcache_cls(),))
-        self.cache_chains.append(self.thing_cache)
-
-        #load the database info
-        self.dbm = self.load_db_params(global_conf)
-
-        # can't do this until load_db_params() has been called
-        self.hardcache = HardcacheChain((localcache_cls(),
-                                         self.memcache,
-                                         HardCache(self)),
-                                        cache_negative_results = True)
-        self.cache_chains.append(self.hardcache)
-
-        # I know this sucks, but we need non-request-threads to be
-        # able to reset the caches, so we need them be able to close
-        # around 'cache_chains' without being able to call getattr on
-        # 'g'
-        cache_chains = self.cache_chains[::]
-        def reset_caches():
-            for chain in cache_chains:
-                chain.reset()
-
-        self.reset_caches = reset_caches
-        self.reset_caches()
-
-        #make a query cache
-        self.stats_collector = QueryStats()
-
-        # set the modwindow
-        self.MODWINDOW = timedelta(self.MODWINDOW)
-
-        self.REDDIT_MAIN = bool(os.environ.get('REDDIT_MAIN'))
-
+        origin_prefix = self.domain_prefix + "." if self.domain_prefix else ""
+        self.origin = "http://" + origin_prefix + self.domain
         self.secure_domains = set([urlparse(self.payment_domain).netloc])
+
+        self.trusted_domains = set([self.domain])
+        self.trusted_domains.update(self.authorized_cnames)
+        if self.https_endpoint:
+            https_url = urlparse(self.https_endpoint)
+            self.secure_domains.add(https_url.netloc)
+            self.trusted_domains.add(https_url.hostname)
+        if getattr(self, 'oauth_domain', None):
+            self.secure_domains.add(self.oauth_domain)
 
         # load the unique hashed names of files under static
         static_files = os.path.join(self.paths.get('static_files'), 'static')
@@ -295,18 +329,6 @@ class Globals(object):
                 self.static_names = json.load(handle)
         else:
             self.static_names = {}
-
-        #set up the logging directory
-        log_path = self.log_path
-        process_iden = global_conf.get('scgi_port', 'default')
-        self.reddit_port = process_iden
-        if log_path:
-            if not os.path.exists(log_path):
-                os.makedirs(log_path)
-            for fname in os.listdir(log_path):
-                if fname.startswith(process_iden):
-                    full_name = os.path.join(log_path, fname)
-                    os.remove(full_name)
 
         #setup the logger
         self.log = logging.getLogger('reddit')
@@ -325,27 +347,6 @@ class Globals(object):
             print ("Warning: g.media_domain == g.domain. " +
                    "This may give untrusted content access to user cookies")
 
-        #read in our CSS so that it can become a default for subreddit
-        #stylesheets
-        stylesheet_path = os.path.join(self.paths.get('static_files'),
-                                       self.static_path.lstrip('/'),
-                                       self.stylesheet)
-        with open(stylesheet_path) as s:
-            self.default_stylesheet = s.read()
-
-        self.profanities = None
-        if self.profanity_wordlist and os.path.exists(self.profanity_wordlist):
-            with open(self.profanity_wordlist, 'r') as handle:
-                words = []
-                for line in handle:
-                    words.append(line.strip(' \n\r'))
-                if words:
-                    self.profanities = re.compile(r"\b(%s)\b" % '|'.join(words),
-                                              re.I | re.U)
-
-        self.reddit_host = socket.gethostname()
-        self.reddit_pid  = os.getpid()
-
         for arg in sys.argv:
             tokens = arg.split("=")
             if len(tokens) == 2:
@@ -353,60 +354,221 @@ class Globals(object):
                 self.log.debug("Overriding g.%s to %s" % (k, v))
                 setattr(self, k, v)
 
-        #the shutdown toggle
-        self.shutdown = False
+        self.reddit_host = socket.gethostname()
+        self.reddit_pid  = os.getpid()
 
-        #if we're going to use the query_queue, we need amqp
-        if self.write_query_queue and not self.amqp_host:
-            raise Exception("amqp_host must be defined to use the query queue")
+        if hasattr(signal, 'SIGUSR1'):
+            # not all platforms have user signals
+            signal.signal(signal.SIGUSR1, thread_dump)
 
-        # This requirement doesn't *have* to be a requirement, but there are
-        # bugs at the moment that will pop up if you violate it
-        if self.write_query_queue and not self.use_query_cache:
-            raise Exception("write_query_queue requires use_query_cache")
+        self.startup_timer.intermediate("configuration")
 
-        # try to set the source control revision number
-        try:
-            popen = subprocess.Popen(["git", "log", "--date=short",
-                                      "--pretty=format:%H %h", '-n1'],
-                                     stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE)
-            resp, stderrdata = popen.communicate()
-            resp = resp.strip().split(' ')
-            self.version, self.short_version = resp
-        except object, e:
-            self.log.info("Couldn't read source revision (%r)" % e)
-            self.version = self.short_version = '(unknown)'
+        ################# ZOOKEEPER
+        # for now, zookeeper will be an optional part of the stack.
+        # if it's not configured, we will grab the expected config from the
+        # [live_config] section of the ini file
+        zk_hosts = self.config.get("zookeeper_connection_string")
+        if zk_hosts:
+            from r2.lib.zookeeper import (connect_to_zookeeper,
+                                          LiveConfig, LiveList)
+            zk_username = self.config["zookeeper_username"]
+            zk_password = self.config["zookeeper_password"]
+            self.zookeeper = connect_to_zookeeper(zk_hosts, (zk_username,
+                                                             zk_password))
+            self.live_config = LiveConfig(self.zookeeper, LIVE_CONFIG_NODE)
+            self.throttles = LiveList(self.zookeeper, "/throttles",
+                                      map_fn=ipaddress.ip_network,
+                                      reduce_fn=ipaddress.collapse_addresses)
+        else:
+            self.zookeeper = None
+            parser = ConfigParser.RawConfigParser()
+            parser.read([self.config["__file__"]])
+            self.live_config = extract_live_config(parser, self.plugins)
+            self.throttles = tuple()  # immutable since it's not real
+        self.startup_timer.intermediate("zookeeper")
+
+        ################# MEMCACHE
+        num_mc_clients = self.num_mc_clients
+
+        # the main memcache pool. used for most everything.
+        self.memcache = CMemcache(self.memcaches, num_clients=num_mc_clients)
+
+        # a smaller pool of caches used only for distributed locks.
+        # TODO: move this to ZooKeeper
+        self.lock_cache = CMemcache(self.lockcaches,
+                                    num_clients=num_mc_clients)
+        self.make_lock = make_lock_factory(self.lock_cache, self.stats)
+
+        # memcaches used in front of the permacache CF in cassandra.
+        # XXX: this is a legacy thing; permacache was made when C* didn't have
+        # a row cache.
+        if self.permacache_memcaches:
+            permacache_memcaches = CMemcache(self.permacache_memcaches,
+                                             num_clients=num_mc_clients)
+        else:
+            permacache_memcaches = None
+
+        # the stalecache is a memcached local to the current app server used
+        # for data that's frequently fetched but doesn't need to be fresh.
+        if self.stalecaches:
+            stalecaches = CMemcache(self.stalecaches,
+                                    num_clients=num_mc_clients)
+        else:
+            stalecaches = None
+
+        # rendercache holds rendered partial templates as well as fully
+        # cached pages.
+        rendercaches = CMemcache(
+            self.rendercaches,
+            noreply=True,
+            no_block=True,
+            num_clients=num_mc_clients,
+        )
+
+        self.startup_timer.intermediate("memcache")
+
+        ################# CASSANDRA
+        keyspace = "reddit"
+        self.cassandra_pools = {
+            "main":
+                StatsCollectingConnectionPool(
+                    keyspace,
+                    stats=self.stats,
+                    logging_name="main",
+                    server_list=self.cassandra_seeds,
+                    pool_size=self.cassandra_pool_size,
+                    timeout=4,
+                    max_retries=3,
+                    prefill=False
+                ),
+        }
+
+        permacache_cf = CassandraCache(
+            'permacache',
+            self.cassandra_pools[self.cassandra_default_pool],
+            read_consistency_level=self.cassandra_rcl,
+            write_consistency_level=self.cassandra_wcl
+        )
+
+        self.startup_timer.intermediate("cassandra")
+
+        ################# POSTGRES
+        event.listens_for(engine.Engine, 'before_cursor_execute')(
+            self.stats.pg_before_cursor_execute)
+        event.listens_for(engine.Engine, 'after_cursor_execute')(
+            self.stats.pg_after_cursor_execute)
+
+        self.dbm = self.load_db_params()
+        self.startup_timer.intermediate("postgres")
+
+        ################# CHAINS
+        # initialize caches. Any cache-chains built here must be added
+        # to cache_chains (closed around by reset_caches) so that they
+        # can properly reset their local components
+        self.cache_chains = {}
+        localcache_cls = (SelfEmptyingCache if self.running_as_script
+                          else LocalCache)
+
+        if stalecaches:
+            self.cache = StaleCacheChain(
+                localcache_cls(),
+                stalecaches,
+                self.memcache,
+            )
+        else:
+            self.cache = MemcacheChain((localcache_cls(), self.memcache))
+        self.cache_chains.update(cache=self.cache)
+
+        self.rendercache = MemcacheChain((
+            localcache_cls(),
+            rendercaches,
+        ))
+        self.cache_chains.update(rendercache=self.rendercache)
+
+        # the thing_cache is used in tdb_cassandra.
+        self.thing_cache = CacheChain((localcache_cls(),))
+        self.cache_chains.update(thing_cache=self.thing_cache)
+
+        self.permacache = CassandraCacheChain(
+            localcache_cls(),
+            permacache_cf,
+            memcache=permacache_memcaches,
+            lock_factory=self.make_lock,
+        )
+        self.cache_chains.update(permacache=self.permacache)
+
+        # hardcache is used for various things that tend to expire
+        # TODO: replace hardcache w/ cassandra stuff
+        self.hardcache = HardcacheChain(
+            (localcache_cls(), self.memcache, HardCache(self)),
+            cache_negative_results=True,
+        )
+        self.cache_chains.update(hardcache=self.hardcache)
+
+        # I know this sucks, but we need non-request-threads to be
+        # able to reset the caches, so we need them be able to close
+        # around 'cache_chains' without being able to call getattr on
+        # 'g'
+        cache_chains = self.cache_chains.copy()
+        def reset_caches():
+            for name, chain in cache_chains.iteritems():
+                chain.reset()
+                chain.stats = CacheStats(self.stats, name)
+
+        self.reset_caches = reset_caches
+        self.reset_caches()
+
+        self.startup_timer.intermediate("cache_chains")
+
+        # try to set the source control revision numbers
+        self.versions = {}
+        r2_root = os.path.dirname(os.path.dirname(self.paths["root"]))
+        r2_gitdir = os.path.join(r2_root, ".git")
+        self.short_version = self.record_repo_version("r2", r2_gitdir)
+
+        if I18N_PATH:
+            i18n_git_path = os.path.join(os.path.dirname(I18N_PATH), ".git")
+            self.record_repo_version("i18n", i18n_git_path)
+
+        self.startup_timer.intermediate("revisions")
+
+    def setup_complete(self):
+        self.startup_timer.stop()
+        self.stats.flush()
 
         if self.log_start:
-            self.log.error("reddit app %s:%s started %s at %s" %
-                           (self.reddit_host, self.reddit_pid,
-                            self.short_version, datetime.now()))
+            self.log.error(
+                "%s:%s started %s at %s (took %.02fs)",
+                self.reddit_host,
+                self.reddit_pid,
+                self.short_version,
+                datetime.now().strftime("%H:%M:%S"),
+                self.startup_timer.elapsed_seconds()
+            )
 
-        if self.LOGANS_RUN_LOW:
-            minutes_to_live = random.randint(self.LOGANS_RUN_LOW,
-                                             self.LOGANS_RUN_HIGH)
-            self.logans_run_limit = datetime.now(self.tz) + timedelta(0,
-                                                 minutes_to_live * 60)
-            disptime = self.logans_run_limit.astimezone(self.display_tz)
-            self.log.info("Will shut down at %s (%d minutes from now)" %
-                (disptime.strftime("%H:%M:%S"), minutes_to_live))
+    def record_repo_version(self, repo_name, git_dir):
+        """Get the currently checked out git revision for a given repository,
+        record it in g.versions, and return the short version of the hash."""
+        try:
+            subprocess.check_output
+        except AttributeError:
+            # python 2.6 compat
+            pass
         else:
-            self.logans_run_limit = None
+            try:
+                revision = subprocess.check_output(["git",
+                                                    "--git-dir", git_dir,
+                                                    "rev-parse", "HEAD"])
+            except subprocess.CalledProcessError, e:
+                self.log.warning("Unable to fetch git revision: %r", e)
+            else:
+                self.versions[repo_name] = revision.rstrip()
+                return revision[:7]
 
+        return "(unknown)"
 
-    @staticmethod
-    def to_bool(x):
-        return (x.lower() == 'true') if x else None
-
-    @staticmethod
-    def to_iter(v, delim = ','):
-        return (x.strip() for x in v.split(delim) if x)
-
-    def load_db_params(self, gc):
-        from r2.lib.services import get_db_load
-
-        self.databases = tuple(self.to_iter(gc['databases']))
+    def load_db_params(self):
+        self.databases = tuple(ConfigValue.to_iter(self.config.raw_data['databases']))
         self.db_params = {}
         if not self.databases:
             return
@@ -415,7 +577,7 @@ class Globals(object):
         db_param_names = ('name', 'db_host', 'db_user', 'db_pass', 'db_port',
                           'pool_size', 'max_overflow')
         for db_name in self.databases:
-            conf_params = self.to_iter(gc[db_name + '_db'])
+            conf_params = ConfigValue.to_iter(self.config.raw_data[db_name + '_db'])
             params = dict(zip(db_param_names, conf_params))
             if params['db_user'] == "*":
                 params['db_user'] = self.db_user
@@ -429,34 +591,51 @@ class Globals(object):
             if params['max_overflow'] == "*":
                 params['max_overflow'] = self.db_pool_overflow_size
 
-            ip = params['db_host']
-            ip_loads = get_db_load(self.servicecache, ip)
-            if ip not in ip_loads or ip_loads[ip][0] < 1000:
-                dbm.setup_db(db_name, g_override=self, **params)
+            dbm.setup_db(db_name, g_override=self, **params)
             self.db_params[db_name] = params
 
-        dbm.type_db = dbm.get_engine(gc['type_db'])
-        dbm.relation_type_db = dbm.get_engine(gc['rel_type_db'])
+        dbm.type_db = dbm.get_engine(self.config.raw_data['type_db'])
+        dbm.relation_type_db = dbm.get_engine(self.config.raw_data['rel_type_db'])
 
-        def split_flags(p):
-            return ([n for n in p if not n.startswith("!")],
-                    dict((n.strip('!'), True) for n in p if n.startswith("!")))
+        def split_flags(raw_params):
+            params = []
+            flags = {}
+
+            for param in raw_params:
+                if not param.startswith("!"):
+                    params.append(param)
+                else:
+                    key, sep, value = param[1:].partition("=")
+                    if sep:
+                        flags[key] = value
+                    else:
+                        flags[key] = True
+
+            return params, flags
 
         prefix = 'db_table_'
-        for k, v in gc.iteritems():
-            if k.startswith(prefix):
-                params = list(self.to_iter(v))
-                name = k[len(prefix):]
-                kind = params[0]
-                if kind == 'thing':
-                    engines, flags = split_flags(params[1:])
-                    dbm.add_thing(name, dbm.get_engines(engines),
-                                  **flags)
-                elif kind == 'relation':
-                    engines, flags = split_flags(params[3:])
-                    dbm.add_relation(name, params[1], params[2],
-                                     dbm.get_engines(engines),
-                                     **flags)
+        self.predefined_type_ids = {}
+        for k, v in self.config.raw_data.iteritems():
+            if not k.startswith(prefix):
+                continue
+
+            params, table_flags = split_flags(ConfigValue.to_iter(v))
+            name = k[len(prefix):]
+            kind = params[0]
+            server_list = self.config.raw_data["db_servers_" + name]
+            engines, flags = split_flags(ConfigValue.to_iter(server_list))
+
+            typeid = table_flags.get("typeid")
+            if typeid:
+                self.predefined_type_ids[name] = int(typeid)
+
+            if kind == 'thing':
+                dbm.add_thing(name, dbm.get_engines(engines),
+                              **flags)
+            elif kind == 'relation':
+                dbm.add_relation(name, params[1], params[2],
+                                 dbm.get_engines(engines),
+                                 **flags)
         return dbm
 
     def __del__(self):
@@ -465,4 +644,3 @@ class Globals(object):
         here.
         """
         pass
-

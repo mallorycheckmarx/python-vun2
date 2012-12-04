@@ -4,29 +4,30 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%!
-   from r2.lib.template_helpers import static, s3_https_if_secure
+   from r2.lib.template_helpers import static, s3_https_if_secure, add_sr
    from r2.models import Sub, FakeSubreddit
    from r2.models.subreddit import DefaultSR
    from r2.lib.pages import SearchForm
+   from r2.lib import authentication
 %>
-<%namespace file="utils.html" import="plain_link, text_with_js, img_link, separator, logout"/>
+<%namespace file="utils.html" import="plain_link, img_link, text_with_links, separator, logout"/>
 
 <div id="header">
   <a tabindex="1" href="#content" id="jumpToContent">${_('jump to content')}</a>
@@ -34,15 +35,24 @@
   <div id="header-bottom-${'right' if c.lang_rtl else 'left'}">
     <%
         header_title = c.site.header_title
-        if c.site.header and c.allow_styles:
+        d = DefaultSR()
+        if c.site.header and c.can_apply_styles and c.allow_styles:
             header_img = c.site.header
+            header_size = c.site.header_size
         else:
-            d = DefaultSR()
             header_img = d.header
+            header_size = d.header_size
             header_title = d.header_title
     %>
-    ${img_link(c.site.name, s3_https_if_secure(header_img), '/', _id = "header-img-a", img_id = 'header-img', title = header_title)}
-
+    
+    % if header_img != g.default_header_url:
+        ${img_link(c.site.name, s3_https_if_secure(header_img),
+            '/', _id="header-img-a", img_id='header-img',
+            title=header_title, size=header_size)}
+    % else:
+        <a href="/" id="header-img" class="default-header" title="${header_title}">${g.domain}</a>
+    % endif
+    
     ##keeps the height of the header from varying when there isnt any content
     &nbsp;
 
@@ -55,86 +65,58 @@
     %if not c.user_is_loggedin:
       %if thing.enable_login_cover and not g.read_only_mode:
       <span class="user">
-        ${text_with_js(_("want to join? %(register)s in seconds"),
-                          register=(_("register"), "return showcover(false);"))}
+        <%
+          base = g.https_endpoint if not c.cname else ""
+          login_url = add_sr(base + "/login", sr_path=False)
+        %>
+        ${text_with_links(_("want to join? %(login_or_register)s in seconds"),
+            login_or_register = dict(link_text=_("login or register"), path=login_url, _class="login-required"))}
       </span>
       ${separator("|")}
       %endif
     %else:
       <span class="user">
          ${plain_link(c.user.name, "/user/%s/" % c.user.name, _sr_path=False)}
-         &nbsp;(<b>${c.user.safe_karma}</b>)
+         &nbsp;(<span class="userkarma" title="${_("link karma")}">${c.user.safe_karma}</span>)
       </span>
 
       ${separator("|")}
 
       <%
-         mail_img ="mail"
          if c.have_messages:
-           mail_img += ".png"
            mail_img_class = 'havemail'
            mail_img_title = "new mail!"
            mail_path = "/message/unread/"
          else:
-           mail_img += "gray.png"
            mail_img_class = 'nohavemail'
            mail_img_title = "no new mail"
            mail_path = "/message/inbox/"
-         mail_img = static(mail_img)
        %>
-      ${img_link(_("messages"), mail_img, path=mail_path,
-                 alt = mail_img_title, title = mail_img_title, 
+      ${plain_link(_("messages"), path=mail_path,
+                 title = mail_img_title, _sr_path = False,
                  _id = "mail", _class=mail_img_class)}
       ${separator("|")}
       %if c.show_mod_mail:
          <%
-            mail_img ="modmail"
             if c.have_mod_messages:
-              mail_img += ".png"
               mail_img_class = 'havemail'
-              mail_img_title = "new mail!"
+              mail_img_title = "new mod mail!"
               mail_path = "/message/moderator/"
             else:
-              mail_img += "gray.png"
               mail_img_class = 'nohavemail'
-              mail_img_title = "no new mail"
+              mail_img_title = "no new mod mail"
               mail_path = "/message/moderator/"
-            mail_img = static(mail_img)
           %>
-         ${img_link(_("mod messages"), mail_img , path=mail_path,
-                    alt = mail_img_title, title = mail_img_title, 
+         ${plain_link(_("mod messages"), path=mail_path,
+                    title = mail_img_title, _sr_path = False,
                     _id = "modmail", _class=mail_img_class)}
          ${separator("|")}
       %endif
     %endif
     ${thing.corner_buttons()}
-    %if c.user_is_loggedin:
+    %if c.user_is_loggedin and authentication.user_can_log_out():
       ${separator("|")}
       ${logout()}
     %endif
   </div>
-</div>
-
-<div class="preload">
-## everything in here will get rendered off screen for pre-fetching purposes.
-  <div class="arrow up"></div>
-  <div class="arrow upmod"></div>
-  <div class="arrow down"></div>
-  <div class="arrow downmod"></div>
-  <div class="eb-sch"></div>
-  <div class="eb-se"></div>
-  <div class="eb-seh"></div>
-  <div class="eb-vch"></div>
-  <div class="eb-ve"></div>
-  <div class="eb-veh"></div>
-  <div class="morelink nub"></div>
-  <div class="mlh"></div>
-  <div class="mlhn"></div>
-  <div class="sidebox gold"><div class="morelink"></div></div>
-  <a class="pretty-button negative"></a>
-  <a class="pretty-button negative pressed"></a>
-  <a class="pretty-button positive"></a>
-  <a class="pretty-button positive pressed"></a>
-## Be careful when adding things here: If all users try to get the new images
-## at once, they'll crush the static servers!
 </div>

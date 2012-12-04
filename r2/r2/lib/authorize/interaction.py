@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from api import *
 from pylons import g
 from r2.models.bidding import Bid
@@ -116,7 +117,7 @@ def auth_transaction(amount, user, payid, thing, campaign, test = None):
         return bid.transaction, ""
 
     elif int(payid) in PayID.get_ids(user):
-        order = Order(invoiceNumber = "%dT%d" % (user._id, thing._id))
+        order = Order(invoiceNumber = "T%dC%d" % (thing._id, campaign))
         success, res = _make_transaction(ProfileTransAuthOnly,
                                          amount, user, payid,
                                          order = order, test = test)
@@ -132,11 +133,13 @@ def auth_transaction(amount, user, payid, thing, campaign, test = None):
             return auth_transaction(amount, user, -1, thing, test = test)
         # duplicate transaction, which is bad, but not horrible.  Log
         # the transaction id, creating a new bid if necessary. 
-        elif (res.response_code, res.response_reason_code) == (3,11):
+        elif res.trans_id and (res.response_code, res.response_reason_code) == (3,11):
+            g.log.error("Authorize.net duplicate trans %d on campaign %d" % 
+                        (res.trans_id, campaign))
             try:
-                Bid.one(res.trans_id)
+                Bid.one(res.trans_id, campaign=campaign)
             except NotFound:
-                Bid._new(res.trans_id, user, payid, thing._id, amount)
+                Bid._new(res.trans_id, user, payid, thing._id, amount, campaign)
         return res.trans_id, res.response_reason_text
 
 
@@ -152,6 +155,7 @@ def void_transaction(user, trans_id, campaign, test = None):
 
 
 def is_charged_transaction(trans_id, campaign):
+    if not trans_id: return False # trans_id == 0 means no bid
     bid =  Bid.one(transaction = trans_id, campaign = campaign)
     return bid.is_charged()
 
@@ -171,28 +175,3 @@ def charge_transaction(user, trans_id, campaign, test = None):
 
     # already charged
     return True
-
-
-#def refund_transaction(amount, user, trans_id, campaign, test = None):
-#    bid =  Bid.one(transaction = trans_id, campaign = campaign)
-#    if trans_id > 0:
-#        # create a new bid to identify the refund
-#        success, res = _make_transaction(ProfileTransRefund,
-#                                         amount, user, bid.pay_id,
-#                                         trans_id = trans_id,
-#                                         test = test)
-#        if success:
-#            bid = Bid._new(res.trans_id, user, -1, bid.thing_id, amount)
-#            bid.refund()
-#            return bool(res.trans_id)
-
-def get_transactions(*trans_keys):
-    from sqlalchemy import and_, or_
-
-    if trans_keys:
-        f = or_(*[and_(Bid.transaction == trans_id, Bid.campaign == camp)
-                  for trans_id, camp in trans_keys])
-        q = Bid.query()
-        q = q.filter(f)
-        return dict(((p.transaction, p.campaign), p) for p in q)
-    return {}

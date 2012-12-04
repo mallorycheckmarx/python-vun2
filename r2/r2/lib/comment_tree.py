@@ -11,22 +11,24 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
-from pylons import g
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+from pylons import g, c
 from itertools import chain
-from r2.lib.utils import tup, to36
+from r2.lib.utils import SimpleSillyStub, tup, to36
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.cache import sgm
-from r2.models.link import Link
+from r2.models.comment_tree import CommentTree
+from r2.models.link import Comment, Link
 
-MAX_ITERATIONS = 20000
+MAX_ITERATIONS = 50000
 
 def comments_key(link_id):
     return 'comments_' + str(link_id)
@@ -47,6 +49,7 @@ def _get_sort_value(comment, sort):
     return getattr(comment, sort)
 
 def add_comments(comments):
+    links = Link._byID([com.link_id for com in tup(comments)], data=True)
     comments = tup(comments)
 
     link_map = {}
@@ -54,84 +57,26 @@ def add_comments(comments):
         link_map.setdefault(com.link_id, []).append(com)
 
     for link_id, coms in link_map.iteritems():
+        link = links[link_id]
+        timer = g.stats.get_timer('comment_tree.add.%s'
+                                  % link.comment_tree_version)
+        timer.start()
         try:
-            with g.make_lock(lock_key(link_id)):
-                add_comments_nolock(link_id, coms)
+            with CommentTree.mutation_context(link):
+                timer.intermediate('lock')
+                cache = get_comment_tree(link, timer=timer)
+                timer.intermediate('get')
+                cache.add_comments(coms)
+                timer.intermediate('update')
         except:
             g.log.exception(
                 'add_comments_nolock failed for link %s, recomputing tree',
                 link_id)
 
             # calculate it from scratch
-            link_comments(link_id, _update = True)
+            get_comment_tree(link, _update=True, timer=timer)
+        timer.stop()
         update_comment_votes(coms)
-
-def add_comments_nolock(link_id, comments):
-    cids, comment_tree, depth, num_children = link_comments(link_id)
-
-    #dfs to find the list of parents for the new comment
-    def find_parents():
-        stack = [cid for cid in comment_tree[None]]
-        parents = []
-        while stack:
-            cur_cm = stack.pop()
-            if cur_cm == cm_id:
-                return parents
-            elif cur_cm in comment_tree:
-                #make cur_cm the end of the parents list
-                parents = parents[:depth[cur_cm]] + [cur_cm]
-                for child in comment_tree[cur_cm]:
-                    stack.append(child)
-
-    new_parents = {}
-    for comment in comments:
-        cm_id = comment._id
-        p_id = comment.parent_id
-
-        #make sure we haven't already done this before (which would happen
-        #if the tree isn't cached when you add a comment)
-        if comment._id in cids:
-            continue
-
-        #add to comment list
-        cids.append(comment._id)
-
-        #add to tree
-        comment_tree.setdefault(p_id, []).append(cm_id)
-
-        #add to depth
-        depth[cm_id] = depth[p_id] + 1 if p_id else 0
-
-        #update children
-        num_children[cm_id] = 0
-
-        #if this comment had a parent, find the parent's parents
-        if p_id:
-            new_parents[cm_id] = p_id
-            for p_id in find_parents():
-                num_children[p_id] += 1
-
-    # update our cache of children -> parents as well:
-    key = parent_comments_key(link_id)
-    r = g.permacache.get(key)
-
-    if not r:
-        r = _parent_dict_from_tree(comment_tree)
-
-    for cm_id, parent_id in new_parents.iteritems():
-#        print "Now, I set %s -> %s" % (cm_id, parent_id)
-        r[cm_id] = parent_id
-
-    for comment in comments:
-        cm_id = comment._id
-        if cm_id not in new_parents:
-            r[cm_id] = None
-#            print "And I set %s -> None" % cm_id
-
-    g.permacache.set(key, r)
-
-    g.permacache.set(comments_key(link_id),
-                     (cids, comment_tree, depth, num_children))
 
 def update_comment_votes(comments, write_consistency_level = None):
     from r2.models import CommentSortsCache
@@ -153,35 +98,22 @@ def update_comment_votes(comments, write_consistency_level = None):
                                           write_consistency_level = write_consistency_level)
 
 def delete_comment(comment):
-    with g.make_lock(lock_key(comment.link_id)):
-        cids, comment_tree, depth, num_children = link_comments(comment.link_id)
-
-        # only completely remove comments with no children
-        if comment._id not in comment_tree:
-            if comment._id in cids:
-                cids.remove(comment._id)
-            if comment._id in depth:
-                del depth[comment._id]
-            if comment._id in num_children:
-                del num_children[comment._id]
-            g.permacache.set(comments_key(comment.link_id),
-                             (cids, comment_tree, depth, num_children))
-
-        # update the link's comment count and schedule it for search reindexing
-        link = Link._byID(comment.link_id, data = True)
-        link._incr('num_comments', -1)
+    link = Link._byID(comment.link_id, data=True)
+    timer = g.stats.get_timer('comment_tree.delete.%s'
+                              % link.comment_tree_version)
+    timer.start()
+    with CommentTree.mutation_context(link):
+        timer.intermediate('lock')
+        cache = get_comment_tree(link)
+        timer.intermediate('get')
+        cache.delete_comment(comment, link)
+        timer.intermediate('update')
         from r2.lib.db.queries import changed
-        changed(link)
-
-def _parent_dict_from_tree(comment_tree):
-    parents = {}
-    for parent, childs in comment_tree.iteritems():
-        for child in childs:
-            parents[child] = parent
-    return parents
+        changed([link])
+        timer.intermediate('changed')
+    timer.stop()
 
 def _comment_sorter_from_cids(cids, sort):
-    from r2.models import Comment
     comments = Comment._byID(cids, data = False, return_dict = False)
     return dict((x._id, _get_sort_value(x, sort)) for x in comments)
 
@@ -201,8 +133,8 @@ def _get_comment_sorter(link_id, sort):
                   for (c_id, val) in sorter.iteritems())
     return sorter
 
-def link_comments_and_sort(link_id, sort):
-    from r2.models import Comment, CommentSortsCache
+def link_comments_and_sort(link, sort):
+    from r2.models import CommentSortsCache
 
     # This has grown sort of organically over time. Right now the
     # cache of the comments tree consists in three keys:
@@ -219,12 +151,16 @@ def link_comments_and_sort(link_id, sort):
     #    (CommentSortsCache) rather than a permacache key. One of
     #    these exists for each sort (hot, new, etc)
 
-    # performance hack: preload these into the LocalCache at the same
-    # time
-    g.permacache.get_multi([comments_key(link_id),
-                            parent_comments_key(link_id)])
+    timer = g.stats.get_timer('comment_tree.get.%s' % link.comment_tree_version)
+    timer.start()
 
-    cids, cid_tree, depth, num_children = link_comments(link_id)
+    link_id = link._id
+    cache = get_comment_tree(link, timer=timer)
+    cids = cache.cids
+    tree = cache.tree
+    depth = cache.depth
+    num_children = cache.num_children
+    parents = cache.parents
 
     # load the sorter
     sorter = _get_comment_sorter(link_id, sort)
@@ -245,10 +181,8 @@ def link_comments_and_sort(link_id, sort):
             update_comment_votes(Comment._byID(sorter_needed, data=True, return_dict=False))
 
         sorter.update(_comment_sorter_from_cids(sorter_needed, sort))
+        timer.intermediate('sort')
 
-    # load the parents
-    key = parent_comments_key(link_id)
-    parents = g.permacache.get(key)
     if parents is None:
         g.log.debug("comment_tree.py: parents cache miss for Link %s"
                     % link_id)
@@ -258,97 +192,35 @@ def link_comments_and_sort(link_id, sort):
                     % link_id)
         parents = {}
 
-    if not parents:
-        with g.make_lock(lock_key(link_id)):
-            # reload from the cache so the sorter and parents are
-            # maximally consistent
-            r = g.permacache.get(comments_key(link_id))
-            cids, cid_tree, depth, num_children = r
+    if not parents and len(cids) > 0:
+        with CommentTree.mutation_context(link):
+            # reload under lock so the sorter and parents are consistent
+            timer.intermediate('lock')
+            cache = get_comment_tree(link, timer=timer)
+            cache.parents = cache.parent_dict_from_tree(cache.tree)
 
-            key = parent_comments_key(link_id)
-            if not parents:
-                parents = _parent_dict_from_tree(cid_tree)
-                g.permacache.set(key, parents)
+    timer.stop()
 
-    return cids, cid_tree, depth, num_children, parents, sorter
+    return (cache.cids, cache.tree, cache.depth, cache.num_children,
+            cache.parents, sorter)
 
-
-def link_comments(link_id, _update=False):
-    key = comments_key(link_id)
-
-    r = g.permacache.get(key)
-
-    if r and not _update:
-        return r
-    else:
-        # This operation can take longer than most (note the inner
-        # locks) better to time out request temporarily than to deal
-        # with an inconsistent tree
-        with g.make_lock(lock_key(link_id), timeout=180):
-            r = _load_link_comments(link_id)
-            # rebuild parent dict
-            cids, cid_tree, depth, num_children, num_comments = r
-            r = r[:-1]  # Remove num_comments from r; we don't need to cache it.
-            g.permacache.set(parent_comments_key(link_id),
-                             _parent_dict_from_tree(cid_tree))
-
-            g.permacache.set(key, r)
-
-            # update the link's comment count and schedule it for search
-            # reindexing
-            link = Link._byID(link_id, data = True)
-            link.num_comments = num_comments
-            link._commit()
-            from r2.lib.db.queries import changed
-            changed(link)
-
-        return r
-
-def _load_link_comments(link_id):
-    from r2.models import Comment
-    q = Comment._query(Comment.c.link_id == link_id,
-                       Comment.c._deleted == (True, False),
-                       Comment.c._spam == (True, False),
-                       optimize_rules=True,
-                       data = True)
-    comments = list(q)
-    cids = [c._id for c in comments]
-
-    #make a tree
-    comment_tree = {}
-    for cm in comments:
-        p_id = cm.parent_id
-        comment_tree.setdefault(p_id, []).append(cm._id)
-
-    #calculate the depths
-    depth = {}
-    level = 0
-    cur_level = comment_tree.get(None, ())
-    while cur_level:
-        next_level = []
-        for cm_id in cur_level:
-            depth[cm_id] = level
-            next_level.extend(comment_tree.get(cm_id, ()))
-        cur_level = next_level
-        level += 1
-
-    #calc the number of children
-    num_children = {}
-    for cm_id in cids:
-        num = 0
-        todo = [cm_id]
-        iteration_count = 0
-        while todo:
-            if iteration_count > MAX_ITERATIONS:
-                raise Exception("bad comment tree for link %s" % link_id)
-            more = comment_tree.get(todo.pop(0), ())
-            num += len(more)
-            todo.extend(more)
-            iteration_count += 1
-        num_children[cm_id] = num
-
-    num_comments = sum(1 for c in comments if not c._deleted)
-    return cids, comment_tree, depth, num_children, num_comments
+def get_comment_tree(link, _update=False, timer=None):
+    if timer is None:
+        timer = SimpleSillyStub()
+    cache = CommentTree.by_link(link)
+    timer.intermediate('load')
+    if cache and not _update:
+        return cache
+    with CommentTree.mutation_context(link, timeout=180):
+        timer.intermediate('lock')
+        cache = CommentTree.rebuild(link)
+        timer.intermediate('rebuild')
+        # the tree rebuild updated the link's comment count, so schedule it for
+        # search reindexing
+        from r2.lib.db.queries import changed
+        changed([link])
+        timer.intermediate('changed')
+        return cache
 
 # message conversation functions
 def messages_key(user_id):
@@ -359,13 +231,15 @@ def messages_lock_key(user_id):
 
 def add_message(message):
     # add the message to the author's list and the recipient
-    with g.make_lock(messages_lock_key(message.author_id)):
+    with g.make_lock("message_tree", messages_lock_key(message.author_id)):
         add_message_nolock(message.author_id, message)
     if message.to_id:
-        with g.make_lock(messages_lock_key(message.to_id)):
+        with g.make_lock("message_tree", messages_lock_key(message.to_id)):
             add_message_nolock(message.to_id, message)
-    if message.sr_id:
-        with g.make_lock(sr_messages_lock_key(message.sr_id)):
+    # Messages to a subreddit should end in its inbox. Messages
+    # FROM a subreddit (currently, just ban messages) should NOT
+    if message.sr_id and not message.from_sr:
+        with g.make_lock("modmail_tree", sr_messages_lock_key(message.sr_id)):
             add_sr_message_nolock(message.sr_id, message)
 
 
@@ -420,8 +294,11 @@ def _conversation(trees, parent):
     # if we get to this point, either we didn't find the conversation,
     # or the first child of the result was not the actual first child.
     # To the database!
-    m = Message._query(Message.c.first_message == parent._id,
-                       data = True)
+    rules = [Message.c.first_message == parent._id]
+    if c.user_is_admin:
+        rules.append(Message.c._spam == (True, False))
+        rules.append(Message.c._deleted == (True, False))
+    m = Message._query(*rules, data=True)
     return compute_message_trees([parent] + list(m))
 
 def conversation(user, parent):
@@ -477,9 +354,8 @@ def subreddit_messages(sr, update = False):
         g.permacache.set(key, trees)
     return trees
 
-def moderator_messages(user):
+def moderator_messages(sr_ids):
     from r2.models import Subreddit
-    sr_ids = Subreddit.reverse_moderator_ids(user)
 
     def multi_load_tree(sr_ids):
         srs = Subreddit._byID(sr_ids, return_dict = False)
@@ -550,7 +426,7 @@ def tree_sort_fn(tree):
     return threads[-1] if threads else root
 
 def _populate(after_id = None, estimate=54301242):
-    from r2.models import Comment, CommentSortsCache, desc
+    from r2.models import CommentSortsCache, desc
     from r2.lib.db import tdb_cassandra
     from r2.lib import utils
 

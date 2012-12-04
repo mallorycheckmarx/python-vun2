@@ -11,51 +11,62 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from validator import *
 from pylons.i18n import _, ungettext
-from reddit_base import RedditController, base_listing
+from pylons.controllers.util import redirect_to
+from reddit_base import RedditController, base_listing, paginated_listing, prevent_framing_and_css
 from r2 import config
 from r2.models import *
+from r2.config.extensions import is_api
 from r2.lib.pages import *
 from r2.lib.pages.things import wrap_links
-from r2.lib.jsontemplates import is_api
+from r2.lib.pages import trafficpages
 from r2.lib.menus import *
 from r2.lib.utils import to36, sanitize_url, check_cheating, title_to_url
 from r2.lib.utils import query_string, UrlParser, link_from_url, link_duplicates
-from r2.lib.utils import randstr
 from r2.lib.template_helpers import get_domain
-from r2.lib.filters import unsafe
+from r2.lib.filters import unsafe, _force_unicode
 from r2.lib.emailer import has_opted_out, Email
 from r2.lib.db.operators import desc
 from r2.lib.db import queries
+from r2.lib.db.tdb_cassandra import MultiColumnQuery
 from r2.lib.strings import strings
-from r2.lib.solrsearch import RelatedSearchQuery, SubredditSearchQuery
-from r2.lib.indextank import IndextankQuery, IndextankException, InvalidIndextankQuery
-from r2.lib.contrib.pysolr import SolrError
+from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
+                           InvalidQuery)
 from r2.lib import jsontemplates
 from r2.lib import sup
 import r2.lib.db.thing as thing
 from errors import errors
 from listingcontroller import ListingController
+from oauth2 import OAuth2ResourceController, require_oauth2_scope
+from api_docs import api_doc, api_section
 from pylons import c, request, request, Response
+from r2.models.token import EmailVerificationToken
+from r2.controllers.ipn import generate_blob
 
+from operator import attrgetter
 import string
 import random as rand
 import re, socket
 import time as time_module
 from urllib import quote_plus
 
-class FrontController(RedditController):
+class FrontController(RedditController, OAuth2ResourceController):
 
     allow_stylesheets = True
+
+    def pre(self):
+        self.check_for_bearer_token()
+        RedditController.pre(self)
 
     @validate(article = VLink('article'),
               comment = VCommentID('comment'))
@@ -85,6 +96,7 @@ class FrontController(RedditController):
             # redirect should be smarter and handle extensions, etc.
             return self.redirect(new_url, code=301)
 
+    @api_doc(api_section.listings)
     def GET_random(self):
         """The Serendipity button"""
         sort = rand.choice(('new','hot'))
@@ -108,14 +120,32 @@ class FrontController(RedditController):
         else:
             return self.redirect(add_sr('/'))
 
+    @prevent_framing_and_css()
     @validate(VAdmin(),
-              article = VLink('article'))
-    def GET_details(self, article):
-        """The (now depricated) details page.  Content on this page
+              thing = VByName('article'),
+              oldid36 = nop('article'),
+              after=nop('after'),
+              before=nop('before'),
+              count=VCount('count'))
+    def GET_details(self, thing, oldid36, after, before, count):
+        """The (now deprecated) details page.  Content on this page
         has been subsubmed by the presence of the LinkInfoBar on the
         rightbox, so it is only useful for Admin-only wizardry."""
-        return DetailsPage(link = article, expand_children=False).render()
+        if not thing:
+            try:
+                link = Link._byID36(oldid36)
+                return self.redirect('/details/' + link._fullname)
+            except (NotFound, ValueError):
+                abort(404)
 
+        kw = {'count': count}
+        if before:
+            kw['after'] = before
+            kw['reverse'] = True
+        else:
+            kw['after'] = after
+            kw['reverse'] = False
+        return DetailsPage(thing=thing, expand_children=False, **kw).render()
 
     def GET_selfserviceoatmeal(self):
         return BoringPage(_("self service help"), 
@@ -127,9 +157,6 @@ class FrontController(RedditController):
     def GET_shirt(self, article):
         if not can_view_link_comments(article):
             abort(403, 'forbidden')
-        if g.spreadshirt_url:
-            from r2.lib.spreadshirt import ShirtPage
-            return ShirtPage(link = article).render()
         return self.abort404()
 
     def _comment_visits(self, article, user, new_visit=None):
@@ -174,12 +201,16 @@ class FrontController(RedditController):
         # point. Now just redirect to GET mode.
         return self.redirect(request.fullpath + query_string(dict(sort=sort)))
 
+    @require_oauth2_scope("read")
     @validate(article      = VLink('article'),
               comment      = VCommentID('comment'),
               context      = VInt('context', min = 0, max = 8),
               sort         = VMenu('controller', CommentSortMenu),
               limit        = VInt('limit'),
               depth        = VInt('depth'))
+    @api_doc(api_section.listings,
+             uri='/comments/{article}',
+             extensions=['json', 'xml'])
     def GET_comments(self, article, comment, context, sort, limit, depth):
         """Comment page for a given 'article'."""
         if comment and comment.link_id != article._id:
@@ -275,7 +306,7 @@ class FrontController(RedditController):
             display = False
             if not comment:
                 age = c.start_time - article._date
-                if age.days < g.REPLY_AGE_LIMIT:
+                if article.promoted or age.days < g.REPLY_AGE_LIMIT:
                     display = True
             displayPane.append(UserText(item = article, creating = True,
                                         post_form = 'comment',
@@ -318,6 +349,7 @@ class FrontController(RedditController):
 
         res = LinkInfoPage(link = article, comment = comment,
                            content = displayPane,
+                           page_classes = ['comments-page'],
                            subtitle = subtitle,
                            subtitle_buttons = subtitle_buttons,
                            nav_menus = [CommentSortMenu(default = sort)],
@@ -354,27 +386,122 @@ class FrontController(RedditController):
         return res
 
     def GET_stylesheet(self):
-        if hasattr(c.site,'stylesheet_contents') and not g.css_killswitch:
+        if g.css_killswitch:
+            self.abort404()
+
+        # de-stale the subreddit object so we don't poison nginx's cache
+        if not isinstance(c.site, FakeSubreddit):
+            c.site = Subreddit._byID(c.site._id, data=True, stale=False)
+
+        if c.site.stylesheet_is_static:
+            # TODO: X-Private-Subreddit?
+            return redirect_to(c.site.stylesheet_url)
+        else:
+            stylesheet_contents = c.site.stylesheet_contents
+
+        if stylesheet_contents:
             c.allow_loggedin_cache = True
-            self.check_modified(c.site,'stylesheet_contents',
-                                private=False, max_age=7*24*60*60,
-                                must_revalidate=False)
+
+            if c.site.stylesheet_modified:
+                self.abort_if_not_modified(
+                    c.site.stylesheet_modified,
+                    private=False,
+                    max_age=timedelta(days=7),
+                    must_revalidate=False,
+                )
+
             c.response_content_type = 'text/css'
-            c.response.content =  c.site.stylesheet_contents
+            c.response.content =  stylesheet_contents
+            if c.site.type == 'private':
+                c.response.headers['X-Private-Subreddit'] = 'private'
             return c.response
         else:
             return self.abort404()
+
+    def _make_moderationlog(self, srs, num, after, reverse, count, mod=None, action=None):
+
+        if mod and action:
+            query = Subreddit.get_modactions(srs, mod=mod, action=None)
+            def keep_fn(ma):
+                return ma.action == action
+        else:
+            query = Subreddit.get_modactions(srs, mod=mod, action=action)
+            def keep_fn(ma):
+                return True
+
+        builder = QueryBuilder(query, skip=True, num=num, after=after, 
+                               keep_fn=keep_fn, count=count, 
+                               reverse=reverse,
+                               wrap=default_thing_wrapper())
+        listing = ModActionListing(builder)
+        pane = listing.listing()
+        return pane
+
+    @require_oauth2_scope("modlog")
+    @prevent_framing_and_css(allow_cname_frame=True)
+    @paginated_listing(max_page_size=500, backend='cassandra')
+    @validate(mod=nop('mod'),
+              action=VOneOf('type', ModAction.actions))
+    @api_doc(api_section.moderation)
+    def GET_moderationlog(self, num, after, reverse, count, mod, action):
+        if not c.user_is_loggedin or not (c.user_is_admin or
+                                          c.site.is_moderator(c.user)):
+            return self.abort404()
+
+        if mod:
+            try:
+                mod = Account._by_name(mod, allow_deleted=True)
+            except NotFound:
+                mod = None
+
+        if isinstance(c.site, (MultiReddit, ModSR)):
+            srs = Subreddit._byID(c.site.sr_ids, return_dict=False)
+
+            # grab all moderators
+            mod_ids = set(Subreddit.get_all_mod_ids(srs))
+            mods = Account._byID(mod_ids, data=True)
+
+            pane = self._make_moderationlog(srs, num, after, reverse, count,
+                                            mod=mod, action=action)
+        elif isinstance(c.site, FakeSubreddit):
+            return self.abort404()
+        else:
+            mod_ids = c.site.moderators
+            mods = Account._byID(mod_ids, data=True)
+
+            pane = self._make_moderationlog(c.site, num, after, reverse, count,
+                                            mod=mod, action=action)
+
+        panes = PaneStack()
+        panes.append(pane)
+
+        action_buttons = [NavButton(_('all'), None, opt='type', css_class='primary')]
+        for a in ModAction.actions:
+            action_buttons.append(NavButton(ModAction._menu[a], a, opt='type'))
+        
+        mod_buttons = [NavButton(_('all'), None, opt='mod', css_class='primary')]
+        for mod_id in mod_ids:
+            mod = mods[mod_id]
+            mod_buttons.append(NavButton(mod.name, mod.name, opt='mod'))
+        base_path = request.path
+        menus = [NavMenu(action_buttons, base_path=base_path, 
+                         title=_('filter by action'), type='lightdrop', css_class='modaction-drop'),
+                NavMenu(mod_buttons, base_path=base_path, 
+                        title=_('filter by moderator'), type='lightdrop')]
+        return EditReddit(content=panes,
+                          nav_menus=menus,
+                          location="log",
+                          extension_handling=False).render()
 
     def _make_spamlisting(self, location, num, after, reverse, count):
         if location == 'reports':
             query = c.site.get_reported()
         elif location == 'spam':
             query = c.site.get_spam()
-        elif location == 'trials':
-            query = c.site.get_trials()
-            num = 1000
         elif location == 'modqueue':
             query = c.site.get_modqueue()
+        elif location == 'unmoderated':
+            query = c.site.get_unmoderated()
         else:
             raise ValueError
 
@@ -389,22 +516,24 @@ class FrontController(RedditController):
             # no need to bother mods with banned users, or deleted content
             if getattr(x,'hidden',False) or x._deleted:
                 return False
+            if getattr(x,'author',None) == c.user and c.user._spam:
+                return False
 
             if location == "reports":
                 return x.reported > 0 and not x._spam
             elif location == "spam":
                 return x._spam
-            elif location == "trials":
-                return not getattr(x, "verdict", None)
             elif location == "modqueue":
                 if x.reported > 0 and not x._spam:
                     return True # reported but not banned
                 verdict = getattr(x, "verdict", None)
                 if verdict is None:
-                    return True # anything without a verdict (i.e., trials)
+                    return True # anything without a verdict
                 if x._spam and verdict != 'mod-removed':
                     return True # spam, unless banned by a moderator
                 return False
+            elif location == "unmoderated":
+                return not getattr(x, 'verdict', None)
             else:
                 raise ValueError
 
@@ -417,6 +546,11 @@ class FrontController(RedditController):
         listing = LinkListing(builder)
         pane = listing.listing()
 
+        # Indicate that the comment tree wasn't built for comments
+        for i in pane.things:
+            if hasattr(i, 'body'):
+                i.child = None
+
         return pane
 
     def _edit_modcontrib_reddit(self, location, num, after, reverse, count, created):
@@ -424,7 +558,7 @@ class FrontController(RedditController):
 
         if not c.user_is_loggedin:
             return self.abort404()
-        if isinstance(c.site, ModSR):
+        if isinstance(c.site, (ModSR, MultiReddit)):
             level = 'mod'
         elif isinstance(c.site, ContribSR):
             level = 'contrib'
@@ -433,19 +567,17 @@ class FrontController(RedditController):
         else:
             raise ValueError
 
-        if ((level == 'mod' and
-             location in ('reports', 'spam', 'trials', 'modqueue'))
-            or
-            (level == 'all' and
-             location == 'trials')):
+        if (level == 'mod' and
+            location in ('reports', 'spam', 'modqueue', 'unmoderated')):
             pane = self._make_spamlisting(location, num, after, reverse, count)
             if c.user.pref_private_feeds:
                 extension_handling = "private"
         else:
             return self.abort404()
 
-        return EditReddit(content = pane,
-                          extension_handling = extension_handling).render()
+        return EditReddit(content=pane,
+                          location=location,
+                          extension_handling=extension_handling).render()
 
     def _edit_normal_reddit(self, location, num, after, reverse, count, created,
                             name, user):
@@ -456,11 +588,17 @@ class FrontController(RedditController):
             pane = PaneStack()
             if created == 'true':
                 pane.append(InfoBar(message = strings.sr_created))
+            c.allow_styles = True
+            c.site = Subreddit._byID(c.site._id, data=True, stale=False)
             pane.append(CreateSubreddit(site = c.site))
         elif location == 'moderators':
             pane = ModList(editable = is_moderator)
         elif is_moderator and location == 'banned':
             pane = BannedList(editable = is_moderator)
+        elif is_moderator and location == 'wikibanned':
+            pane = WikiBannedList(editable = is_moderator)
+        elif is_moderator and location == 'wikicontributors':
+            pane = WikiMayContributeList(editable = is_moderator)
         elif (location == 'contributors' and
               # On public reddits, only moderators can see the whitelist.
               # On private reddits, all contributors can see each other.
@@ -477,27 +615,39 @@ class FrontController(RedditController):
                 stylesheet_contents = c.site.stylesheet_contents
             else:
                 stylesheet_contents = ''
+            c.allow_styles = True
             pane = SubredditStylesheet(site = c.site,
                                        stylesheet_contents = stylesheet_contents)
-        elif location in ('reports', 'spam', 'trials', 'modqueue') and is_moderator:
+        elif (location == 'stylesheet'
+              and c.site.can_view(c.user)
+              and not g.css_killswitch):
+            stylesheet = (c.site.stylesheet_contents_user or
+                          c.site.stylesheet_contents)
+            pane = SubredditStylesheetSource(stylesheet_contents=stylesheet)
+        elif (location in ('reports', 'spam', 'modqueue', 'unmoderated')
+              and is_moderator):
+            c.allow_styles = True
             pane = self._make_spamlisting(location, num, after, reverse, count)
             if c.user.pref_private_feeds:
                 extension_handling = "private"
-        elif is_moderator and location == 'traffic':
-            pane = RedditTraffic()
+        elif (is_moderator or c.user_is_sponsor) and location == 'traffic':
+            pane = trafficpages.SubredditTraffic()
         elif is_moderator and location == 'flair':
+            c.allow_styles = True
             pane = FlairPane(num, after, reverse, name, user)
         elif c.user_is_sponsor and location == 'ads':
             pane = RedditAds()
-        elif (not location or location == "about") and is_api():
-            return Reddit(content = Wrapped(c.site)).render()
+        elif (location == "about") and is_api():
+            return self.redirect(add_sr('about.json'), code=301)
         else:
             return self.abort404()
 
-        return EditReddit(content = pane,
-                          extension_handling = extension_handling).render()
+        return EditReddit(content=pane,
+                          location=location,
+                          extension_handling=extension_handling).render()
 
     @base_listing
+    @prevent_framing_and_css(allow_cname_frame=True)
     @validate(location = nop('location'),
               created = VOneOf('created', ('true','false'),
                                default = 'false'),
@@ -511,7 +661,13 @@ class FrontController(RedditController):
                 user = Account._by_name(name)
             except NotFound:
                 c.errors.add(errors.USER_DOESNT_EXIST, field='name')
+        c.profilepage = True
         if isinstance(c.site, ModContribSR):
+            return self._edit_modcontrib_reddit(location, num, after, reverse,
+                                                count, created)
+        elif isinstance(c.site, MultiReddit):
+            if not (c.user_is_admin or c.site.is_moderator(c.user)):
+                self.abort403()
             return self._edit_modcontrib_reddit(location, num, after, reverse,
                                                 count, created)
         elif isinstance(c.site, AllSR) and c.user_is_admin:
@@ -523,40 +679,52 @@ class FrontController(RedditController):
             return self._edit_normal_reddit(location, num, after, reverse,
                                             count, created, name, user)
 
+    @require_oauth2_scope("read")
+    @api_doc(api_section.subreddits, uri='/r/{subreddit}/about', extensions=['json'])
+    def GET_about(self):
+        """Return information about the subreddit.
+
+        Data includes the subscriber count, description, and header image."""
+        if not is_api() or isinstance(c.site, FakeSubreddit):
+            return self.abort404()
+        return Reddit(content = Wrapped(c.site)).render()
 
     def GET_awards(self):
         """The awards page."""
         return BoringPage(_("awards"), content = UserAwards()).render()
 
-    # filter for removing punctuation which could be interpreted as lucene syntax
-    related_replace_regex = re.compile('[?\\&|!{}+~^()":*-]+')
+    # filter for removing punctuation which could be interpreted as search syntax
+    related_replace_regex = re.compile(r'[?\\&|!{}+~^()"\':*-]+')
     related_replace_with  = ' '
 
     @base_listing
     @validate(article = VLink('article'))
     def GET_related(self, num, article, after, reverse, count):
         """Related page: performs a search using title of article as
-        the search query."""
-
+        the search query.
+        
+        """
         if not can_view_link_comments(article):
             abort(403, 'forbidden')
 
-        title = c.site.name + ((': ' + article.title) if hasattr(article, 'title') else '')
-
         query = self.related_replace_regex.sub(self.related_replace_with,
                                                article.title)
-        if len(query) > 1024:
-            # could get fancier and break this into words, but titles
-            # longer than this are typically ascii art anyway
-            query = query[0:1023]
+        query = _force_unicode(query)
+        query = query[:1024]
+        query = u"|".join(query.split())
+        query = u"title:'%s'" % query
+        rel_range = timedelta(days=3)
+        start = int(time.mktime((article._date - rel_range).utctimetuple()))
+        end = int(time.mktime((article._date + rel_range).utctimetuple()))
+        nsfw = u"nsfw:0" if not (article.over_18 or article._nsfw.findall(article.title)) else u""
+        query = u"(and %s timestamp:%s..%s %s)" % (query, start, end, nsfw)
+        q = SearchQuery(query, raw_sort="-text_relevance",
+                        syntax="cloudsearch")
+        pane = self._search(q, num=num, after=after, reverse=reverse,
+                            count=count)[2]
 
-        q = RelatedSearchQuery(query, ignore = [article._fullname])
-        num, t, pane = self._search(q,
-                                    num = num, after = after, reverse = reverse,
-                                    count = count)
-
-        return LinkInfoPage(link = article, content = pane,
-                            subtitle = _('related')).render()
+        return LinkInfoPage(link=article, content=pane,
+                            subtitle=_('related')).render()
 
     @base_listing
     @validate(article = VLink('article'))
@@ -565,6 +733,7 @@ class FrontController(RedditController):
             abort(403, 'forbidden')
 
         links = link_duplicates(article)
+        links.sort(key=attrgetter('num_comments'), reverse=True)
         builder = IDBuilder([ link._fullname for link in links ],
                             num = num, after = after, reverse = reverse,
                             count = count, skip = False)
@@ -580,29 +749,35 @@ class FrontController(RedditController):
 
     @base_listing
     @validate(query = nop('q'))
-    def GET_search_reddits(self, query, reverse, after,  count, num):
+    @api_doc(api_section.subreddits, uri='/reddits/search', extensions=['json', 'xml'])
+    def GET_search_reddits(self, query, reverse, after, count, num):
         """Search reddits by title and description."""
         q = SubredditSearchQuery(query)
 
-        num, t, spane = self._search(q, num = num, reverse = reverse,
-                                     after = after, count = count)
+        results, etime, spane = self._search(q, num=num, reverse=reverse,
+                                            after=after, count=count,
+                                            skip_deleted_authors=False)
         
         res = SubredditsPage(content=spane,
-                             prev_search = query,
-                             elapsed_time = t,
-                             num_results = num,
+                             prev_search=query,
+                             elapsed_time=etime,
+                             num_results=results.hits,
                              # update if we ever add sorts
-                             search_params = {},
-                             title = _("search results"),
+                             search_params={},
+                             title=_("search results"),
                              simple=True).render()
         return res
 
+    search_help_page = "/help/search"
     verify_langs_regex = re.compile(r"\A[a-z][a-z](,[a-z][a-z])*\Z")
     @base_listing
-    @validate(query = nop('q'),
-              sort = VMenu('sort', SearchSortMenu, remember=False),
-              restrict_sr = VBoolean('restrict_sr', default=False))
-    def GET_search(self, query, num, reverse, after, count, sort, restrict_sr):
+    @validate(query=VLength('q', max_length=512),
+              sort=VMenu('sort', SearchSortMenu, remember=False),
+              restrict_sr=VBoolean('restrict_sr', default=False),
+              syntax=VOneOf('syntax', options=SearchQuery.known_syntaxes))
+    @api_doc(api_section.search, extensions=['json', 'xml'])
+    def GET_search(self, query, num, reverse, after, count, sort, restrict_sr,
+                   syntax):
         """Search links page."""
         if query and '.' in query:
             url = sanitize_url(query, require_scheme = True)
@@ -613,49 +788,68 @@ class FrontController(RedditController):
             site = DefaultSR()
         else:
             site = c.site
+        
+        if not syntax:
+            syntax = SearchQuery.default_syntax
 
         try:
             cleanup_message = None
             try:
-                q = IndextankQuery(query, site, sort)
-                num, t, spane = self._search(q, num=num, after=after, 
-                                             reverse = reverse, count = count)
-            except InvalidIndextankQuery:
-                # strip the query down to a whitelist
-                cleaned = re.sub("[^\w\s]+", "", query)
-                cleaned = cleaned.lower()
+                q = SearchQuery(query, site, sort, syntax=syntax)
+                results, etime, spane = self._search(q, num=num, after=after,
+                                                     reverse=reverse,
+                                                     count=count)
+            except InvalidQuery:
+                # Clean the search of characters that might be causing the
+                # InvalidQuery exception. If the cleaned search boils down
+                # to an empty string, the search code is expected to bail
+                # out early with an empty result set.
+                cleaned = re.sub("[^\w\s]+", " ", query)
+                cleaned = cleaned.lower().strip()
 
-                # if it was nothing but mess, we have to stop
-                if not cleaned.strip():
-                    num, t, spane = 0, 0, []
-                    cleanup_message = strings.completely_invalid_search_query
-                else:
-                    q = IndextankQuery(cleaned, site, sort)
-                    num, t, spane = self._search(q, num=num, after=after, 
-                                                 reverse=reverse, count=count)
+                q = SearchQuery(cleaned, site, sort)
+                results, etime, spane = self._search(q, num=num,
+                                                     after=after,
+                                                     reverse=reverse,
+                                                     count=count)
+                if cleaned:
                     cleanup_message = strings.invalid_search_query % {
-                                          "clean_query": cleaned
-                                      }
-		
-            res = SearchPage(_('search results'), query, t, num, content=spane,
-                             nav_menus = [SearchSortMenu(default=sort)],
-                             search_params = dict(sort = sort), 
+                                                        "clean_query": cleaned
+                                                                      }
+                    cleanup_message += " "
+                    cleanup_message += strings.search_help % {
+                                          "search_help": self.search_help_page
+                                                              }
+                else:
+                    cleanup_message = strings.completely_invalid_search_query
+            
+            res = SearchPage(_('search results'), query, etime, results.hits,
+                             content=spane,
+                             nav_menus=[SearchSortMenu(default=sort)],
+                             search_params=dict(sort=sort),
                              infotext=cleanup_message,
-                             simple=False, site=c.site, 
-                             restrict_sr=restrict_sr).render()
+                             simple=False, site=c.site,
+                             restrict_sr=restrict_sr,
+                             syntax=syntax,
+                             converted_data=q.converted_data,
+                             facets=results.subreddit_facets,
+                             sort=sort,
+                             ).render()
 
             return res
-        except (IndextankException, socket.error), e:
+        except SearchException + (socket.error,) as e:
             return self.search_fail(e)
 
-    def _search(self, query_obj, num, after, reverse, count=0):
+    def _search(self, query_obj, num, after, reverse, count=0,
+                skip_deleted_authors=True):
         """Helper function for interfacing with search.  Basically a
            thin wrapper for SearchBuilder."""
 
         builder = SearchBuilder(query_obj,
                                 after = after, num = num, reverse = reverse,
                                 count = count,
-                                wrap = ListingController.builder_wrapper)
+                                wrap = ListingController.builder_wrapper,
+                                skip_deleted_authors=skip_deleted_authors)
 
         listing = LinkListing(builder, show_nums=True)
 
@@ -663,11 +857,11 @@ class FrontController(RedditController):
         # computed after fetch_more
         try:
             res = listing.listing()
-        except (IndextankException, SolrError, socket.error), e:
+        except SearchException + (socket.error,) as e:
             return self.search_fail(e)
         timing = time_module.time() - builder.start_time
 
-        return builder.total_num, timing, res
+        return builder.results, timing, res
 
     @validate(VAdmin(),
               comment = VCommentByID('comment_id'))
@@ -677,10 +871,13 @@ class FrontController(RedditController):
 
     @validate(url = VRequired('url', None),
               title = VRequired('title', None),
+              text = VRequired('text', None),
+              selftext = VRequired('selftext', None),
               then = VOneOf('then', ('tb','comments'), default = 'comments'))
-    def GET_submit(self, url, title, then):
+    def GET_submit(self, url, title, text, selftext, then):
         """Submit form."""
-        if url and not request.get.get('resubmit'):
+        resubmit = request.get.get('resubmit')
+        if url and not resubmit:
             # check to see if the url has already been submitted
             links = link_from_url(url)
             if links and len(links) == 1:
@@ -702,13 +899,20 @@ class FrontController(RedditController):
         captcha = Captcha() if c.user.needs_captcha() else None
         sr_names = (Subreddit.submit_sr_names(c.user) or
                     Subreddit.submit_sr_names(None))
-
+        
+        never_show_self = request.get.get('no_self')
+        
         return FormPage(_("submit"),
                         show_sidebar = True,
+                        page_classes=['submit-page'],
                         content=NewLink(url=url or '',
                                         title=title or '',
+                                        text=text or '',
+                                        selftext=selftext or '',
                                         subreddits = sr_names,
                                         captcha=captcha,
+                                        resubmit=resubmit,
+                                        never_show_self = never_show_self,
                                         then = then)).render()
 
     def GET_frame(self):
@@ -769,22 +973,94 @@ class FrontController(RedditController):
             return self.abort404()
 
 
+    @require_oauth2_scope("modtraffic")
     @validate(VTrafficViewer('article'),
               article = VLink('article'))
     def GET_traffic(self, article):
-        content = PromotedTraffic(article)
+        content = trafficpages.PromotedLinkTraffic(article)
         if c.render_style == 'csv':
             c.response.content = content.as_csv()
             return c.response
 
-        return LinkInfoPage(link = article,
-                           comment = None,
-                           content = content).render()
+        return LinkInfoPage(link=article,
+                            page_classes=["promoted-traffic"],
+                            comment=None,
+                            content=content).render()
+
+    @validate(VTrafficViewer('link'),
+              link=VLink('link'))
+    def GET_promo_traffic(self, link):
+        if link:
+            content = trafficpages.PromoTraffic(link)
+            if c.render_style == 'csv':
+                c.response.content = content.as_csv()
+                return c.response
+            return LinkInfoPage(link=link,
+                                page_classes=["promo-traffic"],
+                                comment=None,
+                                content=content).render()
+        else:
+            return self.abort404()
 
     @validate(VSponsorAdmin())
     def GET_site_traffic(self):
-        return BoringPage("traffic",
-                          content = RedditTraffic()).render()
+        return trafficpages.SitewideTrafficPage().render()
+
+    @validate(VSponsorAdmin())
+    def GET_lang_traffic(self, langcode):
+        return trafficpages.LanguageTrafficPage(langcode).render()
+
+    @validate(VSponsorAdmin())
+    def GET_advert_traffic(self, code):
+        return trafficpages.AdvertTrafficPage(code).render()
+
+    @validate(VUser())
+    def GET_account_activity(self):
+        return AccountActivityPage().render()
+    
+    def GET_rules(self):
+        return BoringPage(_("rules of reddit"), show_sidebar=False,
+                          content=RulesPage(), page_classes=["rulespage-body"]
+                          ).render()
+    
+    @validate(vendor=VOneOf("v", ("claimed-gold", "claimed-creddits",
+                                  "paypal", "google-checkout"),
+                            default="claimed-gold"))
+    def GET_goldthanks(self, vendor):
+        vendor_url = None
+        vendor_claim_msg = _("thanks for buying reddit gold! your transaction "
+                             "has been completed and emailed to you. you can "
+                             "check the details by logging into your account "
+                             "at:")
+        lounge_md = None
+        if vendor == "claimed-gold":
+            claim_msg = _("claimed! enjoy your reddit gold membership.")
+        elif vendor == "claimed-creddits":
+            claim_msg = _("your gold creddits have been claimed!")
+            lounge_md = _("now go to someone's userpage and give "
+                          "them a present!")
+        elif vendor == "paypal":
+            claim_msg = vendor_claim_msg
+            vendor_url = "https://www.paypal.com/us"
+        elif vendor == "google-checkout":
+            claim_msg = vendor_claim_msg
+            vendor_url = "https://wallet.google.com/manage"
+        else:
+            abort(404)
+        
+        if g.lounge_reddit and not lounge_md:
+            lounge_url = "/r/" + g.lounge_reddit
+            lounge_md = strings.lounge_msg % {'link': lounge_url}
+        
+        return BoringPage(_("thanks"), show_sidebar=False,
+                          content=GoldThanks(claim_msg=claim_msg,
+                                             vendor_url=vendor_url,
+                                             lounge_md=lounge_md)).render()
+
+
+    def GET_gold_info(self):
+        return GoldInfoPage(_("gold"), show_sidebar=False).render()
+
 
 class FormsController(RedditController):
 
@@ -813,34 +1089,36 @@ class FormsController(RedditController):
         return BoringPage(_("verify email"), content = content).render()
 
     @validate(VUser(),
-              cache_evt = VCacheKey('email_verify', ('key',)),
-              key = nop('key'),
-              dest = VDestination(default = "/prefs/update"))
-    def GET_verify_email(self, cache_evt, key, dest):
-        if c.user_is_loggedin and c.user.email_verified:
-            cache_evt.clear()
-            return self.redirect(dest)
-        elif not (cache_evt.user and
-                key == passhash(cache_evt.user.name, cache_evt.user.email)):
-            content = PaneStack(
-                [InfoBar(message = strings.email_verify_failed),
-                 PrefUpdate(email = True, verify = True,
-                            password = False)])
-            return BoringPage(_("verify email"), content = content).render()
-        elif c.user != cache_evt.user:
-            # wrong user.  Log them out and try again. 
+              token=VOneTimeToken(EmailVerificationToken, "key"),
+              dest=VDestination(default="/prefs/update"))
+    def GET_verify_email(self, token, dest):
+        if token and token.user_id != c.user._fullname:
+            # wrong user. log them out and try again.
             self.logout()
             return self.redirect(request.fullpath)
-        else:
-            cache_evt.clear()
+        elif token and c.user.email_verified:
+            # they've already verified. consume and ignore this token.
+            token.consume()
+            return self.redirect(dest)
+        elif token and token.valid_for_user(c.user):
+            # successful verification!
+            token.consume()
             c.user.email_verified = True
             c.user._commit()
             Award.give_if_needed("verified_email", c.user)
             return self.redirect(dest)
+        else:
+            # failure. let 'em know.
+            content = PaneStack(
+                [InfoBar(message=strings.email_verify_failed),
+                 PrefUpdate(email=True,
+                            verify=True,
+                            password=False)])
+            return BoringPage(_("verify email"), content=content).render()
 
-    @validate(cache_evt = VHardCacheKey('email-reset', ('key',)),
-              key = nop('key'))
-    def GET_resetpassword(self, cache_evt, key):
+    @validate(token=VOneTimeToken(PasswordResetToken, "key"),
+              key=nop("key"))
+    def GET_resetpassword(self, token, key):
         """page hit once a user has been sent a password reset email
         to verify their identity before allowing them to update their
         password."""
@@ -854,59 +1132,10 @@ class FormsController(RedditController):
         if not key and request.referer:
             referer_path = request.referer.split(g.domain)[-1]
             done = referer_path.startswith(request.fullpath)
-        elif not getattr(cache_evt, "user", None):
+        elif not token:
             return self.redirect("/password?expired=true")
         return BoringPage(_("reset password"),
                           content=ResetPassword(key=key, done=done)).render()
-
-    @validate(VUser())
-    def GET_depmod(self):
-        displayPane = PaneStack()
-
-        active_trials = {}
-        finished_trials = {}
-
-        juries = Jury.by_account(c.user)
-
-        trials = trial_info([j._thing2 for j in juries])
-
-        for j in juries:
-            defendant = j._thing2
-
-            if trials.get(defendant._fullname, False):
-                active_trials[defendant._fullname] = j._name
-            else:
-                finished_trials[defendant._fullname] = j._name
-
-        if active_trials:
-            fullnames = sorted(active_trials.keys(), reverse=True)
-
-            def my_wrap(thing):
-                w = Wrapped(thing)
-                w.hide_score = True
-                w.likes = None
-                w.trial_mode = True
-                w.render_class = LinkOnTrial
-                w.juryvote = active_trials[thing._fullname]
-                return w
-
-            listing = wrap_links(fullnames, wrapper=my_wrap)
-            displayPane.append(InfoBar(strings.active_trials,
-                                       extra_class="mellow"))
-            displayPane.append(listing)
-
-        if finished_trials:
-            fullnames = sorted(finished_trials.keys(), reverse=True)
-            listing = wrap_links(fullnames)
-            displayPane.append(InfoBar(strings.finished_trials,
-                                       extra_class="mellow"))
-            displayPane.append(listing)
-
-        displayPane.append(InfoBar(strings.more_info_link %
-                                       dict(link="/help/deputies"),
-                                   extra_class="mellow"))
-
-        return Reddit(content = displayPane).render()
 
     @validate(VUser(),
               location = nop("location"))
@@ -923,10 +1152,15 @@ class FormsController(RedditController):
             content.append(EnemyList())
         elif location == 'update':
             content = PrefUpdate()
+        elif location == 'apps':
+            content = PrefApps(my_apps=OAuth2Client._by_user(c.user),
+                               developed_apps=OAuth2Client._by_developer(c.user))
         elif location == 'feeds' and c.user.pref_private_feeds:
             content = PrefFeeds()
         elif location == 'delete':
             content = PrefDelete()
+        elif location == 'otp':
+            content = PrefOTP()
         else:
             return self.abort404()
 
@@ -975,8 +1209,9 @@ class FormsController(RedditController):
         #check like this because c.user_is_admin is still false
         if not c.user.name in g.admins:
             return self.abort404()
-        self.login(c.user, admin = True, rem = True)
-        return self.redirect(dest)
+
+        c.deny_frames = True
+        return AdminModeInterstitial(dest=dest).render()
 
     @validate(VAdmin(),
               dest = VDestination())
@@ -984,7 +1219,7 @@ class FormsController(RedditController):
         """disable admin interaction with site."""
         if not c.user.name in g.admins:
             return self.abort404()
-        self.login(c.user, admin = False, rem = True)
+        self.disable_admin_mode(c.user)
         return self.redirect(dest)
 
     def GET_validuser(self):
@@ -992,7 +1227,7 @@ class FormsController(RedditController):
         returns their user name"""
         c.response_content_type = 'text/plain'
         if c.user_is_loggedin:
-            perm = str(g.allow_wiki_editing and c.user.can_wiki())
+            perm = str(c.user.can_wiki())
             c.response.content = c.user.name + "," + perm
         else:
             c.response.content = ''
@@ -1032,7 +1267,7 @@ class FormsController(RedditController):
 
     @validate(VUser(),
               secret=VPrintable("secret", 50))
-    def GET_thanks(self, secret):
+    def GET_claim(self, secret):
         """The page to claim reddit gold trophies"""
         return BoringPage(_("thanks"), content=Thanks(secret)).render()
 
@@ -1044,9 +1279,16 @@ class FormsController(RedditController):
               # variables below are just for gifts
               signed = VBoolean("signed"),
               recipient_name = VPrintable("recipient", max_length = 50),
+              comment = VByName("comment", thing_cls=Comment),
               giftmessage = VLength("giftmessage", 10000))
     def GET_gold(self, goldtype, period, months,
-                 signed, recipient_name, giftmessage):
+                 signed, recipient_name, giftmessage, comment):
+
+        if comment:
+            comment_sr = Subreddit._byID(comment.sr_id, data=True)
+            if comment._deleted or not comment_sr.allow_comment_gilding:
+                comment = None
+
         start_over = False
         recipient = None
         if goldtype == "autorenew":
@@ -1058,10 +1300,18 @@ class FormsController(RedditController):
         elif goldtype == "gift":
             if months is None or months < 1:
                 start_over = True
-            try:
-                recipient = Account._by_name(recipient_name or "")
-            except NotFound:
-                start_over = True
+
+            if comment:
+                recipient = Account._byID(comment.author_id, data=True)
+                if recipient._deleted:
+                    comment = None
+                    recipient = None
+                    start_over = True
+            else:
+                try:
+                    recipient = Account._by_name(recipient_name or "")
+                except NotFound:
+                    start_over = True
         else:
             goldtype = ""
             start_over = True
@@ -1079,21 +1329,17 @@ class FormsController(RedditController):
 
             if goldtype == "gift":
                 payment_blob["signed"] = signed
-                payment_blob["recipient"] = recipient_name
+                payment_blob["recipient"] = recipient.name
                 payment_blob["giftmessage"] = giftmessage
+                if comment:
+                    payment_blob["comment"] = comment._fullname
 
-            passthrough = randstr(15)
-
-            g.hardcache.set("payment_blob-" + passthrough,
-                            payment_blob, 86400 * 30)
-
-            g.log.info("just set payment_blob-%s" % passthrough)
+            passthrough = generate_blob(payment_blob)
 
             return BoringPage(_("reddit gold"),
-                              show_sidebar = False,
+                              show_sidebar=False,
                               content=GoldPayment(goldtype, period, months,
                                                   signed, recipient,
-                                                  giftmessage, passthrough)
+                                                  giftmessage, passthrough,
+                                                  comment)
                               ).render()
-
-

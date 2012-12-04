@@ -11,15 +11,17 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
-import pylons, sha
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+import pylons
+import hashlib
 from mako.template import Template as mTemplate
 from mako.exceptions import TemplateLookupException
 from r2.lib.filters import websafe, unsafe
@@ -41,6 +43,7 @@ class tp_manager:
         elif not file.startswith('/'):
             file = '/' + file
         self.templates[key] = file
+        return file
 
     def add_handler(self, name, style, handler):
         key = (name.lower(), style.lower())
@@ -57,28 +60,32 @@ class tp_manager:
         for cls in inspect.getmro(thing):
             name = cls.__name__.lower()
             key = (name, style)
-            if not self.templates.has_key(key):
-                self.add(name, style)
-            if isinstance(self.templates[key], self.Template):
-                template = self.templates[key]
+
+            template_or_name = self.templates.get(key)
+            if not template_or_name:
+                template_or_name = self.add(name, style)
+
+            if isinstance(template_or_name, self.Template):
+                template = template_or_name
+                break
             else:
                 try:
                     _loader = pylons.buffet.engines[self.engine]['engine']
-                    template = _loader.load_template(self.templates[key])
+                    template = _loader.load_template(template_or_name)
                     if cache:
                         self.templates[key] = template
                         # also store a hash for the template
                         if (not hasattr(template, "hash") and
                             hasattr(template, "filename")):
                             with open(template.filename, 'r') as handle:
-                                template.hash = sha.new(handle.read()).hexdigest()
+                                template.hash = hashlib.sha1(handle.read()).hexdigest()
                         # cache also for the base class so
                         # introspection is not required on subsequent passes
                         if key != top_key:
                             self.templates[top_key] = template
+                    break
                 except TemplateLookupException:
-                    continue
-            break
+                    pass
 
         if not template or not isinstance(template, self.Template):
             raise AttributeError, ("template doesn't exist for %s" % str(top_key))

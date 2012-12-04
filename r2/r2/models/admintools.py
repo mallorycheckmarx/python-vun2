@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.lib.utils import tup, fetch_things2
 from r2.lib.filters import websafe
 from r2.lib.log import log_text
@@ -32,31 +33,45 @@ from copy import copy
 class AdminTools(object):
 
     def spam(self, things, auto=True, moderator_banned=False,
-             banner=None, date = None, **kw):
+             banner=None, date=None, train_spam=True, **kw):
         from r2.lib.db import queries
 
         all_things = tup(things)
         new_things = [x for x in all_things if not x._spam]
 
-        # No need to accept reports on things with _spam=True,
-        # since nobody can report them in the first place.
-        Report.accept(new_things, True)
+        Report.accept(all_things, True)
 
         for t in all_things:
             if getattr(t, "promoted", None) is not None:
                 g.log.debug("Refusing to mark promotion %r as spam" % t)
                 continue
-            t._spam = True
-            ban_info = copy(getattr(t, 'ban_info', {}))
-            ban_info.update(auto = auto,
-                            moderator_banned = moderator_banned,
-                            banned_at = date or datetime.now(g.tz),
-                            **kw)
 
+            if not t._spam and train_spam:
+                note = 'spam'
+            elif not t._spam and not train_spam:
+                note = 'remove not spam'
+            elif t._spam and not train_spam:
+                note = 'confirm spam'
+            elif t._spam and train_spam:
+                note = 'reinforce spam'
+
+            t._spam = True
+
+            if moderator_banned:
+                t.verdict = 'mod-removed'
+            elif not auto:
+                t.verdict = 'admin-removed'
+
+            ban_info = copy(getattr(t, 'ban_info', {}))
             if isinstance(banner, dict):
                 ban_info['banner'] = banner[t._fullname]
             else:
                 ban_info['banner'] = banner
+            ban_info.update(auto=auto,
+                            moderator_banned=moderator_banned,
+                            banned_at=date or datetime.now(g.tz),
+                            **kw)
+            ban_info['note'] = note
 
             t.ban_info = ban_info
             t._commit()
@@ -65,9 +80,10 @@ class AdminTools(object):
             self.author_spammer(new_things, True)
             self.set_last_sr_ban(new_things)
 
-        queries.ban(new_things)
+        queries.ban(all_things, filtered=auto)
 
-    def unspam(self, things, unbanner = None):
+    def unspam(self, things, moderator_unbanned=True, unbanner=None,
+               train_spam=True, insert=True):
         from r2.lib.db import queries
 
         things = tup(things)
@@ -89,15 +105,24 @@ class AdminTools(object):
             ban_info['unbanned_at'] = datetime.now(g.tz)
             if unbanner:
                 ban_info['unbanner'] = unbanner
+            if ban_info.get('reset_used', None) == None:
+                ban_info['reset_used'] = False
+            else:
+                ban_info['reset_used'] = True
             t.ban_info = ban_info
             t._spam = False
+            if moderator_unbanned:
+                t.verdict = 'mod-approved'
+            else:
+                t.verdict = 'admin-approved'
             t._commit()
 
-        # auto is always False for unbans
         self.author_spammer(things, False)
         self.set_last_sr_ban(things)
-
-        queries.unban(things)
+        queries.unban(things, insert)
+    
+    def report(self, thing):
+        pass
 
     def author_spammer(self, things, spam):
         """incr/decr the 'spammer' field for the author of every
@@ -306,11 +331,17 @@ def update_gold_users(verbose=False):
             delta, account = minimum
             print "Next expiration is %s, in %d days" % (account.name, delta.days)
 
+def admin_ratelimit(user):
+    return True
+
 def is_banned_IP(ip):
     return False
 
 def is_banned_domain(dom, ip):
     return None
+
+def is_shamed_domain(dom, ip):
+    return False, None, None
 
 def valid_thing(v, karma, *a, **kw):
     return not v._thing1._spam
@@ -325,7 +356,7 @@ def login_throttle(username, wrong_password):
 def apply_updates(user):
     pass
 
-def update_score(obj, up_change, down_change, new_valid_thing, old_valid_thing):
+def update_score(obj, up_change, down_change, vote, old_valid_thing):
      obj._incr('_ups',   up_change)
      obj._incr('_downs', down_change)
 
@@ -338,10 +369,6 @@ def ip_span(ip):
     return '<!-- %s -->' % ip
 
 def filter_quotas(unfiltered):
-    from r2.lib.utils.trial_utils import trial_info
-
-    trials = trial_info(unfiltered)
-
     now = datetime.now(g.tz)
 
     baskets = {
@@ -377,9 +404,7 @@ def filter_quotas(unfiltered):
             'admin-approved', 'mod-approved')
 
         # Then, make sure it's worthy of quota-clogging
-        if trials.get(item._fullname):
-            pass
-        elif item._spam:
+        if item._spam:
             pass
         elif item._deleted:
             pass
@@ -398,6 +423,9 @@ def filter_quotas(unfiltered):
         return baskets, new_quotas
     else:
         return baskets, None
+
+def check_request(end_time):
+    pass
 
 try:
     from r2admin.models.admintools import *

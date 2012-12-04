@@ -4,24 +4,27 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%!
   from r2.lib.filters import keep_space
-  from r2.lib.template_helpers import add_sr
+  from r2.lib.template_helpers import add_sr, static
+  from r2.lib.media import s3_direct_url
+  import os
 
 %>
 <%namespace file="utils.html" import="error_field, image_upload"/>
@@ -36,10 +39,11 @@
     
   <input type="hidden" name="r"  value="${thing.site.name}" />
   <input type="hidden" name="op"  value="" />
-  <input type="hidden" name="thumbbucket" 
-         value="http://${g.s3_thumb_bucket}/${c.site._fullname}" />
 
   <h2>${_("stylesheet")}</h2>
+  <input type="hidden" name="prevstyle" value="${thing.site.prev_stylesheet}"/>
+  ${error_field("TOO_LONG", "prevstyle")}
+  ${error_field("BAD_REVISION", "prevstyle")}
   <div class="sheets">
     <div style="width: 100%" class="col">
       <div>
@@ -51,6 +55,11 @@
            >
           ${keep_space(thing.stylesheet_contents) or ''}
         </textarea>
+        <div id="conflict_box" style="display: none">
+            <div id="conflict_diff"></div>
+            <h2 class="error">${_('Your edit will not be saved!')}</h2>
+            <textarea rows="20" cols="20" name="conflict_old"></textarea>
+        </div>
       </div>
     </div>
     <div style="display:none" class="col">
@@ -62,7 +71,6 @@
            name="default_stylesheet"
            readonly="readonly"
            >
-          ${keep_space(g.default_stylesheet)}
         </textarea>
       </div>
     </div>
@@ -94,12 +102,34 @@
   
   </form>
 
+  <div id="preview-table" style="display:none">
+    <h2><a name="preview">${_("preview")}</a></h2>
+    <table>
+      <tr>
+        <th>${_("normal link")}</th>
+        <td id="preview_link_normal"></td>
+      </tr>
+      <tr>
+        <th>${_("compressed link")}</th>
+        <td id="preview_link_compressed"></td>
+      </tr>
+      <tr>
+        <th>${_("link with thumbnail")}</th>
+        <td id="preview_link_media"></td>
+      </tr>
+      <tr>
+        <th>${_("comment")}</th>
+        <td id="preview_comment"></td>
+      </tr>
+    </table>
+  </div>
+
   <div id="images">
     <h2><a name="images">${_("images")}</a></h2>
 
   <%call expr="image_upload('/api/upload_sr_img', '', 
                               onchange='return file_changed(this)',
-                              label = _('image file'))">
+                              label = _('image file'), ask_type=True)">
     
     <br/>
     <label for="img-name">${_("new image name:")}</label>
@@ -142,13 +172,24 @@
             $(".img-status").innerHTML = "";
         }
         function showDefaultStylesheet(btn) {
+            var default_stylesheet = $('#default_stylesheet');
+            /* make sure to load the default stylesheet contents from the local domain so it doesn't get caught by cross-domain rules. */
+            var stylesheet_url = '${add_sr(os.path.join(c.site.static_path, g.static_names.get("reddit.css", "reddit.css")), nocname=True, sr_path=False)}';
+
+            if (!default_stylesheet.data('loaded')) {
+              default_stylesheet.text('loading...');
+              $.get(stylesheet_url, function(css) {
+                default_stylesheet.val(css);
+                default_stylesheet.data('loaded', true);
+              })
+            }
+
             $("#stylesheet_contents").parents(".col")
                 .animate( { width: "50%" }, function() { 
-                        $("#default_stylesheet").parents(".col")
+                        default_stylesheet.parents(".col")
                             .css("width", "50%")
                             .fadeIn();
-                    } );
-            
+                    });
         }
         function hideDefaultStylesheet(btn) {
             $("#default_stylesheet").parents(".col")
@@ -202,14 +243,20 @@
     /* ]]> */
     </script>
     <ul id="image-preview-list" class="image-list">
-      <%def name="make_li(name='', img = None, prototype=False)">
+      <%def name="make_li(name='', img=None, prototype=False)">
         <li ${"style='display:none'" if img is None else ""}>
           <% 
              if img is not None:
-                 img = "http://%s/%s_%d.png" % \
-                      (g.s3_thumb_bucket, c.site._fullname, img)
+                 if isinstance(img, int):
+                    bucket = g.s3_old_thumb_bucket
+                    baseurl = "http://%s" % (bucket)
+                    if g.s3_media_direct:
+                        baseurl = "http://%s/%s" % (s3_direct_url, bucket)
+                        
+                    img = "%s/%s_%d.png" % \
+                    (baseurl, c.site._fullname, img)
              else:
-                 img = "/static/kill.png"                  
+                 img = static('kill.png')
              %>
           <a href="${img}" class="preview">
             <img id="img-preview-${name}" src="${img}" 
@@ -235,7 +282,7 @@
         </%def>
       ${make_li(prototype=True)}
       %for name, img_num in c.site.get_images():
-         ${make_li(name = name, img = img_num)}
+         ${make_li(name=name, img=img_num)}
       %endfor
     </ul>
 
@@ -244,27 +291,5 @@
     
   </div>
 
-  <div style="clear:left"><!--IEsux--></div>
-  <div id="preview-table" style="display:none">
-    <h2><a name="preview">${_("preview")}</a></h2>
-    <table>
-      <tr>
-        <th>${_("normal link")}</th>
-        <td id="preview_link_normal"></td>
-      </tr>
-      <tr>
-        <th>${_("compressed link")}</th>
-        <td id="preview_link_compressed"></td>
-      </tr>
-      <tr>
-        <th>${_("link with thumbnail")}</th>
-        <td id="preview_link_media"></td>
-      </tr>
-      <tr>
-        <th>${_("comment")}</th>
-        <td id="preview_comment"></td>
-      </tr>
-    </table>
-  </div>
 </div>
 

@@ -11,14 +11,14 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
 
 from Queue import Queue
 from threading import local, Thread
@@ -42,6 +42,8 @@ amqp_exchange = 'reddit_exchange'
 log = g.log
 amqp_virtual_host = g.amqp_virtual_host
 amqp_logging = g.amqp_logging
+stats = g.stats
+queues = g.queues
 
 #there are two ways of interacting with this module: add_item and
 #handle_items/consume_items. _add_item (the internal function for
@@ -128,11 +130,22 @@ class ConnectionManager(local):
         return self.channel
 
     def init_queue(self):
-        from r2.lib.queues import RedditQueueMap
-
         chan = self.get_channel()
+        chan.exchange_declare(exchange=amqp_exchange,
+                              type="direct",
+                              durable=True,
+                              auto_delete=False)
 
-        RedditQueueMap(amqp_exchange, chan).init()
+        for queue in queues:
+            chan.queue_declare(queue=queue.name,
+                               durable=queue.durable,
+                               exclusive=queue.exclusive,
+                               auto_delete=queue.auto_delete)
+
+        for queue, key in queues.bindings:
+            chan.queue_bind(routing_key=key,
+                            queue=queue,
+                            exchange=amqp_exchange)
 
 connection_manager = ConnectionManager()
 
@@ -154,16 +167,20 @@ def _add_item(routing_key, body, message_id = None,
     if message_id:
         msg.properties['message_id'] = message_id
 
+    event_name = 'amqp.%s' % routing_key
     try:
         chan.basic_publish(msg,
                            exchange = amqp_exchange,
                            routing_key = routing_key)
     except Exception as e:
+        stats.event_count(event_name, 'enqueue_failed')
         if e.errno == errno.EPIPE:
             connection_manager.get_channel(True)
             add_item(routing_key, body, message_id)
         else:
             raise
+    else:
+        stats.event_count(event_name, 'enqueue')
 
 def add_item(routing_key, body, message_id = None, delivery_mode = DELIVERY_DURABLE):
     if amqp_host and amqp_logging:
@@ -184,6 +201,18 @@ def consume_items(queue, callback, verbose=True):
     from pylons import c
 
     chan = connection_manager.get_channel()
+
+    # configure the amount of data rabbit will send down to our buffer before
+    # we're ready for it (to reduce network latency). by default, it will send
+    # as much as our buffers will allow.
+    chan.basic_qos(
+        # size in bytes of prefetch window. zero indicates no preference.
+        prefetch_size=0,
+        # maximum number of prefetched messages.
+        prefetch_count=10,
+        # if global, applies to the whole connection, else just this channel.
+        a_global=False
+    )
 
     def _callback(msg):
         if verbose:
@@ -216,18 +245,19 @@ def consume_items(queue, callback, verbose=True):
         if chan.is_open:
             chan.close()
 
-def handle_items(queue, callback, ack = True, limit = 1, drain = False,
-                 verbose=True, sleep_time = 1):
+def handle_items(queue, callback, ack=True, limit=1, min_size=0,
+                 drain=False, verbose=True, sleep_time=1):
     """Call callback() on every item in a particular queue. If the
-       connection to the queue is lost, it will die. Intended to be
-       used as a long-running process."""
+    connection to the queue is lost, it will die. Intended to be
+    used as a long-running process."""
+    if limit < min_size:
+        raise ValueError("min_size must be less than limit")
     from pylons import c
 
     chan = connection_manager.get_channel()
     countdown = None
 
     while True:
-
         # NB: None != 0, so we don't need an "is not None" check here
         if countdown == 0:
             break
@@ -245,15 +275,21 @@ def handle_items(queue, callback, ack = True, limit = 1, drain = False,
         g.reset_caches()
         c.use_write_db = {}
 
-        items = []
+        items = [msg]
 
-        while msg and countdown != 0:
-            items.append(msg)
+        while countdown != 0:
             if countdown is not None:
                 countdown -= 1
             if len(items) >= limit:
                 break # the innermost loop only
             msg = chan.basic_get(queue)
+            if msg is None:
+                if len(items) < min_size:
+                    time.sleep(sleep_time)
+                else:
+                    break
+            else:
+                items.append(msg)
 
         try:
             count_str = ''
@@ -286,8 +322,6 @@ def empty_queue(queue):
 
 def black_hole(queue):
     """continually empty out a queue as new items are created"""
-    chan = connection_manager.get_channel()
-
     def _ignore(msg):
         print 'Ignoring msg: %r' % msg.body
 
@@ -340,22 +374,3 @@ def dedup_queue(queue, rk = None, limit=None,
         worker.join()
 
         chan.basic_ack(0, multiple=True)
-
-
-def _test_setup(test_q = 'test_q'):
-    from r2.lib.queues import RedditQueueMap
-    chan = connection_manager.get_channel()
-    rqm = RedditQueueMap(amqp_exchange, chan)
-    rqm._q(test_q, durable=False, auto_delete=True, self_refer=True)
-    return chan
-
-def test_consume(test_q = 'test_q'):
-    chan = _test_setup()
-    def _print(msg):
-        print msg.body
-    consume_items(test_q, _print)
-
-def test_produce(test_q = 'test_q', msg_body = 'hello, world!'):
-    _test_setup()
-    add_item(test_q, msg_body)
-    worker.join()

@@ -4,21 +4,21 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%!
    from r2.lib.filters import keep_space
@@ -35,19 +35,6 @@
        id="${thing.site._fullname}"
      %endif
      >
-%if thing.site:
-  <h1>${_("community settings")}
-  %if thing.site:
-    | &#32;<strong>${thing.site.name}</strong>
-  %endif
-  </h1>
-%else:
-  %if thing.name:
-    <p class="infobar">
-      ${_("that subreddit doesn't exist, but you can create it here.")}</p>
-  %endif
-  <h1>${_("create a community")}</h1>
-%endif
 
 <div class="pretty-form" id="sr-form">
 
@@ -79,13 +66,42 @@
   </%utils:line_field>
 
   <%utils:line_field title="${_('description')}" css_class="usertext"
-                     description="${_('500 characters max.  Make them count.')}">
-    %if thing.site and thing.site.description:
-     ${UserText(None, text = thing.site.description or "", editable = True, creating = True, name="description", have_form = False)}
+                     description="${_('publicly describe your subreddit for all to see. 500 characters max.')}">
+    %if thing.site and thing.site.public_description:
+     ${UserText(None, text=thing.site.public_description or "", editable=True, creating=True, name="public_description", have_form=False)}
     %else:
-     ${UserText(None, text = "", creating = True, name="description", have_form = False)}
+     ${UserText(None, text="", creating=True, name="public_description", have_form=False)}
     %endif
+    <div id="public_description_conflict_box" style="display: none">
+        <div id="public_description_conflict_diff"></div>
+        ${UserText(None, text="", editable=True, creating=True, name="public_description_conflict_old", have_form=False)}
+    </div>
+    ${error_field("CONFLICT", "public_description")}
   </%utils:line_field>
+
+  <%utils:line_field title="${_('sidebar')}" css_class="usertext"
+                     description="${_('shown in the sidebar of your subreddit. 5120 characters max.')}">
+    %if thing.site and thing.site.description:
+     ${UserText(None, text=thing.site.description or "", editable=True, creating=True, name="description", have_form=False)}
+    %else:
+     ${UserText(None, text="", creating=True, name="description", have_form=False)}
+    %endif
+    <div id="description_conflict_box" style="display: none">
+        <div id="description_conflict_diff"></div>
+        ${UserText(None, text="", editable=True, creating=True, name="description_conflict_old", have_form=False)}
+    </div>
+    ${error_field("CONFLICT", "description")}
+  </%utils:line_field>
+  
+  
+  %if thing.site:
+        <input type="hidden" name="prev_public_description_id" value="${thing.site.prev_public_description_id}"/>
+        <input type="hidden" name="prev_description_id" value="${thing.site.prev_description_id}"/>
+        ${error_field("TOO_LONG", "prev_public_description_id")}
+        ${error_field("TOO_LONG", "prev_description_id")}
+        ${error_field("BAD_REVISION", "prev_public_description_id")}
+        ${error_field("BAD_REVISION", "prev_description_id")}
+  %endif
 
   <%utils:line_field title="${_('language')}">
     <div class="delete-field">
@@ -110,7 +126,15 @@
       ${utils.radio_type('type', "private", _("private"),
                          _("only approved members can view and submit"),
                          (thing.site and thing.site.type=='private'))}
+
+      <% is_archived = thing.site and thing.site.type == 'archived' %>
+      %if c.user_is_admin or is_archived:
+        ${utils.radio_type('type', "archived", _("archived"),
+                           _("anyone can view, but submissions are no longer accepted"),
+                           is_archived)}
+      %endif
       </table>
+      ${error_field("INVALID_OPTION", "type")}
     </div>
   </%utils:line_field>
 
@@ -127,9 +151,47 @@
                            _("only text/self posts are allowed"),
                            (thing.site and thing.site.link_type=='self'))}
       </table>
+      ${error_field("INVALID_OPTION", "link_type")}
     </div>
   </%utils:line_field>
-
+  <%utils:line_field title="${_('wiki')}">
+    <div class="delete-field">
+      <table>
+        ${utils.radio_type('wikimode', "disabled", _("disabled"),
+                           _("Wiki is disabled for all users except mods"),
+                           (not thing.site or thing.site.wikimode == 'disabled'))}
+        ${utils.radio_type('wikimode', "modonly", _("mod editing"),
+                           _("Only mods or those on a pages edit list may edit"),
+                           (thing.site and thing.site.wikimode == 'modonly'))}
+        ${utils.radio_type('wikimode', "anyone", _("anyone"),
+                           _("Anyone who can submit to the subreddit may edit"),
+                           (thing.site and thing.site.wikimode == 'anyone'))}
+      </table>
+      ${error_field("INVALID_OPTION", "wikimode")}
+    </div>
+    <div class="usertext-edit">
+    <div class="delete-field">
+    <label for="wiki_edit_karma">${_('Subreddit karma required to edit and create wiki pages:')}</label>
+        %if thing.site:
+            <input id="wiki_edit_karma" type="text" name="wiki_edit_karma" 
+                   value = "${thing.site.wiki_edit_karma}"/>
+        %else:
+            <input id="wiki_edit_karma" type="text" name="wiki_edit_karma" value="100" />
+        %endif
+        ${error_field("BAD_NUMBER", "wiki_edit_karma")}
+    </div>
+    <div class="delete-field">
+    <label for="wiki_edit_age">${_('Account age (days) required to edit and create wiki pages:')}</label>
+        %if thing.site:
+            <input id="wiki_edit_age" type="text" name="wiki_edit_age" 
+                   value = "${thing.site.wiki_edit_age}"/>
+        %else:
+            <input id="wiki_edit_age" type="text" name="wiki_edit_age" value="0" />
+        %endif
+        ${error_field("BAD_NUMBER", "wiki_edit_age")}
+    </div>
+    </div>
+  </%utils:line_field>
   <%utils:line_field title="${_('other options')}">
     <div class="delete-field">
       <ul>
@@ -160,6 +222,7 @@
     </div>
   </%utils:line_field>
 
+% if thing.site and thing.site.domain != thing.site._defaults['domain']:
   <%utils:line_field title="${_('domain')}" css_class="usertext">
     <div class="delete-field">
       %if thing.site and c.site.domain:
@@ -194,6 +257,7 @@
       </div>
     </div>
   </%utils:line_field>
+% endif
 
 %if thing.site:
   <input type="hidden" name="sr" value="${thing.site._fullname}"/> 
@@ -215,7 +279,9 @@
         <li>
           <%utils:image_upload post_target="/api/upload_sr_img" 
                                current_image="${thing.site.header}"
-                               label="${_('upload header image')}">
+                               label="${_('upload header image')}"
+                               ask_type="${True}">
+            <br/>
             <button id="delete-img" class="delete-img"
                     %if not thing.site.header:
                        style="display: none;"
@@ -268,7 +334,9 @@
           <%utils:image_upload post_target="/api/upload_sr_img" 
                                current_image="${thing.site.sponsorship_img}"
                                label="${_('upload sponsorship image')}"
-                               form_id="sponsor-upload">
+                               form_id="sponsor-upload",
+                               ask_type="${True}">
+            <br/>
             <button id="delete-sponsor" class="delete-img"
                    %if not thing.site.sponsorship_img:
                       style="display: none;"
@@ -276,6 +344,7 @@
                    onclick="return post_form(this.form, 'delete_sr_header');">
               ${_('delete')}
             </button>
+            
             <div class="clearleft"></div>
             <input type="hidden" name="uh" value="${c.modhash}" />
             <input type="hidden" name="r"  value="${c.site.name}" />

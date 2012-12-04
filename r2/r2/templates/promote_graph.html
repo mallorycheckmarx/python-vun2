@@ -4,34 +4,41 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
-<%!
-   from r2.lib.template_helpers import static
-   from r2.lib import js
-   import datetime, locale
-   from r2.lib import promote
-   def num(x):
-      return locale.format('%d', x, True)
-   def money(x):
-      return "$%.2f" % x
- %>
-<h1>Sponsored link calendar</h1>
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
-${unsafe(js.use('flot'))}
+<%!
+   from r2.lib.template_helpers import static, format_number
+   from r2.lib import js
+   import datetime
+   from r2.lib import promote
+   import babel.numbers
+
+   locale = c.locale
+
+   def num(x):
+      return format_number(x, locale)
+   def money(x):
+      return babel.numbers.format_currency(x, 'USD', locale)
+ %>
+
+<%namespace file="reddittraffic.html" import="load_timeseries_js"/>
+${load_timeseries_js()}
+
+<h1>${_("Sponsored link calendar")}</h1>
 
 %if not c.user_is_sponsor:
 <div class="instructions">
@@ -130,151 +137,45 @@ ${unsafe(js.use('flot'))}
 <% 
    prev_end = 0
  %>
-%for link, bid, start, end, indx in thing.promote_blocks:
-  <% 
-     start += 1
-     end += 1
-     sr = '' 
-     if indx in getattr(link, "campaigns", {}):
-         sr = link.campaigns[indx][promote.CAMPAIGN.sr]
-     if sr:
-        sr += ':'
-   %>
- %if start != end:
+%for link, start, end, campaign in thing.promote_blocks:
+  <%
+    start += 1
+    end += 1
+    sr = campaign.sr_name + ':' if campaign.sr_name else ''
+  %>
+  %if start != end:
   %if prev_end > start:
     <% prev_end = 0 %>
     <div class="clearleft"></div>
   %endif
-  <%
-     margin = "%.2f" % (float(max_percent*(start-prev_end))/(thing.total_size+1))
-     width  = "%.2f" % (float(max_percent*(end-start))/(thing.total_size+1))
-     prev_end = end 
-   %>  
-  <div class="blob promotedlink ${link.rowstyle} rounded"
-       title="${link.title}"  
-       style="width: ${width}%; margin-left: ${margin}%">
-    <div class="bid">
-      ${sr}$${int(bid)}
+    <%
+       margin = "%.2f" % (float(max_percent*(start-prev_end))/(thing.total_size+1))
+       width  = "%.2f" % (float(max_percent*(end-start))/(thing.total_size+1))
+       prev_end = end 
+     %>  
+    <div class="blob promotedlink ${link.rowstyle} rounded"
+         title="${link.title}"  
+         style="width: ${width}%; margin-left: ${margin}%">
+      <div class="bid">
+        ${sr}$${int(campaign.bid)}
+      </div>
+      <a class="title" 
+         href="/promoted/edit_promo/${link._id36}"
+         title="${link.title}">
+        ${link.author.name}
+      </a>
     </div>
-    <a class="title" 
-       href="/promoted/edit_promo/${link._id36}"
-       title="${link.title}">
-      ${link.author.name}
-    </a>
-  </div>
- %endif
+  %endif
 %endfor
 </div>
 <div class="clear"></div>
 
-%if c.user_is_sponsor:
-  <h1>${_("total promotion traffic")}</h1>
-  <div>
-  %if thing.imp_graph:
-     ${thing.imp_graph}
-  %endif
-  %if thing.cli_graph:
-     ${thing.cli_graph}
-  %endif
-  %if thing.money_graph:
-     ${thing.money_graph}
-  %endif
-  </div>
-%endif
-
 <h1>${_("historical site performance")}</h1>
-<div>
-%if thing.cpm_graph:
-   ${thing.cpm_graph}
-%endif
-%if thing.cpc_graph:
-   ${thing.cpc_graph}
-%endif
-%if thing.cpc_graph and c.user_is_sponsor:
-   ${thing.ctr_graph}
-%endif
+<div id="charts"></div>
+
+${thing.performance_table}
+
+<script type="text/javascript">
+    r.timeseries.init()
+</script>
 </div>
-
-%if c.user_is_sponsor:
-<div class="clear"></div>
-  %if thing.top_promoters:
-  <h1>${_('top promoters this month')}</h1>
-  
-  <table class="traffic-table">
-    <tr>
-      <th>user</th>
-      <th>promos</th>
-      <th>bids</th>
-      <th>credits</th>
-      <th>total</th>
-      <th>per promo</th>
-    </tr>
-    %for account, bid, refund, promos in thing.top_promoters:
-      <tr>
-        <td>${account.name}</td>
-        <td>${len(promos)}</td>
-        <td>${money(bid)}</td>
-        <td>${money(refund)}</td>
-        <td>${money(bid - refund)}</td>
-        <td>${money((bid - refund)/len(promos))}</td>
-      </tr>
-    %endfor
-    %if len(thing.top_promoters) != 1:
-      <% 
-         totals = zip(*thing.top_promoters)
-         total_bid = sum(totals[1])
-         total_refund = sum(totals[2])
-         total_promos = sum(map(len, totals[3]))
-       %>
-      <tr class="totals">
-        <td>Total</td>
-        <td>${total_promos}</td>
-        <td>${money(total_bid)}</td>
-        <td>${money(total_refund)}</td>
-        <td>${money(total_bid - total_refund)}</td>
-        <td>${money((total_bid - total_refund)/total_promos)}</td>
-      </tr>
-   %endif
-  </table>
-  %endif
-
-  %if thing.recent:
-  <h1>${_('promotions this month')}&nbsp;<a href="/promoted/graph.csv">[CSV]</a></h1>
-  
-  <table class="traffic-table">
-    <tr>
-      <th colspan="2">Impresions</th>
-      <th colspan="2">Clicks</th>
-      <th></th>
-      <th></th>
-    </tr>
-    <tr>
-      <th>date</th>
-      <th>unique</th>
-      <th>total</th>
-      <th>unique</th>
-      <th>total</th>
-      <th>price</th>
-      <th>points</th>
-      <th>title</th>
-    </tr>
-    %for link, uimp, nimp, ucli, ncli in thing.recent:
-    <tr>
-      <td style="white-space:nowrap">
-        ${link._date.strftime("%Y-%m-%d")}
-      </td>
-      <td>${num(uimp)}</td>
-      <td>${num(nimp)}</td>
-      <td>${num(ucli)}</td>
-      <td>${num(ncli)}</td>
-      <td>TODO</td>
-##      <td>${money(link.promote_bid)}</td>
-      <td>${link._ups - link._downs}</td>
-      <td style="text-align:left">
-        <a class="title" href="${link.permalink}">${link.title}</a>
-      </td>
-    </tr>
-    %endfor
-  </table>
-  %endif
-%endif

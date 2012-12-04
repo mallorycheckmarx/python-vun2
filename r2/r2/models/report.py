@@ -11,19 +11,21 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.lib.db.thing import Thing, Relation, MultiRelation, thing_prefix
 from r2.lib.utils import tup
 from r2.lib.memoize import memoize
 from r2.models import Link, Comment, Message, Subreddit, Account
 from r2.models.vote import score_changes
+from datetime import datetime
 
 from pylons import g
 
@@ -69,12 +71,16 @@ class Report(MultiRelation('report',
             author = Account._byID(thing.author_id, data=True)
             author._incr('reported')
 
-        # update the reports queue if it exists
-        queries.new_report(thing)
+        item_age = datetime.now(g.tz) - thing._date
+        if item_age.days < g.REPORT_AGE_LIMIT:
+            # update the reports queue if it exists
+            queries.new_report(thing, r)
 
-        # if the thing is already marked as spam, accept the report
-        if thing._spam:
-            cls.accept(thing)
+            # if the thing is already marked as spam, accept the report
+            if thing._spam:
+                cls.accept(thing)
+        else:
+            g.log.debug("Ignoring old report %s" % r)
 
         return r
 
@@ -100,11 +106,12 @@ class Report(MultiRelation('report',
         for thing_cls, cls_things in things_by_cls.iteritems():
             # look up all of the reports for each thing
             rel_cls = cls.rel(Account, thing_cls)
-            rels = rel_cls._query(rel_cls.c._thing2_id == [ x._id for x in cls_things ],
-                                  rel_cls.c._name == '0')
+            thing_ids = [t._id for t in cls_things]
+            rels = rel_cls._query(rel_cls.c._thing2_id == thing_ids)
             for r in rels:
-                r._name = '1' if correct else '-1'
-                r._commit()
+                if r._name == '0':
+                    r._name = '1' if correct else '-1'
+                    r._commit()
 
             for thing in cls_things:
                 if thing.reported > 0:
@@ -112,6 +119,5 @@ class Report(MultiRelation('report',
                     thing._commit()
                     to_clear.append(thing)
 
-        if to_clear:
-            queries.clear_reports(to_clear)
+        queries.clear_reports(to_clear, rels)
 

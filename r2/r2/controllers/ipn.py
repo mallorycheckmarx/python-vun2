@@ -1,3 +1,25 @@
+# The contents of this file are subject to the Common Public Attribution
+# License Version 1.0. (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License at
+# http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
+# License Version 1.1, but Sections 14 and 15 have been added to cover use of
+# software over a computer network and provide for limited attribution for the
+# Original Developer. In addition, Exhibit A has been modified to be consistent
+# with Exhibit B.
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+# the specific language governing rights and limitations under the License.
+#
+# The Original Code is reddit.
+#
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
+#
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from xml.dom.minidom import Document
 from httplib import HTTPSConnection
 from urlparse import urlparse
@@ -9,12 +31,23 @@ from pylons.i18n import _
 
 from validator import *
 from r2.models import *
+from r2.lib.utils import randstr
 
 from reddit_base import RedditController
 
+
+def generate_blob(data):
+    passthrough = randstr(15)
+
+    g.hardcache.set("payment_blob-" + passthrough,
+                    data, 86400 * 30)
+    g.log.info("just set payment_blob-%s", passthrough)
+    return passthrough
+
+
 def get_blob(code):
     key = "payment_blob-" + code
-    with g.make_lock("payment_blob_lock-" + code):
+    with g.make_lock("payment_blob", "payment_blob_lock-" + code):
         blob = g.hardcache.get(key)
         if not blob:
             raise NotFound("No payment_blob-" + code)
@@ -24,6 +57,13 @@ def get_blob(code):
         blob['status'] = "locked"
         g.hardcache.set(key, blob, 86400 * 30)
     return key, blob
+
+def has_blob(custom):
+    if not custom:
+        return False
+
+    blob = g.hardcache.get('payment_blob-%s' % custom)
+    return bool(blob)
 
 def dump_parameters(parameters):
     for k, v in parameters.iteritems():
@@ -110,11 +150,20 @@ def verify_ipn(parameters):
         raise ValueError("Invalid IPN response: %r" % status)
 
 
-def existing_subscription(subscr_id, paying_id):
+def existing_subscription(subscr_id, paying_id, custom):
+    if subscr_id is None:
+        return None
+
     account_id = accountid_from_paypalsubscription(subscr_id)
+
+    if not account_id and has_blob(custom):
+        # New subscription contains the user info in hardcache
+        return None
 
     should_set_subscriber = False
     if account_id is None:
+        # Payment from legacy subscription (subscr_id not set), fall back
+        # to guessing the user from the paying_id
         account_id = account_by_payingid(paying_id)
         should_set_subscriber = True
         if account_id is None:
@@ -129,8 +178,8 @@ def existing_subscription(subscr_id, paying_id):
             return "deleted account"
 
         if should_set_subscriber:
-            if hasattr(account, "gold_subscr_id"):
-                g.log.warning("Attempted to set subscr_id (%s) for account (%d) " +
+            if hasattr(account, "gold_subscr_id") and account.gold_subscr_id:
+                g.log.warning("Attempted to set subscr_id (%s) for account (%d) "
                               "that already has one." % (subscr_id, account_id))
                 return None
 
@@ -142,16 +191,24 @@ def existing_subscription(subscr_id, paying_id):
     return account
 
 def months_and_days_from_pennies(pennies):
-    if pennies >= 2999:
-        months = 12 * (pennies / 2999)
-        days  = 366 * (pennies / 2999)
+    if pennies >= g.gold_year_price.pennies:
+        years = pennies / g.gold_year_price.pennies
+        months = 12 * years
+        days  = 366 * years
     else:
-        months = pennies / 399
+        months = pennies / g.gold_month_price.pennies
         days   = 31 * months
     return (months, days)
 
-def send_gift(buyer, recipient, months, days, signed, giftmessage):
+def send_gift(buyer, recipient, months, days, signed, giftmessage, comment_id):
     admintools.engolden(recipient, days)
+
+    if comment_id:
+        comment = Thing._by_fullname(comment_id, data=True)
+        comment._gild(buyer)
+    else:
+        comment = None
+
     if signed:
         sender = buyer.name
         md_sender = "[%s](/user/%s)" % (sender, sender)
@@ -160,20 +217,27 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage):
         md_sender = "An anonymous redditor"
 
     create_gift_gold (buyer._id, recipient._id, days, c.start_time, signed)
+
     if months == 1:
         amount = "a month"
     else:
         amount = "%d months" % months
 
+    if not comment:
+        message = strings.youve_got_gold % dict(sender=md_sender, amount=amount)
+
+        if giftmessage and giftmessage.strip():
+            message += "\n\n" + strings.giftgold_note + giftmessage
+    else:
+        message = strings.youve_got_comment_gold % dict(
+            url=comment.make_permalink_slow(),
+        )
+
     subject = sender + " just sent you reddit gold!"
-    message = strings.youve_got_gold % dict(sender=md_sender, amount=amount)
-
-    if giftmessage and giftmessage.strip():
-        message += "\n\n" + strings.giftgold_note + giftmessage
-
     send_system_message(recipient, subject, message)
 
     g.log.info("%s gifted %s to %s" % (buyer.name, amount, recipient.name))
+    return comment
 
 def _google_ordernum_request(ordernums):
     d = Document()
@@ -252,6 +316,10 @@ class IpnController(RedditController):
             raise ValueError("Invalid username %s in spendcreddits, buyer = %s"
                              % (recipient_name, c.user.name))
 
+        if recipient._deleted:
+            form.set_html(".status", _("that user has deleted their account"))
+            return
+
         if not c.user_is_admin:
             if months > c.user.gold_creddits:
                 raise ValueError("%s is trying to sneak around the creddit check"
@@ -261,7 +329,9 @@ class IpnController(RedditController):
             c.user.gold_creddit_escrow += months
             c.user._commit()
 
-        send_gift(c.user, recipient, months, days, signed, giftmessage)
+        comment_id = payment_blob.get("comment")
+        comment = send_gift(c.user, recipient, months, days, signed,
+                            giftmessage, comment_id)
 
         if not c.user_is_admin:
             c.user.gold_creddit_escrow -= months
@@ -271,7 +341,12 @@ class IpnController(RedditController):
         g.hardcache.set(blob_key, payment_blob, 86400 * 30)
 
         form.set_html(".status", _("the gold has been delivered!"))
-        jquery("button").hide()
+        form.find("button").hide()
+
+        if comment:
+            gilding_message = make_comment_gold_message(comment,
+                                                        user_gilded=True)
+            jquery.gild_comment(comment_id, gilding_message, comment.gildings)
 
     @textresponse(full_sn = VLength('serial-number', 100))
     def POST_gcheckout(self, full_sn):
@@ -393,7 +468,7 @@ class IpnController(RedditController):
         months, days = months_and_days_from_pennies(pennies)
 
         # Special case: autorenewal payment
-        existing = existing_subscription(subscr_id, paying_id)
+        existing = existing_subscription(subscr_id, paying_id, custom)
         if existing:
             if existing != "deleted account":
                 create_claimed_gold ("P" + txn_id, payer_email, paying_id,
@@ -404,9 +479,6 @@ class IpnController(RedditController):
                 g.log.info("Just applied IPN renewal for %s, %d days" %
                            (existing.name, days))
             return "Ok"
-        elif subscr_id:
-            g.log.warning("IPN subscription %s is not associated with anyone"
-                          % subscr_id)
 
         # More sanity checks that all non-autorenewals should pass:
 
@@ -465,7 +537,8 @@ class IpnController(RedditController):
                                  % (recipient_name, custom))
             signed = payment_blob.get("signed", False)
             giftmessage = payment_blob.get("giftmessage", False)
-            send_gift(buyer, recipient, months, days, signed, giftmessage)
+            comment_id = payment_blob.get("comment")
+            send_gift(buyer, recipient, months, days, signed, giftmessage, comment_id)
             instagift = True
             subject = _("thanks for giving reddit gold!")
             message = _("Your gift to %s has been delivered." % recipient.name)

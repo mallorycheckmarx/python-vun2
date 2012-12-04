@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from account import *
 from link import *
 from listing import *
@@ -26,11 +27,13 @@ from builder import *
 from vote import *
 from report import *
 from subreddit import *
+from flair import *
 from award import *
-from jury import *
-from trial import *
 from ad import *
 from bidding import *
 from mail_queue import Email, has_opted_out, opt_count
 from gold import *
 from admintools import *
+from token import *
+from modaction import *
+from promo import *

@@ -11,19 +11,21 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-##############################################################################
-import sha, datetime
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+import datetime
+import hashlib
 from email.MIMEText import MIMEText
 
 import sqlalchemy as sa
-from sqlalchemy.databases.postgres import PGInet, PGBigInteger
+from sqlalchemy.dialects.postgresql.base import PGInet
 
 from r2.lib.db.tdb_sql import make_metadata, index_str, create_table
 from r2.lib.utils import Storage, timeago, Enum, tup
@@ -42,7 +44,7 @@ def mail_queue(metadata):
                     sa.Column("msg_hash", sa.String),
                     
                     # the id of the account who started it
-                    sa.Column('account_id', PGBigInteger),
+                    sa.Column('account_id', sa.BigInteger),
 
                     # the name (not email) for the from
                     sa.Column('from_name', sa.String),
@@ -81,7 +83,7 @@ def sent_mail_table(metadata, name = 'sent_mail'):
                     sa.Column('msg_hash', sa.String, primary_key=True),
                     
                     # the account who started it
-                    sa.Column('account_id', PGBigInteger),
+                    sa.Column('account_id', sa.BigInteger),
                     
                     # the "To" address of the email
                     sa.Column('to_addr', sa.String),
@@ -175,7 +177,7 @@ class EmailHandler(object):
                 has_opted_out(email, _update = True)
                 opt_count(_update = True)
                 return (email, True)
-            except sa.exceptions.SQLError:
+            except sa.exc.DBAPIError:
                 return (email, False)
         return (None, False)
 
@@ -214,7 +216,7 @@ class EmailHandler(object):
         for email in tup(emails):
             uid = user._id if user else 0
             tid = thing._fullname if thing else ""
-            key = sha.new(str((email, from_name, uid, tid, ip, kind, body,
+            key = hashlib.sha1(str((email, from_name, uid, tid, ip, kind, body,
                                datetime.datetime.now(g.tz)))).hexdigest()
             s.insert().values({s.c.to_addr : email,
                                s.c.account_id : uid,
@@ -299,7 +301,6 @@ class Email(object):
                 "LIVE_PROMO",
                 "FINISHED_PROMO",
                 "NEW_PROMO",
-                "HELP_TRANSLATE",
                 "NERDMAIL",
                 "GOLDMAIL",
                 )
@@ -319,7 +320,6 @@ class Email(object):
         Kind.LIVE_PROMO   : _("[reddit] your promotion is now live"),
         Kind.FINISHED_PROMO : _("[reddit] your promotion has finished"),
         Kind.NEW_PROMO : _("[reddit] your promotion has been created"),
-        Kind.HELP_TRANSLATE : _("[i18n] translation offer from '%(user)s'"),
         Kind.NERDMAIL : _("[reddit] hey, nerd!"),
         Kind.GOLDMAIL : _("[reddit] reddit gold activation link")
         }

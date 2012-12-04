@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.models import Subreddit, Link
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.db.thing import Query
@@ -31,12 +32,14 @@ from time import time
 max_items = 150 # the number of links to request from the hot page
                 # query when the precomputer is disabled
 
-cpdef list get_hot(list srs, only_fullnames = True):
+cpdef list get_hot(list srs, only_fullnames=True, obey_age_limit=True):
     """Get the fullnames for the hottest normalised hottest links in a
        subreddit. Use the query-cache to avoid some lookups if we
        can."""
     cdef double oldest
-    cdef int hot_page_age = g.HOT_PAGE_AGE
+    cdef int hot_page_age = 0
+    if obey_age_limit:
+        hot_page_age = g.HOT_PAGE_AGE
     cdef int i
     cdef double hot
     cdef double thot # the top hotness on a given subreddit
@@ -70,13 +73,15 @@ cpdef list get_hot(list srs, only_fullnames = True):
                 q._filter(Link.c._date > timeago('%d days' % hot_page_age))
             q._limit = max_items
             for i, link in enumerate(q):
+                if i == 0:
+                    hot = link._hot
+                    thot = max(hot, 1.0)
                 es = epoch_seconds(link._date)
                 if not hot_page_age or es > oldest:
-                    hot = link._hot
                     if i == 0:
-                        thot = max(hot, 1.0)
                         ehot = 1.0
                     else:
+                        hot = link._hot
                         ehot = hot/thot
                     links.append((ehot, hot, link._fullname))
 
@@ -87,9 +92,10 @@ cpdef list get_hot(list srs, only_fullnames = True):
             # sorting a bit cheaper
 
             for i, (fname, hot, es) in enumerate(q.data[:max_items]):
+                if i == 0:
+                    thot = max(hot, 1.0)
                 if not hot_page_age or es > oldest:
                     if i == 0:
-                        thot = max(hot, 1.0)
                         ehot = 1.0
                     else:
                         ehot = hot/thot
@@ -106,8 +112,8 @@ cpdef _second(tuple x):
     return x[2]
 
 # memoized by our caller in normalized_hot.py
-cpdef list normalized_hot_cached(sr_ids):
+cpdef list normalized_hot_cached(sr_ids, obey_age_limit=True):
     """Fetches the hot lists for each subreddit, normalizes the
        scores, and interleaves the results."""
-    srs = Subreddit._byID(sr_ids, return_dict = False)
-    return get_hot(srs, True)
+    srs = Subreddit._byID(sr_ids, return_dict=False)
+    return get_hot(srs, True, obey_age_limit)

@@ -11,28 +11,42 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.lib.db.thing     import Thing, Relation, NotFound
 from r2.lib.db.operators import lower
 from r2.lib.db.userrel   import UserRel
+from r2.lib.db           import tdb_cassandra
 from r2.lib.memoize      import memoize
 from r2.lib.utils        import modhash, valid_hash, randstr, timefromnow
-from r2.lib.utils        import UrlParser, set_last_visit, last_visit
+from r2.lib.utils        import UrlParser
 from r2.lib.utils        import constant_time_compare
 from r2.lib.cache        import sgm
+from r2.lib import filters
 from r2.lib.log import log_text
+from r2.models.last_modified import LastModified
 
-from pylons import g
-import time, sha
+from pylons import c, g, request
+from pylons.i18n import _
+import time
+import hashlib
 from copy import copy
 from datetime import datetime, timedelta
+import bcrypt
+import hmac
+import hashlib
+from pycassa.system_manager import ASCII_TYPE
+
+
+COOKIE_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S'
+
 
 class AccountExists(Exception): pass
 
@@ -64,6 +78,8 @@ class Account(Thing):
                      pref_no_profanity = True,
                      pref_label_nsfw = True,
                      pref_show_stylesheets = True,
+                     pref_show_flair = True,
+                     pref_show_link_flair = True,
                      pref_mark_messages_read = True,
                      pref_threaded_messages = True,
                      pref_collapse_read_messages = False,
@@ -94,7 +110,31 @@ class Account(Thing):
                      gold_charter = False,
                      gold_creddits = 0,
                      gold_creddit_escrow = 0,
+                     otp_secret=None,
+                     state=0,
                      )
+
+    def __eq__(self, other):
+        if type(self) != type(other):
+            return False
+
+        return self._id == other._id
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def has_interacted_with(self, sr):
+        if not sr:
+            return False
+
+        for type in ('link', 'comment'):
+            if hasattr(self, "%s_%s_karma" % (sr.name, type)):
+                return True
+
+        if sr.is_subscriber(self):
+            return True
+
+        return False
 
     def karma(self, kind, sr = None):
         suffix = '_' + kind + '_karma'
@@ -143,20 +183,12 @@ class Account(Thing):
         return max(karma, 1) if karma > -1000 else karma
 
     def can_wiki(self):
-        if self.wiki_override is not None:
-            return self.wiki_override
-        else:
-            return (self.link_karma >= g.WIKI_KARMA and
-                    self.comment_karma >= g.WIKI_KARMA)
-
-    def jury_betatester(self):
-        if g.cache.get("jury-killswitch"):
-            return False
-        else:
-            return True
+        if self.wiki_override is None:
+            return self.link_karma > 100 or self.comment_karma > 100
+        return self.wiki_override
 
     def all_karmas(self):
-        """returns a list of tuples in the form (name, link_karma,
+        """returns a list of tuples in the form (name, hover-text, link_karma,
         comment_karma)"""
         link_suffix = '_link_karma'
         comment_suffix = '_comment_karma'
@@ -168,19 +200,18 @@ class Account(Thing):
             elif k.endswith(comment_suffix):
                 sr_names.add(k[:-len(comment_suffix)])
         for sr_name in sr_names:
-            karmas.append((sr_name,
+            karmas.append((sr_name, None,
                            self._t.get(sr_name + link_suffix, 0),
                            self._t.get(sr_name + comment_suffix, 0)))
 
-        karmas.sort(key = lambda x: abs(x[1] + x[2]), reverse=True)
+        karmas.sort(key = lambda x: abs(x[2] + x[3]), reverse=True)
 
-        karmas.insert(0, ('total',
-                          self.karma('link'),
-                          self.karma('comment')))
-
-        karmas.append(('old',
-                       self._t.get('link_karma', 0),
-                       self._t.get('comment_karma', 0)))
+        old_link_karma = self._t.get('link_karma', 0)
+        old_comment_karma = self._t.get('comment_karma', 0)
+        if old_link_karma or old_comment_karma:
+            karmas.append((_('ancient history'),
+                           _('really obscure karma from before it was cool to track per-subreddit'),
+                           old_link_karma, old_comment_karma))
 
         return karmas
 
@@ -189,34 +220,57 @@ class Account(Thing):
 
         apply_updates(self)
 
-        #prev_visit = getattr(self, 'last_visit', None)
-        prev_visit = last_visit(self)
-
-        if prev_visit and current_time - prev_visit < timedelta(1):
+        prev_visit = LastModified.get(self._fullname, "Visit")
+        if prev_visit and current_time - prev_visit < timedelta(days=1):
             return
 
         g.log.debug ("Updating last visit for %s from %s to %s" %
                     (self.name, prev_visit, current_time))
-        set_last_visit(self)
 
-    def make_cookie(self, timestr = None, admin = False):
+        LastModified.touch(self._fullname, "Visit")
+
+        self.last_visit = int(time.time())
+        self._commit()
+
+    def make_cookie(self, timestr=None):
         if not self._loaded:
             self._load()
-        timestr = timestr or time.strftime('%Y-%m-%dT%H:%M:%S')
+        timestr = timestr or time.strftime(COOKIE_TIMESTAMP_FORMAT)
         id_time = str(self._id) + ',' + timestr
         to_hash = ','.join((id_time, self.password, g.SECRET))
-        if admin:
-            to_hash += 'admin'
-        return id_time + ',' + sha.new(to_hash).hexdigest()
+        return id_time + ',' + hashlib.sha1(to_hash).hexdigest()
+
+    def make_admin_cookie(self, first_login=None, last_request=None):
+        if not self._loaded:
+            self._load()
+        first_login = first_login or datetime.utcnow().strftime(COOKIE_TIMESTAMP_FORMAT)
+        last_request = last_request or datetime.utcnow().strftime(COOKIE_TIMESTAMP_FORMAT)
+        hashable = ','.join((first_login, last_request, request.ip, request.user_agent, self.password))
+        mac = hmac.new(g.SECRET, hashable, hashlib.sha1).hexdigest()
+        return ','.join((first_login, last_request, mac))
+
+    def make_otp_cookie(self, timestamp=None):
+        if not self._loaded:
+            self._load()
+
+        timestamp = timestamp or datetime.utcnow().strftime(COOKIE_TIMESTAMP_FORMAT)
+        secrets = [request.user_agent, self.otp_secret, self.password]
+        signature = hmac.new(g.SECRET, ','.join([timestamp] + secrets), hashlib.sha1).hexdigest()
+
+        return ",".join((timestamp, signature))
 
     def needs_captcha(self):
-        return self.link_karma < 1 and not g.disable_captcha
+        return not g.disable_captcha and self.link_karma < 1
 
     def modhash(self, rand=None, test=False):
         return modhash(self, rand = rand, test = test)
     
     def valid_hash(self, hash):
-        return valid_hash(self, hash)
+        if self == c.oauth_user:
+            # OAuth authenticated requests do not require CSRF protection.
+            return True
+        else:
+            return valid_hash(self, hash)
 
     @classmethod
     @memoize('account._by_name')
@@ -299,7 +353,8 @@ class Account(Thing):
         rel.note = note
         rel._commit()
 
-    def delete(self):
+    def delete(self, delete_message=None):
+        self.delete_message = delete_message
         self._deleted = True
         self._commit()
 
@@ -324,6 +379,45 @@ class Account(Thing):
                           eager_load=True)
         for f in q:
             f._thing1.remove_enemy(f._thing2)
+
+        # Remove OAuth2Client developer permissions.  This will delete any
+        # clients for which this account is the sole developer.
+        from r2.models.token import OAuth2Client
+        for client in OAuth2Client._by_developer(self):
+            client.remove_developer(self)
+
+    # 'State' bitfield properties
+    @property
+    def _banned(self):
+        return self.state & 1
+
+    @_banned.setter
+    def _banned(self, value):
+        if value and not self._banned:
+            self.state |= 1
+            # Invalidate all cookies by changing the password
+            # First back up the password so we can reverse this
+            self.backup_password = self.password
+            # New PW doesn't matter, they can't log in with it anyway.
+            # Even if their PW /was/ 'banned' for some reason, this
+            # will change the salt and thus invalidate the cookies
+            change_password(self, 'banned') 
+
+            # deauthorize all access tokens
+            from r2.models.token import OAuth2AccessToken
+            from r2.models.token import OAuth2RefreshToken
+
+            OAuth2AccessToken.revoke_all_by_user(self)
+            OAuth2RefreshToken.revoke_all_by_user(self)
+        elif not value and self._banned:
+            self.state &= ~1
+
+            # Undo the password thing so they can log in
+            self.password = self.backup_password
+
+            # They're on their own for OAuth tokens, though.
+
+        self._commit()
 
     @property
     def subreddits(self):
@@ -387,6 +481,13 @@ class Account(Thing):
 
     def cup_info(self):
         return g.hardcache.get("cup_info-%d" % self._id)
+
+    def special_distinguish(self):
+        if self._t.get("special_distinguish_name"):
+            return dict((k, self._t.get("special_distinguish_"+k, None))
+                        for k in ("name", "kind", "symbol", "cssclass", "label", "link"))
+        else:
+            return None
 
     def quota_key(self, kind):
         return "user_%s_quotas-%s" % (kind, self.name)
@@ -533,33 +634,72 @@ class Account(Thing):
     def flair_enabled_in_sr(self, sr_id):
         return getattr(self, 'flair_%d_enabled' % sr_id, True)
 
+    def update_sr_activity(self, sr):
+        if not self._spam:
+            AccountsActiveBySR.touch(self, sr)
+
 class FakeAccount(Account):
     _nodb = True
     pref_no_profanity = True
 
+    def __eq__(self, other):
+        return self is other
 
-def valid_cookie(cookie):
-    try:
-        uid, timestr, hash = cookie.split(',')
-        uid = int(uid)
-    except:
-        return (False, False)
-
+def valid_admin_cookie(cookie):
     if g.read_only_mode:
-        return (False, False)
+        return (False, None)
 
+    # parse the cookie
     try:
-        account = Account._byID(uid, True)
-        if account._deleted:
-            return (False, False)
-    except NotFound:
-        return (False, False)
+        first_login, last_request, hash = cookie.split(',')
+    except ValueError:
+        return (False, None)
 
-    if constant_time_compare(cookie, account.make_cookie(timestr, admin = False)):
-        return (account, False)
-    elif constant_time_compare(cookie, account.make_cookie(timestr, admin = True)):
-        return (account, True)
-    return (False, False)
+    # make sure it's a recent cookie
+    try:
+        first_login_time = datetime.strptime(first_login, COOKIE_TIMESTAMP_FORMAT)
+        last_request_time = datetime.strptime(last_request, COOKIE_TIMESTAMP_FORMAT)
+    except ValueError:
+        return (False, None)
+
+    cookie_age = datetime.utcnow() - first_login_time
+    if cookie_age.total_seconds() > g.ADMIN_COOKIE_TTL:
+        return (False, None)
+
+    idle_time = datetime.utcnow() - last_request_time
+    if idle_time.total_seconds() > g.ADMIN_COOKIE_MAX_IDLE:
+        return (False, None)
+
+    # validate
+    expected_cookie = c.user.make_admin_cookie(first_login, last_request)
+    return (constant_time_compare(cookie, expected_cookie),
+            first_login)
+
+
+def valid_otp_cookie(cookie):
+    if g.read_only_mode:
+        return False
+
+    # parse the cookie
+    try:
+        remembered_at, signature = cookie.split(",")
+    except ValueError:
+        return False
+
+    # make sure it hasn't expired
+    try:
+        remembered_at_time = datetime.strptime(remembered_at, COOKIE_TIMESTAMP_FORMAT)
+    except ValueError:
+        return False
+
+    age = datetime.utcnow() - remembered_at_time
+    if age.total_seconds() > g.OTP_COOKIE_TTL:
+        return False
+
+    # validate
+    expected_cookie = c.user.make_otp_cookie(remembered_at)
+    return constant_time_compare(cookie, expected_cookie)
+
 
 def valid_feed(name, feedhash, path):
     if name and feedhash and path:
@@ -574,7 +714,7 @@ def valid_feed(name, feedhash, path):
             pass
 
 def make_feedhash(user, path):
-    return sha.new("".join([user.name, user.password, g.FEEDSECRET])
+    return hashlib.sha1("".join([user.name, user.password, g.FEEDSECRET])
                    ).hexdigest()
 
 def make_feedurl(user, path, ext = "rss"):
@@ -591,47 +731,74 @@ def valid_login(name, password):
         return False
 
     if not a._loaded: a._load()
+    if a._banned:
+        return False
     return valid_password(a, password)
 
 def valid_password(a, password):
-    try:
-        # A constant_time_compare isn't strictly required here
-        # but it is doesn't hurt
-        if constant_time_compare(a.password, passhash(a.name, password, '')):
-            #add a salt
-            a.password = passhash(a.name, password, True)
-            a._commit()
-            return a
-        else:
-            salt = a.password[:3]
-            if constant_time_compare(a.password, passhash(a.name, password, salt)):
-                return a
-    except AttributeError, UnicodeEncodeError:
+    # bail out early if the account or password's invalid
+    if not hasattr(a, 'name') or not hasattr(a, 'password') or not password:
         return False
-    # Python defaults to returning None
-    return False
+
+    # standardize on utf-8 encoding
+    password = filters._force_utf8(password)
+
+    if a.password.startswith('$2a$'):
+        # it's bcrypt.
+        expected_hash = bcrypt.hashpw(password, a.password)
+        if not constant_time_compare(a.password, expected_hash):
+            return False
+
+        # if it's using the current work factor, we're done, but if it's not
+        # we'll have to rehash.
+        # the format is $2a$workfactor$salt+hash
+        work_factor = int(a.password.split("$")[2])
+        if work_factor == g.bcrypt_work_factor:
+            return a
+    else:
+        # alright, so it's not bcrypt. how old is it?
+        # if the length of the stored hash is 43 bytes, the sha-1 hash has a salt
+        # otherwise it's sha-1 with no salt.
+        salt = ''
+        if len(a.password) == 43:
+            salt = a.password[:3]
+        expected_hash = passhash(a.name, password, salt)
+
+        if not constant_time_compare(a.password, expected_hash):
+            return False
+
+    # since we got this far, it's a valid password but in an old format
+    # let's upgrade it
+    a.password = bcrypt_password(password)
+    a._commit()
+    return a
+
+def bcrypt_password(password):
+    salt = bcrypt.gensalt(log_rounds=g.bcrypt_work_factor)
+    return bcrypt.hashpw(password, salt)
 
 def passhash(username, password, salt = ''):
     if salt is True:
         salt = randstr(3)
     tohash = '%s%s %s' % (salt, username, password)
-    return salt + sha.new(tohash).hexdigest()
+    return salt + hashlib.sha1(tohash).hexdigest()
 
 def change_password(user, newpassword):
-    user.password = passhash(user.name, newpassword, True)
+    user.password = bcrypt_password(newpassword)
     user._commit()
     return True
 
 #TODO reset the cache
-def register(name, password):
+def register(name, password, registration_ip):
     try:
         a = Account._by_name(name)
         raise AccountExists
     except NotFound:
         a = Account(name = name,
-                    password = passhash(name, password, True))
+                    password = bcrypt_password(password))
         # new accounts keep the profanity filter settings until opting out
         a.pref_no_profanity = True
+        a.registration_ip = registration_ip
         a._commit()
 
         #clear the caches
@@ -664,3 +831,27 @@ class DeletedUser(FakeAccount):
             pass
         else:
             object.__setattr__(self, attr, val)
+
+class AccountsActiveBySR(tdb_cassandra.View):
+    _use_db = True
+    _connection_pool = 'main'
+    _ttl = timedelta(minutes=15)
+
+    _extra_schema_creation_args = dict(key_validation_class=ASCII_TYPE)
+
+    _read_consistency_level  = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.ANY
+
+    @classmethod
+    def touch(cls, account, sr):
+        cls._set_values(sr._id36,
+                        {account._id36: ''})
+
+    @classmethod
+    def get_count(cls, sr, cached=True):
+        return cls.get_count_cached(sr._id36, _update=not cached)
+
+    @classmethod
+    @memoize('accounts_active', time=60)
+    def get_count_cached(cls, sr_id):
+        return cls._cf.get_count(sr_id)

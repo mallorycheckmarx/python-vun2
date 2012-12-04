@@ -14,6 +14,9 @@ function close_menus(event) {
         .removeClass("inuse");
     $(".drop-choices.active").removeClass("active");
 
+    // Clear any flairselectors that may have been opened.
+    $(".flairselector").empty();
+
     /* hide the search expando if the user clicks elsewhere on the page */ 
     if ($(event.target).closest("#search").length == 0) {
         $("#moresearchinfo").slideUp();
@@ -29,6 +32,16 @@ function close_menus(event) {
 };
 
 function hover_open_menu(menu) { };
+
+function select_tab_menu(tab_link, tab_name) {
+    var target = "tabbedpane-" + tab_name;
+    var menu = $(tab_link).parent().parent().parent();
+    menu.find(".tabmenu li").removeClass("selected");
+    $(tab_link).parent().addClass("selected");
+    menu.find(".tabbedpane").each(function() {
+        this.style.display = (this.id == target) ? "block" : "none";
+      });
+}
 
 function update_user(form) {
   try {
@@ -85,15 +98,19 @@ function get_form_fields(form, fields, filter_func) {
 };
 
 function form_error(form) {
-    return function(r) {
-        $(form).find(".status")
-            .html("an error occurred while posting " + 
-                  "(status: " + r.status + ")").end();
+    return function(req) {
+        var msg
+        if (req == 'ratelimit') {
+            msg = r.strings.rate_limit
+        } else {
+            msg = 'an error occurred while posting (status: ' + req.status + ')'
+        }
+        $(form).find('.status').text(msg)
     }
 }
 
-function simple_post_form(form, where, fields, block) {
-    $.request(where, get_form_fields(form, fields), null, block, 
+function simple_post_form(form, where, fields, block, callback) {
+    $.request(where, get_form_fields(form, fields), callback, block, 
               "json", false, form_error(form));
     return false;
 };
@@ -110,6 +127,12 @@ function post_pseudo_form(form, where, block) {
     return false;
 }
 
+function post_multipart_form(form, where) {
+    $(form).find(".error").not(".status").hide();
+    $(form).find(".status").html(reddit.status_msg.submitting).show();
+    return true;
+}
+
 function emptyInput(elem, msg) {
     if (! $(elem).val() || $(elem).val() == msg ) 
         $(elem).addClass("gray").val(msg).attr("rows", 3);
@@ -120,17 +143,6 @@ function emptyInput(elem, msg) {
 
 function showlang() {
     $(".lang-popup:first").show();
-    return false;
-};
-
-function showcover(warning, reason) {
-    $.request("new_captcha");
-    if (warning) 
-        $("#cover_disclaim, #cover_msg").show();
-    else
-        $("#cover_disclaim, #cover_msg").hide();
-    $(".login-popup:first").show()
-        .find('form input[name="reason"]').val(reason || "");
     return false;
 };
 
@@ -149,8 +161,8 @@ function deleteRow(elem) {
 
 /* general things */
 
-function change_state(elem, op, callback, keep) {
-    var form = $(elem).parents("form");
+function change_state(elem, op, callback, keep, post_callback) {
+    var form = $(elem).parents("form").first();
     /* look to see if the form has an id specified */
     var id = form.find('input[name="id"]');
     if (id.length) 
@@ -158,7 +170,7 @@ function change_state(elem, op, callback, keep) {
     else /* fallback on the parent thing */
         id = $(elem).thing_id();
 
-    simple_post_form(form, op, {id: id});
+    simple_post_form(form, op, {id: id}, undefined, post_callback);
     /* call the callback first before we mangle anything */
     if (callback) {
         callback(form.length ? form : elem, op);
@@ -213,8 +225,10 @@ function click_thing(elem) {
 }
 
 function hide_thing(elem) {
-    $(elem).thing().fadeOut(function(elem) { 
-            $(this).toggleClass("hidden") });
+    $(elem).thing().fadeOut(function() {
+            $(this).toggleClass("hidden");
+            unexpando_child(elem);
+    });
 };
 
 function toggle_label (elem, callback, cancelback) {
@@ -226,6 +240,8 @@ function toggle_label (elem, callback, cancelback) {
 }
 
 function toggle(elem, callback, cancelback) {
+    r.analytics.breadcrumbs.storeLastClick(elem)
+
     var self = $(elem).parent().andSelf().filter(".option");
     var sibling = self.removeClass("active")
         .siblings().addClass("active").get(0); 
@@ -284,6 +300,8 @@ function get_organic(elem, next) {
         if (next_thing.length == 0)
             next_thing = thing.siblings(".thing:not(.stub)").filter(":last");
     }    
+
+    organic_help(listing, next_thing)
     thing.fadeOut('fast', function() {
             if(next_thing.length)
                 next_thing.fadeIn('fast', function() {
@@ -313,6 +331,27 @@ function get_organic(elem, next) {
                     });
 };
 
+function organic_help(listing, thing) {
+    listing = listing || $('.organic-listing')
+    thing = thing || listing.find('.thing:visible')
+
+    var help = $('#spotlight-help')
+    if (!help.length) {
+        return
+    }
+
+    help.data('HelpBubble').hide(function() {
+        help.find('.help-section').hide()
+        if (thing.hasClass('promoted')) {
+            help.find('.help-promoted').show()
+        } else if (thing.hasClass('interestbar')) {
+            help.find('.help-interestbar').show()
+        } else {
+            help.find('.help-organic').show()
+        }
+    })
+}
+
 /* links */
 
 function linkstatus(form) {
@@ -322,33 +361,34 @@ function linkstatus(form) {
 
 function subscribe(reddit_name) {
     return function() { 
-        if (!reddit.logged)  {
-            showcover();
-        } else {
+        if (reddit.logged) {
+            if (reddit.cur_site == reddit_name) {
+                $('body').addClass('subscriber');
+            }
             $.things(reddit_name).find(".entry").addClass("likes");
             $.request("subscribe", {sr: reddit_name, action: "sub"});
+            r.analytics.fireUITrackingPixel("sub", reddit_name)
         }
     };
 };
 
 function unsubscribe(reddit_name) {
     return function() { 
-        if (!reddit.logged)  {
-            showcover();
-        } else {
+        if (reddit.logged) {
+            if (reddit.cur_site == reddit_name) {
+                $('body').removeClass('subscriber');
+            }
             $.things(reddit_name).find(".entry").removeClass("likes");
             $.request("subscribe", {sr: reddit_name, action: "unsub"});
+            r.analytics.fireUITrackingPixel("unsub", reddit_name)
         }
     };
 };
 
 function friend(user_name, container_name, type) {
     return function() {
-        if (!reddit.logged)  {
-            showcover();
-        }
-        else {
-            encoded = encodeURIComponent(reddit.referer);
+        if (reddit.logged) {
+            encoded = encodeURIComponent(document.referrer);
             $.request("friend?note=" + encoded,
                       {name: user_name, container: container_name, type: type});
         }
@@ -472,76 +512,6 @@ function moremessages(elem) {
 
 /* stylesheet and CSS stuff */
 
-function update_reddit_count(site) {
-    if (!site || !reddit.logged) return;
-    
-    var decay_factor = .9; //precentage to keep
-    var decay_period = 86400; //num of seconds between updates
-    var num_recent = 10; //num of recent reddits to report
-    var num_count = 100; //num of reddits to actually count
-    
-    var date_key = '_date';
-    var cur_date = new Date();
-    var count_cookie = 'reddit_counts';
-    var recent_cookie = 'recent_reddits';
-    var reddit_counts = $.cookie_read(count_cookie).data;
-    
-    //init the reddit_counts dict
-    if (!$.defined(reddit_counts) ) {
-        reddit_counts = {};
-        reddit_counts[date_key] = cur_date.toString();
-    }
-    var last_reset = new Date(reddit_counts[date_key]);
-    var decay = cur_date - last_reset > decay_period * 1000;
-
-    //incrmenet the count on the current reddit
-    reddit_counts[site] = $.with_default(reddit_counts[site], 0) + 1;
-
-    //collect the reddit names (for sorting) and decay the view counts
-    //if necessary
-    var names = [];
-    $.each(reddit_counts, function(sr_name, value) {
-            if(sr_name != date_key) {
-                if (decay && sr_name != site) {
-                    //compute the new count val
-                    var val = Math.floor(decay_factor * reddit_counts[sr_name]);
-                    if (val > 0) 
-                        reddit_counts[sr_name] = val;
-                    else 
-                        delete reddit_counts[sr_name];
-                }
-                if (reddit_counts[sr_name]) 
-                    names.push(sr_name);
-            }
-        });
-
-    //sort the names by the view counts
-    names.sort(function(n1, n2) {
-            return reddit_counts[n2] - reddit_counts[n1];
-        });
-
-    //update the last decay date
-    if (decay) reddit_counts[date_key] = cur_date.toString();
-
-    //build the list of names to report as "recent"
-    var recent_reddits = "";
-    for (var i = 0; i < names.length; i++) {
-        var sr_name = names[i];
-        if (i < num_recent) {
-            recent_reddits += names[i] + ',';
-        } else if (i >= num_count && sr_name != site) {
-            delete reddit_counts[sr_name];
-        }
-    }
-
-    //set the two cookies: one for the counts, one for the final
-    //recent list
-    $.cookie_write({name: count_cookie, data: reddit_counts});
-    if (recent_reddits) 
-        $.cookie_write({name: recent_cookie, data: recent_reddits});
-};
-
-
 function add_thing_to_cookie(thing, cookie_name) {
     var id = $(thing).thing_id();
 
@@ -563,9 +533,9 @@ function add_thing_id_to_cookie(id, cookie_name) {
 
     cookie.data = id + ',' + cookie.data;
 
-    if(cookie.data.length > 1000) {
-        var fullnames = cookie.data.split(',');
-        fullnames = $.uniq(fullnames, 20);
+    var fullnames = cookie.data.split(',');
+    if(fullnames.length > 5) {
+        fullnames = $.uniq(fullnames, 5);
         cookie.data = fullnames.join(',');
     }
 
@@ -603,50 +573,9 @@ function updateEventHandlers(thing) {
     thing = $(thing);
     var listing = thing.parent();
 
-    $(thing).filter(".promotedlink, .sponsorshipbox")
-        .bind("onshow", function() {
-            var id = $(this).thing_id();
-            if($.inArray(id, reddit.tofetch) != -1) {
-                $.request("onload", {ids: reddit.tofetch.join(",")});
-                reddit.tofetch = [];
-            }
-            var tracker = reddit.trackers[id]; 
-            if($.defined(tracker)) {
-                var title = $(this).find("a.title");
-                var text;
-                if ($.browser.msie) {
-                    /* bugfix for IE7-8; links with text that look like
-                     * a url of some sort (including the @ character)
-                     * have their text changed when href is set.
-                     * see http://jsfiddle.net/JU2Vj/1/ for a distilled
-                     * reproduction of the bug */
-                    text = title.html();
-                }
-
-                $(this).find("a.title").attr("href", tracker.click).end()
-                    .find("a.thumbnail").attr("href", tracker.click).end()
-                    .find("img.promote-pixel")
-                    .attr("src", tracker.show);
-
-                if ($.browser.msie) {
-                    if (text != title.html()) {
-                        title.html(text);
-                    }
-                }
-
-                delete reddit.trackers[id];
-            }
-        })
-        /* pre-trigger new event if already shown */
-        .filter(":visible").trigger("onshow");
-
     /* click on a title.. */
     $(thing).filter(".link")
         .find("a.title, a.comments").mousedown(function() {
-            /* the site is either stored in the sr dict, or we are on
-             * an sr and it is the current one */
-            var sr = reddit.sr[$(this).thing_id()] || reddit.cur_site;
-            update_reddit_count(sr);
             /* mark as clicked */
             $(this).addClass("click");
             /* set the click cookie. */
@@ -819,7 +748,7 @@ function sr_search(query) {
     query = query.toLowerCase();
     var cache = sr_cache();
     if (!cache[query]) {
-        $.request('search_reddit_names', {query: query},
+        $.request('search_reddit_names.json', {query: query},
                   function (r) {
                       cache[query] = r['names'];
                       update_dropdown(r['names']);
@@ -881,6 +810,7 @@ function sr_name_down(e) {
         return false;
     }
     else if (e.keyCode == 13) {
+        $("#sr-autocomplete").trigger("sr-changed");
         hide_sr_name_list();
         input.parents("form").submit();
         return false;
@@ -901,12 +831,14 @@ function sr_dropdown_mup(row) {
         var name = $(row).text();
         $("#sr-autocomplete").val(name);
         $("#sr-drop-down").hide();
+        $("#sr-autocomplete").trigger("sr-changed");
     }
 }
 
 function set_sr_name(link) {
     var name = $(link).text();
     $("#sr-autocomplete").trigger('focus').val(name);
+    $("#sr-autocomplete").trigger("sr-changed");
 }
 
 /*** tabbed pane stuff ***/
@@ -1045,9 +977,9 @@ function edit_usertext(elem) {
 }
 
 function cancel_usertext(elem) {
-    var t = $(elem).thing().debug();
-    t.find(".edit-usertext:first").parent("li").andSelf().show(); 
-    hide_edit_usertext(t.find(".usertext:first"));
+    var t = $(elem);
+    t.thing().find(".edit-usertext:first").parent("li").andSelf().show(); 
+    hide_edit_usertext(t.closest(".usertext"));
 }
 
 function save_usertext(elem) {
@@ -1230,7 +1162,7 @@ function fetch_parent(elem, parent_permalink, parent_id) {
                     });
                 if(parent) {
                     /* make a parent div for the contents of the fetch */
-                    thing.find(".noncollapsed .md")
+                    thing.find(".noncollapsed .md").first() 
                         .before('<div class="parent rounded">' +
                                 $.unsafe(parent) +
                                 '</div>'); 
@@ -1251,13 +1183,16 @@ function big_mod_action(elem, dir) {
          id: thing_id
       };
 
+      elem.siblings(".status-msg").hide();
       if (dir == -1) {
+        d.spam = false;
         $.request("remove", d, null, true);
         elem.siblings(".removed").show();
-        elem.siblings(".approved").hide();
+      } else if (dir == -2) {
+        $.request("remove", d, null, true);
+        elem.siblings(".spammed").show();
       } else if (dir == 1) {
         $.request("approve", d, null, true);
-        elem.siblings(".removed").hide();
         elem.siblings(".approved").show();
       }
    }
@@ -1265,24 +1200,6 @@ function big_mod_action(elem, dir) {
    return false;
 }
 
-function juryvote(elem, dir) {
-   var thing_id = elem.thing_id();
-
-   if (elem.hasClass("pressed")) {
-      dir = 0;
-   }
-
-   elem.toggleClass("pressed");
-   elem.siblings(".pretty-button").removeClass("pressed");
-
-   d = {
-         id: thing_id,
-         dir: dir
-       };
-   $.request("juryvote", d, null, true);
-   elem.siblings(".thanks-for-voting").show();
-   return false;
-}
 
 /* The ready method */
 $(function() {
@@ -1323,10 +1240,6 @@ $(function() {
         /* set up the cookie domain */
         $.default_cookie_domain(reddit.cur_domain.split(':')[0]);
         
-        /* Count the rendering of this reddit */
-        if(reddit.cur_site)  
-           update_reddit_count(reddit.cur_site);
-
         /* visually mark the last-clicked entry */
         last_click();
 
@@ -1355,11 +1268,28 @@ $(function() {
         $("#shortlink-text").click(function() {
             $(this).select();
         });
+
+        organic_help()
+
+        /* ajax ynbutton */
+        function toggleThis() { return toggle(this); }
+        $("body")
+            .delegate(".ajax-yn-button", "submit",
+                      function() {
+                          var op = $(this).find('input[name="_op"]').val();
+                          post_form(this, op);
+                          return false;
+                      })
+            .delegate(".ajax-yn-button .togglebutton", "click", toggleThis)
+            .delegate(".ajax-yn-button .no", "click", toggleThis)
+            .delegate(".ajax-yn-button .yes", "click",
+                      function() { $(this).closest("form").submit(); })
+            ;
     });
 
 function show_friend(account_fullname) {
     var label = '<a class="friend" title="friend" href="/prefs/friends">F</a>';
-    var ua = $(".author.id-" + account_fullname).addClass("friend")
+    var ua = $("div.content .author.id-" + account_fullname).addClass("friend")
         .next(".userattrs").each(function() {
                 if (!$(this).html()) {
                     $(this).html(" [" + label + "]");
@@ -1378,6 +1308,17 @@ function show_unfriend(account_fullname) {
                 $(this).html("");
             }
         });
+}
+
+function show_saved(comment_fullname) {
+    var comment = $('.id-' + comment_fullname),
+        buttons = comment.find('.buttons').first(),
+        save = buttons.find('.comment-save-button')
+        form = '<li class="comment-unsave-button"><form action="/post/unsave" method="post" class="state-button unsave-button">'
+    form = form + '<input type="hidden" name="executed" value="unsaved"/><span>'
+    form = form + '<a href="javascript:void(0)" onclick="return change_state(this, \'unsave\', unsave_thing);">unsave</a></span></form></li>'
+    save.replaceWith(form)
+    comment.addClass('saved')
 }
 
 function search_feedback(elem, approval) {
@@ -1408,4 +1349,31 @@ function highlight_new_comments(period) {
       items.removeClass("new-comment");
     }
   }
+}
+
+function save_href(link) {
+  if (!link.attr("srcurl")){
+    link.attr("srcurl", link.attr("href"));
+  }
+  return link;
+}
+
+function pure_domain(url) {
+    var domain = url.match(/:\/\/([^/]+)/)
+    if (domain) {
+        domain = domain[1].replace(/^www\./, '');
+    }
+    return domain;
+}
+
+function parse_domain(url) {
+    var domain = pure_domain(url);
+    if (!domain) {
+        /* Internal link? Get the SR name, if there is one */
+        var reddit = url.match(/\/r\/([^/]+)/)
+        if (reddit) {
+            domain = "self." + reddit[1].toLowerCase();
+        }
+    }
+    return domain;
 }

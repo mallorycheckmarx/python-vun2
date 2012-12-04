@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.lib.manager import tp_manager
 from r2.lib.jsontemplates import *
 
@@ -43,12 +44,29 @@ api('morechildren',  MoreCommentJsonTemplate)
 api('reddit',        RedditJsonTemplate)
 api('panestack',     PanestackJsonTemplate)
 api('listing',       ListingJsonTemplate)
-api('usertableitem', UserItemJsonTemplate)
+api('modlist',       UserListJsonTemplate)
+api('userlist',      UserListJsonTemplate)
+api('contributorlist', UserListJsonTemplate)
+api('bannedlist',    UserListJsonTemplate)
+api('friendlist',    UserListJsonTemplate)
+api('usertableitem', UserTableItemJsonTemplate)
 api('account',       AccountJsonTemplate)
 
 api('organiclisting',       OrganicListingJsonTemplate)
-api('reddittraffic', TrafficJsonTemplate)
+api('subreddittraffic', TrafficJsonTemplate)
 api('takedownpane', TakedownJsonTemplate)
+
+api('wikibasepage', WikiJsonTemplate)
+api('wikipagerevisions', WikiJsonTemplate)
+api('wikiview', WikiViewJsonTemplate)
+api('wikirevision', WikiRevisionJsonTemplate)
 
 api('flairlist', FlairListJsonTemplate)
 api('flaircsv', FlairCsvJsonTemplate)
+
+api('subredditstylesheet', StylesheetTemplate)
+api('createsubreddit', SubredditSettingsTemplate)
+
+api('modaction', ModActionTemplate)
+
+tpm.add_handler('usertableitem', 'api-html', UserItemHTMLJsonTemplate())

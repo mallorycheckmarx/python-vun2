@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2008
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.lib.db.thing import Thing, Relation, NotFound
 from r2.lib.db.userrel import UserRel
 from r2.lib.db.operators import asc, desc, lower
@@ -29,6 +30,7 @@ from pylons import c, g, request
 class Award (Thing):
     _defaults = dict(
         awardtype = 'regular',
+        api_ok = False
         )
 
     @classmethod
@@ -45,11 +47,9 @@ class Award (Thing):
         return [ d[id] for id in all ]
 
     @classmethod
-    def _new(cls, codename, title, awardtype, imgurl):
-#        print "Creating new award codename=%s title=%s imgurl=%s" % (
-#            codename, title, imgurl)
+    def _new(cls, codename, title, awardtype, imgurl, api_ok):
         a = Award(codename=codename, title=title, awardtype=awardtype,
-                  imgurl=imgurl)
+                  imgurl=imgurl, api_ok=api_ok)
         a._commit()
         Award._all_awards_cache(_update=True)
 
@@ -142,8 +142,12 @@ class Trophy(Relation(Account, Award)):
             recipient.set_cup(cup_info)
 
         t._commit()
-        Trophy.by_account(recipient, _update=True)
-        Trophy.by_award(award, _update=True)
+        t.update_caches()
+        return t
+    
+    def update_caches(self):
+        self.by_account(self._thing1, _update=True)
+        self.by_award(self._thing2, _update=True)
 
     @classmethod
     @memoize('trophy.by_account2')
@@ -165,7 +169,7 @@ class Trophy(Relation(Account, Award)):
     def by_award_cache(cls, award_id):
         q = Trophy._query(Trophy.c._thing2_id == award_id,
                           sort = desc('_date'))
-        q._limit = 500
+        q._limit = 50
         return [ t._id for t in q ]
 
     @classmethod

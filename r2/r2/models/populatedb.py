@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.models import *
 from r2.lib.utils import fetch_things2
 from pylons import g
@@ -37,7 +38,7 @@ def populate(num_srs = 10, num_users = 1000, num_links = 100, num_comments = 20,
     try:
         a = Account._by_name(g.system_user)
     except NotFound:
-        a = register(g.system_user, "password")
+        a = register(g.system_user, "password", "127.0.0.1")
 
     srs = []
     for i in range(num_srs):
@@ -59,7 +60,7 @@ def populate(num_srs = 10, num_users = 1000, num_links = 100, num_comments = 20,
                              in range(int(random.uniform(1, 10))) ])
         name = 'test_' + name_ext
         try:
-            a = register(name, name)
+            a = register(name, name, "127.0.0.1")
         except AccountExists:
             a = Account._by_name(name)
         accounts.append(a)

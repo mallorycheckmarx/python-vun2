@@ -11,35 +11,98 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+from copy import deepcopy
 from datetime import datetime
 import cPickle as pickle
-from copy import deepcopy
-import random
-
-import sqlalchemy as sa
-from sqlalchemy.databases import postgres
-
-from r2.lib.utils import storage, storify, iters, Results, tup, TransSet
-import operators
-from pylons import g, c
-dbm = g.dbm
-
 import logging
-log_format = logging.Formatter('sql: %(message)s')
+import operators
+import re
+import threading
 
+from pylons import g, c, request
+import sqlalchemy as sa
+
+from r2.lib import filters
+from r2.lib.utils import (
+    iters,
+    Results,
+    simple_traceback,
+    storage,
+    tup,
+)
+
+
+dbm = g.dbm
+predefined_type_ids = g.predefined_type_ids
+log_format = logging.Formatter('sql: %(message)s')
 max_val_len = 1000
 
-transactions = TransSet()
 
-BigInteger = postgres.PGBigInteger
+class TransactionSet(threading.local):
+    """A manager for SQL transactions.
+
+    This implements a thread local meta-transaction which may span multiple
+    databases.  The existing tdb_sql code calls add_engine before executing
+    writes.  If thing.py calls begin then these calls will actually kick in
+    and start a transaction that must be committed or rolled back by thing.py.
+
+    Because this involves creating transactions at the connection level, this
+    system implicitly relies on using the threadlocal strategy for the
+    sqlalchemy engines.
+
+    This system is a bit awkward, and should be replaced with something that
+    doesn't use module-globals when doing a cleanup of tdb_sql.
+
+    """
+
+    def __init__(self):
+        self.transacting_engines = set()
+        self.transaction_begun = False
+
+    def begin(self):
+        """Indicate that a transaction has begun."""
+        self.transaction_begun = True
+
+    def add_engine(self, engine):
+        """Add a database connection to the meta-transaction if active."""
+        if not self.transaction_begun:
+            return
+
+        if engine not in self.transacting_engines:
+            engine.begin()
+            self.transacting_engines.add(engine)
+
+    def commit(self):
+        """Commit the meta-transaction."""
+        try:
+            for engine in self.transacting_engines:
+                engine.commit()
+        finally:
+            self._clear()
+
+    def rollback(self):
+        """Roll back the meta-transaction."""
+        try:
+            for engine in self.transacting_engines:
+                engine.rollback()
+        finally:
+            self._clear()
+
+    def _clear(self):
+        self.transacting_engines.clear()
+        self.transaction_begun = False
+
+
+transactions = TransactionSet()
 
 MAX_THING_ID = 9223372036854775807 # http://www.postgresql.org/docs/8.3/static/datatype-numeric.html
 
@@ -124,7 +187,7 @@ def get_rel_type_table(metadata):
 
 def get_thing_table(metadata, name):
     table = sa.Table(g.db_app_name + '_thing_' + name, metadata,
-                     sa.Column('thing_id', BigInteger, primary_key = True),
+                     sa.Column('thing_id', sa.BigInteger, primary_key = True),
                      sa.Column('ups', sa.Integer, default = 0, nullable = False),
                      sa.Column('downs',
                                sa.Integer,
@@ -142,11 +205,12 @@ def get_thing_table(metadata, name):
                                sa.DateTime(timezone = True),
                                default = sa.func.now(),
                                nullable = False))
+    table.thing_name = name
     return table
 
 def get_data_table(metadata, name):
     data_table = sa.Table(g.db_app_name + '_data_' + name, metadata,
-                          sa.Column('thing_id', BigInteger, nullable = False,
+                          sa.Column('thing_id', sa.BigInteger, nullable = False,
                                     primary_key = True),
                           sa.Column('key', sa.String, nullable = False,
                                     primary_key = True),
@@ -156,13 +220,14 @@ def get_data_table(metadata, name):
 
 def get_rel_table(metadata, name):
     rel_table = sa.Table(g.db_app_name + '_rel_' + name, metadata,
-                         sa.Column('rel_id', BigInteger, primary_key = True),
-                         sa.Column('thing1_id', BigInteger, nullable = False),
-                         sa.Column('thing2_id', BigInteger, nullable = False),
+                         sa.Column('rel_id', sa.BigInteger, primary_key = True),
+                         sa.Column('thing1_id', sa.BigInteger, nullable = False),
+                         sa.Column('thing2_id', sa.BigInteger, nullable = False),
                          sa.Column('name', sa.String, nullable = False),
                          sa.Column('date', sa.DateTime(timezone = True),
                                    default = sa.func.now(), nullable = False),
                          sa.UniqueConstraint('thing1_id', 'thing2_id', 'name'))
+    rel_table.rel_name = name
     return rel_table
 
 #get/create the type tables
@@ -186,9 +251,21 @@ types_name = {}
 rel_types_id = {}
 rel_types_name = {}
 
-def check_type(table, selector, insert_vals):
-    #check for type in type table, create if not existent
-    r = table.select(selector).execute().fetchone()
+class ConfigurationError(Exception):
+    pass
+
+def check_type(table, name, insert_vals):
+    # before hitting the db, check if we can get the type id from
+    # the ini file
+    type_id = predefined_type_ids.get(name)
+    if type_id:
+        return type_id
+    elif len(predefined_type_ids) > 0:
+        # flip the hell out if only *some* of the type ids are defined
+        raise ConfigurationError("Expected typeid for %s" % name)
+
+    # check for type in type table, create if not existent
+    r = table.select(table.c.name == name).execute().fetchone()
     if not r:
         r = table.insert().execute(**insert_vals)
         type_id = r.last_inserted_ids()[0]
@@ -200,7 +277,7 @@ def check_type(table, selector, insert_vals):
 def build_thing_tables():
     for name, engines in dbm.things_iter():
         type_id = check_type(type_table,
-                             type_table.c.name == name,
+                             name,
                              dict(name = name))
 
         tables = []
@@ -234,7 +311,7 @@ def build_rel_tables():
         type1_id = types_name[type1_name].type_id
         type2_id = types_name[type2_name].type_id
         type_id = check_type(rel_type_table,
-                             rel_type_table.c.name == name,
+                             name,
                              dict(name = name,
                                   type1_id = type1_id,
                                   type2_id = type2_id))
@@ -287,20 +364,12 @@ def get_write_table(tables):
     else:
         return tables[0]
 
-import re, traceback, cStringIO as StringIO
 _spaces = re.compile('[\s]+')
 def add_request_info(select):
-    from pylons import request
-    from r2.lib import filters
     def sanitize(txt):
         return _spaces.sub(' ', txt).replace("/", "|").replace("-", "_").replace(';', "").replace("*", "").replace(r"/", "")
-    s = StringIO.StringIO()
-    traceback.print_stack( file = s)
-    tb = s.getvalue()
-    if tb:
-        tb = tb.split('\n')[0::2]
-        tb = [x.split('/')[-1] for x in tb if "/r2/" in x]
-        tb = '\n'.join(tb[-15:-2])
+
+    tb = simple_traceback(limit=12)
     try:
         if (hasattr(request, 'path') and
             hasattr(request, 'ip') and
@@ -370,8 +439,9 @@ def make_thing(type_id, ups, downs, date, deleted, spam, id=None):
     try:
         id = do_insert(table)
         params['thing_id'] = id
+        g.stats.event_count('thing.create', table.thing_name)
         return id
-    except sa.exceptions.SQLError, e:
+    except sa.exc.DBAPIError, e:
         if not 'IntegrityError' in e.message:
             raise
         # wrap the error to prevent db layer bleeding out
@@ -418,8 +488,9 @@ def make_relation(rel_type_id, thing1_id, thing2_id, name, date=None):
                                    thing2_id = thing2_id,
                                    name = name, 
                                    date = date)
+        g.stats.event_count('rel.create', table.rel_name)
         return r.last_inserted_ids()[0]
-    except sa.exceptions.SQLError, e:
+    except sa.exc.DBAPIError, e:
         if not 'IntegrityError' in e.message:
             raise
         # wrap the error to prevent db layer bleeding out
@@ -473,30 +544,39 @@ def db2py(val, kind):
 
     return val
 
-#TODO i don't need type_id
-def set_data(table, type_id, thing_id, **vals):
-    s = sa.select([table.c.key], sa.and_(table.c.thing_id == thing_id))
 
+def update_data(table, thing_id, **vals):
     transactions.add_engine(table.bind)
-    keys = [x.key for x in s.execute().fetchall()]
 
-    i = table.insert(values = dict(thing_id = thing_id))
     u = table.update(sa.and_(table.c.thing_id == thing_id,
-                             table.c.key == sa.bindparam('key')))
+                             table.c.key == sa.bindparam('_key')))
 
     inserts = []
     for key, val in vals.iteritems():
         val, kind = py2db(val, return_kind=True)
 
-        #TODO one update?
-        if key in keys:
-            u.execute(key = key, value = val, kind = kind)
-        else:
+        uresult = u.execute(_key = key, value = val, kind = kind)
+        if not uresult.rowcount:
             inserts.append({'key':key, 'value':val, 'kind': kind})
 
     #do one insert
     if inserts:
+        i = table.insert(values = dict(thing_id = thing_id))
         i.execute(*inserts)
+
+
+def create_data(table, thing_id, **vals):
+    transactions.add_engine(table.bind)
+
+    inserts = []
+    for key, val in vals.iteritems():
+        val, kind = py2db(val, return_kind=True)
+        inserts.append(dict(key=key, value=val, kind=kind))
+
+    if inserts:
+        i = table.insert(values=dict(thing_id=thing_id))
+        i.execute(*inserts)
+
 
 def incr_data_prop(table, type_id, thing_id, prop, amount):
     t = table
@@ -515,8 +595,8 @@ def fetch_query(table, id_col, thing_id):
         single = True
         thing_id = (thing_id,)
     
-    s = sa.select([table], sa.or_(*[id_col == tid
-                                    for tid in thing_id]))
+    s = sa.select([table], id_col.in_(thing_id))
+
     try:
         r = add_request_info(s).execute().fetchall()
     except Exception, e:
@@ -542,9 +622,13 @@ def get_data(table, thing_id):
 
     return res
 
-def set_thing_data(type_id, thing_id, **vals):
+def set_thing_data(type_id, thing_id, brand_new_thing, **vals):
     table = get_thing_table(type_id, action = 'write')[1]
-    return set_data(table, type_id, thing_id, **vals)
+
+    if brand_new_thing:
+        return create_data(table, thing_id, **vals)
+    else:
+        return update_data(table, thing_id, **vals)
 
 def incr_thing_data(type_id, thing_id, prop, amount):
     table = get_thing_table(type_id, action = 'write')[1]
@@ -577,9 +661,13 @@ def get_thing(type_id, thing_id):
             res[row.thing_id] = stor
     return res
 
-def set_rel_data(rel_type_id, thing_id, **vals):
+def set_rel_data(rel_type_id, thing_id, brand_new_thing, **vals):
     table = get_rel_table(rel_type_id, action = 'write')[3]
-    return set_data(table, rel_type_id, thing_id, **vals)
+
+    if brand_new_thing:
+        return create_data(table, thing_id, **vals)
+    else:
+        return update_data(table, thing_id, **vals)
 
 def incr_rel_data(rel_type_id, thing_id, prop, amount):
     table = get_rel_table(rel_type_id, action = 'write')[3]
@@ -684,7 +772,7 @@ def add_sort(sort, t_table, select):
                 if k and orig_col.startswith(k):
                     table = t_table[k]
                     col = orig_col[len(k):]
-            if not table:
+            if table is None:
                 table = t_table[None]
         else:
             table = t_table
@@ -796,7 +884,7 @@ def find_data(type_id, get_cols, sort, limit, constraints):
                 alias = d_table.alias()
                 id_col = first_alias.c.thing_id
 
-            if id_col:
+            if id_col is not None:
                 s.append_whereclause(id_col == alias.c.thing_id)
             
             s.append_column(alias.c.value.label(key))

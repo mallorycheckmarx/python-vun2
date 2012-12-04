@@ -4,21 +4,21 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%! 
    from r2.lib.template_helpers import add_sr, static, join_urls, class_dict, get_domain
@@ -31,6 +31,8 @@
 %>
 <%namespace file="login.html" import="login_panel, login_form"/>
 <%namespace file="framebuster.html" import="framebuster"/>
+<%namespace file="less.html" import="less_js"/>
+<%namespace file="utils.html" import="tags, css_class"/>
 <%inherit file="base.html"/>
 
 <%def name="Title()">
@@ -38,6 +40,25 @@
     ${thing.title}
   %else:
     ${parent.Title()}
+  %endif
+</%def>
+
+<%def name="pagemeta()">
+  %if hasattr(thing, "shortlink"):
+    <link rel="shorturl" href="http://${thing.shortlink}"/>
+  %endif
+
+  <link rel='icon' href="${static('icon.png')}" sizes="256x256" type="image/png" />
+  <link rel='shortcut icon' href="${static('favicon.ico')}" type="image/x-icon" />
+  <link rel='apple-touch-icon-precomposed' href="${static('icon-touch.png')}" />
+  %if thing.extension_handling:
+    <%
+       rss = add_sr(join_urls(request.path,'.rss'))
+       if thing.extension_handling == "private":
+          rss = make_feedurl(c.user, rss)
+     %>
+    <link rel="alternate" type="application/rss+xml" title="RSS"
+          href="${rss}" />
   %endif
 </%def>
 
@@ -62,50 +83,20 @@
       %endif
   %endif
 
-  %if hasattr(thing, "shortlink"):
-    <link rel="shorturl" href="http://${thing.shortlink}"/>
-  %endif
-
-  %if c.allow_styles and c.site.stylesheet_contents:
-     <% inline_stylesheet = (
-          len(c.site.stylesheet_contents) < 1024
-          and '<' not in c.site.stylesheet_contents) %>
-     %if inline_stylesheet:
-       ## for very simple stylesheets, we can just include them inline
-       <style type="text/css" title="applied_subreddit_stylesheet">
-           ${unsafe(c.site.stylesheet_contents)}
-       </style>
-     %else:
-       <link rel="stylesheet"
-             href="http://${get_domain(cname=False, subreddit=True)}/stylesheet.css?v=${c.site.stylesheet_hash}"
-             title="applied_subreddit_stylesheet"
-             type="text/css" />
-     %endif
-  %endif
-  %if getattr(thing, "additional_css", None):
-    <link rel="stylesheet" href="${static(thing.additional_css)}" 
-          type="text/css" />
-  %endif
-
-  <link rel='shortcut icon' href="${static('favicon.ico')}"
-        type="image/x-icon" />
-  %if thing.extension_handling:
-    <%
-       rss= add_sr(join_urls(request.path,'.rss'))
-       if thing.extension_handling == "private":
-          rss = make_feedurl(c.user, rss)
-     %>
-    <link rel="alternate" type="application/rss+xml" title="RSS"
-          href="${rss}" />
+  %if c.can_apply_styles and c.allow_styles and c.site.stylesheet_hash:
+    <link rel="stylesheet"
+          href="${c.site.stylesheet_url}"
+          title="applied_subreddit_stylesheet"
+          type="text/css">
   %endif
 
   <!--[if lt IE 7]>
-    <link rel="stylesheet" href="${static('reddit-ie6-hax.css')}"" 
+    <link rel="stylesheet" href="${static('reddit-ie6-hax.css')}"
           type="text/css" />
   <![endif]-->
 
   <!--[if lt IE 8]>
-    <link rel="stylesheet" href="${static('reddit-ie7-hax.css')}"" 
+    <link rel="stylesheet" href="${static('reddit-ie7-hax.css')}"
           type="text/css" />
   <![endif]-->
 </%def>
@@ -113,6 +104,13 @@
 <%def name="javascript()">
   <% from r2.lib import js %>
   ${unsafe(js.use('jquery', 'reddit'))}
+  % if c.deny_frames:
+    <script>if (window != top) top.location = window.location</script>
+  % endif
+  <!--[if lt IE 9]>
+    ${unsafe(js.use('html5shiv'))}
+  <![endif]-->
+  ${less_js()}
 </%def>
 
 <%def name="javascript_run()">
@@ -120,7 +118,7 @@
 </%def>
 
 <%def name="bodyHTML()">
-  <body>
+  <body ${tags(_class=' '.join(thing.page_classes()))}>
     <%include file="redditheader.html"/>
   
     %if thing.show_sidebar:
@@ -128,13 +126,14 @@
         ${sidebar(content = thing.rightbox())}
       </div>
     %endif
-    
-    %if thing.content:
+
+    <% content = getattr(self, "content", None) or thing.content %>
+    %if content:
       ##<div class="fixedwidth"><!--IE6sux--></div>
       ##<div class="clearleft"><!--IE6sux--></div>
       <a name="content"></a>
-      <div class="content">
-        ${thing.content()}
+      <div ${tags(id=thing.content_id)} class="content${css_class(thing)}">
+        ${content()}
       </div>
     %endif
     
@@ -149,7 +148,7 @@
           <div class="popup">
             <h1 class="cover-msg">${strings.cover_msg}</h1>
             ${login_panel(login_form)}
-            <div style="text-align:center; clear: both">
+            <div class="close-popup">
               <a href="#" onclick="return hidecover(this)">
                 ${_("close this window")}
               </a>

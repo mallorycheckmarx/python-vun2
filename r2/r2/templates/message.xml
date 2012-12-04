@@ -4,21 +4,21 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
-## 
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
+##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
-## 
-## The Original Code is Reddit.
-## 
+##
+## The Original Code is reddit.
+##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
-## 
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## the Original Code is reddit Inc.
+##
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%!
    from r2.lib.filters import safemarkdown
@@ -33,24 +33,15 @@
   <link>${permalink}</link>
   <title>
   <%
-   taglinetext = ''
-   if thing.to_id == c.user._id or thing.to_id is None:
-        taglinetext = _("from %(author)s sent %(when)s ago")
-   elif thing.author_id == c.user._id:
-        taglinetext = _("to %(dest)s sent %(when)s ago")
-   else:
-        taglinetext = _("to %(dest)s from %(author)s sent %(when)s ago")
-
    author = thing.author.name
    if thing.sr_id and not (getattr(thing, "is_child", False) or
                            getattr(thing, "is_parent", False)):
-     updated_author = _("%(author)s via %(subreddit)s")
      subreddit = thing.subreddit.name
-     author = updated_author % dict(author = author, subreddit = subreddit)
+     author = thing.updated_author % dict(author=author, subreddit=subreddit)
   %>
-  ${thing.subject} : ${unsafe(taglinetext % dict(when = thing.timesince, 
-                              author= u"%s" % author,
-                              dest = u"%s" % thing.to.name if thing.to else ""))}
+  ${thing.subject} : ${unsafe(thing.taglinetext % dict(when=thing.timesince,
+                                                       author=u"%s" % author,
+                                                       dest=u"%s" % thing.dest))}
   </title>
   <pubDate>${thing._date.strftime('%a, %d %b %Y %H:%M:%S %z')}</pubDate>
   <dc:date>${thing._date.isoformat()}-0700</dc:date>

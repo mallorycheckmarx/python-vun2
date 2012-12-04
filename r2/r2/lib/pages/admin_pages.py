@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from pylons         import c, g
 from r2.lib.wrapped import Templated
 from pages   import Reddit
@@ -31,8 +32,8 @@ class AdminSidebar(Templated):
 
 
 class Details(Templated):
-    def __init__(self, link):
-        Templated.__init__(self)
+    def __init__(self, link, *a, **kw):
+        Templated.__init__(self, *a, **kw)
         self.link = link
 
 
@@ -53,7 +54,6 @@ class AdminPage(Reddit):
             buttons.append(NavButton(menu.awards, "ads"))
             buttons.append(NavButton(menu.awards, "awards"))
             buttons.append(NavButton(menu.errors, "error log"))
-            buttons.append(NavButton(menu.usage,  "usage stats"))
 
             admin_menu = NavMenu(buttons, title='show', base_path = '/admin',
                                  type="lightdrop")

@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from reddit_base import RedditController
 from r2.lib.pages import *
 from r2.models import *
@@ -30,6 +31,7 @@ from r2.lib.template_helpers import add_sr
 from r2.lib import utils
 from validator import *
 from pylons import c, Response
+from r2.models.admintools import is_shamed_domain
 
 import string
 
@@ -93,13 +95,25 @@ class ToolbarController(RedditController):
 
     @validate(link = VLink('id'))
     def GET_tb(self, link):
+        '''/tb/$id36, show a given link with the toolbar
+        If the user doesn't have the toolbar enabled, redirect to comments
+        page.
+        
+        '''
         from r2.lib.media import thumbnail_url
-
-        "/tb/$id36, show a given link with the toolbar"
         if not link:
             return self.abort404()
-        elif link.is_self or not link.subreddit_slow.can_view(c.user):
+        elif link.is_self:
             return self.redirect(link.url)
+        elif not (c.user_is_loggedin and c.user.pref_frame):
+            return self.redirect(link.make_permalink_slow(force_domain=True))
+        
+        # if the domain is shame-banned, bail out.
+        if is_shamed_domain(link.url, request.ip)[0]:
+            self.abort404()
+        
+        if not link.subreddit_slow.can_view(c.user):
+            self.abort403()
 
         if link.has_thumbnail:
             thumbnail = thumbnail_url(link)
@@ -120,6 +134,10 @@ class ToolbarController(RedditController):
 
         if not path:
             # it was malformed
+            self.abort404()
+
+        # if the domain is shame-banned, bail out.
+        if is_shamed_domain(path, request.ip)[0]:
             self.abort404()
 
         link = utils.link_from_url(path, multiple = False)

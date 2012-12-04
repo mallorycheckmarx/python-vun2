@@ -4,21 +4,22 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%!
    from r2.lib.template_helpers import add_sr
    from r2.lib.utils import UrlParser
@@ -131,7 +132,7 @@
   <tr>
     <th>${_("link options")}</th>
     <td class="prefright">
-%if c.user_is_loggedin and c.user.jury_betatester():
+%if c.user_is_loggedin:
       <p>
         ${checkbox(_("show the spotlight box on the front page"), "organic")}
         &#32;
@@ -145,11 +146,11 @@
 
       <p>${checkbox(_("show me links I've recently viewed"), "clickgadget")}</p>
       <p>${checkbox(_("compress the link display"), "compress")}</p>
-      <p>${checkbox(_("don't show links after i've liked them"), "hide_ups")}
+      <p>${checkbox(_("don't show links after I've liked them"), "hide_ups")}
          &#32;
          <span class="little gray">${_("(except my own)")}</span>
       </p>
-      <p>${checkbox(_("don't show links after i've disliked them"), "hide_downs")}
+      <p>${checkbox(_("don't show links after I've disliked them"), "hide_downs")}
          &#32;
          <span class="little gray">${_("(except my own)")}</span>
       </p>
@@ -230,17 +231,21 @@
     <th>${_("display options")}</th>
     <td class="prefright">
       ${checkbox(_("allow reddits to show me custom styles"), "show_stylesheets")}
-    %if c.user.pref_show_promote is not None:
       <br/>
-      ${checkbox(_("show promote tab on front page"), 
-        "show_promote")}
-    %endif
+      ${checkbox(_("show user flair"), "show_flair")}
+      <br/>
+      ${checkbox(_("show link flair"), "show_link_flair")}
+      %if c.user.pref_show_promote is not None:
+        <br/>
+        ${checkbox(_("show promote tab on front page"), 
+          "show_promote")}
+      %endif
     </td>
   </tr>
   <tr>
     <th>${_("content options")}</th>
     <td class="prefright">
-      ${checkbox(_("i am over eighteen years old and willing to view adult content"), "over_18")}
+      ${checkbox(_("I am over eighteen years old and willing to view adult content"), "over_18")}
       &#32;<span class="little gray">(${_("required to view some reddits")})</span>
       <br/>
         ${checkbox(_("label posts that are not safe for work (NSFW)"), "label_nsfw", disabled = c.user.pref_no_profanity, disabled_text = "(requires not 'safer for work' mode)")}

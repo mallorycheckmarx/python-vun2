@@ -11,20 +11,21 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from wrapped import CachedTemplate, Styled
 from pylons import c, request, g
 from utils import  query_string, timeago
 from strings import StringHandler, plurals
 from r2.lib.db import operators
-from r2.lib.indextank import sorts as indextank_sorts
+import r2.lib.search as search
 from r2.lib.filters import _force_unicode
 from pylons.i18n import _
 
@@ -81,34 +82,33 @@ menu =   MenuHandler(hot          = _('hot'),
                      autobanned   = _("autobanned"),
 
                      # reddit header strings
-                     adminon      = _("turn admin on"),
-                     adminoff     = _("turn admin off"), 
                      prefs        = _("preferences"), 
                      submit       = _("submit"),
                      help         = _("help"),
-                     blog         = _("the reddit blog"),
+                     blog         = _("blog"),
                      logout       = _("logout"),
                      
                      #reddit footer strings
-                     feedback     = _("feedback"),
-                     bookmarklets = _("bookmarklets"),
-                     socialite    = _("socialite firefox extension"),
+                     feedback     = _("contact us"),
                      buttons      = _("buttons"),
                      widget       = _("widget"), 
                      code         = _("source code"),
                      mobile       = _("mobile"), 
                      store        = _("store"),  
-                     ad_inq       = _("inquire about advertising"),
-                     random       = _('random'),
-                     iphone       = _("iPhone app"),
+                     ad_inq       = _("advertise"),
                      gold         = _('reddit gold'),
+                     reddits      = _('subreddits'),
+                     team         = _('team'),
+                     rules        = _('rules'),
 
                      #preferences
                      options      = _('options'),
+                     apps         = _("apps"),
                      feeds        = _("RSS feeds"),
                      friends      = _("friends"),
                      update       = _("password/email"),
                      delete       = _("delete"),
+                     otp          = _("two-factor authentication"),
 
                      # messages
                      compose      = _("compose"),
@@ -120,8 +120,8 @@ menu =   MenuHandler(hot          = _('hot'),
                      related      = _("related"),
                      details      = _("details"),
                      duplicates   = _("other discussions (%(num)s)"),
-                     shirt        = _("shirt"),
                      traffic      = _("traffic stats"),
+                     stylesheet   = _("stylesheet"),
 
                      # reddits
                      home         = _("home"),
@@ -133,7 +133,16 @@ menu =   MenuHandler(hot          = _('hot'),
                      contributors = _("edit approved submitters"),
                      banned       = _("ban users"),
                      banusers     = _("ban users"),
-                     flair        = _("edit user flair"),
+                     flair        = _("edit flair"),
+                     log          = _("moderation log"),
+                     modqueue     = _("moderation queue"),
+                     unmoderated  = _("unmoderated links"),
+                     
+                     wikibanned        = _("ban wiki contributors"),
+                     wikicontributors  = _("add wiki contributors"),
+                     
+                     wikirecentrevisions = _("recent wiki revisions"),
+                     wikipageslist = _("wiki page list"),
 
                      popular      = _("popular"),
                      create       = _("create"),
@@ -143,7 +152,6 @@ menu =   MenuHandler(hot          = _('hot'),
                      errors       = _("errors"),
                      awards       = _("awards"),
                      ads          = _("ads"),
-                     usage        = _("usage"),
                      promoted     = _("promoted"),
                      reporters    = _("reporters"),
                      reports      = _("reported links"),
@@ -170,6 +178,10 @@ menu =   MenuHandler(hot          = _('hot'),
                      unpaid_promos  = _('unpaid'),
                      pending_promos = _('pending'),
                      rejected_promos = _('rejected'),
+
+                     sitewide = _('sitewide'),
+                     languages = _('languages'),
+                     adverts = _('adverts'),
 
                      whitelist = _("whitelist")
                      )
@@ -250,7 +262,8 @@ class NavButton(Styled):
                  target = "", style = "plain", **kw):
         # keep original dest to check against c.location when rendering
         aliases = set(_force_unicode(a.rstrip('/')) for a in aliases)
-        aliases.add(_force_unicode(dest.rstrip('/')))
+        if dest:
+            aliases.add(_force_unicode(dest.rstrip('/')))
 
         self.request_params = dict(request.GET)
         self.stripped_path = _force_unicode(request.path.rstrip('/').lower())
@@ -268,7 +281,10 @@ class NavButton(Styled):
         # of opt 
         if self.opt:
             p = self.request_params.copy()
-            p[self.opt] = self.dest
+            if self.dest:
+                p[self.opt] = self.dest
+            elif self.opt in p:
+                del p[self.opt]
         else:
             p = {}
             base_path = ("%s/%s/" % (base_path, self.dest)).replace('//', '/')
@@ -289,6 +305,8 @@ class NavButton(Styled):
     def is_selected(self):
         """Given the current request path, would the button be selected."""
         if self.opt:
+            if not self.dest and self.opt not in self.request_params:
+                return True
             return self.request_params.get(self.opt, '') in self.aliases
         else:
             if self.stripped_path == self.bare_path:
@@ -319,12 +337,17 @@ class OffsiteButton(NavButton):
         return [('path', self.path), ('title', self.title)]
 
 class SubredditButton(NavButton):
-    def __init__(self, sr):
-        from r2.models.subreddit import Mod
+    from r2.models.subreddit import Frontpage, Mod
+    # TRANSLATORS: This refers to /r/mod
+    name_overrides = {Mod: _("mod"),
+    # TRANSLATORS: This refers to the user's front page
+                      Frontpage: _("front")}
+
+    def __init__(self, sr, **kw):
         self.path = sr.path
-        name = 'mod' if sr == Mod else sr.name
+        name = self.name_overrides.get(sr, sr.name)
         NavButton.__init__(self, name, sr.path, False,
-                           isselected = (c.site == sr))
+                           isselected = (c.site == sr), **kw)
 
     def build(self, base_path = ''):
         pass
@@ -358,11 +381,15 @@ class NamedButton(NavButton):
 class JsButton(NavButton):
     """A button which fires a JS event and thus has no path and cannot
     be in the 'selected' state"""
-    def __init__(self, title, style = 'js', **kw):
-        NavButton.__init__(self, title, '#', style = style, **kw)
+    def __init__(self, title, style = 'js', tab_name = None, **kw):
+        NavButton.__init__(self, title, '#', style = style, tab_name = tab_name,
+                           **kw)
 
     def build(self, *a, **kw):
-        self.path = 'javascript:void(0)'
+        if self.tab_name:
+            self.path = '#' + self.tab_name
+        else:
+            self.path = 'javascript:void(0)'
 
     def is_selected(self):
         return False
@@ -438,13 +465,13 @@ class ProfileSortMenu(SortMenu):
 class CommentSortMenu(SortMenu):
     """Sort menu for comments pages"""
     default   = 'confidence'
-    options   = ('hot', 'new', 'controversial', 'top', 'old', 'confidence')
+    options   = ('confidence', 'top', 'new', 'hot', 'controversial', 'old')
     use_post  = True
 
 class SearchSortMenu(SortMenu):
     """Sort menu for search pages."""
     default   = 'relevance'
-    mapping   = indextank_sorts
+    mapping   = search.sorts
     options   = mapping.keys()
 
     @classmethod

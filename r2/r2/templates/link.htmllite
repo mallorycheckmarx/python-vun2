@@ -4,21 +4,22 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
-## 
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
+##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
-## 
-## The Original Code is Reddit.
-## 
+##
+## The Original Code is reddit.
+##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
-## 
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## the Original Code is reddit Inc.
+##
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%namespace file="utils.html" import="optionalstyle"/>
 
 <%!
@@ -26,6 +27,15 @@
    from r2.lib.template_helpers import get_domain
 %>
 <%inherit file="printable.htmllite" />
+
+<%def name="flair()">
+  %if c.user.pref_show_link_flair:
+    <span class="linkflair"
+        ${optionalstyle("color: #545454; background-color: #f5f5f5; border: 1px solid #dedede; display: inline-block; font-size: x-small; margin-right: 0.5em; padding: 0 2px; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;")}>
+      ${thing.flair_text}
+    </span>
+  %endif
+</%def>
 
 <%def name="entry()">
 <% 
@@ -43,6 +53,9 @@
          ${optionalstyle("margin-left: 28px; min-height:32px;")}
        %endif
        >
+    %if c.site.link_flair_position == 'left' and thing.flair_text:
+      ${flair()}
+    %endif
     <a href="${thing.href_url}" class="reddit-link-title"
       ${optionalstyle("text-decoration:none;color:#336699;font-size:small;")}
        %if thing.nofollow:
@@ -56,11 +69,14 @@
          target="_top"
        %endif
        %if thing.mousedown_url:
-         onmousedown="this.href='${thing.mousedown_url}'"
+         onmousedown="save_href($(this));this.href='${thing.mousedown_url}'"
        %endif
        >
       ${thing.title}
     </a>
+    %if c.site.link_flair_position == 'right' and thing.flair_text:
+      ${flair()}
+    %endif
     %if not expanded:
       <br />
     %endif
@@ -72,16 +88,17 @@
        %endif
        >
       %if not expanded:
-      <% 
-       if thing.likes is False:
-           score, cls = thing.display_score[0], "dislikes"
-       elif thing.likes is None:
-           score, cls = thing.display_score[1], "unvoted"
-       else:
-           score, cls = thing.display_score[2], "likes"
+      <%
+       score_dislikes, score_unvoted, score_likes = thing.display_score
        %>
-      <span class="score ${cls}">
-         ${score}
+      <span class="score dislikes">
+         ${score_dislikes}
+      </span>
+      <span class="score unvoted">
+         ${score_unvoted}
+      </span>
+      <span class="score likes">
+         ${score_likes}
       </span>
       &#32;|&#32;
       %endif

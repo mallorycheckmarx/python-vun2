@@ -4,21 +4,22 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%!
    from r2.lib.template_helpers import add_sr
    from r2.lib.utils import UrlParser
@@ -27,34 +28,35 @@
 
 <%namespace file="utils.html" import="error_field"/>
 
-<% op = "login-main" %>
-<form method="post" 
-      id="login_${op}" action="${add_sr('/post/login', nocname = True)}" 
-      %if thing.auth_cname:
-        onsubmit="return post_user(this, 'login');"
-      %else:
-        onsubmit="return update_user(this);"
-      %endif
-      class="login-form-side">
+<%
+  op = "login-main"
+  base = g.https_endpoint if not thing.cname else ''
+%>
+<form method="post"
+      action="${add_sr(base + '/post/login', nocname=not thing.auth_cname)}"
+      id="login_${op}"
+      class="login-form login-form-side">
   %if thing.cname:
     <input type="hidden" name="${UrlParser.cname_get}" 
            value="${random.random()}" />
   %endif
   <input type="hidden" name="op" value="${op}" />
-  <input name="user" type="text" maxlength="20" tabindex="1"/>
-  <input name="passwd" type="password" maxlength="20" tabindex="2"/>
+  <input name="user" placeholder="${_('username')}" type="text" maxlength="20" tabindex="1"/>
+  <input name="passwd" placeholder="${_('password')}" type="password" tabindex="1"/>
 
-  ${error_field("WRONG_PASSWORD", "passwd", "div")}
-  ${error_field("RATELIMIT", "ratelimit")}
-  ${error_field("RATELIMIT", "vdelay")}
-  <div class="status error"></div>
+  <div class="status"></div>
 
   <div id="remember-me">
-    <button class="btn" type="submit" tabindex="4">${_("login")}</button>
-    <input type="checkbox" name="rem" tabindex="3" id="rem-${op}" />
+    <input type="checkbox" name="rem" id="rem-${op}" tabindex="1" />
     <label for="rem-${op}">${_("remember me")}</label>
-    <a class="recover-password" href="/password">${_("recover password")}</a>
-    <div class="clear"></div>
+    <a class="recover-password" href="/password">${_("reset password")}</a>
   </div>
+
+  <div class="submit">
+    <span class="throbber"></span>
+    <button class="btn" type="submit" tabindex="1">${_("login")}</button>
+  </div>
+  
+  <div class="clear"></div>
 </form>
 

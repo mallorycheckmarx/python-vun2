@@ -4,21 +4,22 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%!
   from r2.lib.template_helpers import static
   from r2.lib import js
@@ -48,7 +49,7 @@ ${unsafe(js.use('sponsored'))}
           ${error_field("BAD_FUTURE_DATE", "enddate", "div")}
           ${error_field("BAD_DATE_RANGE", "enddate", "div")}
         <%p:datepicker name="startdate", value="${thing.startdate}"
-                          minDateSrc="#date-min" initfuncname="init_startdate">
+                          minDateSrc="date-min" initfuncname="init_startdate">
         function(elem) {
           var other = $("#enddate");
           if(dateFromInput("#startdate") >= dateFromInput("#enddate")) {
@@ -63,7 +64,7 @@ ${unsafe(js.use('sponsored'))}
         </%p:datepicker>
         -
         <%p:datepicker name="enddate", value="${thing.enddate}"
-                          minDateSrc="#startdate" initfuncname="init_enddate">
+                          minDateSrc="startdate" initfuncname="init_enddate">
           function(elem) { update_bid(elem); }
         </%p:datepicker>
        </td>
@@ -79,7 +80,6 @@ ${unsafe(js.use('sponsored'))}
        ${reddit_selector(thing.default_sr, thing.sr_searches, thing.subreddits)}
      </div>
      <div class="buttons">
-       <input type="hidden" name="indx" value="" />
        <span class="status error"></span>
        <button name="create"
           onclick="return post_pseudo_form('.campaign', 'add_roadblock')">

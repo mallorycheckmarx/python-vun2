@@ -11,21 +11,21 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
 
 from r2.lib.db.tdb_sql import make_metadata, index_str, create_table
 
 from pylons import g, c
 from datetime import datetime
 import sqlalchemy as sa
-from sqlalchemy.exceptions import IntegrityError
+from sqlalchemy.exc import IntegrityError
 
 from xml.dom.minidom import Document
 from r2.lib.utils import tup, randstr
@@ -312,14 +312,14 @@ def process_google_transaction(trans_id):
             pennies = int(float(auth.find("order-total").contents[0])*100)
             if is_creddits:
                 secret = "cr_"
-                if pennies >= 2999:
-                    days = 12 * 31 * int(pennies / 2999)
+                if pennies >= g.gold_year_price.pennies:
+                    days = 12 * 31 * int(pennies / g.gold_year_price.pennies)
                 else:
-                    days = 31 * int(pennies / 399)
-            elif pennies == 2999:
+                    days = 31 * int(pennies / g.gold_month_price.pennies)
+            elif pennies == g.gold_year_price.pennies:
                 secret = "ys_"
                 days = 366
-            elif pennies == 399:
+            elif pennies == g.gold_month_price.pennies:
                 secret = "m_"
                 days = 31
             else:

@@ -4,26 +4,28 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%namespace file="utils.html" import="error_field, success_field, radio_type"/>
 <%namespace name="utils" file="utils.html"/>
 
-<%! from r2.lib.strings import strings, Score %>
+<%!
+  from r2.lib.strings import strings, Score
+%>
 
 <script type="text/javascript">
   $(function() {
@@ -65,12 +67,12 @@
   <select name="months" class="gold-dropdown">
     %for i in range(1, 8):
        <option value="${i}">
-         ${unsafe(Score.somethings(i, what))}: $${"%0.2f" % (3.99 * i)}
+         ${unsafe(Score.somethings(i, what))}: ${g.gold_month_price * i}
        </option>
     %endfor
     %for i in range(1, 4):
        <option value="${i * 12}" ${"SELECTED" if i == 1 else ""}>
-         ${unsafe(Score.somethings(i * 12, what))} &#32; (special price!): $${"%0.2f" % (29.99 * i)}
+         ${unsafe(Score.somethings(i * 12, what))} &#32; (special price!): ${g.gold_year_price * i}
        </option>
     %endfor
   </select>
@@ -78,8 +80,7 @@
 </%def>
 
 <div class="gold-form">
-  <h1>
-    <img src="/static/giftgold.png" /> &#32;
+  <h1 class="goldgift">
     ${_("reddit gold")} (<a href="/help/gold">help</a>)
   </h1>
 
@@ -99,9 +100,10 @@
 
   <%self:goldsec goldtype="autorenew">
     <%utils:round_field title="${'Monthly or yearly?'}">
-      ${radio_type("period", "monthly", _("$3.99 / month"), "", False)}<br/>
-      ${radio_type("period", "yearly", _("$29.99 / year (which works out to just $2.50 / month!)"),
-      "", True)}<br/>
+      ${radio_type("period", "monthly", _("%s / month") % g.gold_month_price, "", False)}<br/>
+      ${radio_type("period", "yearly", _("%s / year (which works out to just %s / month!)")
+                                       % (g.gold_year_price, g.gold_year_price / 12),
+                   "", True)}<br/>
       <button type="submit" class="btn gold-button">${_("subscribe")}</button>
       <span class="status"></span>
     </%utils:round_field>

@@ -11,15 +11,17 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from r2.lib.pages import *
+from reddit_base import cross_domain
 from api import ApiController
 from r2.lib.utils import Storage, query_string, UrlParser
 from r2.lib.emailer import opt_in, opt_out
@@ -27,7 +29,7 @@ from pylons import request, c, g
 from validator import *
 from pylons.i18n import _
 from r2.models import *
-import sha
+import hashlib
 
 class PostController(ApiController):
     def api_wrapper(self, kw):
@@ -63,7 +65,7 @@ class PostController(ApiController):
 
 
     @validate(pref_lang = VLang('lang'),
-              all_langs = nop('all-langs', default = 'all'))
+              all_langs = VOneOf('all-langs', ('all', 'some'), default='all'))
     def POST_unlogged_options(self, all_langs, pref_lang):
         self.set_options( all_langs, pref_lang)
         return self.redirect(request.referer)
@@ -89,6 +91,8 @@ class PostController(ApiController):
               pref_num_comments = VInt('num_comments', 1, g.max_comments,
                                        default = g.num_comments),
               pref_show_stylesheets = VBoolean('show_stylesheets'),
+              pref_show_flair = VBoolean('show_flair'),
+              pref_show_link_flair = VBoolean('show_link_flair'),
               pref_no_profanity = VBoolean('no_profanity'),
               pref_label_nsfw = VBoolean('label_nsfw'),
               pref_show_promote = VBoolean('show_promote'),
@@ -101,7 +105,7 @@ class PostController(ApiController):
               pref_show_sponsors = VBoolean("show_sponsors"),
               pref_show_sponsorships = VBoolean("show_sponsorships"),
               pref_highlight_new_comments = VBoolean("highlight_new_comments"),
-              all_langs = nop('all-langs', default = 'all'))
+              all_langs = VOneOf('all-langs', ('all', 'some'), default='all'))
     def POST_options(self, all_langs, pref_lang, **kw):
         #temporary. eventually we'll change pref_clickgadget to an
         #integer preference
@@ -133,16 +137,16 @@ class PostController(ApiController):
         return BoringPage(_("over 18?"),
                           content = Over18()).render()
 
-    @validate(over18 = nop('over18'),
-              uh = nop('uh'),
+    @validate(VModhash(fatal=False),
+              over18 = nop('over18'),
               dest = VDestination(default = '/'))
-    def POST_over18(self, over18, uh, dest):
+    def POST_over18(self, over18, dest):
         if over18 == 'yes':
-            if c.user_is_loggedin and c.user.valid_hash(uh):
+            if c.user_is_loggedin and not c.errors:
                 c.user.pref_over_18 = True
                 c.user._commit()
             else:
-                ip_hash = sha.new(request.ip).hexdigest()
+                ip_hash = hashlib.sha1(request.ip).hexdigest()
                 domain = g.domain if not c.frameless_cname else None
                 c.cookies.add('over18', ip_hash,
                               domain = domain)
@@ -174,18 +178,11 @@ class PostController(ApiController):
 
     @validate(dest = VDestination(default = "/"))
     def POST_login(self, dest, *a, **kw):
-        ApiController.POST_login(self, *a, **kw)
+        ApiController._handle_login(self, *a, **kw)
         c.render_style = "html"
         c.response_content_type = ""
 
-        errors = list(c.errors)
-        if errors:
-            for e in errors:
-                if not e[0].endswith("_login"):
-                    msg = c.errors[e].message
-                    c.errors.remove(e)
-                    c.errors.add(e[0], msg)
-
+        if c.errors:
             return LoginPage(user_login = request.post.get('user'),
                              dest = dest).render()
 
@@ -193,17 +190,11 @@ class PostController(ApiController):
 
     @validate(dest = VDestination(default = "/"))
     def POST_reg(self, dest, *a, **kw):
-        ApiController.POST_register(self, *a, **kw)
+        ApiController._handle_register(self, *a, **kw)
         c.render_style = "html"
         c.response_content_type = ""
 
-        errors = list(c.errors)
-        if errors:
-            for e in errors:
-                if not e[0].endswith("_reg"):
-                    msg = c.errors[e].message
-                    c.errors.remove(e)
-                    c.errors.add(e[0], msg)
+        if c.errors:
             return LoginPage(user_reg = request.post.get('user'),
                              dest = dest).render()
 

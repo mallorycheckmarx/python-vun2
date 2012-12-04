@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 """
 For talking to authorize.net credit card payments via their XML api.
 
@@ -36,6 +37,8 @@ from r2.lib.utils import iters, Storage
 from r2.models import NotFound
 from r2.models.bidding import CustomerID, PayID, ShippingAddress
 
+from xml.sax.saxutils import escape
+
 # list of the most common errors.
 Errors = Storage(TESTMODE = "E00009",
                  TRANSACTION_FAIL = "E00027",
@@ -44,9 +47,23 @@ Errors = Storage(TESTMODE = "E00009",
                  TOO_MANY_PAY_PROFILES = "E00042",
                  TOO_MANY_SHIP_ADDRESSES = "E00043")
 
-class AuthorizeNetException(Exception):
-    pass
+PROFILE_LIMIT = 10 # max payment profiles per user allowed by authorize.net
 
+class AuthorizeNetException(Exception):
+    def __init__(self, msg):
+        # don't let CC info show up in logs
+        msg = re.sub("<cardNumber>\d+(\d{4})</cardNumber>", 
+                     "<cardNumber>...\g<1></cardNumber>",
+                     msg)
+        msg = re.sub("<cardCode>\d+</cardCode>",
+                     "<cardCode>omitted</cardCode>",
+                     msg)
+        super(AuthorizeNetException, self).__init__(msg)
+
+
+
+# xml tags whose content shouldn't be escaped 
+_no_escape_list = ["extraOptions"]
 
 class SimpleXMLObject(object):
     """
@@ -73,6 +90,10 @@ class SimpleXMLObject(object):
         def process(k, v):
             if isinstance(v, SimpleXMLObject):
                 v = v.toXML()
+            elif v is not None:
+                v = unicode(v)
+                if k not in _no_escape_list:
+                    v = escape(v) # escape &, <, and >
             if v is not None:
                 content.append(self.simple_tag(k, v))
 
@@ -212,7 +233,7 @@ class AuthorizeNetRequest(SimpleXMLObject):
         u = urlparse(g.authorizenetapi)
         try:
             conn = HTTPSConnection(u.hostname, u.port)
-            conn.request("POST", u.path, self.toXML(),
+            conn.request("POST", u.path, self.toXML().encode('utf-8'),
                          {"Content-type": "text/xml"})
             res = conn.getresponse()
             res = self.handle_response(res.read())
@@ -236,7 +257,9 @@ class AuthorizeNetRequest(SimpleXMLObject):
 
     def handle_response(self, res):
         res = self._autoclose_re.sub(self._autoclose_handler, res)
-        res = BeautifulStoneSoup(res, markupMassage=False)
+        res = BeautifulStoneSoup(res, 
+                                 markupMassage=False, 
+                                 convertEntities=BeautifulStoneSoup.XML_ENTITIES)
         if res.resultcode.contents[0] == u"Ok":
             return self.process_response(res)
         else:
@@ -285,12 +308,22 @@ class CreateCustomerProfileRequest(AuthorizeNetRequest):
         return (CustomerID.get_id(self._user) or
                 AuthorizeNetRequest.make_request(self))
 
-    re_lost_id = re.compile("A duplicate record with id (\d+) already exists")
+    re_lost_id = re.compile("A duplicate record with ID (\d+) already exists")
     def process_error(self, res):
         if self.is_error_code(res, Errors.DUPLICATE_RECORD):
-            # D'oh.  We lost one
-            m = self.re_lost_id.match(res.find("text").contents[0]).groups()
-            CustomerID.set(self._user, m[0])
+            # authorize.net has a record for this customer but we don't. get
+            # the correct id from the error message and update our db
+            matches = self.re_lost_id.match(res.find("text").contents[0])
+            if matches:
+                match_groups = matches.groups()
+                CustomerID.set(self._user, match_groups[0])
+                g.log.debug("Updated missing authorize.net id for user %s" % self._user._id)
+            else:
+                # could happen if the format of the error message changes.
+                msg = ("Failed to fix duplicate authorize.net profile id. "
+                       "re_lost_id regexp may need to be updated. Response: %r" 
+                       % res)
+                raise AuthorizeNetException(msg)
         # otherwise, we might have sent a user that already had a customer ID
         cust_id = CustomerID.get_id(self._user)
         if cust_id:
@@ -583,4 +616,18 @@ class CreateCustomerProfileTransactionRequest(AuthorizeNetRequest):
             except ValueError:
                 pass
         return s
+
+class GetSettledBatchListRequest(AuthorizeNetRequest):
+    _keys = AuthorizeNetRequest._keys + ["includeStatistics", 
+                                         "firstSettlementDate", 
+                                         "lastSettlementDate"]
+    def __init__(self, start_date, end_date, **kw):
+        AuthorizeNetRequest.__init__(self, 
+                                     includeStatistics=1,
+                                     firstSettlementDate=start_date.isoformat(),
+                                     lastSettlementDate=end_date.isoformat(),
+                                     **kw)
+
+    def process_response(self, res):
+        return res
 

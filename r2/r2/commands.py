@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 import paste.deploy.config
 import paste.fixture
 from paste.registry import RegistryManager
@@ -100,12 +101,7 @@ class RunCommand(command.Command):
         loaded_namespace = {}
 
         if self.args[1:]:
-            cmd = self.args[1]
-            f = open(cmd);
-            data = f.read()
-            f.close()
-            
-            exec data in loaded_namespace
-            
+            execfile(self.args[1], loaded_namespace)
+
         if self.options.command:
             exec self.options.command in loaded_namespace

@@ -11,18 +11,19 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
-#TODO byID use Things?
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from __future__ import with_statement
 
-import new, sys, sha
+import new, sys
+import hashlib
 from datetime import datetime
 from copy import copy, deepcopy
 
@@ -34,6 +35,7 @@ from .. utils import iters, Results, tup, to36, Storage, thing_utils, timefromno
 from r2.config import cache
 from r2.lib.cache import sgm
 from r2.lib.log import log_text
+from r2.lib import stats
 from pylons import g
 
 
@@ -230,14 +232,29 @@ class DataThing(object):
         return self._dirty
 
     def _commit(self, keys=None):
-        if not self._created:
-            self._create()
+        lock = None
 
-        with g.make_lock('commit_' + self._fullname):
-            if not self._sync_latest():
+        try:
+            if not self._created:
+                begin()
+                self._create()
+                just_created = True
+            else:
+                just_created = False
+
+            lock = g.make_lock("thing_commit", 'commit_' + self._fullname)
+            lock.acquire()
+
+            if not just_created and not self._sync_latest():
                 #sync'd and we have nothing to do now, but we still cache anyway
                 self._cache_myself()
                 return
+
+            # begin is a no-op if already done, but in the not-just-created
+            # case we need to do this here because the else block is not
+            # executed when the try block is exited prematurely in any way
+            # (including the return in the above branch)
+            begin()
 
             if keys:
                 keys = tup(keys)
@@ -255,7 +272,10 @@ class DataThing(object):
                     data_props[k] = v
 
             if data_props:
-                self._set_data(self._type_id, self._id, **data_props)
+                self._set_data(self._type_id,
+                               self._id,
+                               just_created,
+                               **data_props)
 
             if thing_props:
                 self._set_props(self._type_id, self._id, **thing_props)
@@ -268,9 +288,17 @@ class DataThing(object):
                 self._dirties.clear()
 
             self._cache_myself()
+        except:
+            rollback()
+            raise
+        else:
+            commit()
+        finally:
+            if lock:
+                lock.release()
 
     @classmethod
-    def _load_multi(cls, need, check_essentials=True):
+    def _load_multi(cls, need):
         need = tup(need)
         need_ids = [n._id for n in need]
         datas = cls._get_data(cls._type_id, need_ids)
@@ -285,13 +313,9 @@ class DataThing(object):
             i._t.update(datas.get(i._id, i._t))
             i._loaded = True
 
-            for essential in essentials:
-                if essential not in i._t:
-                    if check_essentials:
-                        raise AttributeError("Refusing to cache %s; it's missing %s"
-                                             % (i._fullname, essential))
-                    else:
-                        print "Warning: %s is missing %s" % (i._fullname, essential)
+            for attr in essentials:
+                if attr not in i._t:
+                    print "Warning: %s is missing %s" % (i._fullname, attr)
             i._asked_for_data = True
             to_save[i._id] = i
 
@@ -300,8 +324,8 @@ class DataThing(object):
         #write the data to the cache
         cache.set_multi(to_save, prefix=prefix)
 
-    def _load(self, check_essentials=True):
-        self._load_multi(self, check_essentials)
+    def _load(self):
+        self._load_multi(self)
 
     def _safe_load(self):
         if not self._loaded:
@@ -323,7 +347,7 @@ class DataThing(object):
                        (prop, self, self._int_props, self._data_int_props))
                 raise ValueError, msg
 
-        with g.make_lock('commit_' + self._fullname):
+        with g.make_lock("thing_commit", 'commit_' + self._fullname):
             self._sync_latest()
             old_val = getattr(self, prop)
             if self._defaults.has_key(prop) and self._defaults[prop] == old_val:
@@ -345,19 +369,31 @@ class DataThing(object):
     def _id36(self):
         return to36(self._id)
 
+    @classmethod
+    def _fullname_from_id36(cls, id36):
+        return cls._type_prefix + to36(cls._type_id) + '_' + id36
+
     @property
     def _fullname(self):
-        return self._type_prefix + to36(self._type_id) + '_' + to36(self._id)
+        return self._fullname_from_id36(self._id36)
 
     #TODO error when something isn't found?
     @classmethod
     def _byID(cls, ids, data=False, return_dict=True, extra_props=None,
-              stale=False, check_essentials=True):
+              stale=False):
         ids, single = tup(ids, True)
         prefix = thing_prefix(cls.__name__)
 
         if not all(x <= tdb.MAX_THING_ID for x in ids):
             raise NotFound('huge thing_id in %r' % ids)
+
+        def count_found(ret, still_need):
+            cache.stats.cache_report(
+                hits=len(ret), misses=len(still_need),
+                cache_name='sgm.%s' % cls.__name__)
+
+        if not cache.stats:
+            count_found = None
 
         def items_db(ids):
             items = cls._get_item(cls._type_id, ids)
@@ -366,7 +402,8 @@ class DataThing(object):
 
             return items
 
-        bases = sgm(cache, ids, items_db, prefix, stale=stale)
+        bases = sgm(cache, ids, items_db, prefix, stale=stale,
+                    found_fn=count_found)
 
         #check to see if we found everything we asked for
         for i in ids:
@@ -387,7 +424,7 @@ class DataThing(object):
                 if not v._loaded:
                     need.append(v)
             if need:
-                cls._load_multi(need, check_essentials)
+                cls._load_multi(need)
 ### The following is really handy for debugging who's forgetting data=True:
 #       else:
 #           for v in bases.itervalues():
@@ -769,30 +806,6 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             self._name = 'un' + self._name
 
         @classmethod
-        def _fast_query_timestamp_touch(cls, thing1):
-            thing_utils.set_last_modified_for_cls(thing1, cls._type_name)
-
-        @classmethod
-        def _can_skip_lookup(cls, thing1, thing2):
-            # we can't possibly have voted on things that were created
-            # after the last time we voted. for relations that have an
-            # invariant like this we can avoid doing these lookups as
-            # long as the relation takes responsibility for keeping
-            # the timestamp up-to-date
-
-            last_done = thing_utils.get_last_modified_for_cls(
-                thing1, cls._type_name)
-
-            if not last_done:
-                return False
-
-            if thing2._date > last_done:
-                return True
-
-            return False
-
-
-        @classmethod
         def _fast_query(cls, thing1s, thing2s, name, data=True, eager_load=True,
                         thing_data=False, timestamp_optimize = False):
             """looks up all the relationships between thing1_ids and
@@ -820,9 +833,6 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                 t2_ids = set()
                 names = set()
                 for t1, t2, name in pairs:
-                    if timestamp_optimize and cls._can_skip_lookup(thing1_dict[t1],
-                                                                   thing2_dict[t2]):
-                        continue
                     t1_ids.add(t1)
                     t2_ids.add(t2)
                     names.add(name)
@@ -890,10 +900,10 @@ class Query(object):
         self._read_cache = kw.get('read_cache')
         self._write_cache = kw.get('write_cache')
         self._cache_time = kw.get('cache_time', 0)
-        self._stats_collector = kw.get('stats_collector')
         self._limit = kw.get('limit')
         self._data = kw.get('data')
         self._sort = kw.get('sort', ())
+        self._filter_primary_sort_only = kw.get('filter_primary_sort_only', False)
 
         self._filter(*rules)
     
@@ -934,8 +944,16 @@ class Query(object):
 
     def _dir(self, thing, reverse):
         ors = []
+
+        # this fun hack lets us simplify the query on /r/all 
+        # for postgres-9 compatibility. please remove it when
+        # /r/all is precomputed.
+        sorts = range(len(self._sort))
+        if self._filter_primary_sort_only:
+            sorts = [0]
+
         #for each sort add and a comparison operator
-        for i in range(len(self._sort)):
+        for i in sorts:
             s = self._sort[i]
 
             if isinstance(s, operators.asc):
@@ -981,13 +999,10 @@ class Query(object):
             rules.sort()
             for r in rules:
                 i += str(r)
-        return sha.new(i).hexdigest()
+        return hashlib.sha1(i).hexdigest()
 
     def __iter__(self):
         used_cache = False
-
-        if self._stats_collector:
-            self._stats_collector.add(self)
 
         def _retrieve():
             return self._cursor().fetchall()
@@ -1003,7 +1018,7 @@ class Query(object):
             # it's not in the cache, and we have the power to
             # update it, which we should do in a lock to prevent
             # concurrent requests for the same data
-            with g.make_lock("lock_%s" % self._iden()):
+            with g.make_lock("thing_query", "lock_%s" % self._iden()):
                 # see if it was set while we were waiting for our
                 # lock
                 names = cache.get(self._iden(), allow_local = False) \

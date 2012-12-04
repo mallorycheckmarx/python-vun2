@@ -11,24 +11,30 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+import _pylibmc
+import pycassa.pool
+import sqlalchemy.exc
 
 from pylons import Response, c, g, request, session, config
 from pylons.controllers import WSGIController, Controller
 from pylons.i18n import N_, _, ungettext, get_lang
-import r2.lib.helpers as h
+from paste import httpexceptions
 from r2.lib.utils import to_js
 from r2.lib.filters import spaceCompress, _force_unicode
 from r2.lib.template_helpers import get_domain
 from utils import storify, string2js, read_http_date
 from r2.lib.log import log_exception
+import r2.lib.db.thing
+import r2.lib.lock
 
 import re, hashlib
 from urllib import quote
@@ -36,10 +42,43 @@ import urllib2
 import sys
 
 
+OPERATIONAL_EXCEPTIONS = (_pylibmc.MemcachedError,
+                          r2.lib.db.thing.NotFound,
+                          r2.lib.lock.TimeoutExpired,
+                          sqlalchemy.exc.OperationalError,
+                          sqlalchemy.exc.IntegrityError,
+                          pycassa.pool.AllServersUnavailable,
+                          pycassa.pool.NoConnectionAvailable,
+                          pycassa.pool.MaximumRetryException,
+                         )
+
+
 #TODO hack
 import logging
 from r2.lib.utils import UrlParser, query_string
 logging.getLogger('scgi-wsgi').setLevel(logging.CRITICAL)
+
+
+def is_local_address(ip):
+    # TODO: support the /20 and /24 private networks? make this configurable?
+    return ip.startswith('10.')
+
+def abort(code_or_exception=None, detail="", headers=None, comment=None):
+    """Raise an HTTPException and save it in environ for use by error pages."""
+    # Pylons 0.9.6 makes it really hard to get your raised HTTPException,
+    # so this helper implements it manually using a familiar syntax.
+    # FIXME: when we upgrade Pylons, we can replace this with raise
+    #        and access environ['pylons.controller.exception']
+    if isinstance(code_or_exception, httpexceptions.HTTPException):
+        exc = code_or_exception
+    else:
+        if type(code_or_exception) is type and issubclass(code_or_exception, httpexceptions.HTTPException):
+            exc_cls = code_or_exception
+        else:
+            exc_cls = httpexceptions.get_exception(code_or_exception)
+        exc = exc_cls(detail, headers, comment)
+    request.environ['r2.controller.exception'] = exc
+    raise exc
 
 class BaseController(WSGIController):
     def try_pagecache(self):
@@ -64,7 +103,7 @@ class BaseController(WSGIController):
             and hashlib.md5(true_client_ip + g.ip_hash).hexdigest() \
             == ip_hash.lower()):
             request.ip = true_client_ip
-        elif remote_addr in g.proxy_addr and forwarded_for:
+        elif g.trust_local_proxies and forwarded_for and is_local_address(remote_addr):
             request.ip = forwarded_for.split(',')[-1]
         else:
             request.ip = environ['REMOTE_ADDR']
@@ -93,16 +132,20 @@ class BaseController(WSGIController):
             meth = request.method.upper()
             if meth == 'HEAD':
                 meth = 'GET'
-            request.environ['pylons.routes_dict']['action'] = \
-                    meth + '_' + action
 
-        c.thread_pool = environ['paste.httpserver.thread_pool']
+            if meth != 'OPTIONS':
+                handler_name = meth + '_' + action
+            else:
+                handler_name = meth
 
+            request.environ['pylons.routes_dict']['action_name'] = action
+            request.environ['pylons.routes_dict']['action'] = handler_name
+                    
         c.response = Response()
         try:
             res = WSGIController.__call__(self, environ, start_response)
         except Exception as e:
-            if g.exception_logging:
+            if g.exception_logging and not isinstance(e, OPERATIONAL_EXCEPTIONS):
                 try:
                     log_exception(e, *sys.exc_info())
                 except Exception as f:
@@ -114,6 +157,11 @@ class BaseController(WSGIController):
     def pre(self): pass
     def post(self): pass
 
+    def _get_action_handler(self, name=None, method=None):
+        name = name or request.environ["pylons.routes_dict"]["action_name"]
+        method = method or request.method
+        action = method + "_" + name
+        return getattr(self, action, None)
 
     @classmethod
     def format_output_url(cls, url, **kw):
@@ -144,8 +192,8 @@ class BaseController(WSGIController):
 
         # unparse and encode it un utf8
         rv = _force_unicode(u.unparse()).encode('utf8')
-        if any(ch.isspace() for ch in rv):
-            raise ValueError("Space characters in redirect URL: [%r]" % rv)
+        if "\n" in rv or "\r" in rv:
+            abort(400)
         return rv
 
 
@@ -164,7 +212,7 @@ class BaseController(WSGIController):
 
         path = add_sr(cls.format_output_url(form_path) +
                       query_string(params))
-        return cls.redirect(path)
+        abort(302, path)
 
     @classmethod
     def redirect(cls, dest, code = 302):

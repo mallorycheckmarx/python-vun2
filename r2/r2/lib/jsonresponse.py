@@ -11,19 +11,20 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
+from r2.config.extensions import get_api_subtype
 from r2.lib.utils import tup
 from r2.lib.captcha import get_iden
 from r2.lib.wrapped import Wrapped, StringTemplate
 from r2.lib.filters import websafe_json, spaceCompress
-from r2.lib.jsontemplates import get_api_subtype
 from r2.lib.base import BaseController
 from r2.lib.pages.things import wrap_links
 from r2.models import IDBuilder, Listing
@@ -44,12 +45,16 @@ class JsonResponse(object):
     in the api func's validators, as well as blobs of data set by the
     api func.
     """
+
+    content_type = 'application/json; charset=UTF-8'
+
     def __init__(self):
         self._clear()
 
     def _clear(self):
         self._errors = set()
         self._new_captcha = False
+        self._ratelimit = False
         self._data = {}
 
     def send_failure(self, error):
@@ -57,7 +62,7 @@ class JsonResponse(object):
         self._clear()
         self._errors.add((error, None))
 
-    def __call__(self, *a):
+    def __call__(self, *a, **kw):
         return self
 
     def __getattr__(self, key):
@@ -67,7 +72,11 @@ class JsonResponse(object):
         res = {}
         if self._data:
             res['data'] = self._data
-        res['errors'] = [(e[0], c.errors[e].message) for e in self._errors]
+        if self._new_captcha:
+            res['captcha'] = get_iden()
+        if self._ratelimit:
+            res['ratelimit'] = self._ratelimit
+        res['errors'] = [(e[0], c.errors[e].message, e[1]) for e in self._errors]
         return {"json": res}
 
     def set_error(self, error_name, field_name):
@@ -117,6 +126,12 @@ class JsonResponse(object):
 
     def _send_data(self, **kw):
         self._data.update(kw)
+
+    def new_captcha(self):
+        self._new_captcha = True
+
+    def ratelimit(self, seconds):
+        self._ratelimit = seconds
 
 
 class JQueryResponse(JsonResponse):

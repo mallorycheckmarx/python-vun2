@@ -4,30 +4,31 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
-## 
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
+##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
-## 
-## The Original Code is Reddit.
-## 
+##
+## The Original Code is reddit.
+##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
-## 
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## the Original Code is reddit Inc.
+##
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
+
 <%!
-   from r2.lib.template_helpers import get_domain
+   from r2.lib.template_helpers import static, get_domain
+   from r2.lib.utils import query_string
    from r2.lib.strings import Score
  %>
 
-<%namespace file="buttontypes.html" import="submiturl" />
+<%def name="submiturl(url, title='')">${("http://%s/submit" % get_domain(cname = c.cname, subreddit = not c.cname)) + query_string(dict(url=url, title=title))}</%def>
 
 <% 
-    domain = get_domain()
     if thing._fullname:
         path = thing.make_permalink_slow()
     else:
@@ -43,7 +44,7 @@
 %endif
     write_string += '">';
 %if thing.image > 0:
-    write_string += unstyled_submit + '<img style="height: 2.3ex; vertical-align:top; margin-right: 1ex" src="http://${get_domain(subreddit=False)}/static/spreddit${thing.image}.gif">' + "</a>";
+    write_string += unstyled_submit + '<img style="height: 2.3ex; vertical-align:top; margin-right: 1ex" src="${static('spreddit' + str(thing.image) + '.gif')}">' + "</a>";
 %endif
 %if thing._fullname:
     write_string += '${Score.safepoints(thing.score)}';

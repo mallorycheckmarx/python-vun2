@@ -11,16 +11,31 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 """r2
 
 This file loads the finished app from r2.config.middleware.
 """
-from r2.config.middleware import make_app
+
+# _strptime is imported with PyImport_ImportModuleNoBlock which can fail
+# miserably when multiple threads try to import it simultaneously.
+# import this here to get it over with
+# see "Non Blocking Module Imports" in:
+# http://code.google.com/p/modwsgi/wiki/ApplicationIssues
+import _strptime
+
+# defer the (hefty) import until it's actually needed. this allows
+# modules below r2 to be imported before cython files are built, also
+# provides a hefty speed boost to said imports when they don't need
+# the app initialization.
+def make_app(*args, **kwargs):
+    from r2.config.middleware import make_app as real_make_app
+    return real_make_app(*args, **kwargs)

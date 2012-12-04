@@ -4,53 +4,30 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%!
-   import locale
    from r2.lib.strings import strings, Score
-   from r2.lib.pages import WrappedUser
+   from r2.lib.pages import WrappedUser, ModList
  %>
 
-<%namespace file="utils.html" import="plain_link, timestamp"/>
+<%namespace file="utils.html" import="plain_link, thing_timestamp, text_with_links"/>
 <%namespace file="subreddit.html" import="addremove_button" />
 <%namespace file="printablebuttons.html" import="ynbutton, state_button" />
-
-<%def name="moderate_button(location, fmt, question, left)">
-  ${ynbutton(_("leave"), left, location,
-             question = question, format = fmt, format_arg = "leave",
-             hidden_data = dict(id = thing.sr._fullname))}
-</%def>
-
-<%def name="flair_control(flair_user)">
-  %if flair_user:
-    <form class="toggle flairtoggle">
-      <input id="flair_enabled" type="checkbox" name="flair_enabled"
-          %if flair_user.flair_enabled:
-            checked="checked"
-          %endif
-          >
-      ${_("Show my flair on this reddit. It looks like:")}
-      <div class="tagline">
-        ${flair_user}
-      </div>
-    </form>
-  %endif
-</%def>
 
 <div class="titlebox">
   <h1 class="hover redditname">
@@ -58,27 +35,39 @@
   </h1>
 
   ${addremove_button(thing.sr)}
-  ${unsafe(Score.readers(thing.subscribers))}
+  <span class="subscribers">${unsafe(Score.readers(thing.subscribers))}</span>
+  <p class="users-online ${'fuzzed' if thing.accounts_active_fuzzed else ''}" title="${_('logged-in users viewing this subreddit in the past 15 minutes')}">
+      ${unsafe(Score.users_here_now(thing.accounts_active, prepend='~' if thing.accounts_active_fuzzed else ''))}
+  </p>
 
   %if thing.sr.moderator:
-    ${moderate_button("leavemoderator",
-                      _("you are a moderator of this reddit. (%(leave)s)"),
-                      _("stop being a moderator?"),
-                      _("you are no longer a moderator"))}
-                     
+    <div class="leavemoderator">
+      ${text_with_links(ModList.remove_self_title % dict(action='(%(action)s)'),
+          _sr_path=True,
+          action=dict(
+            ## TRANSLATORS: this label links to the edit moderators page.
+            link_text=_('change'),
+            path='about/moderators'))}
+    </div>
   %endif
 
   %if thing.sr.contributor:
-    ${moderate_button("leavecontributor",
-                      _("you are an approved submitter on this reddit. (%(leave)s)"),
-                      _("stop being an approved submitter?"),
-                      _("you are no longer an approved submitter"))}
+    ${ynbutton(op='leavecontributor',
+               title=_('leave'),
+               executed=_('you are no longer an approved submitter'),
+               question=_('stop being an approved submitter?'),
+               format=_('you are an approved submitter on this reddit. (%(leave)s)'),
+               format_arg='leave',
+               hidden_data=dict(
+                 id=thing.sr._fullname))}
   %endif
 
-  ${flair_control(thing.flair_user)}
+  %if thing.flair_prefs:
+    ${thing.flair_prefs}
+  %endif
 
   %if thing.sr.description:
-    ${thing.sr.usertext}
+    ${thing.sr.description_usertext}
   %endif
 
   <div class="bottom">
@@ -87,7 +76,7 @@
     %endif
     
     <span class="age">
-      ${_("a community for")}&#32;${timestamp(thing.sr)}
+      ${_("a community for")}&#32;${thing_timestamp(thing.sr)}
     </span>  
   </div>
 

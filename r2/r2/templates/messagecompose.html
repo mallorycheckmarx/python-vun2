@@ -4,21 +4,21 @@
 ## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
-## Original Developer. In addition, Exhibit A has been modified to be consistent
-## with Exhibit B.
+## Original Developer. In addition, Exhibit A has been modified to be
+## consistent with Exhibit B.
 ##
 ## Software distributed under the License is distributed on an "AS IS" basis,
 ## WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 ## the specific language governing rights and limitations under the License.
 ##
-## The Original Code is Reddit.
+## The Original Code is reddit.
 ##
 ## The Original Developer is the Initial Developer.  The Initial Developer of
-## the Original Code is CondeNet, Inc.
+## the Original Code is reddit Inc.
 ##
-## All portions of the code written by CondeNet are Copyright (c) 2006-2010
-## CondeNet, Inc. All Rights Reserved.
-################################################################################
+## All portions of the code written by reddit are Copyright (c) 2006-2012
+## reddit Inc. All Rights Reserved.
+###############################################################################
 
 <%namespace file="utils.html" import="error_field, submit_form"/>
 <%namespace name="utils" file="utils.html"/>
@@ -26,6 +26,7 @@
 <%!
    import simplejson
    from r2.lib.pages import UserText
+   from r2.lib.template_helpers import static
 %>
 
 <h1>${_("send a message")}</h1>
@@ -38,8 +39,10 @@
 function admincheck(elem) {
   var admins = ${unsafe(simplejson.dumps(thing.admins))};
 
-  if (admins.indexOf(elem.value) >= 0) {
-    $(".admin-to").text(elem.value);
+  if ($.inArray(elem.value, admins) >= 0) {
+    $(".admin-to")
+      .text(elem.value)
+      .attr('href', '/about/team/#user/' + elem.value);
     $(".clippy").show();
   } else {
     $(".clippy").hide();
@@ -49,7 +52,7 @@ function admincheck(elem) {
 
 <div class="spacer">
   <%utils:round_field title="${_('to')}", 
-                      description="${_('(username, or # followed by the reddit name)')}">
+                      description="${_('(username, or /r/ followed by the reddit name)')}">
     <input type="text" name="to" value="${thing.to or ''}"
            onchange="admincheck(this)"/>
     ${error_field("NO_USER", "to")}
@@ -77,7 +80,7 @@ function admincheck(elem) {
   style="display:none"
 %endif
 >
-   <img src="/static/alien-clippy.png" />
+   <img src="${static('alien-clippy.png')}" />
 
    <div class="clippy-bubble">
      <p class="clippy-headline">It looks like you're writing to an admin!</p>
@@ -85,15 +88,13 @@ function admincheck(elem) {
 
        Before you click "send", you might want to make sure that
        &#32;
-       <span class="admin-to">${thing.to}</span>
+       <a class="admin-to" href="/about/team/#user/${thing.to}">${thing.to}</a>
        &#32;
-       is the right admin for the job.
-
+       is the right admin for the job. The
        &#32;
-       <a href="http://reddit.com/help/faq#WhichstaffmembershouldIwritetoifIhaveaproblemorquestion">
-         The FAQ has some guidelines</a>
+       <a href="/about/team/">team page</a>
        &#32;
-       about who handles what.
+       has some info about who handles what.
 
        Also:
      </p>
@@ -104,8 +105,8 @@ function admincheck(elem) {
        <li>If you think your posts are being caught in the spam filter,
          please write to
          &#32;
-         <a href="http://reddit.com/help/faq#HowcanItellwhomoderatesagivenreddit">
-          the moderator of the reddit
+         <a href="http://www.reddit.com/help/faq#HowcanItellwhomoderatesagivenreddit">
+          the moderators of the subreddit
          </a>
          &#32;
          instead.
@@ -118,8 +119,8 @@ function admincheck(elem) {
          inquiring about, and that's actually the reason you're writing, please
          message 
          &#32;
-         <a href="http://reddit.com/help/faq#HowcanItellwhomoderatesagivenreddit">
-          all of the moderators of the reddit
+         <a href="http://www.reddit.com/help/faq#HowcanItellwhomoderatesagivenreddit">
+          all of the moderators of the subreddit
          </a>
          &#32; (using the "message the mods" feature located at the top of the
          mod box) with a direct link to the comment page of the submission or other

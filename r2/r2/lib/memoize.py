@@ -11,14 +11,15 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 #
-# The Original Code is Reddit.
+# The Original Code is reddit.
 #
-# The Original Developer is the Initial Developer.  The Initial Developer of the
-# Original Code is CondeNet, Inc.
+# The Original Developer is the Initial Developer.  The Initial Developer of
+# the Original Code is reddit Inc.
 #
-# All portions of the code written by CondeNet are Copyright (c) 2006-2010
-# CondeNet, Inc. All Rights Reserved.
-################################################################################
+# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# Inc. All Rights Reserved.
+###############################################################################
+
 from hashlib import md5
 
 from r2.config import cache
@@ -29,7 +30,7 @@ from pylons import g
 
 make_lock = g.make_lock
 
-def memoize(iden, time = 0):
+def memoize(iden, time = 0, stale=False):
     def memoize_fn(fn):
         from r2.lib.memoize import NoneResult
         def new_fn(*a, **kw):
@@ -40,11 +41,11 @@ def memoize(iden, time = 0):
 
             key = make_key(iden, *a, **kw)
 
-            res = None if update else cache.get(key)
+            res = None if update else cache.get(key, stale=stale)
 
             if res is None:
                 # not cached, we should calculate it.
-                with make_lock('memoize_lock(%s)' % key):
+                with make_lock("memoize", 'memoize_lock(%s)' % key):
                     # see if it was completed while we were waiting
                     # for the lock
                     stored = None if update else cache.get(key)
