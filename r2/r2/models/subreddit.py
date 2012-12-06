@@ -102,7 +102,8 @@ class Subreddit(Thing, Printable):
                      allow_comment_gilding=True,
                      )
     _essentials = ('type', 'name', 'lang')
-    _data_int_props = Thing._data_int_props + ('mod_actions', 'reported')
+    _data_int_props = Thing._data_int_props + ('mod_actions', 'reported',
+                                               'wiki_edit_karma', 'wiki_edit_age')
 
     sr_limit = 50
     gold_limit = 100
@@ -363,7 +364,7 @@ class Subreddit(Thing, Printable):
 
     def change_css(self, content, parsed, prev=None, reason=None, author=None, force=False):
         from r2.models import ModAction
-        author = author if author else c.user.name
+        author = author if author else c.user._id36
         if content is None:
             content = ''
         try:

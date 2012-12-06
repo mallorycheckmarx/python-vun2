@@ -642,7 +642,10 @@ class FrontController(RedditController, OAuth2ResourceController):
         else:
             return self.abort404()
 
+        is_wiki_action = location in ['wikibanned', 'wikicontributors']
+
         return EditReddit(content=pane,
+                          show_wiki_actions=is_wiki_action,
                           location=location,
                           extension_handling=extension_handling).render()
 
@@ -1227,7 +1230,8 @@ class FormsController(RedditController):
         returns their user name"""
         c.response_content_type = 'text/plain'
         if c.user_is_loggedin:
-            perm = str(c.user.can_wiki())
+            # Change cookie based on can_wiki trac permissions
+            perm = str(c.user.can_wiki(default=False))
             c.response.content = c.user.name + "," + perm
         else:
             c.response.content = ''

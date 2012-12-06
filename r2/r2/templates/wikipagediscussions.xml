@@ -20,32 +20,5 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%namespace file="utils.html" import="timestamp"/>
+${thing.listing}
 
-<%!
-    from r2.lib.filters import wikimarkdown
-    from r2.lib.pages import WrappedUser
-%>
-
-%if thing.diff:
-    <p>
-        ${unsafe(thing.diff)}
-    </p>
-%endif
-<p>
-    %if not thing.page_content_md:
-        <em>${_("this page is empty")}</em>
-    %else:
-        ${unsafe(wikimarkdown(thing.page_content_md))}
-    %endif
-</p>
-%if thing.edit_date:
-    <hr/>
-    <em>
-        %if thing.edit_by:
-             ${unsafe(_("revision by&nbsp;%s") % WrappedUser(thing.edit_by).render())}
-             &mdash;&nbsp;
-        %endif
-        ${unsafe("%(time)s&nbsp;ago" % dict(time=timestamp(thing.edit_date)))}
-    </em>
-%endif

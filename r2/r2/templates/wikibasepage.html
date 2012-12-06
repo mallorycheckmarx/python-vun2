@@ -28,7 +28,7 @@
         %endif
         "
         %if action[2]:
-            href="${thing.base_url}/${action[0]}/${c.page}"
+            href="${thing.base_url}/${action[0]}/${thing.page}"
         %else:
             href="${thing.base_url}/${action[0]}"
         %endif
@@ -41,8 +41,8 @@
         %if thing.title:
             ${thing.title}
         %endif
-        %if c.page:
-            <strong>${c.page}</strong>
+        %if thing.page:
+            <strong>${thing.page}</strong>
         %endif
     </h1>
     
@@ -53,15 +53,17 @@
     %endif
 </span>
     
-<br/>
-
-%if thing.description:
-    <br/>
-    <span><h2>${unsafe(thing.description)}</h2></span>
-%endif
-
 <div class="wiki-page-content">
+    %if thing.description:
+        <div class="description">
+            <h2>
+                %for desc in thing.description:
+                    ${desc}<br/>
+                %endfor
+            </h2>
+        </div>
+    %endif
     ${thing.content}
 </div>
 
-<!--Reddit wikis are powered by Cray-1™ supercomputers-->
+<!--reddit wikis are powered by Cray-1™ supercomputers-->
