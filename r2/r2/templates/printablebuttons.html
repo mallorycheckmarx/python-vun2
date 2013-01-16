@@ -287,11 +287,11 @@
           ${self.bylink_button(_("parent"), thing.parent_permalink)}
         </li>
       %endif
-      %if thing.is_author:
-        <li>
-          ${self.simple_button(_("edit"), "edit_usertext", css_class="edit-usertext")}
-        </li>
-      %endif
+    %endif
+    %if thing.is_author:
+      <li>
+        ${self.simple_button(_("edit"), "edit_usertext", css_class="edit-usertext")}
+      </li>
     %endif
     ${self.banbuttons()}
     ${self.distinguish()}
