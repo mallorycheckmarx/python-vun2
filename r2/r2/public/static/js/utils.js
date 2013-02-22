@@ -37,7 +37,7 @@ r.utils = {
     serializeForm: function(form) {
         var params = {}
         $.each(form.serializeArray(), function(index, value) {
-            params[value.name] = value.value
+            params[value.name] = value.value.replace(/\r\n/g, '\n');
         })
         return params
     },
