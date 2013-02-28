@@ -20,63 +20,84 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from reddit_base import RedditController, MinimalController, set_user_cookie
-from reddit_base import cross_domain, paginated_listing
-
+import csv
+import hashlib
+from collections import defaultdict
+from datetime import datetime
+from datetime import timedelta
 from pylons.i18n import _
-from pylons import c, request, response
+from pylons import c
+from pylons import request
 
-from r2.lib.validator import *
+from reddit_base import RedditController
+from reddit_base import MinimalController
+from reddit_base import set_user_cookie
+from reddit_base import cross_domain
+from reddit_base import paginated_listing
 
-from r2.models import *
+from r2.controllers.api_docs import api_doc
+from r2.controllers.api_docs import api_section
+from r2.controllers.ipn import generate_blob
+from r2.controllers.oauth2 import OAuth2ResourceController
+from r2.controllers.oauth2 import require_oauth2_scope
 
 from r2.lib import amqp
-
-from r2.lib.utils import get_title, sanitize_url, timeuntil, set_last_modified
-from r2.lib.utils import query_string, timefromnow, randstr
-from r2.lib.utils import timeago, tup, filter_links
-from r2.lib.pages import (EnemyList, FriendList, ContributorList, ModList,
-                          BannedList, WikiBannedList, WikiMayContributeList,
-                          BoringPage, FormPage, CssError, UploadedImage,
-                          ClickGadget, UrlParser, WrappedUser)
-from r2.lib.pages import FlairList, FlairCsv, FlairTemplateEditor, \
-    FlairSelector
-from r2.lib.pages import PrefApps
-from r2.lib.pages.things import wrap_links, default_thing_wrapper
-from r2.models.last_modified import LastModified
-
-from r2.lib.menus import CommentSortMenu
+from r2.lib import media
+from r2.lib import promote
+from r2.lib import cssfilter
+from r2.lib import emailer
 from r2.lib.captcha import get_iden
-from r2.lib.strings import strings
-from r2.lib.filters import _force_unicode, websafe_json, websafe, spaceCompress
+from r2.lib.comment_tree import delete_comment
+from r2.lib.db import tdb_cassandra
 from r2.lib.db import queries
 from r2.lib.db.queries import changed
-from r2.lib import media
-from r2.lib.db import tdb_cassandra
-from r2.lib import promote
-from r2.lib.comment_tree import delete_comment
-from r2.lib import tracking,  cssfilter, emailer
-from r2.lib.subreddit_search import search_reddits
-from r2.lib.log import log_text
 from r2.lib.filters import safemarkdown
-from r2.lib.scraper import str_to_image
-from r2.controllers.api_docs import api_doc, api_section
-from r2.lib.search import SearchQuery
-from r2.controllers.oauth2 import OAuth2ResourceController, require_oauth2_scope
-from r2.lib.template_helpers import add_sr, get_domain
-from r2.lib.system_messages import notify_user_added
-from r2.controllers.ipn import generate_blob
+from r2.lib.filters import spaceCompress
+from r2.lib.filters import websafe
 from r2.lib.lock import TimeoutExpired
+from r2.lib.log import log_text
+from r2.lib.menus import CommentSortMenu
+from r2.lib.merge import ConflictException
+from r2.lib.pages import BannedList
+from r2.lib.pages import BoringPage
+from r2.lib.pages import ClickGadget
+from r2.lib.pages import ContributorList
+from r2.lib.pages import CssError
+from r2.lib.pages import FlairCsv
+from r2.lib.pages import FlairList
+from r2.lib.pages import FlairSelector
+from r2.lib.pages import FlairTemplateEditor
+from r2.lib.pages import FriendList
+from r2.lib.pages import ModList
+from r2.lib.pages import PrefApps
+from r2.lib.pages import UploadedImage
+from r2.lib.pages import UrlParser
+from r2.lib.pages import WikiBannedList
+from r2.lib.pages import WikiMayContributeList
+from r2.lib.pages import WrappedUser
+from r2.lib.pages.things import wrap_links
+from r2.lib.pages.things import default_thing_wrapper
+from r2.lib.search import SearchQuery
+from r2.lib.scraper import str_to_image
+from r2.lib.strings import strings
+from r2.lib.subreddit_search import search_reddits
+from r2.lib.system_messages import notify_user_added
+from r2.lib.template_helpers import add_sr
+from r2.lib.template_helpers import get_domain
+from r2.lib.utils import filter_links
+from r2.lib.utils import get_title
+from r2.lib.utils import timeago
+from r2.lib.utils import timefromnow
+from r2.lib.utils import timeuntil
+from r2.lib.utils import tup
+from r2.lib.utils import query_string
+from r2.lib.utils import set_last_modified
 
 from r2.models import wiki
-from r2.lib.merge import ConflictException
+from r2.models.last_modified import LastModified
 
-import csv
-from collections import defaultdict
-from datetime import datetime, timedelta
-import hashlib
-import urllib
-import urllib2
+from r2.lib.validator import *
+from r2.models import *
 
 def reject_vote(thing):
     voteword = request.params.get('dir')
