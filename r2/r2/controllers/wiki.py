@@ -127,6 +127,8 @@ class WikiController(RedditController):
         else:
             edit_by = page.get_author()
             edit_date = page._get('last_edit_date')
+       
+        revision = page._get('revision')
 
         diffcontent = None
         if not version:
@@ -153,6 +155,7 @@ class WikiController(RedditController):
         return WikiPageView(content, alert=message, v=version, diff=diffcontent,
                             may_revise=this_may_revise(page), edit_by=edit_by,
                             edit_date=edit_date, page=page.name,
+                            revision=revision,
                             renderer=renderer).render()
 
     @paginated_listing(max_page_size=100, backend='cassandra')

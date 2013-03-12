@@ -771,6 +771,7 @@ class WikiViewJsonTemplate(ThingJsonTemplate):
                     revision_by=edit_by,
                     revision_date=edit_date,
                     may_revise=thing.may_revise,
+                    revision=thing.revision,
                     sr=thing.sr)
 
 class WikiSettingsJsonTemplate(ThingJsonTemplate):
