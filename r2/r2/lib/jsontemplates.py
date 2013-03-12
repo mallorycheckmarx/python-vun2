@@ -765,7 +765,8 @@ class WikiViewJsonTemplate(ThingJsonTemplate):
         edit_by = None
         if thing.edit_by and not thing.edit_by._deleted:
              edit_by = Wrapped(thing.edit_by).render()
-        return dict(content_md=thing.page_content_md,
+        return dict(page=thing.page,
+                    content_md=thing.page_content_md,
                     content_html=thing.page_content,
                     revision_by=edit_by,
                     revision_date=edit_date,
@@ -779,6 +780,7 @@ class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def data(self, thing):
          editors = [Wrapped(e).render() for e in thing.mayedit]
          return dict(permlevel=thing.permlevel,
+                     page=thing.page,
                      editors=editors,
                      sr=thing.sr)
 
