@@ -42,6 +42,7 @@ class WikiView(Templated):
         self.page = page
         self.diff = diff
         self.edit_by = edit_by
+        self.sr = c.site.name
         self.may_revise = may_revise
         self.edit_date = edit_date
         self.base_url = c.wiki_base_url
@@ -59,6 +60,7 @@ class WikiPageListing(Templated):
         self.page = page
         self.linear_pages = linear_pages
         self.base_url = c.wiki_base_url
+        self.sr = c.site.name
         Templated.__init__(self)
 
 class WikiEditPage(Templated):
@@ -78,6 +80,7 @@ class WikiPageSettings(Templated):
         self.page = page
         self.base_url = c.wiki_base_url
         self.mayedit = mayedit
+        self.sr = c.site.name
         Templated.__init__(self)
 
 class WikiPageRevisions(Templated):

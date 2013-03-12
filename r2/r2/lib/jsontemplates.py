@@ -754,7 +754,7 @@ class WikiPageListingJsonTemplate(ThingJsonTemplate):
     
     def data(self, thing):
         pages = [p.name for p in thing.linear_pages]
-        return dict(children=pages)
+        return dict(children=pages, sr=thing.sr)
 
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
@@ -769,7 +769,8 @@ class WikiViewJsonTemplate(ThingJsonTemplate):
                     content_html=thing.page_content,
                     revision_by=edit_by,
                     revision_date=edit_date,
-                    may_revise=thing.may_revise)
+                    may_revise=thing.may_revise,
+                    sr=thing.sr)
 
 class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def kind(self, thing):
@@ -778,7 +779,8 @@ class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def data(self, thing):
          editors = [Wrapped(e).render() for e in thing.mayedit]
          return dict(permlevel=thing.permlevel,
-                     editors=editors)
+                     editors=editors,
+                     sr=thing.sr)
 
 class WikiRevisionJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
@@ -792,7 +794,9 @@ class WikiRevisionJsonTemplate(ThingJsonTemplate):
                                    id=str(thing._id),
                                    timestamp=timestamp,
                                    reason=thing._get('reason'),
-                                   page=thing.page))
+                                   page=thing.page,
+                                   # todo: Once subreddit it is batched into the revision, use here
+                                   sr=c.site.name))
 
 class FlairListJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
