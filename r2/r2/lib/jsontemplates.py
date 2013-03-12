@@ -754,7 +754,7 @@ class WikiPageListingJsonTemplate(ThingJsonTemplate):
     
     def data(self, thing):
         pages = [p.name for p in thing.linear_pages]
-        return pages
+        return dict(children=pages)
 
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
