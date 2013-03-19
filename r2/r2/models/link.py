@@ -120,13 +120,15 @@ class Link(Thing, Printable):
             LinksByUrl._set_values(LinksByUrl._key_from_url(self.url),
                                    {self._id36: ''})
 
-    @property
-    def already_submitted_link(self):
-        return self.make_permalink_slow() + '?already_submitted=true'
+    def already_submitted_link(self, url=None, title=None):
+        return self.make_permalink_slow() + \
+            '?already_submitted=' + url_escape(url or self.url) + \
+            '&title=' + url_escape(title or self.title)
 
-    def resubmit_link(self, sr_url=False):
+    def resubmit_link(self, sr_url=False, url=False, title=False):
         submit_url = self.subreddit_slow.path if sr_url else '/'
-        submit_url += 'submit?resubmit=true&url=' + url_escape(self.url)
+        submit_url += 'submit?resubmit=true&url=' + url_escape(url or self.url)
+        submit_url += '&title=' + url_escape(title or self.title)
         return submit_url
 
     @classmethod

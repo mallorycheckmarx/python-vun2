@@ -321,7 +321,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                 g.stats.simple_event('spam.shame.link')
             elif form.has_errors("url", errors.ALREADY_SUB):
                 check_domain = False
-                u = url[0].already_submitted_link
+                u = utils.tup(Link._by_url(url, sr))[0]
+                u = u.already_submitted_link(url=url, title=title)
+
                 if extension:
                     u = UrlParser(u)
                     u.set_extension(extension)

@@ -252,7 +252,10 @@ class FrontController(RedditController, OAuth2ResourceController):
         # check if we just came from the submit page
         infotext = None
         if request.get.get('already_submitted'):
-            infotext = strings.already_submitted % article.resubmit_link()
+            infotext = strings.already_submitted % article.resubmit_link(
+                sr_url=True,
+                url=request.get.get('already_submitted'),
+                title=request.get.get('title'))
 
         check_cheating('comments')
 
@@ -920,11 +923,16 @@ class FrontController(RedditController, OAuth2ResourceController):
         if url and not resubmit:
             # check to see if the url has already been submitted
             links = link_from_url(url)
+
             if links and len(links) == 1:
-                return self.redirect(links[0].already_submitted_link)
+                u = links[0].already_submitted_link(url=url, title=title)
+                return self.redirect(u)
             elif links:
                 infotext = (strings.multiple_submitted
-                            % links[0].resubmit_link())
+                            % links[0].resubmit_link(
+                                sr_url=True,
+                                url=request.get.get('already_submitted'),
+                                title=request.get.get('title')))
                 res = BoringPage(_("seen it"),
                                  content=wrap_links(links),
                                  infotext=infotext).render()
