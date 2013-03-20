@@ -1182,7 +1182,7 @@ class VUrl(VRequired):
             try:
                 l = Link._by_url(url, sr)
                 self.error(errors.ALREADY_SUB)
-                return utils.tup(l)
+                return url
             except NotFound:
                 return url
         return self.error(errors.BAD_URL)
