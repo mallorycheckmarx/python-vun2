@@ -378,7 +378,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             sendreplies = kind == 'self'
 
         # well, nothing left to do but submit it
-        l = Link._submit(request.post.title, url if kind == 'link' else 'self',
+        l = Link._submit(spaceCompress(request.post.title), url if kind == 'link' else 'self',
                          c.user, sr, ip, spam=c.user._spam, sendreplies=sendreplies)
 
         if banmsg:
