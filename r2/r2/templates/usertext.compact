@@ -72,7 +72,7 @@
       <div class="bottom-area">
         <div class="usertext-buttons">
           <a href="#" class="help-toggle newbutton">help</a>
-          <button type="submit" class="save newbutton">Save</button>
+          <button type="submit" class="save newbutton">Send</button>
           <button type="button" class="cancel newbutton" style="display: none;"
             onclick="return cancel_usertext(this)">
             Cancel</button>
