@@ -670,6 +670,8 @@ class FrontController(RedditController, OAuth2ResourceController):
                           location=location,
                           extension_handling=extension_handling).render()
 
+    @require_oauth2_scope('modconfig')
+    @api_doc(api_section.moderation)
     @base_listing
     @prevent_framing_and_css(allow_cname_frame=True)
     @validate(location=nop('location'),
@@ -678,7 +680,11 @@ class FrontController(RedditController, OAuth2ResourceController):
               name=nop('name'))
     def GET_editreddit(self, location, num, after, reverse, count, created,
                        name):
-        """Edit reddit form."""
+        """Edit reddit form.
+
+        Provides access to the reddit's stylesheet and images.
+
+        """
         user = None
         if name:
             try:
