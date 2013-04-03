@@ -222,8 +222,8 @@
                 }
                 
                 var ext = file_input.value
-                    .replace(/.*[\/\\]/, "").split('.').pop()
-                    .toLowerCase().replace("jpeg", "jpg");
+                    .split('.').pop().toLowerCase()
+                    .replace("jpeg", "jpg");
                 if (ext == 'png' || ext == 'jpg') {
                     $('input:radio[name=img_type][value="' + ext + '"]').attr('checked', true);
                     $('input:radio[name=img_type][value!="' + ext + '"]').attr('checked', false);
