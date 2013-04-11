@@ -509,19 +509,24 @@ def ratelimit_agent(agent):
         request.environ['retry_after'] = SLICE_SIZE - remainder
         abort(429)
 
-appengine_re = re.compile(r'AppEngine-Google; \(\+http://code.google.com/appengine; appid: s~([a-z0-9-]{6,30})\)\Z')
+gae_re = re.compile(r'^(?P<custom>.+ )?AppEngine-Google; \(\+http://code\.google\.com/appengine(?:; appid: (?:dev~|s~)?(?P<appid>[a-z0-9][a-z0-9-]{4,28}[a-z0-9]))?\)$')
+
 def ratelimit_agents():
     user_agent = request.user_agent
 
     if not user_agent:
         return
 
-    # parse out the appid for appengine apps
-    appengine_match = appengine_re.match(user_agent)
-    if appengine_match:
-        appid = appengine_match.group(1)
-        ratelimit_agent(appid)
-        return
+    gae_m = gae_re.match(user_agent)
+
+    if gae_m:
+        appid = gae_m.group('appid')
+        custom = (gae_m.group('custom') or '').rstrip()
+
+        # The App ID may not be available in the UA string of dev servers
+        # (see <http://goo.gl/kiJyT#c4>)
+        if appid or custom:
+            return
 
     user_agent = user_agent.lower()
     for s in g.agents:
