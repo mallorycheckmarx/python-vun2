@@ -1354,7 +1354,7 @@ a.author { margin-right: 0.5em; }
 .md.wiki img { display: block }
 .md ol, .md ul { margin: 10px 2em; }
 .md ul { list-style: disc outside }
-.md ol { list-style: decimal outside; margin-left: 30px }
+.md ol { list-style: decimal outside; margin-left: 3em }
 .md pre { margin: 10px; }
 .md blockquote, .help blockquote {
     border-left: 2px solid #369;
