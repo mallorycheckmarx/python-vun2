@@ -22,6 +22,7 @@
 <%!
     from r2.lib.template_helpers import static
     from r2.lib.filters import safemarkdown
+    from r2.lib.pages import WrappedUser
 %>
 
 <div class="gold-accent gold-thanks">
@@ -34,7 +35,7 @@
   %endif
   </p>
     
-  %if thing.lounge_md:
+  %if thing.lounge_md and c.user_is_gold:
     <span class="lounge-msg">
       ${unsafe(safemarkdown(thing.lounge_md))}
     </span>
