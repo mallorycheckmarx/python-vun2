@@ -650,6 +650,7 @@ class UserController(ListingController):
 
         return q
 
+    @require_oauth2_scope("mystuff")
     @validate(vuser = VExistingUname('username'),
               sort = VMenu('sort', ProfileSortMenu, remember = False),
               time = VMenu('t', TimeMenu, remember = False))

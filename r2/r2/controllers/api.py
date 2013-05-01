@@ -2017,6 +2017,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             sr = thing.subreddit_slow
             ModAction.create(sr, c.user, 'distinguish', target=thing, **log_kw)
 
+    @require_oauth2_scope("save")
     @noresponse(VUser(),
                 VModhash(),
                 thing = VByName('id'))
@@ -2033,6 +2034,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         if isinstance(thing, Comment) and not c.user.gold: return
         r = thing._save(c.user)
 
+    @require_oauth2_scope("save")
     @noresponse(VUser(),
                 VModhash(),
                 thing = VByName('id'))

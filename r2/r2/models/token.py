@@ -139,6 +139,13 @@ class OAuth2Scope:
             "name": _("Subreddit Traffic"),
             "description": _("Access traffic stats in subreddits I moderate."),
         },
+        "mystuff": {
+            "id": "mystuff",
+            "name:": _("My Stuff"),
+            "description": _(
+                "Access my voting history and my saved / hidden comments and"
+                " posts.")
+        },        
         "mysubreddits": {
             "id": "mysubreddits",
             "name": _("My Subreddits"),
@@ -156,6 +163,11 @@ class OAuth2Scope:
             "id": "read",
             "name": _("Read Content"),
             "description": _("Access posts and comments through my account."),
+        },
+        "save": {
+            "id": "save",
+            "name": _("Save Content"),
+            "description": _("Save and unsave comments and posts.")
         },
         "submit": {
             "id": "submit",
