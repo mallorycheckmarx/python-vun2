@@ -103,6 +103,13 @@ class OAuth2Scope:
             "name": _("Edit Posts"),
             "description": _("Edit and delete my comments and submissions."),
         },
+        "history": {
+            "id": "history",
+            "name:": _("History"),
+            "description": _(
+                "Access my voting history and my saved / hidden comments and"
+                " posts.")
+        },        
         "identity": {
             "id": "identity",
             "name": _("My Identity"),
@@ -138,14 +145,7 @@ class OAuth2Scope:
             "id": "modtraffic",
             "name": _("Subreddit Traffic"),
             "description": _("Access traffic stats in subreddits I moderate."),
-        },
-        "mystuff": {
-            "id": "mystuff",
-            "name:": _("My Stuff"),
-            "description": _(
-                "Access my voting history and my saved / hidden comments and"
-                " posts.")
-        },        
+        },       
         "mysubreddits": {
             "id": "mysubreddits",
             "name": _("My Subreddits"),
