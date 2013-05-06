@@ -382,7 +382,7 @@ class QueryBuilder(Builder):
                 break;
 
             #if fewer results than we wanted, we're done
-            elif self.num and len(new_items) < self.num - num_have:
+            elif self.num and len(new_items) <= self.num - num_have:
                 done = True
                 have_next = False
 
