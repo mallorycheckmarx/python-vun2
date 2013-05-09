@@ -192,15 +192,15 @@ class WikiRevisions(WikiBasePage):
         WikiBasePage.__init__(self, content, page=page, **context)
 
 class WikiRecent(WikiBasePage):
-    def __init__(self, revisions, **context):
+    def __init__(self, revisions, sr, **context):
         content = WikiPageRevisions(revisions)
-        context['wikiaction'] = ('revisions', _("Viewing recent revisions for /r/%s") % c.wiki_id)
+        context['wikiaction'] = ('revisions', _("Viewing recent revisions for /r/%s") % sr)
         WikiBasePage.__init__(self, content, showtitle=True, **context)
 
 class WikiListing(WikiBasePage):
-    def __init__(self, pages, linear_pages, **context):
+    def __init__(self, pages, linear_pages, sr, **context):
         content = WikiPageListing(pages, linear_pages)
-        context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % c.wiki_id)
+        context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % sr)
         description = [_("Below is a list of pages in this wiki visible to you in this subreddit.")]
         WikiBasePage.__init__(self, content, description=description, showtitle=True, **context)
 

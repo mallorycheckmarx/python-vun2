@@ -216,13 +216,15 @@ class WikiController(RedditController):
                                             skip=not c.is_wiki_mod,
                                             user=wikiuser, sr=c.site)
         listing = WikiRevisionListing(builder).listing()
-        return WikiRecent(listing).render()
+        sr = g.default_sr if isinstance(c.site, DefaultSR) else c.site.name
+        return WikiRecent(listing, sr).render()
 
     def GET_wiki_listing(self):
         def check_hidden(page):
             return this_may_view(page)
         pages, linear_pages = WikiPage.get_listing(c.site, filter_check=check_hidden)
-        return WikiListing(pages, linear_pages).render()
+        sr = g.default_sr if isinstance(c.site, DefaultSR) else c.site.name
+        return WikiListing(pages, linear_pages, sr).render()
 
     def GET_wiki_redirect(self, page='index'):
         return redirect_to(str("%s/%s" % (c.wiki_base_url, page)), _code=301)
@@ -276,10 +278,8 @@ class WikiController(RedditController):
             self.handle_error(403, 'WIKI_DOWN')
         if not c.site._should_wiki:
             self.handle_error(404, 'NOT_WIKIABLE')  # /r/mod for an example
-        frontpage = isinstance(c.site, DefaultSR)
         c.wiki_base_url = join_urls(c.site.path, 'wiki')
         c.wiki_api_url = join_urls(c.site.path, '/api/wiki')
-        c.wiki_id = g.default_sr if frontpage else c.site.name
         self.editconflict = False
         c.is_wiki_mod = (
             c.user_is_admin or c.site.is_moderator_with_perms(c.user, 'wiki')
