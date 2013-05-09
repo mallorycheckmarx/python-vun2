@@ -225,8 +225,8 @@
                     .split('.').pop().toLowerCase()
                     .replace("jpeg", "jpg");
                 if (ext == 'png' || ext == 'jpg') {
+                    $('input:radio[name=img_type]').attr('checked', false);
                     $('input:radio[name=img_type][value="' + ext + '"]').attr('checked', true);
-                    $('input:radio[name=img_type][value!="' + ext + '"]').attr('checked', false);
                 }
             }
         }
