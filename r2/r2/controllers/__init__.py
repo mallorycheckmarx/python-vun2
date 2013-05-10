@@ -85,5 +85,7 @@ def load_controllers():
     from ipn import StripeController
     from ipn import CoinbaseController
     from ipn import RedditGiftsController
+    
+    from images import ImagesController
 
     _reddit_controllers.update((name.lower(), obj) for name, obj in locals().iteritems())
