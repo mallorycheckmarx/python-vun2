@@ -301,7 +301,7 @@ def make_map():
                                  "edit_campaign|delete_campaign|meta_promo|"
                                  "add_roadblock|rm_roadblock")))
     mc('/api/:action', controller='images',
-        requirements=dict(action=("upload_sr_img")))
+        requirements=dict(action=("upload_sr_img|delete_sr_img|delete_sr_header")))
     mc('/api/:action', controller='apiminimal',
        requirements=dict(action="new_captcha"))
     mc('/api/:action', controller='api')

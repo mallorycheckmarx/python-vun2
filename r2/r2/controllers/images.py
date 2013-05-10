@@ -120,3 +120,47 @@ class ImagesController(RedditController, OAuth2ResourceController):
 
             return UploadedImage(_('saved'), new_url, name, 
                                  errors=errors, form_id=form_id).render()
+
+    @require_oauth2_scope("modconfig")
+    @validatedForm(VSrModerator(perms='config'),
+                   VModhash(),
+                   name = VCssName('img_name'))
+    @api_doc(api_section.subreddits)
+    def POST_delete_sr_img(self, form, jquery, name):
+        """
+        Called called upon requested delete on /about/stylesheet.
+        Updates the site's image list, and causes the <li> which wraps
+        the image to be hidden.
+        """
+        # just in case we need to kill this feature from XSS
+        if g.css_killswitch:
+            return self.abort(403,'forbidden')
+        c.site.del_image(name)
+        c.site._commit()
+        ModAction.create(c.site, c.user, action='editsettings', 
+                         details='del_image', description=name)
+
+    @require_oauth2_scope("modconfig")
+    @validatedForm(VSrModerator(perms='config'),
+                   VModhash())
+    @api_doc(api_section.subreddits)
+    def POST_delete_sr_header(self, form, jquery):
+        """
+        Called when the user request that the header on a sr be reset.
+        """
+        # just in case we need to kill this feature from XSS
+        if g.css_killswitch:
+            return self.abort(403,'forbidden')
+        if c.site.header:
+            c.site.header = None
+            c.site.header_size = None
+            c.site._commit()
+            ModAction.create(c.site, c.user, action='editsettings', 
+                             details='del_header')
+
+        # hide the button which started this
+        form.find('.delete-img').hide()
+        # hide the preview box
+        form.find('.img-preview-container').hide()
+        # reset the status boxes
+        form.set_html('.img-status', _("deleted"))
