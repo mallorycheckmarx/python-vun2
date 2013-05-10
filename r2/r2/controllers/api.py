@@ -37,7 +37,7 @@ from r2.lib.utils import query_string, timefromnow, randstr
 from r2.lib.utils import timeago, tup, filter_links
 from r2.lib.pages import (EnemyList, FriendList, ContributorList, ModList,
                           BannedList, WikiBannedList, WikiMayContributeList,
-                          BoringPage, FormPage, CssError, UploadedImage,
+                          BoringPage, FormPage, CssError,
                           ClickGadget, UrlParser, WrappedUser)
 from r2.lib.pages import FlairList, FlairCsv, FlairTemplateEditor, \
     FlairSelector
@@ -1572,86 +1572,6 @@ class ApiController(RedditController, OAuth2ResourceController):
         form.find('.img-preview-container').hide()
         # reset the status boxes
         form.set_html('.img-status', _("deleted"))
-        
-
-    def GET_upload_sr_img(self, *a, **kw):
-        """
-        Completely unnecessary method which exists because safari can
-        be dumb too.  On page reload after an image has been posted in
-        safari, the iframe to which the request posted preserves the
-        URL of the POST, and safari attempts to execute a GET against
-        it.  The iframe is hidden, so what it returns is completely
-        irrelevant.
-        """
-        return "nothing to see here."
-
-    @require_oauth2_scope("modconfig")
-    @validate(VSrModerator(perms='config'),
-              VModhash(),
-              file = VLength('file', max_length=1024*500),
-              name = VCssName("name"),
-              img_type = VImageType('img_type'),
-              form_id = VLength('formid', max_length = 100), 
-              header = VInt('header', max=1, min=0))
-    @api_doc(api_section.subreddits)
-    def POST_upload_sr_img(self, file, header, name, form_id, img_type):
-        """
-        Called on /about/stylesheet when an image needs to be replaced
-        or uploaded, as well as on /about/edit for updating the
-        header.  Unlike every other POST in this controller, this
-        method does not get called with Ajax but rather is from the
-        original form POSTing to a hidden iFrame.  Unfortunately, this
-        means the response needs to generate an page with a script tag
-        to fire the requisite updates to the parent document, and,
-        more importantly, that we can't use our normal toolkit for
-        passing those responses back.
-
-        The result of this function is a rendered UploadedImage()
-        object in charge of firing the completedUploadImage() call in
-        JS.
-        """
-
-        # default error list (default values will reset the errors in
-        # the response if no error is raised)
-        errors = dict(BAD_CSS_NAME = "", IMAGE_ERROR = "")
-        add_image_to_sr = False
-        size = None
-        
-        if not header:
-            add_image_to_sr = True
-            if not name:
-                # error if the name wasn't specified and the image was not for a sponsored link or header
-                # this may also fail if a sponsored image was added and the user is not an admin
-                errors['BAD_CSS_NAME'] = _("bad image name")
-        
-        if c.site.images and add_image_to_sr:
-            if c.site.get_num_images() >= g.max_sr_images:
-                errors['IMAGE_ERROR'] = _("too many images (you only get %d)") % g.max_sr_images
-
-        if any(errors.values()):
-            return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
-        else:
-            try:
-                new_url = cssfilter.save_sr_image(c.site, file, suffix ='.' + img_type)
-            except cssfilter.BadImage:
-                errors['IMAGE_ERROR'] = _("Invalid image or general image error")
-                return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
-            size = str_to_image(file).size
-            if header:
-                c.site.header = new_url
-                c.site.header_size = size
-            if add_image_to_sr:
-                c.site.add_image(name, url = new_url)
-            c.site._commit()
-
-            if header:
-                kw = dict(details='upload_image_header')
-            else:
-                kw = dict(details='upload_image', description=name)
-            ModAction.create(c.site, c.user, action='editsettings', **kw)
-
-            return UploadedImage(_('saved'), new_url, name, 
-                                 errors=errors, form_id=form_id).render()
 
     @require_oauth2_scope("modconfig")
     @validatedForm(VUser(),

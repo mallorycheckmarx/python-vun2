@@ -300,6 +300,8 @@ def make_map():
                                  "traffic_viewer|rm_traffic_viewer|"
                                  "edit_campaign|delete_campaign|meta_promo|"
                                  "add_roadblock|rm_roadblock")))
+    mc('/api/:action', controller='images',
+        requirements=dict(action=("upload_sr_img")))
     mc('/api/:action', controller='apiminimal',
        requirements=dict(action="new_captcha"))
     mc('/api/:action', controller='api')
