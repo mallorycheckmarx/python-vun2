@@ -49,7 +49,7 @@ class BadImage(Exception):
 def save_sr_image(sr, data, suffix = '.png'):
     try:
         return upload_media(data, file_type = suffix)
-    except Exception as e:
+    except IOError as e:
         raise BadImage(e)
 
 class ImagesController(RedditController, OAuth2ResourceController):
