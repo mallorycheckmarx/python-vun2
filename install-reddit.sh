@@ -26,7 +26,7 @@
 # --------------------
 # This script installs a reddit stack suitable for development. DO NOT run
 # this on a system that you use for other purposes as it may accidentally
-# an important file.
+# alter an important file.
 #
 # You can run this script as is, in which case a user "reddit" will be created
 # and the code will be placed in its home directory. The various reddit-code
