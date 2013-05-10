@@ -193,7 +193,7 @@ class Reddit(Templated):
                     c.site.domain.endswith("imgur.com")):
                 self.infobar = InfoBar(message=
                     _("imgur.com domain listings (including this one) are "
-                      "currently disabled to speed up vote processing.")
+                      "currently disabled to speed upvote processing.")
                 )
             elif isinstance(c.site, AllMinus) and not c.user.gold:
                 self.infobar = InfoBar(message=strings.all_minus_gold_only,
