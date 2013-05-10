@@ -35,8 +35,6 @@ import os
 import tempfile
 from r2.lib import s3cp
 
-from r2.lib.media import upload_media
-
 from r2.lib.template_helpers import s3_https_if_secure
 
 import re
@@ -403,14 +401,3 @@ def rendered_link(links, media, compress):
 
 def rendered_comment(comments):
     return wrap_links(comments, num = 1).render(style = "html")
-
-class BadImage(Exception):
-    def __init__(self, error = None):
-        self.error = error
-
-def save_sr_image(sr, data, suffix = '.png'):
-    try:
-        return upload_media(data, file_type = suffix)
-    except Exception as e:
-        raise BadImage(e)
-

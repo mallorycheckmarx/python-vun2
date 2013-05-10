@@ -39,7 +39,18 @@ from r2.controllers.api_docs import api_doc, api_section
 from r2.models.modaction import ModAction
 from r2.lib.scraper import str_to_image
 from r2.lib.pages import UploadedImage
+from r2.lib.media import upload_media
 from r2.lib import cssfilter
+
+class BadImage(Exception):
+    def __init__(self, error = None):
+        self.error = error
+
+def save_sr_image(sr, data, suffix = '.png'):
+    try:
+        return upload_media(data, file_type = suffix)
+    except Exception as e:
+        raise BadImage(e)
 
 class ImagesController(RedditController, OAuth2ResourceController):
     def GET_upload_sr_img(self, *a, **kw):
@@ -100,8 +111,8 @@ class ImagesController(RedditController, OAuth2ResourceController):
             return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
         else:
             try:
-                new_url = cssfilter.save_sr_image(c.site, file, suffix ='.' + img_type)
-            except cssfilter.BadImage as e:
+                new_url = save_sr_image(c.site, file, suffix ='.' + img_type)
+            except BadImage:
                 errors['IMAGE_ERROR'] = _("Invalid image or general image error")
                 return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
             size = str_to_image(file).size
