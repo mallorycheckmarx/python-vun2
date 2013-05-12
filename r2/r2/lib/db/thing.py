@@ -619,6 +619,10 @@ class Thing(DataThing):
     def _confidence(self):
         return sorts.confidence(self._ups, self._downs)
 
+    @property
+    def _optimism(self):
+        return sorts.optimism(self._ups, self._downs)
+
     @classmethod
     def _build(cls, id, bases):
         return cls(bases.ups, bases.downs, bases.date,

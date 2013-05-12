@@ -76,12 +76,31 @@ cpdef double _confidence(int ups, int downs):
 
     return (left - right) / under
 
+cpdef double _optimism(int ups, int downs):
+    """The optimism sort. Exactly the same as above, with a tiny difference:
+       http://www.reddit.com/r/ideasfortheadmins/comments/1aac47/use_upper_bound_of_wilson_score_confidence/"""
+    cdef float n = ups + downs
+
+    if n == 0:
+        return 0
+
+    cdef float z = 1.281551565545 # 80% confidence
+    cdef float p = float(ups) / n
+
+    left = p + 1/(2*n)*z*z
+    right = z*sqrt(p*(1-p)/n + z*z/(4*n*n))
+    under = 1+1/n*z*z
+
+    return (left + right) / under
+
 cdef int up_range = 400
 cdef int down_range = 100
 cdef list _confidences = []
+cdef list _optimists = []
 for ups in xrange(up_range):
     for downs in xrange(down_range):
         _confidences.append(_confidence(ups, downs))
+        _optimists.append(_optimism(ups, downs))
 def confidence(int ups, int downs):
     if ups + downs == 0:
         return 0
@@ -89,3 +108,10 @@ def confidence(int ups, int downs):
         return _confidences[downs + ups * down_range]
     else:
         return _confidence(ups, downs)
+def optimism(int ups, int downs):
+    if ups + downs == 0:
+        return 0
+    elif ups < up_range and downs < down_range:
+        return _optimists[downs + ups * down_range]
+    else:
+        return _optimism(ups, downs)

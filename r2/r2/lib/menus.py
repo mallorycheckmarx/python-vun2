@@ -54,6 +54,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      relevance    = _('relevance'),
                      controversial  = _('controversial'),
                      confidence   = _('best'),
+                     optimism     = _('optimistic')
                      random       = _('random'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
