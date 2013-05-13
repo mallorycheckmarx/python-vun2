@@ -29,7 +29,11 @@
 
 <%def name="actionsbar(actions)">
     %for action in actions:
-        <li>
+        <li
+        %if action[0] == thing.action[0]:
+            class="selected"
+        %endif
+        >
         <a class="wikiaction wikiaction-${action[0]}
         %if action[0] == thing.action[0]:
             wikiaction-current
