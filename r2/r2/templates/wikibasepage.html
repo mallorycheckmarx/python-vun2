@@ -29,6 +29,7 @@
 
 <%def name="actionsbar(actions)">
     %for action in actions:
+        <li>
         <a class="wikiaction wikiaction-${action[0]}
         %if action[0] == thing.action[0]:
             wikiaction-current
@@ -40,6 +41,7 @@
             href="${thing.base_url}/${action[0]}"
         %endif
         >${action[1]}</a>
+        </li>
     %endfor
 </%def>
 
