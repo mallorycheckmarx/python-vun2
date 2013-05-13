@@ -89,7 +89,7 @@ r.wiki = {
             dataType: 'json',
             data: params,
             success: function() {
-                window.location = r.wiki.baseUrl() + '/' + r.config.wiki_page
+                window.location = r.wiki.baseUrl() + '/' + r.config.wiki_page +  r.utils.renderExt()
             },
             statusCode: {
                 409: function(xhr) {
@@ -125,7 +125,7 @@ r.wiki = {
     goCompare: function() {
         v1 = $('input:radio[name=v1]:checked').val()
         v2 = $('input:radio[name=v2]:checked').val()
-        url = r.wiki.baseUrl() + '/' + r.config.wiki_page + '?v=' + v1
+        url = r.wiki.baseUrl() + '/' + r.config.wiki_page + r.utils.renderExt() + '?v=' + v1
         if (v2 != v1) {
             url += '&v2=' + v2
         }
