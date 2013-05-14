@@ -21,6 +21,12 @@
 ###############################################################################
 <%inherit file="reddit.compact"/>
 <%namespace file="wikibasepage.html" import="actionsbar"/>
+<%namespace file="less.html" import="less_stylesheet"/>
+
+<%def name="stylesheet()">
+    ${parent.stylesheet()}
+    ${less_stylesheet('wiki_compact.less')}
+</%def>
 
 <%def name="content()">
     %if thing.pageactions:
