@@ -126,7 +126,7 @@ ${first_defined(kw[1:])}
   </%call>
 </%def>
 
-<%def name="plain_link(link_text, path, _sr_path = True, nocname=False, fmt='', target='', **kw)">
+<%def name="plain_link(link_text, path, _sr_path = True, nocname=False, fmt='', target='', classes=None, **kw)">
   ## caching comment: 
   ##  in addition to the args, this function also makes use of c.cname, 
   ##  and, via add_sr, both c.site.name and c.render_style. 
@@ -141,6 +141,8 @@ ${first_defined(kw[1:])}
          target = '_top'
      if target:
          kw['target'] = target
+     if classes:
+         kw['class'] = " ".join(c for c in classes if c)
 
      link = _a_buffered(link_text, 
                         href=path and add_sr(path, sr_path=_sr_path, nocname=nocname),
