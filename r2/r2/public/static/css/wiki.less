@@ -12,6 +12,18 @@
         margin: 15px;
         margin-right: 325px;
 
+        #wiki_allow_username {
+            width: 430px;
+        }
+
+        .button {
+            color: black;
+        }
+        
+        .morelink .button {
+            color: #369;
+        }
+        
         // Wiki page listing 
         .pagelisting {
             font-size: 1.2em;
@@ -162,7 +174,9 @@
                 padding-left: 15px;
             }
         }
-
+        textarea {
+            width: 100%;
+        }
     }
 
     // Page title 
@@ -184,24 +198,28 @@
         border-radius: 5px;
         border: 1px solid #8D9CAA;
         vertical-align: middle;
-        .wikiaction {
-            display: inline-block;
-            margin: 2px;
-            padding-top: 2px;
-            padding-bottom: 3px;
-            border-radius: 3px;
-            padding-right: 10px;
-            padding-left: 10px;
-        }
-        .wikiaction:hover {
-            background-color: #CEE3F8;
-        }
-        .wikiaction-current:hover {
-            background-color: #5F99CF;
-        }
-        .wikiaction-current {
-            color: white;
-            background-color: #5F99CF;
+        li {
+            display: inline;
+            list-style-type: none;
+            .wikiaction {
+                display: inline-block;
+                margin: 2px;
+                padding-top: 2px;
+                padding-bottom: 3px;
+                border-radius: 3px;
+                padding-right: 10px;
+                padding-left: 10px;
+            }
+            .wikiaction:hover {
+                background-color: #CEE3F8;
+            }
+            .wikiaction-current:hover {
+                background-color: #5F99CF;
+            }
+            .wikiaction-current {
+                color: white;
+                background-color: #5F99CF;
+            }
         }
     }
 }

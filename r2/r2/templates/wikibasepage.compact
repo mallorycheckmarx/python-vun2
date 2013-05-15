@@ -19,5 +19,43 @@
 ## All portions of the code written by reddit are Copyright (c) 2006-2013
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
+<%inherit file="reddit.compact"/>
+<%namespace file="wikibasepage.html" import="actionsbar"/>
+<%namespace file="less.html" import="less_stylesheet"/>
 
-<%inherit file="infobar.html" />
+<%def name="stylesheet()">
+    ${parent.stylesheet()}
+    ${less_stylesheet('wiki_compact.less')}
+</%def>
+
+<%def name="content()">
+    %if thing.pageactions:
+        <div class="subtoolbar">
+            <ul class="tabmenu overthrow-enabled">
+                ${actionsbar(thing.pageactions)}
+            </ul>
+        </div>
+    %endif
+        
+    <div class="wiki-page-content">
+        ${thing.infobar}
+
+        <h1 class="wikititle">
+            %if thing.pagetitle:
+                ${thing.pagetitle}
+            %endif
+            %if thing.page:
+                <strong>${thing.page}</strong>
+            %endif
+        </h1>
+
+        %if thing.description:
+        %for desc in thing.description:
+            <h1 class="description">
+                ${desc}
+            </h1>
+        %endfor
+        %endif
+        ${thing.inner_content}
+    </div>
+</%def>

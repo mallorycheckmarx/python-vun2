@@ -20,6 +20,8 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 <%namespace file="less.html" import="less_stylesheet"/>
+<%namespace file="utils.html" import="plain_link"/>
+
 <%inherit file="reddit.html"/>
 
 <%def name="global_stylesheets()">
@@ -28,18 +30,26 @@
 </%def>
 
 <%def name="actionsbar(actions)">
+    <%!
+       from r2.lib.template_helpers import join_urls
+    %>
     %for action in actions:
-        <a class="wikiaction wikiaction-${action[0]}
-        %if action[0] == thing.action[0]:
-            wikiaction-current
+        <li
+        %if not action:
+            class="sep"
+        %elif action[0] == thing.action[0]:
+            class="selected"
         %endif
-        "
-        %if action[2]:
-            href="${thing.base_url}/${action[0]}/${thing.page}"
+        >
+        %if action:
+        ${plain_link(action[1],\
+                     join_urls(thing.base_url, action[0], thing.page if action[2] else ""),\
+                     classes=["wikiaction wikiaction-%s" % action[0],\
+                     ("wikiaction-current" if action[0] == thing.action[0] else None)])}
         %else:
-            href="${thing.base_url}/${action[0]}"
+            &nbsp;
         %endif
-        >${action[1]}</a>
+        </li>
     %endfor
 </%def>
 
@@ -57,7 +67,9 @@
         
         %if thing.pageactions:
             <span class="pageactions">
-                ${actionsbar(thing.pageactions)}
+                <ul>
+                    ${actionsbar(thing.pageactions)}
+                </ul>
             </span>
         %endif
     </span>

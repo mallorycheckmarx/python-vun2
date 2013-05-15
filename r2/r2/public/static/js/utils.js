@@ -34,6 +34,10 @@ r.utils = {
             .toArray().join(' ')
     },
 
+    renderExt: function() {
+        return r.config.renderstyle == 'html' ? '' : '.' + r.config.renderstyle;
+    },
+
     serializeForm: function(form) {
         var params = {}
         $.each(form.serializeArray(), function(index, value) {

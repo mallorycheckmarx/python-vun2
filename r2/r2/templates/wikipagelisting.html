@@ -22,16 +22,21 @@
 
 <% from r2.models.wiki import WikiPage %>
 
+<%namespace file="utils.html" import="plain_link"/>
+
 <%def name="listing(pages)">
+    <%
+        from r2.lib.template_helpers import join_urls
+    %>
     %for name, page_info in pages.iteritems():
         <ul>
         <li>
         %if page_info[0]:
-            <a href="${c.wiki_base_url}/${page_info[0].name}" target="_blank">${name}</a></li>
+            ${plain_link(name, join_urls(c.wiki_base_url, page_info[0].name))}
         %else:
             ${name}
-        </li>
          %endif
+         </li>
         ${listing(page_info[1])}
         </ul>
     %endfor

@@ -129,7 +129,7 @@ body[orient="landscape"] > #topbar > h1 { margin-left: -125px; width: 250px; }
 .status { color: red; margin-left: 20px; }
 
 /*Subtoolbar (eg hot)*/
-.subtoolbar { -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box; height: 32px; background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #ffffff), color-stop(100%, #cccccc)); background: -webkit-linear-gradient(top, #ffffff, #cccccc); background: -moz-linear-gradient(top, #ffffff, #cccccc); background: -o-linear-gradient(top, #ffffff, #cccccc); background: linear-gradient(top, #ffffff, #cccccc); background-color: #e5e5e5; border-bottom: 1px solid #bbb; padding: 6px; text-overflow: ellipsis; overflow: hidden; }
+.subtoolbar { overflow: hidden; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box; height: 32px; background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #ffffff), color-stop(100%, #cccccc)); background: -webkit-linear-gradient(top, #ffffff, #cccccc); background: -moz-linear-gradient(top, #ffffff, #cccccc); background: -o-linear-gradient(top, #ffffff, #cccccc); background: linear-gradient(top, #ffffff, #cccccc); background-color: #e5e5e5; border-bottom: 1px solid #bbb; padding: 6px; text-overflow: ellipsis; }
 
 .subtoolbar > ul { list-style-type: none; margin: 0; padding: 0; }
 

@@ -24,10 +24,12 @@
    from r2.lib.template_helpers import get_domain
 %>
 
+<%namespace file="utils.html" import="plain_link"/>
+
 ${thing.listing}
 
 <div class="morelink discussionlink">
-<a href="/submit?url=http://${get_domain()}/wiki/${thing.page}&resubmit=true&no_self=true&title=Check+out+this+wiki+page">${_("submit a discussion")}
+${plain_link(_("submit a discussion"), "/submit?url=http://" + get_domain() + "/wiki/" + thing.page + "&resubmit=true&no_self=true&title=Check+out+this+wiki+page", classes=["button"])}
 <div class="nub"></div>
 </a>
 </div>

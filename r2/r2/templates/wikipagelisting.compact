@@ -20,4 +20,8 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%inherit file="infobar.html" />
+<%namespace file="wikipagelisting.html" import="listing" />
+
+<div class="pagelisting">
+${listing(thing.pages)}
+</div>

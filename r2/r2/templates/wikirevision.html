@@ -20,11 +20,12 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%namespace file="utils.html" import="timestamp"/>
+<%namespace file="utils.html" import="timestamp, plain_link"/>
 <%namespace file="printablebuttons.html" import="ynbutton" />
 
 <%!
    from urllib import quote
+   from r2.lib.template_helpers import join_urls
 %>
 
 <tr class="revision
@@ -46,12 +47,12 @@
     
     %if not thing.show_extended:
         <td>
-            <a href="${c.wiki_base_url}/${thing.page}">${thing.page}</a>
+            ${plain_link(thing.page, join_urls(c.wiki_base_url, thing.page))}
         </td>
     %endif
     
     <td>
-        <a href="${c.wiki_base_url}/${thing.page}?v=${thing._id}">view</a>
+        ${plain_link(_('view'), join_urls(c.wiki_base_url, thing.page + '?v=' + str(thing._id)))}
     </td>
     
     <td>
@@ -64,7 +65,7 @@
    
     %if thing.show_extended and c.is_wiki_mod:
         <td>
-            <a href="#" class="revision_hide" data-revision="${thing._id}">hide</a>
+            <a href="#" class="revision_hide" data-revision="${thing._id}">${_('hide')}</a>
         </td>
         <td class="wiki_revert" style="white-space: nowrap;">
             ${ynbutton(_("revert here"), 

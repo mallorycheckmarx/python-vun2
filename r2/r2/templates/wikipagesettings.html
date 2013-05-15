@@ -55,7 +55,7 @@
     <br/>
     <%utils:line_field title="${_('allow users to edit page')}">
         <form id="WikiAllowEditor" onsubmit="r.wiki.addUser(event)">
-            <input name="username" maxlength="32" type="text" style="width: 430px;" />
+            <input name="username" maxlength="32" type="text" />
             <button type="submit" style="font-size: 100%;">${_('add')}</button>
             <h3 class="error" style="display:none" id="usereditallowerror">${_('username does not exist')}</h2>
         </form>
@@ -72,5 +72,5 @@
     </%utils:line_field>
     %endif
 
-    <input type="submit" class="wiki_button" onclick="$('#pagesettings').submit()" value="${_('save settings')}" />
+    <button type="submit" class="wiki_button button" onclick="$('#pagesettings').submit()">${_('save settings')}</button>
 </div>

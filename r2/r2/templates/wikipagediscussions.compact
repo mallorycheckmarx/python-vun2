@@ -20,4 +20,5 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%inherit file="infobar.html" />
+<%inherit file="wikipagediscussions.html"/>
+
