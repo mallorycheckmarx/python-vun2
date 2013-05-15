@@ -212,7 +212,7 @@ class WikiController(RedditController):
     @base_listing
     @validate(page=VWikiPage('page', restricted=True))
     def GET_wiki_discussions(self, page, num, after, reverse, count):
-        page_url = add_sr("%s/%s" % (c.wiki_base_url, page.name))
+        page_url = add_sr("%s/%s" % (c.wiki_base_url, page.name), retain_extension=False)
         builder = url_links_builder(page_url)
         listing = LinkListing(builder, nextprev=False).listing()
         return WikiDiscussions(listing, page=page.name,
