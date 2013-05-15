@@ -90,6 +90,8 @@ class WikiBasePage(Reddit):
                  actionless=False, alert=None, description=None, 
                  showtitle=False, **context):
         pageactions = []
+        if c.render_style == "compact" and not page:
+            pageactions += [('index', _("index"), False)]
         if not actionless and page:
             pageactions += [(page, _("view"), False)]
             if may_revise:
@@ -98,7 +100,10 @@ class WikiBasePage(Reddit):
             pageactions += [('discussions', _("talk"), True)]
             if c.is_wiki_mod:
                 pageactions += [('settings', _("settings"), True)]
-
+        if c.render_style == "compact":
+            pageactions += [(None),
+                            ('pages', _("pages"), False),
+                            ('revisions', _("recent"), False)]
         action = context.get('wikiaction', (page, 'wiki'))
         
         if alert:
