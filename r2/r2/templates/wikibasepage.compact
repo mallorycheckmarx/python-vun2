@@ -31,7 +31,7 @@
 <%def name="content()">
     %if thing.pageactions:
         <div class="subtoolbar">
-            <ul class="tabmenu">
+            <ul class="tabmenu overthrow-enabled">
                 ${actionsbar(thing.pageactions)}
             </ul>
         </div>
