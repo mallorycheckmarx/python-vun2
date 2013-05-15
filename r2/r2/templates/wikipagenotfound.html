@@ -20,5 +20,11 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
+<%namespace file="utils.html" import="plain_link"/>
+
+<%!
+   from r2.lib.template_helpers import join_urls
+%>
+
 ${_('The page "%s" was not found in this subreddit.') % thing.page}<br/>
-<a href="${c.wiki_base_url}/create/${thing.page}">${_('Create page "%s"') % thing.page}
+${plain_link(_('Create page "%s"') % thing.page, join_urls(c.wiki_base_url, 'create', thing.page))}
