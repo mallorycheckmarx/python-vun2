@@ -38,6 +38,8 @@
     %endif
         
     <div class="wiki-page-content">
+        ${thing.infobar}
+    
         %if thing.description:
         %for desc in thing.description:
             <h1 class="description">
