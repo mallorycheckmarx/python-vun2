@@ -35,15 +35,20 @@
     %>
     %for action in actions:
         <li
-        %if action[0] == thing.action[0]:
+        %if not action:
+            class="sep"
+        %elif action[0] == thing.action[0]:
             class="selected"
         %endif
         >
-
+        %if action:
         ${plain_link(action[1],\
                      join_urls(thing.base_url, action[0], thing.page if action[2] else ""),\
                      classes=["wikiaction wikiaction-%s" % action[0],\
                      ("wikiaction-current" if action[0] == thing.action[0] else None)])}
+        %else:
+            &nbsp;
+        %endif
         </li>
     %endfor
 </%def>
@@ -62,7 +67,9 @@
         
         %if thing.pageactions:
             <span class="pageactions">
-                ${actionsbar(thing.pageactions)}
+                <ul>
+                    ${actionsbar(thing.pageactions)}
+                </ul>
             </span>
         %endif
     </span>
