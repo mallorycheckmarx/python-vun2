@@ -52,6 +52,12 @@ button.button { padding: 0 5px; }
 .link .options_expando a:last-child, .comment .options_expando a:last-child, .message .options_expando a:last-child { border-right: none; }
 .link .options_expando.expanded, .comment .options_expando.expanded, .message .options_expando.expanded { display: block; }
 
+.options_expando {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch; 
+    white-space: nowrap;
+}
+
 .comment .entry, .message .entry { margin-right: 50px; }
 .comment .child .options_link, .message .child .options_link { top: 8px; }
 .comment .options_expando, .message .options_expando { margin: 10px -50px 10px 0px; }
