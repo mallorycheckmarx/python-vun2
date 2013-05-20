@@ -84,6 +84,9 @@
         ${error_field("DELETED_COMMENT", "parent", "span")}
         ${error_field("DELETED_LINK", "parent", "span")}
         ${error_field("USER_BLOCKED", "parent", "span")}
+
+        <span class="error no_personal_info" style="display: none;">Your post appears to contain personal information.<br>Have you read the <a href="/wiki/faq#wiki_is_posting_personal_information_ok.3F" class="rules" target="_blank" tabindex="101">${_('rules')}</a>?</span>
+
         <div class="usertext-buttons">
           ${action_button("save", "submit", "",
                           thing.creating and thing.have_form)}
