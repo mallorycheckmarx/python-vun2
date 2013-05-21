@@ -130,5 +130,14 @@ r.wiki = {
             url += '&v2=' + v2
         }
         window.location = url
+    },
+
+    helpon: function(elem) {
+        $(elem).parents("form").children(".markhelp:first").show('slow');
+    },
+
+    helpoff: function(elem) {
+        $(elem).parents("form").children(".markhelp:first").hide('slow');
     }
+
 }
