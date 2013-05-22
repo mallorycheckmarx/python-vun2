@@ -753,6 +753,8 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         elif form.has_errors("name", errors.USER_DOESNT_EXIST, errors.NO_USER):
             return
+        elif form.has_errors("note", errors.TOO_LONG):
+            return
 
         if type in self._sr_friend_types_with_permissions:
             if form.has_errors('type', errors.INVALID_PERMISSION_TYPE):
@@ -788,6 +790,9 @@ class ApiController(RedditController, OAuth2ResourceController):
             # the right one and update its data.
             c.user.friend_rels_cache(_update=True)
             c.user.add_friend_note(friend, note or '')
+        
+        if type in ('banned', 'wikibanned'):
+            container.add_rel_note(type, friend, note)
 
         cls = dict(friend=FriendList,
                    moderator=ModList,
@@ -797,6 +802,9 @@ class ApiController(RedditController, OAuth2ResourceController):
                    banned=BannedList, wikibanned=WikiBannedList).get(type)
         userlist = cls()
         form.set_inputs(name = "")
+        if note:
+            form.set_inputs(note = "")
+        form.removeClass("edited")
         form.set_html(".status:first", userlist.executed_message(type))
         if new and cls:
             user_row = userlist.user_row(type, friend)
@@ -810,7 +818,18 @@ class ApiController(RedditController, OAuth2ResourceController):
                    friend = VExistingUname('name'),
                    note = VLength('note', 300))
     def POST_friendnote(self, form, jquery, friend, note):
+        if form.has_errors("note", errors.TOO_LONG):
+            return
         c.user.add_friend_note(friend, note)
+        form.set_html('.status', _("saved"))
+
+    @validatedForm(type = VOneOf('type', ('bannednote', 'wikibannednote')),
+                   user = VExistingUname('name'),
+                   note = VLength('note', 300))
+    def POST_relnote(self, form, jquery, type, user, note):
+        if form.has_errors("note", errors.TOO_LONG):
+            return
+        c.site.add_rel_note(type[:-4], user, note)
         form.set_html('.status', _("saved"))
 
     @validatedForm(VUser(),
