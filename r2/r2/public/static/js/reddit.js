@@ -879,6 +879,39 @@ function save_usertext(elem) {
     t.find(".edit-usertext:first").parent("li").andSelf().show(); 
 }
 
+
+var scan_usertext_for_dox = _.debounce(do_scan_usertext_for_dox, 500);
+
+function do_scan_usertext_for_dox(event) {
+      var elem = event.target,
+          textAreaContents = $(elem).val(),
+          doxFound = [];
+      for (i in doxTests) {
+        if (doxTests[i].test(textAreaContents)) {
+            doxFound.push(i);
+        }
+      }
+      if (doxFound.length) {
+        show_dox_warning(elem, doxFound);
+        return false;
+      }
+}
+
+function show_dox_warning(elem, doxFound) {
+    var thisParent = $(elem).closest('.usertext-edit'),
+        errmsg = $(thisParent).find('.no_personal_info')[0];
+
+    // doxFound, currently not used, is an array of types of dox found.
+    $(errmsg).show();
+}
+
+var doxTests = {
+    fb: /(?:(?:http|https):\/\/)?(?:www.)?facebook.com\/(?:(?:\w)*#!\/)?(?:pages\/)?(?:[?\w\-]*\/)?(?:profile.php\?id=(?=\d.*))?([\w\-]*)?/,
+    twitter: /(https?:)?\/\/(www\.)?twitter.com\/(#!\/)?([^\/ ].)+/,
+    email: /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[A-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)\b/,
+    phone: /(?:(?:\+?1\s*(?:[.-]\s*)?)?(?:\(\s*([2-9]1[02-9]|[2-9][02-8]1|[2-9][02-8][02-9])\s*\)|([2-9]1[02-9]|[2-9][02-8]1|[2-9][02-8][02-9]))\s*(?:[.-]\s*)?)?([2-9]1[02-9]|[2-9][02-9]1|[2-9][02-9]{2})\s*(?:[.-]\s*)?([0-9]{4})(?:\s*(?:#|x\.?|ext\.?|extension)\s*(\d+))?/
+};
+
 function reply(elem) {
     var form = comment_reply_for_elem(elem);
     //show the right buttons
@@ -1171,6 +1204,9 @@ $(function() {
         $("#shortlink-text").click(function() {
             $(this).select();
         });
+
+        /* usertext textarea dox listener */
+        $('body').on('keyup', '.usertext-edit textarea', null, scan_usertext_for_dox);
 
         /* ajax ynbutton */
         function toggleThis() { return toggle(this); }
