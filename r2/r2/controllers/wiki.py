@@ -58,7 +58,7 @@ from r2.controllers.api_docs import api_doc, api_section
 from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
                               WikiEdit, WikiSettings, WikiRecent,
                               WikiListing, WikiDiscussions,
-                              WikiCreate)
+                              WikiCreate, WikiNew)
 
 from r2.config.extensions import set_extension
 from r2.lib.template_helpers import add_sr
@@ -153,6 +153,9 @@ class WikiController(RedditController):
         builder = WikiRevisionBuilder(revisions, num=num, reverse=reverse, count=count, after=after, skip=not c.is_wiki_mod, wrap=default_thing_wrapper())
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing, page=page.name, may_revise=this_may_revise(page)).render()
+
+    def GET_wiki_new(self):
+        return WikiNew().render()
 
     @validate(wp=VWikiPageRevise('page'),
               page=VWikiPageName('page'))

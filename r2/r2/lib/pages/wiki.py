@@ -44,6 +44,11 @@ class WikiPageNotFound(Templated):
         self.base_url = c.wiki_base_url
         Templated.__init__(self)
 
+class WikiNewPage(Templated):
+    def __init__(self):
+        self.base_url = c.wiki_base_url
+        Templated.__init__(self)
+
 class WikiPageListing(Templated):
     def __init__(self, pages, linear_pages, page=None):
         self.pages = pages
@@ -147,6 +152,12 @@ class WikiNotFound(WikiBasePage):
         context['alert'] = _("page %s does not exist in this subreddit") % page
         context['actionless'] = True
         WikiBasePage.__init__(self, content, page=page, **context)
+
+class WikiNew(WikiBasePage):
+    def __init__(self, **context):
+        content = WikiNewPage()
+        context['actionless'] = True
+        WikiBasePage.__init__(self, content, page="create a wiki page", **context)
 
 class WikiCreate(WikiBasePage):
     def __init__(self, page, **context):

@@ -130,5 +130,12 @@ r.wiki = {
             url += '&v2=' + v2
         }
         window.location = url
+    },
+
+    create: function(event) {
+        event.preventDefault()
+        page = r.utils.serializeForm($(event.target)).page;
+        url = r.wiki.baseUrl() + '/create/' + encodeURIComponent(page);
+        window.location = url
     }
 }
