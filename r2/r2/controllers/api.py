@@ -2562,9 +2562,10 @@ class ApiController(RedditController, OAuth2ResourceController):
                    user = VFlairAccount("name"),
                    link = VFlairLink('link'),
                    text = VFlairText("text"),
+                   modtext = VFlairText("modtext"),
                    css_class = VFlairCss("css_class"))
     @api_doc(api_section.flair)
-    def POST_flair(self, form, jquery, user, link, text, css_class):
+    def POST_flair(self, form, jquery, user, link, text, modtext, css_class):
         if link:
             flair_type = LINK_FLAIR
             if hasattr(c.site, '_id') and c.site._id == link.sr_id:
@@ -2590,7 +2591,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         if flair_type == LINK_FLAIR:
             if not text and not css_class:
-                text = css_class = None
+                text = css_class = modtext = None
             link.flair_text = text
             link.flair_css_class = css_class
             link._commit()
@@ -2598,7 +2599,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             ModAction.create(site, c.user, action='editflair', target=link,
                              details='flair_edit')
         elif flair_type == USER_FLAIR:
-            if not text and not css_class:
+            if not text and not css_class and not modtext:
                 # empty text and css is equivalent to unflairing
                 text = css_class = None
                 c.site.remove_flair(user)
@@ -2612,6 +2613,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
             # Save the flair details in the account data.
             setattr(user, 'flair_%s_text' % c.site._id, text)
+            setattr(user, 'flair_%s_modtext' % c.site._id, modtext)
             setattr(user, 'flair_%s_css_class' % c.site._id, css_class)
             user._commit()
 
@@ -2642,6 +2644,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             return
         c.site.remove_flair(user)
         setattr(user, 'flair_%s_text' % c.site._id, None)
+        setattr(user, 'flair_%s_modtext' % c.site._id, None)
         setattr(user, 'flair_%s_css_class' % c.site._id, None)
         user._commit()
 
@@ -2672,7 +2675,11 @@ class ApiController(RedditController, OAuth2ResourceController):
                 break
 
             try:
-                name, text, css_class = row
+                if len(row) > 4:
+                    raise ValueError
+                name, text, css_class = row[:3]
+                if len(row) > 3:
+                    modtext = row[4]
             except ValueError:
                 line_result.error('row', 'improperly formatted row, ignoring')
                 continue
@@ -2690,10 +2697,17 @@ class ApiController(RedditController, OAuth2ResourceController):
                 css_class = None
 
             orig_text = text
+            orig_modtext = modtext
             text = VFlairText('text').run(orig_text)
+            modtext = VFlairText('modtext').run(modtext)
             if text and orig_text and len(text) < len(orig_text):
                 line_result.warn('text',
                                  'truncating flair text to %d chars'
+                                 % len(text))
+
+            if modtext and orig_modtext and len(modtext) < len(orig_modtext):
+                line_result.warn('modtext',
+                                 'truncating flair modtext to %d chars'
                                  % len(text))
 
             if css_class and not VFlairCss('css_class').run(css_class):
@@ -2710,6 +2724,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 mode = 'removed'
                 c.site.remove_flair(user)
             setattr(user, 'flair_%s_text' % c.site._id, text)
+            setattr(user, 'flair_%s_modtext' % c.site._id, text)
             setattr(user, 'flair_%s_css_class' % c.site._id, css_class)
             user._commit()
 

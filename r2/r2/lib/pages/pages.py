@@ -2505,16 +2505,22 @@ class Embed(Templated):
 
 
 def wrapped_flair(user, subreddit, force_show_flair):
-    if (not hasattr(subreddit, '_id')
-        or not (force_show_flair or getattr(subreddit, 'flair_enabled', True))):
-        return False, 'right', '', ''
-
     get_flair_attr = lambda a, default=None: getattr(
         user, 'flair_%s_%s' % (subreddit._id, a), default)
+    
+    modtext = None
+    
+    if not isinstance(c.site, FakeSubreddit):
+        modtext = get_flair_attr('modtext')
+    
+    if (not hasattr(subreddit, '_id')
+        or not (force_show_flair or getattr(subreddit, 'flair_enabled', True))):
+        return False, 'right', '', '', modtext
 
     return (get_flair_attr('enabled', default=True),
             getattr(subreddit, 'flair_position', 'right'),
-            get_flair_attr('text'), get_flair_attr('css_class'))
+            get_flair_attr('text'), get_flair_attr('css_class'),
+            modtext)
 
 class WrappedUser(CachedTemplate):
     FLAIR_CSS_PREFIX = 'flair-'
@@ -2539,7 +2545,7 @@ class WrappedUser(CachedTemplate):
                 author_title = tup[3]
 
         flair = wrapped_flair(user, subreddit or c.site, force_show_flair)
-        flair_enabled, flair_position, flair_text, flair_css_class = flair
+        flair_enabled, flair_position, flair_text, flair_css_class, flair_modtext = flair
         has_flair = bool(
             c.user.pref_show_flair and (flair_text or flair_css_class))
 
@@ -2550,6 +2556,9 @@ class WrappedUser(CachedTemplate):
             has_flair = True
         else:
             flair_template_id = None
+
+        if not c.user_is_loggedin or not c.site.is_moderator(c.user):
+            flair_modtext = None
 
         if flair_css_class:
             # This is actually a list of CSS class *suffixes*. E.g., "a b c"
@@ -2581,6 +2590,7 @@ class WrappedUser(CachedTemplate):
                                 has_flair = has_flair,
                                 flair_enabled = flair_enabled,
                                 flair_position = flair_position,
+                                flair_modtext = flair_modtext,
                                 flair_text = flair_text,
                                 flair_text_editable = flair_text_editable,
                                 flair_css_class = flair_css_class,
@@ -2695,6 +2705,7 @@ class FlairListRow(Templated):
                                            'flair_%s_%s' % (c.site._id, a), '')
         Templated.__init__(self, user=user,
                            flair_text=get_flair_attr('text'),
+                           flair_modtext=get_flair_attr('modtext'),
                            flair_css_class=get_flair_attr('css_class'))
 
 class FlairNextLink(Templated):
