@@ -36,47 +36,42 @@ r.ui.init = function() {
 }
 
 r.ui.InlineEditor = Backbone.View.extend({
-    editing: false,
-    needscreation: true,
-    
     events: {
-        'click':    'edit',
+        'click': 'edit',
         'submit form': 'save',
         'blur input': 'blur'
     },
 
     edit: function() {
-        if (this.editing) {
-            return;
+        if(this.$el.hasClass('editing')) {
+            return
         }
-        if (this.needscreation) {
-            this.create();
+        if (!this.$form) {
+            this.create()
         }
         this.$el.addClass('editing')
-        this.$input.focus().val('').val(this.$span.text())
-        this.editing = true;
+        this.$input.focus().val(this.$span.text())
     },
 
     create: function($el) {
-        this.needscreation = false;
         this.text = this.$el.text()
-        this.$el.html('')
+        this.$el.empty()
         this.$span = $('<span>').text(this.text)
         this.$el.append(this.$span)
         this.$form = $('<form>')
-        this.$input = $('<input>')
+        this.$input = $('<input type="text">')
         this.$el.append(this.$form.append(this.$input))
     },
 
     blur: function() {
-        if(this.editing) {
+        if(this.$el.hasClass('editing')) {
             this.$form.submit()
         }
     },
 
     save: function(e) {
         e.preventDefault()
-        this.editing = false;
+        this.editing = false
         this.$el.removeClass('editing')
         this.$span.text(this.$input.val())
     }
