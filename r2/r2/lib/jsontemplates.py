@@ -338,14 +338,20 @@ class LabeledMultiDescriptionJsonTemplate(ThingJsonTemplate):
 
 class IdentityJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
-        comment_karma="comment_karma",
-        has_verified_email="email_verified",
-        is_gold="gold",
-        is_mod="is_mod",
-        link_karma="safe_karma",
-        name="name",
-        over_18="pref_over_18",
+        comment_karma = "comment_karma",
+        has_verified_email = "email_verified",
+        is_gold = "gold",
+        is_mod = "is_mod",
+        link_karma = "safe_karma",
+        name = "name"
     )
+    _private_data_attrs_ = dict(over_18 = "pref_over_18")
+
+    def raw_data(self, thing):
+        attrs = self._data_attrs_.copy()
+        if c.user_is_loggedin and thing._id == c.user._id:
+            attrs.update(self._private_data_attrs_)
+        return dict((k, self.thing_attr(thing, v)) for k, v in attrs.iteritems())
 
     def thing_attr(self, thing, attr):
         from r2.models import Subreddit
@@ -355,31 +361,24 @@ class IdentityJsonTemplate(ThingJsonTemplate):
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 class AccountJsonTemplate(IdentityJsonTemplate):
-    _data_attrs_ = IdentityJsonTemplate.data_attrs(
-        has_mail="has_mail",
-        has_mod_mail="has_mod_mail",
-        is_friend="is_friend",
-        is_mod="is_mod",
+    _data_attrs_ = IdentityJsonTemplate.data_attrs(is_friend = "is_friend")
+    _private_data_attrs_ = dict(
+        has_mail = "has_mail",
+        has_mod_mail = "has_mod_mail",
+        modhash = "modhash",
+        **IdentityJsonTemplate._private_data_attrs_
     )
 
     def thing_attr(self, thing, attr):
         if attr == "has_mail":
-            if c.user_is_loggedin and thing._id == c.user._id:
-                return bool(c.have_messages)
-            return None
+            return bool(c.have_messages)
         if attr == "has_mod_mail":
-            if c.user_is_loggedin and thing._id == c.user._id:
-                return bool(c.have_mod_messages)
-            return None
+            return bool(c.have_mod_messages)
         if attr == "is_friend":
             return c.user_is_loggedin and thing._id in c.user.friends
+        if attr == "modhash":
+            return c.modhash
         return IdentityJsonTemplate.thing_attr(self, thing, attr)
-
-    def raw_data(self, thing):
-        data = ThingJsonTemplate.raw_data(self, thing)
-        if c.user_is_loggedin and thing._id == c.user._id:
-            data["modhash"] = c.modhash
-        return data
 
 class LinkJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
