@@ -83,6 +83,7 @@ from r2.lib.validator import (
 )
 from r2.models import (
     Frontpage,
+    DefaultSR,
     Link,
     LiveAdWeights,
     Message,
@@ -125,7 +126,7 @@ class PromoteController(ListingController):
     @classmethod
     @memoize('live_by_subreddit', time=300)
     def live_by_subreddit(cls, sr):
-        if sr == Frontpage:
+        if isinstance(sr, DefaultSR) == Frontpage:
             sr_id = ''
         else:
             sr_id = sr._id
