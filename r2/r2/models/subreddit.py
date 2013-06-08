@@ -1306,7 +1306,6 @@ class DomainSR(FakeSubreddit):
         from r2.lib.db import queries
         return queries.get_domain_links(self.domain, sort, time)
 
-Frontpage = DefaultSR()
 Sub = SubSR()
 Friends = FriendsSR()
 Mod = ModSR()

@@ -331,21 +331,21 @@ class OffsiteButton(NavButton):
         return [('path', self.path), ('title', self.title)]
 
 class SubredditButton(NavButton):
-    from r2.models.subreddit import Frontpage, Mod, All, Random, RandomSubscription
+    from r2.models.subreddit import DefaultSR, ModSR, AllSR, RandomReddit, RandomSubscriptionReddit
     # Translation is deferred (N_); must be done per-request,
     # not at import/class definition time.
     # TRANSLATORS: This refers to /r/mod
-    name_overrides = {Mod: N_("mod"),
+    name_overrides = {ModSR: N_("mod"),
     # TRANSLATORS: This refers to the user's front page
-                      Frontpage: N_("front"),
-                      All: N_("all"),
-                      Random: N_("random"),
+                      DefaultSR: N_("front"),
+                      AllSR: N_("all"),
+                      RandomReddit: N_("random"),
     # TRANSLATORS: Gold feature, "myrandom", a random subreddit from your subscriptions
-                      RandomSubscription: N_("myrandom")}
+                      RandomSubscriptionReddit: N_("myrandom")}
 
     def __init__(self, sr, **kw):
         self.path = sr.path
-        name = self.name_overrides.get(sr)
+        name = self.name_overrides.get(sr.__class__)
         # Run the name through deferred translation
         name = _(name) if name else sr.name
         NavButton.__init__(self, name, sr.path, False,
