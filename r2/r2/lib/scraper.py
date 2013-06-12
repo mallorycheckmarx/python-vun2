@@ -1129,6 +1129,7 @@ class EmbedlyOEmbed(OEmbed):
         'https:\\/\\/crocodoc\\.com\\/.*|' +
         'https:\\/\\/.*\\.crocodoc\\.com\\/.*|' +
         'http:\\/\\/www\\.wikipedia\\.org\\/wiki\\/.*|' +
+        'http:\\/\\/.*\\.wikipedia\\.org\\.*\\/.*|' +
         'http:\\/\\/www\\.wikimedia\\.org\\/wiki\\/File.*|' +
         'https:\\/\\/urtak\\.com\\/u\\/.*|' +
         'https:\\/\\/urtak\\.com\\/clr\\/.*|' +
