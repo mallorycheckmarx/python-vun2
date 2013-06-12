@@ -229,7 +229,7 @@ def base_url(url):
     res = r_base_url.findall(url)
     return (res and res[0]) or url
 
-r_domain = re.compile("(?i)(?:.+?://)?(?:www[\d]*\.)?([^/:#?]*)")
+r_domain = re.compile("(?i)(?:.+?://)?(?:www[\d]*\.)?(\[[0-9a-fA-F:]+\]|[^/:#?]*)")
 def domain(s):
     """
         Takes a URL and returns the domain part, minus www., if
@@ -316,7 +316,7 @@ def extract_title(data):
     return title.encode('utf-8').strip()
     
 valid_schemes = ('http', 'https', 'ftp', 'mailto')
-valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
+valid_dns = re.compile('\A[-a-zA-Z0-9:]+\Z')
 def sanitize_url(url, require_scheme = False):
     """Validates that the url is of the form
 
@@ -429,7 +429,8 @@ class UrlParser(object):
 
     __slots__ = ['scheme', 'path', 'params', 'query',
                  'fragment', 'username', 'password', 'hostname',
-                 'port', '_url_updates', '_orig_url', '_query_dict']
+                 'port', '_url_updates', '_orig_url', '_query_dict',
+                 'is_ipv6']
 
     valid_schemes = ('http', 'https', 'ftp', 'mailto')
     cname_get = "cnameframe"
@@ -439,6 +440,9 @@ class UrlParser(object):
         for s in self.__slots__:
             if hasattr(u, s):
                 setattr(self, s, getattr(u, s))
+        self.is_ipv6 = False
+        if getattr(u, 'netloc', '').startswith('['):
+            self.is_ipv6 = True
         self._url_updates = {}
         self._orig_url    = url
         self._query_dict  = None
@@ -509,8 +513,19 @@ class UrlParser(object):
             q.update(self._url_updates)
             q = query_string(q).lstrip('?')
 
-        # make sure the port is not doubly specified 
-        if self.port and ":" in self.hostname:
+        # if this is ipv6 address, remove brackets from hostname
+        if self.hostname and self.hostname.startswith('[') and ']' in self.hostname:
+            self.is_ipv6 = True
+            self.hostname = self.hostname[1:]
+            self.hostname = self.hostname[:self.hostname.index(']')]
+
+        # if this is marked as ipv6 address but it is not, remove the mark
+        if self.hostname and self.is_ipv6:
+            if not all(c in '0123456789abcdefABCDEF:' for c in self.hostname):
+                self.is_ipv6 = False
+
+        # make sure the port is not doubly specified
+        if self.hostname and ':' in self.hostname and self.port and not self.is_ipv6:
             self.hostname = self.hostname.split(':')[0]
 
         # if there is a netloc, there had better be a scheme
@@ -587,7 +602,10 @@ class UrlParser(object):
         if not self.hostname:
             return ""
         elif getattr(self, "port", None):
-            return self.hostname + ":" + str(self.port)
+            if self.is_ipv6:
+                return "[" + self.hostname + "]:" + str(self.port)
+            else:
+                return self.hostname + ":" + str(self.port)
         return self.hostname
 
     def mk_cname(self, require_frame = True, subreddit = None, port = None):
@@ -959,8 +977,8 @@ def trace(fn):
 def common_subdomain(domain1, domain2):
     if not domain1 or not domain2:
         return ""
-    domain1 = domain1.split(":")[0]
-    domain2 = domain2.split(":")[0]
+    domain1 = urlparse(domain1).hostname
+    domain2 = urlparse(domain2).hostname
     if len(domain1) > len(domain2):
         domain1, domain2 = domain2, domain1
 
