@@ -45,11 +45,11 @@
 <hr/>
 <em>
 %if thing.edit_date:
-        %if thing.edit_by:
-             ${unsafe(_("revision by&nbsp;%s") % WrappedUser(thing.edit_by).render())}
-             &mdash;&nbsp;
-        %endif
-        ${unsafe("%(time)s&nbsp;ago" % dict(time=timestamp(thing.edit_date)))}
+    %if thing.edit_by:
+         ${unsafe(_("revision by&nbsp;%s") % WrappedUser(thing.edit_by).render())}
+         &mdash;&nbsp;
+    %endif
+    ${unsafe("%(time)s&nbsp;ago" % dict(time=timestamp(thing.edit_date)))}
 %endif
 <a href="#" class="toggle-source">${_("view source")}</a>
 </em>
