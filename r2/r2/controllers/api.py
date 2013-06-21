@@ -1706,7 +1706,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                    sr = VByName('sr'),
                    name = VSubredditName("name"),
                    title = VLength("title", max_length = 100),
-                   header_title = VLength("header-title", max_length = 500),
+                   header_title = VLength("header_title", max_length = 500),
                    domain = VCnameDomain("domain"),
                    public_description = VMarkdown("public_description", max_length = 500),
                    prev_public_description_id = VLength('prev_public_description_id', max_length = 36),
