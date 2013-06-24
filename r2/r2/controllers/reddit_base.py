@@ -335,7 +335,7 @@ def set_subreddit():
 
     can_stale = request.method.upper() in ('GET', 'HEAD')
 
-    c.site = Frontpage
+    c.site = None
     if not sr_name:
         #check for cnames
         cname = request.environ.get('legacy-cname')
@@ -384,8 +384,10 @@ def set_subreddit():
                 abort(404)
 
     #if we didn't find a subreddit, check for a domain listing
-    if not sr_name and isinstance(c.site, DefaultSR) and domain:
+    if not sr_name and not c.site and domain:
         c.site = DomainSR(domain)
+    elif not c.site:
+        c.site = DefaultSR()
 
     if isinstance(c.site, FakeSubreddit):
         c.default_sr = True
