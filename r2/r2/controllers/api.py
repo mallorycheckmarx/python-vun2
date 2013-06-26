@@ -354,7 +354,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                               % (request.ip, title))
             elif check_domain:
 
-                banmsg = is_banned_domain(url, request.ip)
+                banmsg = is_banned_domain(url)
         else:
             form.has_errors('text', errors.TOO_LONG)
 
