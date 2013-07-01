@@ -22,10 +22,11 @@
 
 from pylons import c, g, request, session, config, response
 from pylons.controllers import WSGIController
+from pylons.controllers.util import redirect_to
 from pylons.i18n import N_, _, ungettext, get_lang
 from webob.exc import HTTPException, status_map
 from r2.lib.filters import spaceCompress, _force_unicode
-from r2.lib.template_helpers import get_domain
+from r2.lib.template_helpers import get_domain, add_extension
 from utils import string2js, read_http_date
 
 import re, hashlib
@@ -43,6 +44,9 @@ logging.getLogger('scgi-wsgi').setLevel(logging.CRITICAL)
 def is_local_address(ip):
     # TODO: support the /20 and /24 private networks? make this configurable?
     return ip.startswith('10.') or ip == "127.0.0.1"
+
+def redirect_with_ext(path, *k, **kw):
+    redirect_to(add_extension(path), *k, **kw)
 
 def abort(code_or_exception=None, detail="", headers=None, comment=None,
           **kwargs):

@@ -21,12 +21,16 @@
 ###############################################################################
 from pylons import request
 from pylons.controllers.util import abort, redirect_to
+from pylons import c, request
 
-from r2.lib.base import BaseController
+from r2.lib.base import BaseController, redirect_with_ext
 from r2.lib.validator import chkuser, chksrname
 
-
 class RedirectController(BaseController):
+    def pre(self, *k, **kw):
+        BaseController.pre(self, *k, **kw)
+        c.render_style = request.environ['render_style']
+
     def GET_redirect(self, dest):
         return redirect_to(str(dest))
 
@@ -39,7 +43,7 @@ class RedirectController(BaseController):
             url += "/" + rest
         if request.query_string:
             url += "?" + request.query_string
-        return redirect_to(str(url), _code=301)
+        return redirect_with_ext(str(url), _code=301)
 
     def GET_timereddit_redirect(self, timereddit, rest=None):
         tr_name = chksrname(timereddit)
@@ -49,4 +53,7 @@ class RedirectController(BaseController):
             rest = str(rest)
         else:
             rest = ''
-        return redirect_to("/r/t:%s/%s" % (tr_name, rest), _code=301)
+        return redirect_with_ext("/r/t:%s/%s" % (tr_name, rest), _code=301)
+
+    def GET_gilded_comments(self):
+        return redirect_with_ext("/r/all/comments/gilded", _code=301)
