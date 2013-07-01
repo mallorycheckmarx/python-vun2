@@ -382,7 +382,7 @@ class DataThing(object):
     #TODO error when something isn't found?
     @classmethod
     def _byID(cls, ids, data=False, return_dict=True, extra_props=None,
-              stale=False):
+              stale=False, ignore_missing=False):
         ids, single = tup(ids, True)
         prefix = thing_prefix(cls.__name__)
 
@@ -408,8 +408,13 @@ class DataThing(object):
                     found_fn=count_found)
 
         #check to see if we found everything we asked for
-        for i in ids:
+        for i in list(ids):
             if i not in bases:
+                if ignore_missing:
+                    if single:
+                        return None
+                    ids.remove(i)
+                    continue
                 missing = [i for i in ids if i not in bases]
                 raise NotFound, '%s %s' % (cls.__name__, missing)
             if bases[i] and bases[i]._id != i:
@@ -466,7 +471,8 @@ class DataThing(object):
 
     @classmethod
     def _by_fullname(cls, names,
-                     return_dict = True, 
+                     return_dict = True,
+                     ignore_missing=False,
                      **kw):
         names, single = tup(names, True)
 
@@ -492,7 +498,7 @@ class DataThing(object):
         # lookup ids for each type
         identified = {}
         for real_type, thing_ids in table.iteritems():
-            i = real_type._byID(thing_ids, **kw)
+            i = real_type._byID(thing_ids, ignore_missing=ignore_missing, **kw)
             identified[real_type] = i
 
         # interleave types in original order of the name
@@ -500,8 +506,12 @@ class DataThing(object):
         for fullname in names:
             if lookup.has_key(fullname):
                 real_type, thing_id = lookup[fullname]
-                res.append((fullname,
-                            identified.get(real_type, {}).get(thing_id)))
+                thing = identified.get(real_type, {}).get(thing_id)
+                if not thing and ignore_missing:
+                    if single:
+                        return None
+                    continue
+                res.append((fullname, thing))
 
         if single:
             return res[0][1]
