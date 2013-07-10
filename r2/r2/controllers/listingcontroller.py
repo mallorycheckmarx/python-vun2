@@ -550,9 +550,21 @@ class UserController(ListingController):
             res.append(ProfileSortMenu(default = self.sort))
             if self.sort not in ("hot", "new"):
                 res.append(TimeMenu(default = self.time))
+        srnames = None
         if self.where == 'saved' and c.user.gold:
             srnames = LinkSavesBySubreddit.get_saved_subreddits(self.vuser)
             srnames += CommentSavesBySubreddit.get_saved_subreddits(self.vuser)
+        elif ((c.user_is_admin or self.vuser == c.user) and
+              self.sort == 'new' and
+              self.where in ('overview', 'submitted', 'comments')):
+            if self.where == 'submitted':
+                type = 'link'
+            elif self.where == 'comments':
+                type = 'comment'
+            else:
+                type = None
+            srnames = self.vuser.karma_subreddits(type)
+        if srnames:
             srs = Subreddit._by_name(srnames)
             srnames = [name for name, sr in srs.iteritems()
                             if sr.can_view(c.user)]
@@ -608,21 +620,41 @@ class UserController(ListingController):
                      not getattr(item, "deleted", False)))
         return keep
 
+    def get_srid(self):
+        srname = request.get.get('sr')
+        if not srname:
+            return None
+        try:
+            return Subreddit._by_name(srname)._id
+        except NotFound:
+            return None
+
     def query(self):
         q = None
+
+        if self.where in ('overview', 'comments', 'submitted', 'saved'):
+            if self.where == 'saved' and not c.user.gold:
+                sr_id = None
+            elif c.user != self.vuser:
+                sr_id = None
+            elif self.where != 'saved' and self.sort != 'new':
+                sr_id = None
+            else:
+                sr_id = self.get_srid()
+
         if self.where == 'overview':
             self.check_modified(self.vuser, 'overview')
-            q = queries.get_overview(self.vuser, self.sort, self.time)
+            q = queries.get_overview(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'comments':
             sup.set_sup_header(self.vuser, 'commented')
             self.check_modified(self.vuser, 'commented')
-            q = queries.get_comments(self.vuser, self.sort, self.time)
+            q = queries.get_comments(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'submitted':
             sup.set_sup_header(self.vuser, 'submitted')
             self.check_modified(self.vuser, 'submitted')
-            q = queries.get_submitted(self.vuser, self.sort, self.time)
+            q = queries.get_submitted(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where in ('liked', 'disliked'):
             sup.set_sup_header(self.vuser, self.where)
@@ -636,14 +668,6 @@ class UserController(ListingController):
             q = queries.get_hidden(self.vuser)
 
         elif self.where == 'saved':
-            srname = request.get.get('sr')
-            if srname and c.user.gold:
-                try:
-                    sr_id = Subreddit._by_name(srname)._id
-                except NotFound:
-                    sr_id = None
-            else:
-                sr_id = None
             q = queries.get_saved(self.vuser, sr_id)
 
         elif c.user_is_sponsor and self.where == 'promoted':
