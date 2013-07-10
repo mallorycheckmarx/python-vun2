@@ -458,13 +458,17 @@ def get_domain_links(domain, sort, time):
 
     return make_results(q)
 
-def user_query(kind, user_id, sort, time):
+def user_query(kind, user_id, sort, time, sr_id=None):
     """General profile-page query."""
+    filters = []
+
     q = kind._query(kind.c.author_id == user_id,
                     kind.c._spam == (True, False),
                     sort = db_sort(sort))
     if time != 'all':
         q._filter(db_times[time])
+    if sr_id is not None:
+        q._filter(kind.c.sr_id == sr_id)
     return make_results(q)
 
 def get_all_comments():
@@ -481,21 +485,21 @@ def _get_sr_comments(sr_id):
                        sort = desc('_date'))
     return make_results(q)
 
-def _get_comments(user_id, sort, time):
-    return user_query(Comment, user_id, sort, time)
+def _get_comments(user_id, sort, time, sr_id=None):
+    return user_query(Comment, user_id, sort, time, sr_id)
 
-def get_comments(user, sort, time):
-    return _get_comments(user._id, sort, time)
+def get_comments(user, sort, time, sr_id=None):
+    return _get_comments(user._id, sort, time, sr_id)
 
-def _get_submitted(user_id, sort, time):
-    return user_query(Link, user_id, sort, time)
+def _get_submitted(user_id, sort, time, sr_id=None):
+    return user_query(Link, user_id, sort, time, sr_id)
 
-def get_submitted(user, sort, time):
-    return _get_submitted(user._id, sort, time)
+def get_submitted(user, sort, time, sr_id=None):
+    return _get_submitted(user._id, sort, time, sr_id)
 
-def get_overview(user, sort, time):
-    return merge_results(get_comments(user, sort, time),
-                         get_submitted(user, sort, time))
+def get_overview(user, sort, time, sr_id=None):
+    return merge_results(get_comments(user, sort, time, sr_id),
+                         get_submitted(user, sort, time, sr_id))
 
 def rel_query(rel, thing_id, name, filters = []):
     """General relationship query."""
@@ -833,6 +837,7 @@ def new_link(link):
     # that
 
     results.append(get_submitted(author, 'new', 'all'))
+    results.append(get_submitted(author, 'new', 'all', link.sr_id))
 
     for domain in utils.UrlParser(link.url).domain_permutations():
         results.append(get_domain_links(domain, 'new', "all"))
@@ -849,6 +854,7 @@ def new_link(link):
 def new_comment(comment, inbox_rels):
     author = Account._byID(comment.author_id)
     job = [get_comments(author, 'new', 'all'),
+           get_comments(author, 'new', 'all', comment.sr_id),
            get_comments(author, 'top', 'all'),
            get_comments(author, 'controversial', 'all')]
 
@@ -1109,9 +1115,14 @@ def delete(things):
         links = [x for x in a_things if isinstance(x, Link)]
         comments = [x for x in a_things if isinstance(x, Comment)]
 
+        sr_links = _by_srid(links)
+        sr_comments = _by_srid(comments)
+
         if links:
             results = [get_submitted(author, 'hot', 'all'),
                        get_submitted(author, 'new', 'all')]
+            results += [get_submitted(author, 'new', 'all', sr_id)
+                            for sr_id, sr_things in sr_links]
             for sort in time_filtered_sorts:
                 for time in db_times.keys():
                     results.append(get_submitted(author, sort, time))
@@ -1120,6 +1131,8 @@ def delete(things):
         if comments:
             results = [get_comments(author, 'hot', 'all'),
                        get_comments(author, 'new', 'all')]
+            results += [get_submitted(author, 'new', 'all', sr_id)
+                            for sr_id, sr_things in sr_comments]
             for sort in time_filtered_sorts:
                 for time in db_times.keys():
                     results.append(get_comments(author, sort, time))
