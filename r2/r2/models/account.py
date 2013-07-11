@@ -202,8 +202,8 @@ class Account(Thing):
         return sr_names
 
     def all_karmas(self):
-        """returns a list of tuples in the form (name, hover-text, link_karma,
-        comment_karma)"""
+        """returns a list of tuples in the form:
+            (label, hover-text, link_karma, comment_karma, name)"""
         link_suffix = '_link_karma'
         comment_suffix = '_comment_karma'
         karmas = []
@@ -211,7 +211,8 @@ class Account(Thing):
         for sr_name in sr_names:
             karmas.append((sr_name, None,
                            self._t.get(sr_name + link_suffix, 0),
-                           self._t.get(sr_name + comment_suffix, 0)))
+                           self._t.get(sr_name + comment_suffix, 0),
+                           sr_name))
 
         karmas.sort(key = lambda x: x[2] + x[3], reverse=True)
 
@@ -220,7 +221,7 @@ class Account(Thing):
         if old_link_karma or old_comment_karma:
             karmas.append((_('ancient history'),
                            _('really obscure karma from before it was cool to track per-subreddit'),
-                           old_link_karma, old_comment_karma))
+                           old_link_karma, old_comment_karma, None))
 
         return karmas
 
