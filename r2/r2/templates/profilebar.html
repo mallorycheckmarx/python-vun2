@@ -94,8 +94,13 @@
         % else:
           <th>${label}</th>
         % endif
+        % if not name:
           <td>${lc}</td>
           <td>${cc}</td>
+        % else:
+          <td>${plain_link(lc, "/user/" + c.user.name + "/submitted/?sr=" + name)}</td>
+          <td>${plain_link(cc, "/user/" + c.user.name + "/comments/?sr=" + name)}</td>
+        % endif
         </tr>
       %endfor
       </tbody>
