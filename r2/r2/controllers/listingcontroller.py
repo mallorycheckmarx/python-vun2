@@ -635,7 +635,7 @@ class UserController(ListingController):
         if self.where in ('overview', 'comments', 'submitted', 'saved'):
             if self.where == 'saved' and not c.user.gold:
                 sr_id = None
-            elif c.user != self.vuser:
+            elif (not c.user_is_admin and c.user != self.vuser):
                 sr_id = None
             elif self.where != 'saved' and self.sort != 'new':
                 sr_id = None
