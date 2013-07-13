@@ -1167,7 +1167,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                               prefix = "rate_comment_"),
                    ip = ValidIP(),
                    parent = VSubmitParent(['thing_id', 'parent']),
-                   comment = VMarkdown(['text', 'comment']))
+                   comment = VSelfText(['text', 'comment']))
     @api_doc(api_section.links_and_comments)
     def POST_comment(self, commentform, jquery, parent, comment, ip):
         """Submit a new comment or reply to a message.
