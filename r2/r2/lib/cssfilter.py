@@ -57,10 +57,11 @@ browser_prefixes = ['o','moz','webkit','ms','khtml','apple','xv']
 custom_macros = {
     'num': r'[-]?\d+|[-]?\d*\.\d+',
     'percentage': r'{num}%',
-    'length': r'0|{num}(em|ex|px|in|cm|mm|pt|pc)',
+    'length': r'0|{num}(em|ex|ch|rem|px|in|cm|mm|pt|pc|vw|vh|vmin)',
     'int': r'[-]?\d+',
     'w': r'\s*',
-    
+    'angle': r'{num}(deg|grad|rad|turn)',
+
     # From: http://www.w3.org/TR/2008/WD-css3-color-20080721/#svg-color
     'x11color': r'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen',
     'csscolor': r'(maroon|red|orange|yellow|olive|purple|fuchsia|white|lime|green|navy|blue|aqua|teal|black|silver|gray|ActiveBorder|ActiveCaption|AppWorkspace|Background|ButtonFace|ButtonHighlight|ButtonShadow|ButtonText|CaptionText|GrayText|Highlight|HighlightText|InactiveBorder|InactiveCaption|InactiveCaptionText|InfoBackground|InfoText|Menu|MenuText|Scrollbar|ThreeDDarkShadow|ThreeDFace|ThreeDHighlight|ThreeDLightShadow|ThreeDShadow|Window|WindowFrame|WindowText)|#[0-9a-f]{3}|#[0-9a-f]{6}|rgb\({w}{int}{w},{w}{int}{w},{w}{int}{w}\)|rgb\({w}{num}%{w},{w}{num}%{w},{w}{num}%{w}\)',
@@ -74,6 +75,10 @@ custom_macros = {
     'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
 
     'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
+    
+    # http://www.w3.org/TR/css3-2d-transforms/
+    'translation-value': r'{length}|{percentage}',
+    'transform-function': r'matrix({num},{w}{num},{w}{num},{w}{num},{w}{num},{w}{num})|translate({translation-value}(,{w}{translation-value})?)|translateX({translation-value})|translateY({translation-value})|scale({num}(,{w}{num})?)|scaleX({num})|scaleY({num})|rotate({angle})|skewX({angle})|skewY({angle})',
 }
 
 custom_values = {
@@ -88,7 +93,7 @@ custom_values = {
     'background': r'{bg-gradients}',
     'background-image': r'{bg-gradients}',
     'background-color': r'{color}',
-    'background-position': r'(({percentage}|{length}){0,3})?\s*(top|center|left)?\s*(left|center|right)?',
+    'background-position': r'(({percentage}|{length}){0,3})?{w}(top|center|left)?{w}(left|center|right)?',
     
     # http://www.w3.org/TR/css3-background/#border-top-right-radius
     'border-radius': r'{border-radius}',
@@ -96,6 +101,10 @@ custom_values = {
     'border-bottom-right-radius': r'{border-radius}',
     'border-bottom-left-radius': r'{border-radius}',
     'border-top-left-radius': r'{border-radius}',
+    
+    # http://www.w3.org/TR/css3-2d-transforms/
+    'transform': r'none|({transform-function}({w}{transform-function})*)',
+    'transform-origin': r'(top|bottom)|(({percentage}|{length}|left|center|right)({w}({percentage}|{length}|top|center|bottom))?)|((center|(left|right)({w}({percentage}|{length}))?)&&(center|(top|bottom)({w}({percentage}|{length}))?))',
 
     # old mozilla style (for compatibility with existing stylesheets)
     'border-radius-topright': r'{border-radius}',
