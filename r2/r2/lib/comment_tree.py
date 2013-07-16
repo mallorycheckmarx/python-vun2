@@ -88,7 +88,7 @@ def update_comment_votes(comments, write_consistency_level = None):
         link_map.setdefault(com.link_id, []).append(com)
 
     for link_id, coms in link_map.iteritems():
-        for sort in ("_controversy", "_hot", "_confidence", "_score", "_date"):
+        for sort in ("_controversy", "_hot", "_confidence", "_optimism", "_score", "_date"):
             # Cassandra always uses the id36 instead of the integer
             # ID, so we'll map that first before sending it
             c_key = sort_comments_key(link_id, sort)
