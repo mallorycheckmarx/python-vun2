@@ -2198,9 +2198,9 @@ class ApiController(RedditController, OAuth2ResourceController):
 
     @noresponse(VUser(),
                 VModhash(),
-                thing = VByName('id', thing_cls=Link))
+                things = VByName('id', multiple=True, limit=25, thing_cls=Link))
     @api_doc(api_section.links_and_comments)
-    def POST_hide(self, thing):
+    def POST_hide(self, things):
         """Hide a link.
 
         This removes it from the user's default view of subreddit listings.
@@ -2208,21 +2208,29 @@ class ApiController(RedditController, OAuth2ResourceController):
         See also: [/api/unhide](#POST_api_unhide).
 
         """
-        if not thing: return
-        r = thing._hide(c.user)
+        if not things:
+            return
+        user = c.user
+        LinkHidesByAccount._hide(user, things)
+        for thing in things:
+            thing._something(SaveHide, user, thing._hidden, 'hide')
 
     @noresponse(VUser(),
                 VModhash(),
-                thing = VByName('id'))
+                things = VByName('id', multiple=True, limit=25, thing_cls=Link))
     @api_doc(api_section.links_and_comments)
-    def POST_unhide(self, thing):
+    def POST_unhide(self, things):
         """Unhide a link.
 
         See also: [/api/hide](#POST_api_hide).
 
         """
-        if not thing: return
-        r = thing._unhide(c.user)
+        if not things:
+            return
+        user = c.user
+        LinkHidesByAccount._unhide(user, things)
+        for thing in things:
+            thing._unsomething(user, thing._hidden, 'hide')
 
 
     @validatedForm(VUser(),
