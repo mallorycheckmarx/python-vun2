@@ -184,22 +184,35 @@ class Account(Thing):
         karma = self.link_karma
         return max(karma, 1) if karma > -1000 else karma
 
+    def karma_subreddits(self, type=None):
+        include_link = type in (None, 'link')
+        include_comment = type in (None, 'comment')
+
+        link_suffix = '_link_karma'
+        comment_suffix = '_comment_karma'
+
+        sr_names = set()
+
+        for k in self._t.keys():
+            if include_link and k.endswith(link_suffix):
+                sr_names.add(k[:-len(link_suffix)])
+            elif include_comment and k.endswith(comment_suffix):
+                sr_names.add(k[:-len(comment_suffix)])
+
+        return sr_names
+
     def all_karmas(self):
-        """returns a list of tuples in the form (name, hover-text, link_karma,
-        comment_karma)"""
+        """returns a list of tuples in the form:
+            (label, hover-text, link_karma, comment_karma, name)"""
         link_suffix = '_link_karma'
         comment_suffix = '_comment_karma'
         karmas = []
-        sr_names = set()
-        for k in self._t.keys():
-            if k.endswith(link_suffix):
-                sr_names.add(k[:-len(link_suffix)])
-            elif k.endswith(comment_suffix):
-                sr_names.add(k[:-len(comment_suffix)])
+        sr_names = self.karma_subreddits()
         for sr_name in sr_names:
             karmas.append((sr_name, None,
                            self._t.get(sr_name + link_suffix, 0),
-                           self._t.get(sr_name + comment_suffix, 0)))
+                           self._t.get(sr_name + comment_suffix, 0),
+                           sr_name))
 
         karmas.sort(key = lambda x: x[2] + x[3], reverse=True)
 
@@ -208,7 +221,7 @@ class Account(Thing):
         if old_link_karma or old_comment_karma:
             karmas.append((_('ancient history'),
                            _('really obscure karma from before it was cool to track per-subreddit'),
-                           old_link_karma, old_comment_karma))
+                           old_link_karma, old_comment_karma, None))
 
         return karmas
 

@@ -83,7 +83,7 @@
        karmas = thing.user.all_karmas()
      %>
      <tbody>
-     %for i, (label, title, lc, cc) in enumerate(karmas):
+     %for i, (label, title, lc, cc, name) in enumerate(karmas):
         <tr
         % if c.user_is_admin and i >= 5:
           class="more-karmas"
@@ -94,8 +94,13 @@
         % else:
           <th>${label}</th>
         % endif
+        % if not name:
           <td>${lc}</td>
           <td>${cc}</td>
+        % else:
+          <td>${plain_link(lc, "/user/" + c.user.name + "/submitted/?sr=" + name)}</td>
+          <td>${plain_link(cc, "/user/" + c.user.name + "/comments/?sr=" + name)}</td>
+        % endif
         </tr>
       %endfor
       </tbody>
