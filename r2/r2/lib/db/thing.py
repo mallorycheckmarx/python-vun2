@@ -407,22 +407,21 @@ class DataThing(object):
         bases = sgm(cache, ids, items_db, prefix, stale=stale,
                     found_fn=count_found)
 
-        #check to see if we found everything we asked for
-        for i in list(ids):
+        # Check to see if we found everything we asked for
+        missing = []
+        for i in ids:
             if i not in bases:
-                if ignore_missing:
-                    if single:
-                        return None
-                    ids.remove(i)
-                    continue
-                missing = [i for i in ids if i not in bases]
-                raise NotFound, '%s %s' % (cls.__name__, missing)
-            if bases[i] and bases[i]._id != i:
+                missing.append(i)
+            elif bases[i] and bases[i]._id != i:
                 g.log.error("thing.py: Doppleganger on byID: %s got %s for %s" %
                             (cls.__name__, bases[i]._id, i))
                 bases[i] = items_db([i]).values()[0]
                 bases[i]._cache_myself()
-
+        if missing and not ignore_missing:
+            raise NotFound, '%s %s' % (cls.__name__, missing)
+        ids = filter(lambda i: i not in missing, ids)
+        if single and not ids:
+            return None
 
         if data:
             need = []
