@@ -419,7 +419,8 @@ class DataThing(object):
                 bases[i]._cache_myself()
         if missing and not ignore_missing:
             raise NotFound, '%s %s' % (cls.__name__, missing)
-        ids = filter(lambda i: i not in missing, ids)
+        for i in missing:
+            ids.remove(i)
         if single and not ids:
             return None
 
