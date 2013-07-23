@@ -664,7 +664,8 @@ class VByName(Validator):
     # Lookup tdb_sql.Thing or tdb_cassandra.Thing objects by fullname.
     splitter = re.compile('[ ,]+')
     def __init__(self, param, thing_cls=None, multiple=False, limit=None,
-                 error=errors.NO_THING_ID, backend='sql', **kw):
+                 error=errors.NO_THING_ID, ignore_missing=False,
+                 backend='sql', **kw):
         # Limit param only applies when multiple is True
         if not multiple and limit is not None:
             raise TypeError('multiple must be True when limit is set')
@@ -673,6 +674,7 @@ class VByName(Validator):
         self.multiple = multiple
         self.limit = limit
         self._error = error
+        self.ignore_missing = ignore_missing
         self.backend = backend
 
         Validator.__init__(self, param, **kw)
@@ -686,7 +688,8 @@ class VByName(Validator):
                     return self.set_error(errors.TOO_MANY_THING_IDS)
             if items:
                 try:
-                    return tdb_cassandra.Thing._by_fullname(items, return_dict=False)
+                    return tdb_cassandra.Thing._by_fullname(items,
+                        ignore_missing=self.ignore_missing, return_dict=False)
                 except NotFound:
                     pass
         else:
@@ -698,7 +701,7 @@ class VByName(Validator):
             if items and (self.multiple or self.re.match(items)):
                 try:
                     return Thing._by_fullname(items, return_dict=False,
-                                              data=True)
+                        ignore_missing=self.ignore_missing, data=True)
                 except NotFound:
                     pass
 
