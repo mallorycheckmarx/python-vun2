@@ -508,13 +508,11 @@ class DataThing(object):
                 real_type, thing_id = lookup[fullname]
                 thing = identified.get(real_type, {}).get(thing_id)
                 if not thing and ignore_missing:
-                    if single:
-                        return None
                     continue
                 res.append((fullname, thing))
 
         if single:
-            return res[0][1]
+            return res[0][1] if res else None
         elif return_dict:
             return dict(res)
         else:
