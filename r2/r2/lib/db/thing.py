@@ -471,7 +471,7 @@ class DataThing(object):
 
     @classmethod
     def _by_fullname(cls, names,
-                     return_dict = True,
+                     return_dict = True, 
                      ignore_missing=False,
                      **kw):
         names, single = tup(names, True)
