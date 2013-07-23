@@ -421,8 +421,6 @@ class DataThing(object):
             raise NotFound, '%s %s' % (cls.__name__, missing)
         for i in missing:
             ids.remove(i)
-        if single and not ids:
-            return None
 
         if data:
             need = []
@@ -445,7 +443,7 @@ class DataThing(object):
                     bases[_id].__setattr__(k, v, False)
 
         if single:
-            return bases[ids[0]]
+            return bases[ids[0]] if ids else None
         elif return_dict:
             return bases
         else:
