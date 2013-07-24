@@ -203,6 +203,7 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     responseComplete: function(query, data) {
+        delete this.req
         this.loading(false)
         this.cache.set(query, data)
         if (this.dirty && this.val()) {
