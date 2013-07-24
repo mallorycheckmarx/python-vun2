@@ -158,7 +158,7 @@ $.handleResponse = handleResponse;
 
 var api_loc = '/api/';
 $.request = function(op, parameters, worker_in, block, type, 
-                     get_only, errorhandler) {
+                     get_only, errorhandler, no_rate_limit) {
     /* 
        Uniquitous reddit AJAX poster.  Automatically addes
        handleResponse(action) worker to deal with the API result.  The
@@ -169,7 +169,7 @@ $.request = function(op, parameters, worker_in, block, type,
     var action = op;
     var worker = worker_in;
 
-    if (rate_limit(op)) {
+    if (!no_rate_limit && rate_limit(op)) {
         if (errorhandler) {
             errorhandler('ratelimit')
         }
@@ -222,7 +222,7 @@ $.request = function(op, parameters, worker_in, block, type,
         /*if( document.location.host == reddit.ajax_domain ) 
             /* normal AJAX post */
 
-        $.ajax({ type: (get_only) ? "GET" : "POST",
+        return $.ajax({ type: (get_only) ? "GET" : "POST",
                     url: op, 
                     data: parameters, 
                     success: worker,
