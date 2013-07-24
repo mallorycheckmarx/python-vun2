@@ -127,7 +127,9 @@ r.ui.Suggest = Backbone.View.extend({
             e.preventDefault()
             this.changeSelectionBy(e.keyCode == 38 ? -1 : 1)
         } else if (e.keyCode == 13) {
-            e.preventDefault()
+            if (this.selection >= 0) {
+                e.preventDefault()
+            }
         } else {
             this.queryChanged()
         }
