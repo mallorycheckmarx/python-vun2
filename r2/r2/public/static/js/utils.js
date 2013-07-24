@@ -73,5 +73,29 @@ r.utils = {
         return _.escape(str).replace(this._mdLinkRe, function(match, text, url) {
             return '<a href="' + url + '">' + text + '</a>'
         })
-    }
+    },
+
+    LRUCache: Backbone.Model.extend({
+        maxItems: 16,
+        cacheIndex: [],
+        cache: {},
+
+        set: function(key, data) {
+            if(this.cache[key]) {
+                var i = _.indexOf(this.cacheIndex, key)
+                this.cacheIndex.splice(i, 1)
+                this.cacheIndex.push(key)
+            } else {
+                if(this.cache.length >= this.maxItems) {
+                    delete this.cache[this.cacheIndex.shift()]
+                }
+                this.cache[key] = data
+                this.cacheIndex.push(key)
+            }
+        },
+
+        get: function(key) {
+            return this.cache[key]
+        }
+    })
 }
