@@ -3273,6 +3273,16 @@ class ApiController(RedditController, OAuth2ResourceController):
     @json_validate(query=VPrintable('query', max_length=50),
                    include_over_18=VBoolean('include_over_18', default=True))
     @api_doc(api_section.subreddits, extensions=["json"])
+    def GET_subreddit_search(self, responder, query, include_over_18):
+        if not query:
+            return {'subreddits': []}
+        subreddits = search_reddits(query, include_over_18)
+        results = [{'name': sr.name, 'description': sr.description}
+                   for sr in subreddits]
+        return {'subreddits': results}
+
+    @json_validate(query=VPrintable('query', max_length=50),
+                   include_over_18=VBoolean('include_over_18', default=True))
     def POST_search_reddit_names(self, responder, query, include_over_18):
         """List subreddit names that begin with a query string.
 
@@ -3282,15 +3292,10 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         """
         names = []
-        subreddits = []
         if query:
-            results = search_reddits(query, include_over_18)
-            subreddits = [
-                {'name': sr.name, 'description': sr.description}
-                for sr in results]
-            # legacy api clients
-            names = [sr.name for sr in results]
-        return {'names': names, 'subreddits': subreddits}
+            names = search_reddits(query, include_over_18)
+
+        return {'names': names}
 
     @validate(link = VByName('link_id', thing_cls = Link))
     def POST_expando(self, link):

@@ -93,6 +93,12 @@ r.utils = {
 		}
 	},
 
+    sumLength: function(arr) {
+        return _.reduce(arr, function(memo, e) {
+            return memo + e.length
+        }, 0)
+    },
+
     LRUCache: function(maxItems) {
         var _maxItems = maxItems > 0 ? maxItems : 16
         var _cacheIndex = []
