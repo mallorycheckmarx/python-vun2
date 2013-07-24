@@ -386,10 +386,14 @@ ul.flat-vert {text-align: left;}
 
 .tabpane-content { border: 1px solid #5f99cf; padding: 4px 4px 4px 4px; }
 
+#search {
+    font-size: 18px;
+}
+
 #search input[type=text] {
     border: 1px solid gray;
     font-size: 18px;
-    width: 295px;
+    width: 275px;
     padding: 2px;
 }
 
@@ -3678,24 +3682,6 @@ ul#image-preview-list .description pre {
     height: 12px;
  }
 
-#sr-autocomplete-area {
-    position: relative;
-    z-index: 100;
- }
-
-#sr-drop-down {
-    position: absolute;
-    width: 498px;
-    border: 1px solid gray;
-    background: white;
-    display: none;
-    left: 0;
-}
-
-#sr-drop-down  table {
-    width: 100%;
-}
-
 .sr-name-row {
     cursor: default;
  }
@@ -3724,6 +3710,47 @@ ul#image-preview-list .description pre {
     padding-right: 5px;
 }
 
+.suggestarea {
+    .suggestbox {
+        cursor: default;
+        position: absolute;
+        z-index: 100;
+        border: 1px solid gray;
+        background-color: white;
+        li {
+            &.selected {
+                background-color: #369;
+                color: white;
+                font-weight: normal;
+                .name {
+                    color: white;
+                }
+            }
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: lightgrey;
+            .name {
+                color: black;
+                white-space: nowrap;
+                overflow: hidden;
+            }
+            .description {
+                white-space: nowrap;
+                overflow: hidden;
+                margin-left: 15px;
+            }
+        }
+    }
+    .suggestquery {
+        padding-right: 20px !important;
+    }
+    &.working {
+        .suggestquery {
+            background: white url(../throbber.gif) no-repeat right;
+        }
+    }
+}
 
 /*** new menu shit ***/
 
@@ -3926,6 +3953,10 @@ ul.tabmenu.formtab {
     padding: 3px;
     margin: 0;
     border: 1px solid gray;
+}
+
+.roundfield input.suggestquery {
+    width: 474px;
 }
 
 .roundfield.captcha .capimage {
