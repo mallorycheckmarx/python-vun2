@@ -3135,10 +3135,15 @@ class ApiController(RedditController, OAuth2ResourceController):
                    include_over_18=VBoolean('include_over_18', default=True))
     def POST_search_reddit_names(self, responder, query, include_over_18):
         names = []
+        subreddits = []
         if query:
-            names = search_reddits(query, include_over_18)
-
-        return {'names': names}
+            results = search_reddits(query, include_over_18)
+            subreddits = [
+                {'name': sr.name, 'description': sr.description}
+                for sr in results]
+            # legacy api clients
+            names = [sr.name for sr in results]
+        return {'names': names, 'subreddits': subreddits}
 
     @validate(link = VByName('link_id', thing_cls = Link))
     def POST_expando(self, link):
