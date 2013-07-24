@@ -20,18 +20,25 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from collections import namedtuple
+from pylons import g
 from r2.models import Subreddit
 from r2.lib.memoize import memoize
 from r2.lib.db.operators import desc
 from r2.lib import utils
 from r2.lib.db import tdb_cassandra
 from r2.lib.cache import CL_ONE
+from r2.lib.filters import markdown_plaintext
 
 class SubredditsByPartialName(tdb_cassandra.View):
     _use_db = True
     _value_type = 'pickle'
     _connection_pool = 'main'
     _read_consistency_level = CL_ONE
+
+class SRData(namedtuple('SRData', ['name', 'over_18', 'description'])):
+    def __new__(cls, name, over_18, description=None):
+        return super(SRData, cls).__new__(cls, name, over_18, description)
 
 def load_all_reddits():
     query_cache = {}
@@ -46,7 +53,9 @@ def load_all_reddits():
             prefix = name[:i + 1]
             names = query_cache.setdefault(prefix, [])
             if len(names) < 10:
-                names.append((sr.name, sr.over_18))
+                description = markdown_plaintext(sr.public_description)
+                description = description.split('\n', 1)[0][:128]
+                names.append((sr.name, sr.over_18, description))
 
     for name_prefix, subreddits in query_cache.iteritems():
         SubredditsByPartialName._set_values(name_prefix, {'tups': subreddits})
@@ -56,8 +65,13 @@ def search_reddits(query, include_over_18=True):
 
     try:
         result = SubredditsByPartialName._byID(query)
-        return [name for (name, over_18) in getattr(result, 'tups', [])
-                if not over_18 or include_over_18]
+        results = []
+        for data in getattr(result, 'tups', []):
+            data = SRData(*data)
+            if data.over_18 and not include_over_18:
+                continue
+            results.append(data)
+        return results
     except tdb_cassandra.NotFound:
         return []
 
