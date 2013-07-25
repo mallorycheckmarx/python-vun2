@@ -226,11 +226,12 @@ r.ui.Suggest = Backbone.View.extend({
         if (this.dirty && this.val()) {
             this.query(this.val())
         }
-        this.handleResponse(query, data)
+        this.items = this.extractItems(query, data)
+        this.render()
     },
 
-    handleResponse: function(query, data) {
-        this.render(data)
+    extractItems: function(query, data) {
+        return data
     },
 
     getViews: function(items) {
@@ -243,10 +244,10 @@ r.ui.Suggest = Backbone.View.extend({
         return views
     },
 
-    render: function(items) {
+    render: function() {
         this.selectionIndex = -1
         this.hide()
-        this.views = this.getViews(items)
+        this.views = this.getViews(this.items)
         if (!this.views.length) {
             return
         }
@@ -296,8 +297,8 @@ r.ui.SRSuggest = r.ui.Suggest.extend({
     viewClass: r.ui.SRItem,
     maxItems: 5,
 
-    handleResponse: function(query, data) {
-        this.render(data.subreddits)
+    extractItems: function(query, data) {
+        return data.subreddits
     },
 
     queryParams: function(query) {
