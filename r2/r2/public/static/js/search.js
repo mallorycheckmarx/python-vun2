@@ -193,9 +193,13 @@ r.ui.Suggest = Backbone.View.extend({
         if (cached) {
             return callback(cached)
         }
-        this.req = $.request(this.endpoint, this.queryParams(query),
-                             callback, undefined, undefined, true,
-                             _.bind(this.responseError, this, query), true)
+        this.req = $.ajax({
+            url: this.endpoint,
+            data: this.queryParams(query),
+            success: callback,
+            failure: _.bind(this.responseError, this, query),
+            dataType: 'json'
+        })
     },
 
     responseError: function(query, error) {
@@ -288,7 +292,7 @@ r.ui.ClickableSRItem = r.ui.SRItem.extend({
 })
 
 r.ui.SRSuggest = r.ui.Suggest.extend({
-    endpoint: 'subreddit_search.json',
+    endpoint: '/api/subreddit_search.json',
     renderer: r.ui.SRItem,
     maxItems: 5,
 
