@@ -5,7 +5,7 @@ r.ui.SuggestItem = Backbone.View.extend({
 
     clicked: function() {},
 
-    selected: function() {
+    select: function() {
         this.$el.addClass('selected')
         return this
     }
@@ -102,7 +102,7 @@ r.ui.Suggest = Backbone.View.extend({
         this.deselectAll()
         var $item = $(e.currentTarget)
         this.selectionIndex = $item.index()
-        this.views[this.selectionIndex].selected()
+        this.views[this.selectionIndex].select()
     },
 
     changeSelectionBy: function(difference) {
@@ -113,7 +113,7 @@ r.ui.Suggest = Backbone.View.extend({
         if (this.selectionIndex < 0) {
             this.setText(this.lastQuery)
         } else {
-            this.setText(this.views[this.selectionIndex].selected().text())
+            this.setText(this.views[this.selectionIndex].select().text())
         }
     },
 
