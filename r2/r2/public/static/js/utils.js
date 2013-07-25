@@ -75,27 +75,27 @@ r.utils = {
         })
     },
 
-    LRUCache: Backbone.Model.extend({
-        maxItems: 16,
-        cacheIndex: [],
-        cache: {},
+    LRUCache: function(maxItems) {
+        maxItems = maxItems > 0 ? maxItems : 16
+        var cacheIndex = []
+        var cache = {}
 
-        set: function(key, data) {
-            if(this.cache[key]) {
-                var i = _.indexOf(this.cacheIndex, key)
-                this.cacheIndex.splice(i, 1)
-                this.cacheIndex.push(key)
+        this.set = function(key, data) {
+            if(cache[key]) {
+                var i = _.indexOf(cacheIndex, key)
+                cacheIndex.splice(i, 1)
+                cacheIndex.push(key)
             } else {
-                if(this.cache.length >= this.maxItems) {
-                    delete this.cache[this.cacheIndex.shift()]
+                if(cache.length >= maxItems) {
+                    delete cache[cacheIndex.shift()]
                 }
-                this.cache[key] = data
-                this.cacheIndex.push(key)
+                cache[key] = data
+                cacheIndex.push(key)
             }
-        },
-
-        get: function(key) {
-            return this.cache[key]
         }
-    })
+
+        this.get = function(key) {
+            return cache[key]
+        }
+    }
 }
