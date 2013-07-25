@@ -93,14 +93,10 @@ r.ui.Suggest = Backbone.View.extend({
 
     changeSelectionBy: function(difference) {
         this.deselectAll()
-        this.selectionIndex += difference
-        var size = this.size()
-        if (this.selectionIndex >= size) {
-            this.selectionIndex = -1
-        } else if (this.selectionIndex < -1) {
-            this.selectionIndex = size - 1
-        }
-        if (this.selectionIndex == -1) {
+        var index = this.selectionIndex + difference + 1
+        var size = this.size() + 1
+        this.selectionIndex = ((index + size) % size) - 1
+        if (this.selectionIndex < 0) {
             this.setText(this.lastQuery)
         } else {
             this.setText(this.views[this.selectionIndex].selected().text())
