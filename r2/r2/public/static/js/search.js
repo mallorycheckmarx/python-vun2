@@ -307,7 +307,7 @@ r.ui.SRSuggest = r.ui.Suggest.extend({
 })
 
 r.ui.SRSearchSuggest = r.ui.SRSuggest.extend({
-    maxitems: 4,
+    maxItems: 4,
 
     setText: function(val) {},
 
