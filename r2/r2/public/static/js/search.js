@@ -255,7 +255,7 @@ r.ui.Suggest = Backbone.View.extend({
             this.$suggestBox = $('<ul>').addClass('suggestbox')
             this.$suggestBox.insertAfter(this.$input)
         } else {
-            this.$suggestBox.children().remove()
+            this.$suggestBox.empty()
         }
         this.$suggestBox.width(this.$input.innerWidth())
         var $container = this.$suggestBox
