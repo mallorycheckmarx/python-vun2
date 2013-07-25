@@ -1,16 +1,18 @@
 r.ui.Suggest = Backbone.View.extend({
     requestThrottleTimeout: 333,
 
-    events: {'keydown input': 'keyDown',
-             'keyup input': 'keyUp',
-             'input input': 'inputEvent',
-             'click input': 'queryChanged',
-             'blur input': 'defocused',
-             'mouseout .suggestbox li': 'itemHoverOut',
-             'mouseover .suggestbox li': 'itemHover',
-             'mousedown .suggestbox li': 'itemMouseDown',
-             'click .suggestbox li': 'itemClick',
-             'focus input': 'show'},
+    events: {
+        'keydown input': 'keyDown',
+         'keyup input': 'keyUp',
+         'input input': 'inputEvent',
+         'click input': 'queryChanged',
+         'blur input': 'defocused',
+         'mouseout .suggestbox li': 'itemHoverOut',
+         'mouseover .suggestbox li': 'itemHover',
+         'mousedown .suggestbox li': 'itemMouseDown',
+         'click .suggestbox li': 'itemClick',
+         'focus input': 'show'
+    },
 
     initialize: function() {
         this.$el.addClass('suggestarea')
@@ -276,7 +278,9 @@ r.ui.SRItem = r.ui.SuggestItem.extend({
 })
 
 r.ui.ClickableSRItem = r.ui.SRItem.extend({
-    events: {'mouseup': 'clicked'},
+    events: {
+        'mouseup': 'clicked'
+    },
 
     clicked: function() {
         window.location = '/r/' + this.options.item.name
@@ -360,7 +364,9 @@ r.ui.RedditSearchSuggest = r.ui.SRSearchSuggest.extend({
 })
 
 r.ui.DefaultSearch = r.ui.SuggestItem.extend({
-    events: {'click': 'clicked'},
+    events: {
+        'click': 'clicked'
+    },
     template: _.template('Search for: <%- query %>'),
 
     text: function() {
