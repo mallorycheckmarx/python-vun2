@@ -55,7 +55,7 @@ def load_all_reddits():
             if len(names) < 10:
                 description = markdownplaintext(sr.public_description)
                 description = description.split('\n', 1)[0][:128]
-                names.append((sr.name, sr.over_18, description, ))
+                names.append((sr.name, sr.over_18, description))
 
     for name_prefix, subreddits in query_cache.iteritems():
         SubredditsByPartialName._set_values(name_prefix, {'tups': subreddits})
