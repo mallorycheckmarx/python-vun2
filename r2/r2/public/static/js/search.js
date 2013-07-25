@@ -17,8 +17,8 @@ r.ui.Suggest = Backbone.View.extend({
     initialize: function() {
         this.$el.addClass('suggestarea')
         this.$input = this.$el.find('input').first()
-        this.$input.addClass('suggestquery')
-        this.$input.attr('autocomplete', 'off')
+            .addClass('suggestquery')
+            .attr('autocomplete', 'off')
         this.cache = new r.utils.LRUCache()
         this.selection = -1
         this.query = _.throttle(this.query, this.requestThrottleTimeout)
