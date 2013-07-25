@@ -194,7 +194,7 @@ r.ui.Suggest = Backbone.View.extend({
             return callback(cached)
         }
         this.req = $.request(this.endpoint, this.queryParams(query),
-                             callback, undefined, undefined, undefined,
+                             callback, undefined, undefined, true,
                              _.bind(this.responseError, this, query), true)
     },
 
@@ -288,7 +288,7 @@ r.ui.ClickableSRItem = r.ui.SRItem.extend({
 })
 
 r.ui.SRSuggest = r.ui.Suggest.extend({
-    endpoint: 'search_reddit_names.json',
+    endpoint: 'subreddit_search.json',
     renderer: r.ui.SRItem,
     maxItems: 5,
 
