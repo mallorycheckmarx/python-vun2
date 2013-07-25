@@ -35,7 +35,7 @@ r.ui.Suggest = Backbone.View.extend({
             .attr('autocomplete', 'off')
         this.cache = new r.utils.LRUCache()
         this.selectionIndex = -1
-        this.query = _.throttle(this._query, this.requestThrottleTimeout)
+        this.suggest = _.throttle(this._suggest, this.requestThrottleTimeout)
     },
 
     defocused: function() {
@@ -54,7 +54,7 @@ r.ui.Suggest = Backbone.View.extend({
         this.$input.val(val)
     },
 
-    val: function() {
+    query: function() {
         return this.$input.val()
     },
 
@@ -153,18 +153,18 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     queryChanged: function() {
-        var query = $.trim(this.val())
+        var query = $.trim(this.query())
         if (!query) {
             this.stop()
             this.hide()
         }
         if (query != this.lastQuery) {
-            this.query(query)
+            this.suggest(query)
         }
     },
 
     show: function() {
-        this.query(this.val())
+        this.suggest(this.query())
     },
 
     hide: function() {
@@ -186,7 +186,7 @@ r.ui.Suggest = Backbone.View.extend({
         }
     },
 
-    _query: function(query) {
+    _suggest: function(query) {
         if (!this.ready) {
             return
         }
@@ -223,8 +223,8 @@ r.ui.Suggest = Backbone.View.extend({
         delete this.req
         this.loading(false)
         this.cache.set(query, data)
-        if (this.dirty && this.val()) {
-            this.query(this.val())
+        if (this.dirty && this.query()) {
+            this.query(this.query())
         }
         this.items = this.extractItems(query, data)
         this.render()
@@ -313,7 +313,7 @@ r.ui.SRSearchSuggest = r.ui.SRSuggest.extend({
 
     queryChanged: function(query) {
         if (this.defaultBox) {
-            this.defaultBox.query = this.val()
+            this.defaultBox.query = this.query()
             this.defaultBox.render()
         }
         r.ui.SRSuggest.prototype.queryChanged.apply(this)
@@ -361,8 +361,8 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         this.$input.caret(pos)
     },
 
-    val: function() {
-        var query = r.ui.SRSuggest.prototype.val.apply(this)
+    query: function() {
+        var query = r.ui.SRSuggest.prototype.query.apply(this)
         return this.findSelected(query)
     }
 })
