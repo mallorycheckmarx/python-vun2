@@ -20,7 +20,7 @@ r.ui.Suggest = Backbone.View.extend({
             .addClass('suggestquery')
             .attr('autocomplete', 'off')
         this.cache = new r.utils.LRUCache()
-        this.selection = -1
+        this.selectionIndex = -1
         this.query = _.throttle(this._query, this.requestThrottleTimeout)
     },
 
@@ -65,7 +65,7 @@ r.ui.Suggest = Backbone.View.extend({
 
     itemClick: function(e) {
         e.preventDefault()
-        this.setText(this.views[this.selection].text())
+        this.setText(this.views[this.selectionIndex].text())
         this.stop()
         this.hide()
     },
@@ -86,31 +86,31 @@ r.ui.Suggest = Backbone.View.extend({
     itemHover: function(e) {
         this.deselectAll()
         var $item = $(e.currentTarget)
-        this.selection = $item.index()
-        this.views[this.selection].selected()
+        this.selectionIndex = $item.index()
+        this.views[this.selectionIndex].selected()
     },
 
     changeSelectionBy: function(difference) {
         this.deselectAll()
-        this.selection += difference
+        this.selectionIndex += difference
         var size = this.size()
-        if (this.selection >= size) {
-            this.selection = -1
-        } else if (this.selection < -1) {
-            this.selection = size - 1
+        if (this.selectionIndex >= size) {
+            this.selectionIndex = -1
+        } else if (this.selectionIndex < -1) {
+            this.selectionIndex = size - 1
         }
-        if (this.selection == -1) {
+        if (this.selectionIndex == -1) {
             this.setText(this.lastQuery)
         } else {
-            this.setText(this.views[this.selection].selected().text())
+            this.setText(this.views[this.selectionIndex].selected().text())
         }
     },
 
     keyUp: function(e) {
         if (e.keyCode == 13) {
-            if (this.selection >= 0) {
+            if (this.selectionIndex >= 0) {
                 e.preventDefault()
-                this.views[this.selection].clicked()
+                this.views[this.selectionIndex].clicked()
                 this.stop()
                 this.hide()
             }
@@ -129,7 +129,7 @@ r.ui.Suggest = Backbone.View.extend({
             e.preventDefault()
             this.changeSelectionBy(e.keyCode == 38 ? -1 : 1)
         } else if (e.keyCode == 13) {
-            if (this.selection >= 0) {
+            if (this.selectionIndex >= 0) {
                 e.preventDefault()
             }
         }
@@ -227,7 +227,7 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     render: function(items) {
-        this.selection = -1
+        this.selectionIndex = -1
         this.hide()
         this.views = this.getViews(items)
         if (!this.views.length) {
