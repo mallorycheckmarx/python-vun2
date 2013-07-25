@@ -162,11 +162,7 @@ r.ui.Suggest = Backbone.View.extend({
 
     loading: function(done) {
         if (!_.isUndefined(done)) {
-            if (done) {
-                this.$el.addClass('working')
-            } else {
-                this.$el.removeClass('working')
-            }
+            this.$el.toggleClass('working', done)
             return this
         } else {
             return this.$el.hasClass('working')
