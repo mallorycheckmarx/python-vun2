@@ -219,7 +219,7 @@ def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
 
     return smd
 
-def markdownplaintext(text):
+def markdown_plaintext(text):
     text = snudown.markdown(_force_utf8(text))
     return ''.join(BeautifulSoup(text).findAll(text=True)).strip()
 

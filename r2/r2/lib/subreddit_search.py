@@ -28,7 +28,7 @@ from r2.lib.db.operators import desc
 from r2.lib import utils
 from r2.lib.db import tdb_cassandra
 from r2.lib.cache import CL_ONE
-from r2.lib.filters import markdownplaintext
+from r2.lib.filters import markdown_plaintext
 
 class SubredditsByPartialName(tdb_cassandra.View):
     _use_db = True
@@ -53,7 +53,7 @@ def load_all_reddits():
             prefix = name[:i + 1]
             names = query_cache.setdefault(prefix, [])
             if len(names) < 10:
-                description = markdownplaintext(sr.public_description)
+                description = markdown_plaintext(sr.public_description)
                 description = description.split('\n', 1)[0][:128]
                 names.append((sr.name, sr.over_18, description))
 
