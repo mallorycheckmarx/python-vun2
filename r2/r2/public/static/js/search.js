@@ -316,11 +316,11 @@ r.ui.SRSearchSuggest = r.ui.SRSuggest.extend({
             this.defaultBox.query = this.query()
             this.defaultBox.render()
         }
-        r.ui.SRSuggest.prototype.queryChanged.apply(this)
+        r.ui.SRSuggest.prototype.queryChanged.call(this)
     },
 
     getViews: function(items) {
-        var views = r.ui.SRSuggest.prototype.getViews.apply(this, [items])
+        var views = r.ui.SRSuggest.prototype.getViews.call(this, items)
         if (!this.defaultBox) {
             this.defaultBox = new r.ui.DefaultSearch({el: $('<li>')})
             this.defaultBox.query = this.lastQuery
@@ -357,12 +357,12 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         this.findSelected(query)
         values[this.selected] = val
         var pos = r.utils.sumLength(_.first(values, this.selected + 1))
-        r.ui.SRSuggest.prototype.setText.apply(this, [values.join('')])
+        r.ui.SRSuggest.prototype.setText.call(this, values.join(''))
         this.$input.caret(pos)
     },
 
     query: function() {
-        var query = r.ui.SRSuggest.prototype.query.apply(this)
+        var query = r.ui.SRSuggest.prototype.query.call(this)
         return this.findSelected(query)
     }
 })
