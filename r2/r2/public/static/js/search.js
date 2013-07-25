@@ -138,7 +138,7 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     queryChanged: function() {
-        var query = this.val()
+        var query = $.trim(this.val())
         if (!query) {
             this.stop()
             this.hide()
