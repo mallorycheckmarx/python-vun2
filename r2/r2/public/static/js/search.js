@@ -341,11 +341,11 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         var len = 0
         var selected
         var pos = this.$input.caret()
-        query = _.find(this.split(query), function(e, i) {
-            len += e.length
-            selected = i
+        query = _.find(this.split(query), function(elem, idx) {
+            len += elem.length
+            selected = idx
             // Only odd as we want to select the non-separator portion
-            return len >= pos && !(i % 2)
+            return len >= pos && !(idx % 2)
         })
         this.selected = selected
         return query
