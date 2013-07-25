@@ -338,10 +338,7 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         var values = this.split(this.$input.val())
         var selected = _.isUndefined(this.selected) ? values.length - 1 : this.selected
         values[selected] = val
-        var reduced = _.first(values, selected + 1)
-        var pos = _.reduce(reduced, function(memo, e) {
-            return memo + e.length
-        }, 0)
+        var pos = r.utils.sumLength(_.first(values, selected + 1))
         r.ui.SRSuggest.prototype.setText.apply(this, [values.join('')])
         this.$input.caret(pos)
     },
