@@ -1,5 +1,5 @@
 r.ui.SuggestItem = Backbone.View.extend({
-    text: function() {
+    queryText: function() {
         return ''
     },
 
@@ -80,7 +80,7 @@ r.ui.Suggest = Backbone.View.extend({
 
     itemClick: function(e) {
         e.preventDefault()
-        this.setText(this.views[this.selectionIndex].text())
+        this.setText(this.views[this.selectionIndex].queryText())
         this.stop()
         this.hide()
     },
@@ -113,7 +113,7 @@ r.ui.Suggest = Backbone.View.extend({
         if (this.selectionIndex < 0) {
             this.setText(this.lastQuery)
         } else {
-            this.setText(this.views[this.selectionIndex].select().text())
+            this.setText(this.views[this.selectionIndex].select().queryText())
         }
     },
 
@@ -272,7 +272,7 @@ r.ui.SRItem = r.ui.SuggestItem.extend({
         '<span class="name">/r/<%- name %></span><span class="description"><%- description %></span>'
     ),
 
-    text: function() {
+    queryText: function() {
         return this.options.item.name
     },
 
@@ -377,7 +377,7 @@ r.ui.DefaultSearch = r.ui.SuggestItem.extend({
     },
     template: _.template(r.strings('search_default_msg') + '<%- query %>'),
 
-    text: function() {
+    queryText: function() {
         return this.query ? this.query : ''
     },
 
@@ -386,7 +386,7 @@ r.ui.DefaultSearch = r.ui.SuggestItem.extend({
     },
 
     render: function() {
-        this.$el.html(this.template({query: this.text()}))
+        this.$el.html(this.template({query: this.queryText()}))
         return this
     }
 })
