@@ -3,7 +3,7 @@ r.ui.SuggestItem = Backbone.View.extend({
         return ''
     },
 
-    clicked: function() {},
+    action: function() {},
 
     select: function() {
         this.$el.addClass('selected')
@@ -122,7 +122,7 @@ r.ui.Suggest = Backbone.View.extend({
         if (e.keyCode == 13) {
             if (this.selectionIndex >= 0) {
                 e.preventDefault()
-                this.views[this.selectionIndex].clicked()
+                this.views[this.selectionIndex].action()
                 this.stop()
                 this.hide()
             }
@@ -284,10 +284,10 @@ r.ui.SRItem = r.ui.SuggestItem.extend({
 
 r.ui.ClickableSRItem = r.ui.SRItem.extend({
     events: {
-        'mouseup': 'clicked'
+        'mouseup': 'action'
     },
 
-    clicked: function() {
+    action: function() {
         window.location = '/r/' + this.options.item.name
     }
 })
@@ -373,7 +373,7 @@ r.ui.RedditSearchSuggest = r.ui.SRSearchSuggest.extend({
 
 r.ui.DefaultSearch = r.ui.SuggestItem.extend({
     events: {
-        'click': 'clicked'
+        'click': 'action'
     },
     template: _.template(r.strings('search_default_msg') + '<%- query %>'),
 
@@ -381,7 +381,7 @@ r.ui.DefaultSearch = r.ui.SuggestItem.extend({
         return this.query ? this.query : ''
     },
 
-    clicked: function() {
+    action: function() {
         this.$el.closest('form').submit()
     },
 
