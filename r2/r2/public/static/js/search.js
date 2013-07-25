@@ -334,20 +334,10 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         return val.split(/([\/+,\s]+(?:r\/)?)/)
     },
 
-    setText: function(val) {
-        var values = this.split(this.$input.val())
-        var selected = _.isUndefined(this.selected) ? values.length - 1 : this.selected
-        values[selected] = val
-        var pos = r.utils.sumLength(_.first(values, selected + 1))
-        r.ui.SRSuggest.prototype.setText.apply(this, [values.join('')])
-        this.$input.caret(pos)
-    },
-
-    val: function() {
-        var query = r.ui.SRSuggest.prototype.val.apply(this)
-        var pos = this.$input.caret()
+    findSelected: function(query) {
         var len = 0
         var selected
+        var pos = this.$input.caret()
         query = _.find(this.split(query), function(e, i) {
             len += e.length
             selected = i
@@ -356,6 +346,21 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         })
         this.selected = selected
         return query
+    },
+
+    setText: function(val) {
+        var query = this.$input.val()
+        var values = this.split(query)
+        this.findSelected(query)
+        values[this.selected] = val
+        var pos = r.utils.sumLength(_.first(values, this.selected + 1))
+        r.ui.SRSuggest.prototype.setText.apply(this, [values.join('')])
+        this.$input.caret(pos)
+    },
+
+    val: function() {
+        var query = r.ui.SRSuggest.prototype.val.apply(this)
+        return this.findSelected(query)
     }
 })
 
