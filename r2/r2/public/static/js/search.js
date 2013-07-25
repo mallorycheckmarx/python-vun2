@@ -367,7 +367,7 @@ r.ui.DefaultSearch = r.ui.SuggestItem.extend({
     events: {
         'click': 'clicked'
     },
-    template: _.template('Search for: <%- query %>'),
+    template: _.template(r.strings('search_default_msg') + '<%- query %>'),
 
     text: function() {
         return this.query ? this.query : ''

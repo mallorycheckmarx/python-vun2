@@ -97,6 +97,7 @@ string_dict = dict(
 
     sr_subscribe =  _('click the `subscribe` or `unsubscribe` buttons to choose which subreddits appear on your front page.'),
 
+    search_default_msg = _('Search for: '),
     searching_a_reddit = _('you\'re searching within the [%(reddit_name)s](%(reddit_link)s) subreddit. '+
                            'you can also search within [all subreddits](%(all_reddits_link)s)'),
 
