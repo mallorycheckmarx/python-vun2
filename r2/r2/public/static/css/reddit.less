@@ -408,7 +408,7 @@ ul.flat-vert {text-align: left;}
 
 .tabpane-content { border: 1px solid #5f99cf; padding: 4px 4px 4px 4px; }
 
-#search {
+#search.suggestarea {
     font-size: 18px;
 }
 
@@ -3806,48 +3806,6 @@ ul#image-preview-list .description pre {
 #suggested-reddits li {
     display: inline;
     padding-right: 5px;
-}
-
-.suggestarea {
-    .suggestbox {
-        cursor: default;
-        position: absolute;
-        z-index: 100;
-        border: 1px solid gray;
-        background-color: white;
-        li {
-            &.selected {
-                background-color: #369;
-                color: white;
-                font-weight: normal;
-                .name {
-                    color: white;
-                }
-            }
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            color: lightgrey;
-            .name {
-                color: black;
-                white-space: nowrap;
-                overflow: hidden;
-            }
-            .description {
-                white-space: nowrap;
-                overflow: hidden;
-                margin-left: 15px;
-            }
-        }
-    }
-    .suggestquery {
-        padding-right: 20px !important;
-    }
-    &.working {
-        .suggestquery {
-            background: white url(../throbber.gif) no-repeat right;
-        }
-    }
 }
 
 /*** new menu shit ***/
@@ -7410,6 +7368,57 @@ body.with-listing-chooser {
             button {
                 .light-button;
             }
+        }
+    }
+}
+
+.suggestarea {
+
+    .suggestbox {
+        cursor: default;
+        position: absolute;
+        z-index: 100;
+        border: 1px solid gray;
+        background-color: white;
+
+        li {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: lightgrey;
+
+            &.selected {
+
+                background-color: #369;
+                color: white;
+                font-weight: normal;
+
+                .name {
+                    color: white;
+                }
+            }
+
+            .name {
+                color: black;
+                white-space: nowrap;
+                overflow: hidden;
+            }
+
+            .description {
+                white-space: nowrap;
+                overflow: hidden;
+                margin-left: 15px;
+            }
+        }
+    }
+
+    input.suggestquery {
+        padding-right: 20px;
+    }
+
+    &.working {
+        .suggestquery {
+            background: white url(../throbber.gif) no-repeat right;
         }
     }
 }
