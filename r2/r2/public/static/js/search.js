@@ -131,6 +131,7 @@ r.ui.Suggest = Backbone.View.extend({
             this.changeSelectionBy(e.keyCode == 38 ? -1 : 1)
         // enter
         } else if (e.keyCode == 13) {
+            // Prevent default so we may handle this on keyup without submitting the form
             if (this.selectionIndex >= 0) {
                 e.preventDefault()
             }
