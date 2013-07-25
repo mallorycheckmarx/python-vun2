@@ -36,7 +36,7 @@ r.ui.Suggest = Backbone.View.extend({
         this.queryChanged()
     },
 
-    apply: function(val) {
+    setText: function(val) {
         this.$input.val(val)
     },
 
@@ -65,7 +65,7 @@ r.ui.Suggest = Backbone.View.extend({
 
     itemClick: function(e) {
         e.preventDefault()
-        this.apply(this.views[this.selection].text())
+        this.setText(this.views[this.selection].text())
         this.stop()
         this.hide()
     },
@@ -100,9 +100,9 @@ r.ui.Suggest = Backbone.View.extend({
             this.selection = size - 1
         }
         if (this.selection == -1) {
-            this.apply(this.lastQuery)
+            this.setText(this.lastQuery)
         } else {
-            this.apply(this.views[this.selection].selected().text())
+            this.setText(this.views[this.selection].selected().text())
         }
     },
 
@@ -304,7 +304,7 @@ r.ui.SRSuggest = r.ui.Suggest.extend({
 r.ui.SRSearchSuggest = r.ui.SRSuggest.extend({
     maxitems: 4,
 
-    apply: function(val) {},
+    setText: function(val) {},
 
     queryChanged: function(query) {
         if (this.defaultBox) {
@@ -332,7 +332,7 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         return val.split(/([\/+,\s]+(?:r\/)?)/)
     },
 
-    apply: function(val) {
+    setText: function(val) {
         var values = this.split(this.$input.val())
         var selected = _.isUndefined(this.selected) ? values.length - 1 : this.selected
         values[selected] = val
@@ -340,7 +340,7 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
         var pos = _.reduce(reduced, function(memo, e) {
             return memo + e.length
         }, 0)
-        r.ui.SRSuggest.prototype.apply.apply(this, [values.join('')])
+        r.ui.SRSuggest.prototype.setText.apply(this, [values.join('')])
         this.$input.caret(pos)
     },
 
