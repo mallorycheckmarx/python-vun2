@@ -21,7 +21,7 @@ r.ui.Suggest = Backbone.View.extend({
             .attr('autocomplete', 'off')
         this.cache = new r.utils.LRUCache()
         this.selection = -1
-        this.query = _.throttle(this.query, this.requestThrottleTimeout)
+        this.query = _.throttle(this._query, this.requestThrottleTimeout)
     },
 
     defocused: function() {
@@ -173,7 +173,7 @@ r.ui.Suggest = Backbone.View.extend({
         }
     },
 
-    query: function(query) {
+    _query: function(query) {
         if (!this.ready) {
             return
         }
