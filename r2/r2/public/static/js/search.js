@@ -391,4 +391,8 @@ $(function() {
     $('.reddit-selector').each(function(idx, el) {
         $(el).data('SRSuggest', new r.ui.SRSuggest({el: el}))
     })
+
+    $('.add-sr').each(function(idx, el) {
+        $(el).data('MultiSuggest', new r.ui.MultiSuggest({el: el}))
+    })
 })
