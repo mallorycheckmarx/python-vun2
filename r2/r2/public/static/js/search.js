@@ -1,4 +1,18 @@
+r.ui.SuggestItem = Backbone.View.extend({
+    text: function() {
+        return ''
+    },
+
+    clicked: function() {},
+
+    selected: function() {
+        this.$el.addClass('selected')
+        return this
+    }
+})
+
 r.ui.Suggest = Backbone.View.extend({
+    viewClass: r.ui.SuggestItem,
     requestThrottleTimeout: 333,
 
     events: {
@@ -221,10 +235,10 @@ r.ui.Suggest = Backbone.View.extend({
 
     getViews: function(items) {
         var views = []
-        var renderer = this.renderer
+        var viewClass = this.viewClass
         items = _.first(items, this.maxItems)
         _.each(items, function(item) {
-            views.push(new renderer({el: $('<li>'), item: item}))
+            views.push(new viewClass({el: $('<li>'), item: item}))
         })
         return views
     },
@@ -248,19 +262,6 @@ r.ui.Suggest = Backbone.View.extend({
             $container.append(view.render().$el)
         })
         this.$suggestBox.show()
-        return this
-    }
-})
-
-r.ui.SuggestItem = Backbone.View.extend({
-    text: function() {
-        return ''
-    },
-
-    clicked: function() {},
-
-    selected: function() {
-        this.$el.addClass('selected')
         return this
     }
 })
@@ -292,7 +293,7 @@ r.ui.ClickableSRItem = r.ui.SRItem.extend({
 
 r.ui.SRSuggest = r.ui.Suggest.extend({
     endpoint: '/api/subreddit_search.json',
-    renderer: r.ui.SRItem,
+    viewClass: r.ui.SRItem,
     maxItems: 5,
 
     handleResponse: function(query, data) {
@@ -366,7 +367,7 @@ r.ui.MultiSuggest = r.ui.SRSuggest.extend({
 })
 
 r.ui.RedditSearchSuggest = r.ui.SRSearchSuggest.extend({
-    renderer: r.ui.ClickableSRItem
+    viewClass: r.ui.ClickableSRItem
 })
 
 r.ui.DefaultSearch = r.ui.SuggestItem.extend({
