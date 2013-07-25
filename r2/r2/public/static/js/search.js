@@ -104,6 +104,7 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     keyUp: function(e) {
+        // enter
         if (e.keyCode == 13) {
             if (this.selectionIndex >= 0) {
                 e.preventDefault()
@@ -111,8 +112,10 @@ r.ui.Suggest = Backbone.View.extend({
                 this.stop()
                 this.hide()
             }
+        // left or right
         } else if (e.keyCode == 37 || e.keyCode == 39) {
             this.queryChanged()
+        // backspace
         } else if (e.keyCode == 8) {
             this.queryChanged()
         }
@@ -122,9 +125,11 @@ r.ui.Suggest = Backbone.View.extend({
         if (!this.visible()) {
             return
         }
+        // up or down
         if (e.keyCode == 38 || e.keyCode == 40) {
             e.preventDefault()
             this.changeSelectionBy(e.keyCode == 38 ? -1 : 1)
+        // enter
         } else if (e.keyCode == 13) {
             if (this.selectionIndex >= 0) {
                 e.preventDefault()
