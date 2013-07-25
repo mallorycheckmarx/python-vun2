@@ -59,6 +59,7 @@ r.ui.Suggest = Backbone.View.extend({
         this.$suggestBox.children('li.selected').removeClass('selected')
     },
 
+    /* Prevent text selection oddities when clicking items in the list */
     itemMouseDown: function(e) {
         e.preventDefault()
     },
