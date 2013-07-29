@@ -122,5 +122,14 @@ r.utils = {
             }
             return value
         }
+
+        this.ajax = function(key, options) {
+            var cached = this.get(key)
+            if(!_.isUndefined(cached)) {
+                return (new $.Deferred()).resolve(cached)
+            } else {
+                return $.ajax(options).done(_.bind(this.set, this, key))
+            }
+        }
     }
 }

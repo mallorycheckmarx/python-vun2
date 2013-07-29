@@ -86,7 +86,7 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     stop: function() {
-        if (this.req) {
+        if (this.req && this.req.abort) {
             this.req.abort()
         }
         this.loading(false)
@@ -201,28 +201,22 @@ r.ui.Suggest = Backbone.View.extend({
             return
         }
         this.loading(true)
-        var callback = _.bind(this.responseComplete, this, query)
-        var cached = this.cache.get(query)
-        if (cached) {
-            return callback(cached)
-        }
-        this.req = $.ajax({
+        this.req = this.cache.ajax(query, {
             url: this.endpoint,
             data: this.queryParams(query),
-            success: callback,
-            failure: _.bind(this.responseError, this, query),
             dataType: 'json'
-        })
+        }).done(_.bind(this.responseComplete, this, query))
+          .fail(_.bind(this.responseError, this, query))
     },
 
     responseError: function(query, error) {
+        delete this.req
         this.loading(false)
     },
 
     responseComplete: function(query, data) {
         delete this.req
         this.loading(false)
-        this.cache.set(query, data)
         if (this.dirty && this.query()) {
             this.query(this.query())
         }
