@@ -82,26 +82,45 @@ r.utils = {
     },
 
     LRUCache: function(maxItems) {
-        maxItems = maxItems > 0 ? maxItems : 16
-        var cacheIndex = []
-        var cache = {}
+        var _maxItems = maxItems > 0 ? maxItems : 16
+        var _cacheIndex = []
+        var _cache = {}
+
+        var _updateIndex = function(key) {
+            _deleteFromIndex(key)
+            _cacheIndex.push(key)
+            if(_cacheIndex.length > _maxItems) {
+                delete _cache[_cacheIndex.shift()]
+            }
+        }
+
+        var _deleteFromIndex = function(key) {
+            var index = _.indexOf(_cacheIndex, key)
+            if(index > 0) {
+                _cacheIndex.splice(index, 1)
+            }
+        }
+
+        this.delete = function(key) {
+            _deleteFromIndex(key)
+            delete _cache[key]
+        }
 
         this.set = function(key, data) {
-            if(cache[key]) {
-                var i = _.indexOf(cacheIndex, key)
-                cacheIndex.splice(i, 1)
-                cacheIndex.push(key)
+            if(_.isUndefined(data)) {
+                this.delete(key)
             } else {
-                if(cache.length >= maxItems) {
-                    delete cache[cacheIndex.shift()]
-                }
-                cache[key] = data
-                cacheIndex.push(key)
+                _cache[key] = data
+                _updateIndex(key)
             }
         }
 
         this.get = function(key) {
-            return cache[key]
+            var value = _cache[key]
+            if(!_.isUndefined(value)) {
+                _updateIndex(key)
+            }
+            return value
         }
     }
 }
