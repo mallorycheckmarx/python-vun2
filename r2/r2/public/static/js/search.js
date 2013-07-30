@@ -1,3 +1,45 @@
+r.ui.SuggestItems = Backbone.Collection.extend({
+    endpoint: '/',
+
+    initialize: function() {
+        this.cache = new r.utils.LRUCache()
+    },
+
+    queryParams: function(query) {
+        return {query: query}
+    },
+
+    extractModels: function(query, data) {
+        return []
+    },
+
+    responseError: function(query, xhr, textStatus, errorThrown) {
+        delete this.req
+        this.trigger('error', [query, textStatus, errorThrown])
+    },
+
+    responseComplete: function(query, data) {
+        delete this.req
+        this.reset(this.extractModels(query, data))
+    },
+
+    query: function(query) {
+        this.req = this.cache.ajax(query, {
+            url: this.endpoint,
+            data: this.queryParams(query),
+            dataType: 'json'
+        }).done(_.bind(this.responseComplete, this, query))
+          .fail(_.bind(this.responseError, this, query))
+    },
+
+    abort: function() {
+        if (this.req && this.req.abort) {
+            this.req.abort()
+        }
+    }
+});
+
+
 r.ui.SuggestItem = Backbone.View.extend({
     queryText: function() {
         return ''
@@ -12,6 +54,7 @@ r.ui.SuggestItem = Backbone.View.extend({
 })
 
 r.ui.Suggest = Backbone.View.extend({
+    collectionClass: r.ui.SuggestItems,
     viewClass: r.ui.SuggestItem,
     requestThrottleTimeout: 333,
 
@@ -33,9 +76,10 @@ r.ui.Suggest = Backbone.View.extend({
         this.$input = this.$el.find('input').first()
             .addClass('suggestquery')
             .attr('autocomplete', 'off')
-        this.cache = new r.utils.LRUCache()
         this.selectionIndex = -1
         this.suggest = _.throttle(this._suggest, this.requestThrottleTimeout)
+        this.collection = new this.collectionClass()
+        this.collection.on("change reset add remove error", this.update, this);
     },
 
     defocused: function() {
@@ -86,9 +130,7 @@ r.ui.Suggest = Backbone.View.extend({
     },
 
     stop: function() {
-        if (this.req && this.req.abort) {
-            this.req.abort()
-        }
+        this.collection.abort()
         this.loading(false)
     },
 
@@ -173,10 +215,6 @@ r.ui.Suggest = Backbone.View.extend({
         }
     },
 
-    queryParams: function(query) {
-        return {query: query}
-    },
-
     loading: function(done) {
         if (!_.isUndefined(done)) {
             this.$el.toggleClass('working', done)
@@ -201,31 +239,7 @@ r.ui.Suggest = Backbone.View.extend({
             return
         }
         this.loading(true)
-        this.req = this.cache.ajax(query, {
-            url: this.endpoint,
-            data: this.queryParams(query),
-            dataType: 'json'
-        }).done(_.bind(this.responseComplete, this, query))
-          .fail(_.bind(this.responseError, this, query))
-    },
-
-    responseError: function(query, error) {
-        delete this.req
-        this.loading(false)
-    },
-
-    responseComplete: function(query, data) {
-        delete this.req
-        this.loading(false)
-        if (this.dirty && this.query()) {
-            this.query(this.query())
-        }
-        this.items = this.extractItems(query, data)
-        this.render()
-    },
-
-    extractItems: function(query, data) {
-        return data
+        this.collection.query(query)
     },
 
     getViews: function(items) {
@@ -238,10 +252,18 @@ r.ui.Suggest = Backbone.View.extend({
         return views
     },
 
+    update: function() {
+        this.loading(false)
+        if (this.dirty && this.query()) {
+            this.query(this.query())
+        }
+        this.render()
+    },
+
     render: function() {
         this.selectionIndex = -1
         this.hide()
-        this.views = this.getViews(this.items)
+        this.views = this.getViews(this.collection.models)
         if (!this.views.length) {
             return
         }
@@ -288,22 +310,26 @@ r.ui.ClickableSRItem = r.ui.SRItem.extend({
     }
 })
 
-r.ui.SRSuggest = r.ui.Suggest.extend({
+r.ui.SRItems = r.ui.SuggestItems.extend({
     endpoint: '/api/subreddit_search.json',
-    viewClass: r.ui.SRItem,
-    maxItems: 5,
 
-    extractItems: function(query, data) {
+    queryParams: function(query) {
+        return {query: query, include_over_18: r.config.over_18}
+    },
+
+    extractModels: function(query, data) {
         var models = []
         _.each(data.subreddits, function(item) {
             models.push(new r.ui.SRModel(item))
         })
         return models
-    },
-
-    queryParams: function(query) {
-        return {query: query, include_over_18: r.config.over_18}
     }
+})
+
+r.ui.SRSuggest = r.ui.Suggest.extend({
+    collectionClass: r.ui.SRItems,
+    viewClass: r.ui.SRItem,
+    maxItems: 5
 })
 
 r.ui.SRSearchSuggest = r.ui.SRSuggest.extend({
