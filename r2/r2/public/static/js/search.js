@@ -261,17 +261,19 @@ r.ui.Suggest = Backbone.View.extend({
     }
 })
 
+r.ui.SRModel = Backbone.Model.extend({})
+
 r.ui.SRItem = r.ui.SuggestItem.extend({
     template: _.template(
         '<span class="name">/r/<%- name %></span><span class="description"><%- description %></span>'
     ),
 
     queryText: function() {
-        return this.options.item.name
+        return this.options.item.get('name')
     },
 
     render: function() {
-        this.$el.html(this.template(this.options.item))
+        this.$el.html(this.template(this.options.item.attributes))
         return this
     }
 })
@@ -292,7 +294,11 @@ r.ui.SRSuggest = r.ui.Suggest.extend({
     maxItems: 5,
 
     extractItems: function(query, data) {
-        return data.subreddits
+        var models = []
+        _.each(data.subreddits, function(item) {
+            models.push(new r.ui.SRModel(item))
+        })
+        return models
     },
 
     queryParams: function(query) {
