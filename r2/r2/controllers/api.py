@@ -3178,6 +3178,16 @@ class ApiController(RedditController, OAuth2ResourceController):
 
     @json_validate(query=VPrintable('query', max_length=50),
                    include_over_18=VBoolean('include_over_18', default=True))
+    def GET_subreddit_search(self, responder, query, include_over_18):
+        if not query:
+            return {'subreddits': []}
+        subreddits = search_reddits(query, include_over_18)
+        results = [{'name': sr.name, 'description': sr.description}
+                   for sr in subreddits]
+        return {'subreddits': results}
+
+    @json_validate(query=VPrintable('query', max_length=50),
+                   include_over_18=VBoolean('include_over_18', default=True))
     def POST_search_reddit_names(self, responder, query, include_over_18):
         names = []
         if query:
