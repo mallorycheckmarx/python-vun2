@@ -66,7 +66,7 @@ error_list = dict((
         ('SUBREDDIT_NOTALLOWED', _("you aren't allowed to post there.")),
         ('SUBREDDIT_REQUIRED', _('you must specify a subreddit')),
         ('BAD_SR_NAME', _('that name isn\'t going to work')),
-        ('RATELIMIT', _('you are doing that too much. try again in %(time)s.')),
+        ('RATELIMIT', _('you are doing that too often. try again in %(time)s.')),
         ('QUOTA_FILLED', _("You've submitted too many links recently. Please try again in an hour.")),
         ('SUBREDDIT_RATELIMIT', _("you are doing that too much. try again later.")),
         ('EXPIRED', _('your session has expired')),
