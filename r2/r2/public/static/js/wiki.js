@@ -133,11 +133,11 @@ r.wiki = {
     },
 
     helpon: function(elem) {
-        $(elem).parents("form").children(".markhelp:first").show('slow');
+        $(elem).parents("form").children(".markhelp:first").show();
     },
 
     helpoff: function(elem) {
-        $(elem).parents("form").children(".markhelp:first").hide('slow');
+        $(elem).parents("form").children(".markhelp:first").hide();
     }
 
 }
