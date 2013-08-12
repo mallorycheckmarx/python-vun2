@@ -31,7 +31,7 @@ import snudown
 from cStringIO import StringIO
 
 from xml.sax.handler import ContentHandler
-from lxml.sax import saxify
+from lxml.sax import ElementTreeProducer
 import lxml.etree
 from BeautifulSoup import BeautifulSoup, Tag
 
@@ -153,6 +153,16 @@ valid_link_schemes = (
     'ts3server://',
 )
 
+
+def souptest_saxify(element_or_tree, content_handler):
+    return SouptestElementTreeProducer(element_or_tree, content_handler).saxify()
+
+class SouptestElementTreeProducer(ElementTreeProducer):
+    def _recursive_saxify(self, element, prefixes):
+        # lxml saxify does not properly handle Entity
+        if not element.tag is lxml.etree.Entity:
+            return ElementTreeProducer._recursive_saxify(self, element, prefixes)
+
 class SouptestSaxHandler(ContentHandler):
     def __init__(self, ok_tags):
         self.ok_tags = ok_tags
@@ -212,10 +222,10 @@ def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
     smd_with_dtd = markdown_dtd + smd
 
     s = StringIO(smd_with_dtd)
-    parser = lxml.etree.XMLParser(load_dtd=True)
+    parser = lxml.etree.XMLParser(load_dtd=True, resolve_entities=False)
     tree = lxml.etree.parse(s, parser)
     handler = SouptestSaxHandler(markdown_ok_tags)
-    saxify(tree, handler)
+    souptest_saxify(tree, handler)
 
     return smd
 
