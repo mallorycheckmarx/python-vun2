@@ -1616,7 +1616,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                                             compress=True))
                 # do a stickied link
                 jquery('#preview_link_stickied').html(
-                    cssfilter.rendered_link(links, media = 'off',
+                    cssfilter.rendered_link(links, media='off',
                                             compress=False, stickied=True))
     
             # and do a comment
