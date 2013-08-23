@@ -47,4 +47,9 @@
       question=_("sticky this? (any existing sticky will be replaced)"),
       hidden_data=dict(id=thing.link._fullname, state=True))}
   %endif
+  
+%if thing.can_edit and thing.link.is_self:
+  &nbsp;<span class="help-hoverable" title="${_('stickying this post will make it stay visible at the top of your reddit's hot page. It will display normally outside of your reddit.)}">(?)</span>
+%endif
+
 %endif
