@@ -231,7 +231,8 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
         Update all Views.
         """
 
-        views = (ModActionBySR, ModActionBySRMod, ModActionBySRAction)
+        views = (ModActionBySR, ModActionBySRMod, ModActionBySRAction, 
+                 ModActionBySRActionMod)
 
         for v in views:
             v.add_object(self)
@@ -255,17 +256,17 @@ class ModAction(tdb_cassandra.UuidThing, Printable):
         if not mod and not action:
             rowkeys = [sr._id36 for sr in srs]
             q = ModActionBySR.query(rowkeys, after=after, reverse=reverse, count=count)
-        elif mod and not action:
+        elif mod:
             mods = tup(mod)
+            key = '%s_%s' if not action else '%%s_%%s_%s' % action
             rowkeys = itertools.product([sr._id36 for sr in srs],
                 [mod._id36 for mod in mods])
-            rowkeys = ['%s_%s' % (sr, mod) for sr, mod in rowkeys]
-            q = ModActionBySRMod.query(rowkeys, after=after, reverse=reverse, count=count)
-        elif not mod and action:
+            rowkeys = [key % (sr, mod) for sr, mod in rowkeys]
+            view = ModActionBySRActionMod if action else ModActionBySRMod
+            q = view.query(rowkeys, after=after, reverse=reverse, count=count)
+        else:
             rowkeys = ['%s_%s' % (sr._id36, action) for sr in srs]
             q = ModActionBySRAction.query(rowkeys, after=after, reverse=reverse, count=count)
-        else:
-            raise NotImplementedError("Can't query by both mod and action")
 
         return q
 
@@ -390,6 +391,18 @@ class ModActionBySRMod(tdb_cassandra.View):
     @classmethod
     def _rowkey(cls, ma):
         return '%s_%s' % (ma.sr_id36, ma.mod_id36)
+
+class ModActionBySRActionMod(tdb_cassandra.View):
+    _use_db = True
+    _connection_pool = 'main'
+    _compare_with = TIME_UUID_TYPE
+    _view_of = ModAction
+    _ttl = timedelta(days=90)
+    _read_consistency_level = tdb_cassandra.CL.ONE
+
+    @classmethod
+    def _rowkey(cls, ma):
+        return '%s_%s_%s' % (ma.sr_id36, ma.mod_id36, ma.action)
 
 class ModActionBySRAction(tdb_cassandra.View):
     _use_db = True
