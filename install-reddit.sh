@@ -159,6 +159,7 @@ cassandra
 haproxy
 stunnel
 PACKAGES
+netcat
 
 ###############################################################################
 # Wait for all the services to be up
