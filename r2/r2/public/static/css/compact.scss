@@ -450,7 +450,6 @@ body[orient="landscape"] > #topbar > h1 {
 /*Subtoolbar (eg hot)*/
 .subtoolbar {
     @include box-sizing(border-box);
-    height: 32px;
     @include vertical_gradient(white, #ccc);
     border-bottom: 1px solid #bbb;
     padding: 6px;
