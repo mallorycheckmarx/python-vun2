@@ -159,7 +159,7 @@ cassandra
 haproxy
 nginx
 stunnel
-netcat
+netcat-openbsd
 PACKAGES
 
 ###############################################################################
