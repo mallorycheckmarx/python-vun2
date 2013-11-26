@@ -139,7 +139,7 @@ def _fetch_url(url, referer=None):
         return None, None
     response = urllib2.urlopen(request)
     response_data = response.read()
-    if response.info().get("Content-Encoding") == "gzip":
+    if response.info().get("Content-Encoding").lower() == "gzip":
         buf = cStringIO.StringIO(response_data)
         f = gzip.GzipFile(fileobj=buf)
         response_data = f.read()
