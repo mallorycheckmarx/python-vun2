@@ -125,7 +125,7 @@ def _initialize_request(url, referer):
         return
 
     req = urllib2.Request(url)
-    req.add_header('Accept-encoding', 'gzip')
+    req.add_header('Accept-Encoding', 'gzip')
     if g.useragent:
         req.add_header('User-Agent', g.useragent)
     if referer:
