@@ -30,7 +30,7 @@ from pylons.i18n import _
 
 class WikiView(Templated):
     def __init__(self, content, edit_by, edit_date, may_revise=False,
-                 page=None, diff=None, renderer='wiki'):
+                 revision=None, page=None, diff=None, renderer='wiki'):
         self.page_content_md = content
         if renderer == 'wiki':
             self.page_content = wikimarkdown(content)
@@ -42,9 +42,11 @@ class WikiView(Templated):
         self.page = page
         self.diff = diff
         self.edit_by = edit_by
+        self.sr = c.site.name
         self.may_revise = may_revise
         self.edit_date = edit_date
         self.base_url = c.wiki_base_url
+        self.revision = revision
         Templated.__init__(self)
 
 class WikiPageNotFound(Templated):
@@ -59,6 +61,7 @@ class WikiPageListing(Templated):
         self.page = page
         self.linear_pages = linear_pages
         self.base_url = c.wiki_base_url
+        self.sr = c.site.name
         Templated.__init__(self)
 
 class WikiEditPage(Templated):
@@ -78,6 +81,7 @@ class WikiPageSettings(Templated):
         self.page = page
         self.base_url = c.wiki_base_url
         self.mayedit = mayedit
+        self.sr = c.site.name
         Templated.__init__(self)
 
 class WikiPageRevisions(Templated):
@@ -148,7 +152,9 @@ class WikiPageView(WikiBasePage):
             if may_revise:
                 context['alert'] = _("this page is empty, edit it to add some content.")
         content = WikiView(content, context.get('edit_by'), context.get('edit_date'), 
-                           may_revise=may_revise, page=page, diff=diff, renderer=renderer)
+                           revision=context.get('revision'),
+                           may_revise=may_revise, page=page, diff=diff,
+                           renderer=renderer)
         WikiBasePage.__init__(self, content, page=page, **context)
 
 class WikiNotFound(WikiBasePage):
@@ -186,15 +192,15 @@ class WikiRevisions(WikiBasePage):
         WikiBasePage.__init__(self, content, page=page, **context)
 
 class WikiRecent(WikiBasePage):
-    def __init__(self, revisions, **context):
+    def __init__(self, revisions, sr, **context):
         content = WikiPageRevisions(revisions)
-        context['wikiaction'] = ('revisions', _("Viewing recent revisions for /r/%s") % c.wiki_id)
+        context['wikiaction'] = ('revisions', _("Viewing recent revisions for /r/%s") % sr)
         WikiBasePage.__init__(self, content, showtitle=True, **context)
 
 class WikiListing(WikiBasePage):
-    def __init__(self, pages, linear_pages, **context):
+    def __init__(self, pages, linear_pages, sr, **context):
         content = WikiPageListing(pages, linear_pages)
-        context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % c.wiki_id)
+        context['wikiaction'] = ('pages', _("Viewing pages for /r/%s") % sr)
         description = [_("Below is a list of pages in this wiki visible to you in this subreddit.")]
         WikiBasePage.__init__(self, content, description=description, showtitle=True, **context)
 

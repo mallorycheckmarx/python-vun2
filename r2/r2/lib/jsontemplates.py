@@ -754,7 +754,7 @@ class WikiPageListingJsonTemplate(ThingJsonTemplate):
     
     def data(self, thing):
         pages = [p.name for p in thing.linear_pages]
-        return pages
+        return dict(children=pages, sr=thing.sr)
 
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
@@ -765,11 +765,14 @@ class WikiViewJsonTemplate(ThingJsonTemplate):
         edit_by = None
         if thing.edit_by and not thing.edit_by._deleted:
              edit_by = Wrapped(thing.edit_by).render()
-        return dict(content_md=thing.page_content_md,
+        return dict(page=thing.page,
+                    content_md=thing.page_content_md,
                     content_html=thing.page_content,
                     revision_by=edit_by,
                     revision_date=edit_date,
-                    may_revise=thing.may_revise)
+                    may_revise=thing.may_revise,
+                    revision=thing.revision,
+                    sr=thing.sr)
 
 class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def kind(self, thing):
@@ -778,7 +781,9 @@ class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def data(self, thing):
          editors = [Wrapped(e).render() for e in thing.mayedit]
          return dict(permlevel=thing.permlevel,
-                     editors=editors)
+                     page=thing.page,
+                     editors=editors,
+                     sr=thing.sr)
 
 class WikiRevisionJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
@@ -792,7 +797,9 @@ class WikiRevisionJsonTemplate(ThingJsonTemplate):
                                    id=str(thing._id),
                                    timestamp=timestamp,
                                    reason=thing._get('reason'),
-                                   page=thing.page))
+                                   page=thing.page,
+                                   # todo: Once subreddit it is batched into the revision, use here
+                                   sr=c.site.name))
 
 class FlairListJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
