@@ -43,7 +43,9 @@ cpdef double hot(long ups, long downs, date):
     return _hot(ups, downs, epoch_seconds(date))
 
 cpdef double _hot(long ups, long downs, double date):
-    """The hot formula. Should match the equivalent function in postgres."""
+    """The hot formula. Should match the equivalent function in postgres.
+       Intentionally sorts net-positive posts by age asc, and net-negative
+       posts by age desc"""
     s = score(ups, downs)
     order = log10(max(abs(s), 1))
     if s > 0:
