@@ -106,7 +106,18 @@ def valid_url(rule, report, generate_https_urls):
         report.append(ValidationError(msgs["custom_images_only"], rule))
 
 class CSSParser(tinycss.CSSPage3Parser):
+    def strip_comments_safe(self, css_unicode):
+        flat = tokenizer.tokenize_flat(css_unicode, ignore_comments=False)
+        stripped = ''
+        for token in flat:
+            if token.type in ['COMMENT', 'BAD_COMMENT']:
+                stripped += '\n' * token.value.count('\n')
+            else:
+                stripped += token.as_css()
+        return stripped
+
     def parse_stylesheet(self, css_unicode):
+        css_unicode = self.strip_comments_safe(css_unicode)
         flat = tokenizer.tokenize_flat(css_unicode)
         tokens = tokenizer.regroup(flat)
         rules, errors = self.parse_rules(tokens, context='stylesheet')
