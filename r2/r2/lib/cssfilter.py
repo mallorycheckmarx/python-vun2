@@ -126,9 +126,6 @@ def validate_css(string, generate_https_urls):
                                        % dict (max_size = max_size_kb))))
         return ('', report)
 
-    if '\\' in string:
-        report.append(ValidationError(_("if you need backslashes, you're doing it wrong")))
-
     parser = tinycss.make_parser(CSSParser)
 
     parsed, flat = parser.parse_stylesheet(string)
