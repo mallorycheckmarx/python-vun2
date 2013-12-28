@@ -90,8 +90,8 @@ r.utils = {
             return numberAsInt.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
         } else {
             return number
-		}
-	},
+        }
+    },
 
     LRUCache: function(maxItems) {
         var _maxItems = maxItems > 0 ? maxItems : 16
