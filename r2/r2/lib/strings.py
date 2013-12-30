@@ -47,7 +47,7 @@ string_dict = dict(
     banned_by = "removed by %s",
     banned    = "removed",
     reports   = "reports: %d",
-    
+
     submitting = _("submitting..."),
 
     # this accomodates asian languages which don't use spaces
@@ -124,7 +124,7 @@ string_dict = dict(
     compact_suggest = _("Looks like you're browsing on a small screen. Would you like to try [reddit's mobile interface](%(url)s)?"),
     verify_email = _("we're going to need to verify your email address for you to proceed."),
     verify_email_submit = _("you'll be able to submit more frequently once you verify your email address"),
-    email_verified =  _("your email address has been verfied"),
+    email_verified =  _("your email address has been verified"),
     email_verify_failed = _("Verification failed.  Please try that again"),
     search_failed = _("Our search machines are under too much load to handle your request right now. :( Sorry for the inconvenience. Try again in a little bit -- but please don't mash reload; that only makes the problem worse."),
     invalid_search_query = _("I couldn't understand your query, so I simplified it and searched for \"%(clean_query)s\" instead."),
@@ -211,7 +211,7 @@ class StringHandler(object):
             return StringHandler(**rval)
         else:
             raise AttributeError
-    
+
     def __iter__(self):
         return iter(self.string_dict)
 
