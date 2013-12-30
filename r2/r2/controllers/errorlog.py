@@ -20,7 +20,6 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import request, g
 from reddit_base import RedditController
 from r2.lib.pages import AdminPage, AdminErrorLog
 from r2.lib.validator import validate, VAdmin

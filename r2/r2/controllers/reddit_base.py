@@ -31,7 +31,6 @@ from Cookie import CookieError
 from copy import copy
 from datetime import datetime, timedelta
 from functools import wraps
-from hashlib import sha1
 from urllib import quote, unquote
 from urlparse import urlparse
 
@@ -58,7 +57,7 @@ from r2.lib.errors import (
 from r2.lib.filters import _force_utf8, _force_unicode
 from r2.lib.strings import strings
 from r2.lib.template_helpers import add_sr, JSPreload
-from r2.lib.tracking import encrypt, decrypt
+from r2.lib.tracking import decrypt
 from r2.lib.translation import set_lang
 from r2.lib.utils import (
     Enum,
@@ -545,7 +544,6 @@ def set_cnameframe():
         c.authorized_cname = request.environ.get('authorized_cname', False)
 
 def set_colors():
-    theme_rx = re.compile(r'')
     color_rx = re.compile(r'\A([a-fA-F0-9]){3}(([a-fA-F0-9]){3})?\Z')
     c.theme = None
     if color_rx.match(request.GET.get('bgcolor') or ''):

@@ -20,7 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons.i18n import _, ungettext
+from pylons.i18n import _
 from pylons.controllers.util import redirect_to
 from r2.controllers.reddit_base import (
     base_listing,
@@ -30,7 +30,6 @@ from r2.controllers.reddit_base import (
     disable_subreddit_css,
     RedditController,
 )
-from r2 import config
 from r2.models import *
 from r2.config.extensions import is_api
 from r2.lib import recommender
@@ -40,17 +39,12 @@ from r2.lib.pages import trafficpages
 from r2.lib.menus import *
 from r2.lib.utils import to36, sanitize_url, check_cheating, title_to_url
 from r2.lib.utils import query_string, UrlParser, link_from_url, url_links_builder
-from r2.lib.template_helpers import get_domain
-from r2.lib.filters import unsafe, _force_unicode, _force_utf8
+from r2.lib.filters import _force_unicode, _force_utf8
 from r2.lib.emailer import Email
-from r2.lib.db.operators import desc
-from r2.lib.db import queries
-from r2.lib.db.tdb_cassandra import MultiColumnQuery
 from r2.lib.strings import strings
 from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
                            InvalidQuery)
 from r2.lib.validator import *
-from r2.lib import jsontemplates
 from r2.lib import sup
 import r2.lib.db.thing as thing
 from r2.lib.errors import errors
@@ -61,8 +55,6 @@ from pylons import c, request, response
 from r2.models.token import EmailVerificationToken
 from r2.controllers.ipn import generate_blob, validate_blob, GoldException
 
-from operator import attrgetter
-import string
 import random as rand
 import re, socket
 import time as time_module
@@ -411,7 +403,6 @@ class FrontController(RedditController, OAuth2ResourceController):
               name=nop('name'))
     def GET_newreddit(self, name):
         """Create a subreddit form"""
-        title = _('create a subreddit')
         content=CreateSubreddit(name=name or '')
         res = FormPage(_("create a subreddit"),
                        content=content,

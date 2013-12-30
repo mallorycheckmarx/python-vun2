@@ -23,13 +23,13 @@
 from r2.controllers.reddit_base import RedditController
 from r2.lib.base import proxyurl
 from r2.lib.template_helpers import get_domain
-from r2.lib.pages import Embed, BoringPage, HelpPage
-from r2.lib.filters import websafe, SC_OFF, SC_ON
+from r2.lib.pages import Embed, HelpPage
+from r2.lib.filters import SC_OFF, SC_ON
 from r2.lib.memoize import memoize
 from pylons.i18n import _
 from pylons import c, g, request
 
-from BeautifulSoup import BeautifulSoup, Tag
+from BeautifulSoup import BeautifulSoup
 
 from urllib2 import HTTPError
 

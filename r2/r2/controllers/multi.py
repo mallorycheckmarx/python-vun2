@@ -37,8 +37,7 @@ from r2.models.subreddit import (
     LabeledMulti,
     TooManySubredditsError,
 )
-from r2.lib.db import tdb_cassandra, thing
-from r2.lib.wrapped import Wrapped
+from r2.lib.db import tdb_cassandra
 from r2.lib.validator import (
     validate,
     VUser,
@@ -56,7 +55,7 @@ from r2.lib.jsontemplates import (
     LabeledMultiJsonTemplate,
     LabeledMultiDescriptionJsonTemplate,
 )
-from r2.lib.errors import errors, RedditError
+from r2.lib.errors import RedditError
 
 
 multi_sr_data_json_spec = VValidatedJSON.Object({
@@ -135,7 +134,7 @@ class MultiApiController(RedditController, OAuth2ResourceController):
 
         try:
             multi.add_srs(sr_props)
-        except TooManySubredditsError as e:
+        except TooManySubredditsError:
             raise RedditError('MULTI_TOO_MANY_SUBREDDITS', code=409)
 
         return sr_props

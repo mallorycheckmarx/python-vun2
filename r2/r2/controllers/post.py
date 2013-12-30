@@ -21,15 +21,13 @@
 ###############################################################################
 
 from r2.lib.pages import *
-from reddit_base import cross_domain
 from api import ApiController
-from r2.lib.utils import Storage, query_string, UrlParser
+from r2.lib.utils import query_string, UrlParser
 from r2.lib.emailer import opt_in, opt_out
 from r2.lib.validator import *
 from pylons import request, c, g
 from pylons.i18n import _
 from r2.models import *
-import hashlib
 
 class PostController(ApiController):
     def set_options(self, all_langs, pref_lang, **kw):

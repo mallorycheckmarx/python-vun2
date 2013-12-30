@@ -31,7 +31,7 @@ from r2.controllers.reddit_base import (
 )
 
 from pylons.i18n import _
-from pylons import c, request, response
+from pylons import c, request
 
 from r2.lib.validator import *
 
@@ -41,12 +41,12 @@ from r2.lib import amqp
 from r2.lib import recommender
 from r2.lib import hooks
 
-from r2.lib.utils import get_title, sanitize_url, timeuntil, set_last_modified
-from r2.lib.utils import query_string, timefromnow, randstr
+from r2.lib.utils import get_title, timeuntil, set_last_modified
+from r2.lib.utils import query_string
 from r2.lib.utils import timeago, tup, filter_links
-from r2.lib.pages import (EnemyList, FriendList, ContributorList, ModList,
+from r2.lib.pages import (FriendList, ContributorList, ModList,
                           BannedList, WikiBannedList, WikiMayContributeList,
-                          BoringPage, FormPage, CssError, UploadedImage,
+                          BoringPage, CssError, UploadedImage,
                           ClickGadget, UrlParser, WrappedUser)
 from r2.lib.pages import FlairList, FlairCsv, FlairTemplateEditor, \
     FlairSelector
@@ -57,14 +57,14 @@ from r2.models.last_modified import LastModified
 from r2.lib.menus import CommentSortMenu
 from r2.lib.captcha import get_iden
 from r2.lib.strings import strings
-from r2.lib.filters import _force_unicode, websafe_json, websafe, spaceCompress
+from r2.lib.filters import websafe, spaceCompress
 from r2.lib.db import queries
 from r2.lib.db.queries import changed
 from r2.lib import media
 from r2.lib.db import tdb_cassandra
 from r2.lib import promote
 from r2.lib.comment_tree import delete_comment
-from r2.lib import tracking,  cssfilter, emailer
+from r2.lib import cssfilter, emailer
 from r2.lib.subreddit_search import search_reddits
 from r2.lib.log import log_text
 from r2.lib.filters import safemarkdown
@@ -86,8 +86,6 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import hashlib
 import re
-import urllib
-import urllib2
 
 def reject_vote(thing):
     voteword = request.params.get('dir')
@@ -446,7 +444,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         queries.queue_vote(c.user, l, True, ip, cheater=c.cheater)
         if save:
-            r = l._save(c.user)
+            l._save(c.user)
 
         #set the ratelimiter
         if should_ratelimit:
@@ -573,7 +571,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                 langs.sort()
                 user.pref_content_langs = tuple(langs)
 
-            d = c.user._dirties.copy()
+            c.user._dirties.copy()
             user._commit()
 
             amqp.add_item('new_account', user._fullname)
@@ -825,8 +823,6 @@ class ApiController(RedditController, OAuth2ResourceController):
                 return
             if form.has_errors('permissions', errors.INVALID_PERMISSIONS):
                 return
-        else:
-            permissions = None
 
         if type == "moderator_invite" and container.is_moderator(friend):
             c.errors.add(errors.ALREADY_MODERATOR, field="name")
@@ -926,7 +922,6 @@ class ApiController(RedditController, OAuth2ResourceController):
             form.set_error(errors.NO_INVITE_FOUND, None)
             return
 
-        permissions = rel.get_permissions()
         ModAction.create(c.site, c.user, "acceptmoderatorinvite")
         c.site.add_moderator(c.user, permissions=rel.get_permissions())
         notify_user_added("accept_moderator_invite", c.user, c.user, c.site)
@@ -1241,7 +1236,7 @@ class ApiController(RedditController, OAuth2ResourceController):
             admintools.spam(thing, False, True, c.user.name)
         # auto-hide links that are reported
         elif isinstance(thing, Link):
-            r = thing._hide(c.user)
+            thing._hide(c.user)
         # TODO: be nice to be able to remove comments that are reported
         # from a user's inbox so they don't have to look at them.
         elif isinstance(thing, Comment):
@@ -1361,7 +1356,6 @@ class ApiController(RedditController, OAuth2ResourceController):
             should_ratelimit = False
         else:
             is_message = False
-            is_comment = True
             if isinstance(parent, Link):
                 link = parent
                 parent_comment = None
@@ -2346,7 +2340,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         """
         if not thing: return
         if isinstance(thing, Comment) and not c.user.gold: return
-        r = thing._save(c.user)
+        thing._save(c.user)
 
     @require_oauth2_scope("save")
     @noresponse(VUser(),
@@ -2362,7 +2356,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         """
         if not thing: return
-        r = thing._unsave(c.user)
+        thing._unsave(c.user)
 
     def collapse_handler(self, things, collapse):
         if not things:
@@ -2462,7 +2456,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         """
         if not thing: return
-        r = thing._hide(c.user)
+        thing._hide(c.user)
 
     @noresponse(VUser(),
                 VModhash(),
@@ -2475,7 +2469,7 @@ class ApiController(RedditController, OAuth2ResourceController):
 
         """
         if not thing: return
-        r = thing._unhide(c.user)
+        thing._unhide(c.user)
 
 
     @validatedForm(VUser(),
@@ -2608,7 +2602,7 @@ class ApiController(RedditController, OAuth2ResourceController):
         # unlike most cases, if not already submitted, error.
         elif errors.ALREADY_SUB in c.errors:
             # preserve the subreddit if not Default
-            sr = c.site if not isinstance(c.site, FakeSubreddit) else None
+            c.site if not isinstance(c.site, FakeSubreddit) else None
 
             # check permissions on those links to make sure votes will count
             Subreddit.load_subreddits(links, return_dict = False)
@@ -2624,7 +2618,7 @@ class ApiController(RedditController, OAuth2ResourceController):
                                            cheater=c.cheater)
                 elif action == 'save':
                     link = max(links, key = lambda x: x._score)
-                    r = link._save(c.user)
+                    link._save(c.user)
                 return self.redirect("/static/css_%sd.png" % action)
         return self.redirect("/static/css_submit.png")
 

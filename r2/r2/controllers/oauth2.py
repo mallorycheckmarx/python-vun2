@@ -21,15 +21,11 @@
 ###############################################################################
 
 from urllib import urlencode
-import base64
-import simplejson
 
-from pylons import c, g, request
-from pylons.i18n import _
+from pylons import c, request
 from r2.config.extensions import set_extension
 from r2.lib.base import abort
 from reddit_base import RedditController, MinimalController, require_https
-from r2.lib.db.thing import NotFound
 from r2.models import Account
 from r2.models.token import (
     OAuth2Client, OAuth2AuthorizationCode, OAuth2AccessToken,

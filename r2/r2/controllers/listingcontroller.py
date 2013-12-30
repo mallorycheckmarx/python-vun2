@@ -28,14 +28,13 @@ from r2.models.query_cache import CachedQuery, MergedCachedQuery
 from r2.config.extensions import is_api
 from r2.lib.pages import *
 from r2.lib.pages.things import wrap_links
-from r2.lib.menus import TimeMenu, SortMenu, RecSortMenu, ProfileSortMenu
+from r2.lib.menus import TimeMenu, ProfileSortMenu
 from r2.lib.menus import ControversyTimeMenu
 from r2.lib.rising import get_rising
 from r2.lib.wrapped import Wrapped
 from r2.lib.normalized_hot import normalized_hot
-from r2.lib.db.thing import Query, Merge, Relations
+from r2.lib.db.thing import Query
 from r2.lib.db import queries
-from r2.lib.strings import Score
 from r2.lib import organic
 import r2.lib.search as search
 from r2.lib.template_helpers import add_sr
@@ -43,7 +42,6 @@ from r2.lib.utils import iters, check_cheating, timeago
 from r2.lib import sup
 from r2.lib.validator import *
 from r2.lib.butler import extract_user_mentions
-import socket
 
 from api_docs import api_doc, api_section
 
@@ -275,7 +273,6 @@ class HotController(FixListing, ListingController):
         """
 
         organic_fullnames = organic.organic_links(c.user)
-        promoted_links = []
 
         show_promo = False
         srnames = []
