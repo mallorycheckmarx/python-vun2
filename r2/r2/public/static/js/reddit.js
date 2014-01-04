@@ -22,7 +22,7 @@ function close_menus(event) {
         $("#moresearchinfo").slideUp();
 
         if ($("#searchexpando").length == 1) {
-            $("#searchexpando").slideUp(function() {
+            $("#searchexpando").stop(false, true).slideUp(function() {
                 $("#search_showmore").parent().show();
             });
         } else {
@@ -1161,7 +1161,7 @@ $(function() {
         /* search form help expando */
         /* TODO: use focusin and focusout in jQuery 1.4 */
         $('#search input[name="q"]').focus(function () {
-            $("#searchexpando").slideDown();
+            $("#searchexpando").stop(false, true).slideDown();
         });
 
         $("#search_showmore").click(function(event) {
