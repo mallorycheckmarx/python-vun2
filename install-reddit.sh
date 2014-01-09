@@ -25,7 +25,7 @@
 # The reddit installer
 # --------------------
 # This script installs a reddit stack suitable for development. DO NOT run
-# this on a system that you use for other purposes as it may accidentally
+# this on a system that you use for other purposes as it may accidentally delete
 # an important file.
 #
 # You can run this script as is, in which case a user "reddit" will be created
