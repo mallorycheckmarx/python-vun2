@@ -43,7 +43,6 @@ from r2.lib.validator import (
     VByName,
     VFloat,
     VInt,
-    VLength,
     VModhash,
     VOneOf,
     VPrintable,
@@ -920,7 +919,7 @@ class StripeController(GoldPaymentController):
         """
 
         try:
-            payment_blob = validate_blob(passthrough)
+            validate_blob(passthrough)
         except GoldException as e:
             # This should never happen. All fields in the payment_blob
             # are validated on creation

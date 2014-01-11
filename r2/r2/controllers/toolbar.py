@@ -26,7 +26,6 @@ from r2.models import *
 from r2.lib.pages.things import wrap_links
 from r2.lib.menus import CommentSortMenu
 from r2.lib.filters import spaceCompress, safemarkdown
-from r2.lib.memoize import memoize
 from r2.lib.template_helpers import add_sr
 from r2.lib import utils
 from r2.lib.validator import *

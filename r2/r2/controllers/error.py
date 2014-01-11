@@ -24,8 +24,6 @@ import json
 import os
 import random
 
-import pylons
-
 from webob.exc import HTTPFound, HTTPMovedPermanently
 from pylons.i18n import _
 from pylons import c, g, request, response

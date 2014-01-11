@@ -27,7 +27,6 @@ from r2.lib.utils import url_links_builder
 from reddit_base import paginated_listing
 from r2.models.wiki import (WikiPage, WikiRevision, ContentLengthError,
                             modactions)
-from r2.models.subreddit import Subreddit
 from r2.models.modaction import ModAction
 from r2.models.builder import WikiRevisionBuilder, WikiRecentRevisionBuilder
 
@@ -44,7 +43,6 @@ from r2.lib.validator import (
     VModhash,
     VOneOf,
     VPrintable,
-    VRatelimit,
 )
 
 from r2.lib.validator.wiki import (
@@ -64,15 +62,13 @@ from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
 
 from r2.config.extensions import set_extension
 from r2.lib.template_helpers import add_sr
-from r2.lib.db import tdb_cassandra
 from r2.models.listing import WikiRevisionListing
 from r2.lib.pages.things import default_thing_wrapper
 from r2.lib.pages import BoringPage
 from reddit_base import base_listing
-from r2.models import IDBuilder, LinkListing, DefaultSR
+from r2.models import LinkListing, DefaultSR
 from r2.lib.merge import ConflictException, make_htmldiff
 from pylons.i18n import _
-from r2.lib.pages import PaneStack
 from r2.lib.utils import timesince
 from r2.config import extensions
 from r2.lib.base import abort

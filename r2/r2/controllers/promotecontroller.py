@@ -22,7 +22,6 @@
 from datetime import datetime, timedelta
 
 from babel.numbers import format_number
-import json
 import urllib
 
 from pylons import c, g, request
@@ -70,7 +69,6 @@ from r2.lib.validator import (
     VDate,
     VDateRange,
     VExistingUname,
-    VFloat,
     VImageType,
     VInt,
     VLength,

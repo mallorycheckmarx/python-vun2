@@ -20,7 +20,6 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import re
 from collections import defaultdict
 from itertools import chain
 import inspect

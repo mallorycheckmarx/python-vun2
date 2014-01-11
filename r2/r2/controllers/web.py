@@ -21,7 +21,6 @@
 ###############################################################################
 
 from pylons import g, c, request
-from pylons.i18n import _
 
 from r2.controllers.reddit_base import RedditController, abort_with_error
 from r2.lib.base import abort

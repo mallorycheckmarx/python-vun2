@@ -44,7 +44,6 @@ class ButtonsController(RedditController):
                     pass
 
             if links:
-                kw = {}
                 if wrapper:
                     links = wrap_links(links, wrapper = wrapper)
                 else:
