@@ -22,6 +22,7 @@
 
 from r2.models import *
 from filters import unsafe, websafe, _force_unicode, _force_utf8
+from r2.config import extensions
 from r2.lib.utils import UrlParser, timesince, is_subdomain
 
 from r2.lib import hooks
@@ -365,7 +366,16 @@ def dockletStr(context, type, browser):
                      domain = domain, site_domain = site_domain, type = type,
                      modhash = c.modhash if c.user else ''))
 
-
+def add_extension(path):
+    if isinstance(path, basestring):
+        path = UrlParser(path)
+    if c.render_style in extensions.API_TYPES:
+        path.set_extension('json')
+    elif c.render_style == 'mobile':
+        path.set_extension('mobile')
+    elif c.render_style == 'compact':
+        path.set_extension('compact')
+    return path.unparse()
 
 def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_extension=True):
     """
@@ -406,14 +416,7 @@ def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_e
     if c.secure:
         u.scheme = "https"
 
-    if retain_extension:
-        if c.render_style == 'mobile':
-            u.set_extension('mobile')
-
-        elif c.render_style == 'compact':
-            u.set_extension('compact')
-
-    return u.unparse()
+    return add_extension(u) if retain_extension else u.unparse()
 
 def join_urls(*urls):
     """joins a series of urls together without doubles slashes"""

@@ -46,7 +46,7 @@ from pylons.i18n.translation import LanguageError
 from r2.config.extensions import is_api
 from r2.lib import filters, pages, utils, hooks
 from r2.lib.authentication import authenticate_user
-from r2.lib.base import BaseController, abort
+from r2.lib.base import BaseController, abort, redirect_with_ext
 from r2.lib.cache import make_key, MemcachedError
 from r2.lib.errors import (
     ErrorSet,
@@ -57,7 +57,7 @@ from r2.lib.errors import (
 )
 from r2.lib.filters import _force_utf8, _force_unicode
 from r2.lib.strings import strings
-from r2.lib.template_helpers import add_sr, JSPreload
+from r2.lib.template_helpers import add_sr, JSPreload, add_extension
 from r2.lib.tracking import encrypt, decrypt
 from r2.lib.translation import set_lang
 from r2.lib.utils import (
@@ -372,7 +372,7 @@ def set_subreddit():
     elif '-' in sr_name:
         sr_names = sr_name.split('-')
         if not sr_names[0].lower() == All.name.lower():
-            redirect_to("/subreddits/search?q=%s" % sr_name)
+            redirect_with_ext("/subreddits/search?q=%s" % sr_name)
         srs = Subreddit._by_name(sr_names[1:], stale=can_stale).values()
         srs = [sr for sr in srs if not isinstance(sr, FakeSubreddit)]
         if not srs:
@@ -385,7 +385,7 @@ def set_subreddit():
         except NotFound:
             sr_name = chksrname(sr_name)
             if sr_name:
-                redirect_to("/subreddits/search?q=%s" % sr_name)
+                redirect_with_ext("/subreddits/search?q=%s" % sr_name)
             elif not c.error_page and not request.path.startswith("/api/login/") :
                 abort(404)
 
@@ -423,7 +423,7 @@ def set_multireddit():
                     # trim off multi id
                     url_parts = request.path_qs.split("/")[5:]
                     url_parts.insert(0, "/me/m/%s" % multipath)
-                    abort(302, location="/".join(url_parts))
+                    abort(302, location=add_extension("/".join(url_parts)))
 
             multi_id = "/user/%s/m/%s" % (username, multipath)
 
@@ -1087,16 +1087,16 @@ class RedditController(MinimalController):
         # random reddit trickery -- have to do this after the content lang is set
         if c.site == Random:
             c.site = Subreddit.random_reddit(user=c.user)
-            redirect_to("/" + c.site.path.strip('/') + request.path_qs)
+            redirect_with_ext("/" + c.site.path.strip('/') + request.path_qs)
         elif c.site == RandomSubscription:
             if c.user.gold:
                 c.site = Subreddit.random_subscription(c.user)
-                redirect_to('/' + c.site.path.strip('/') + request.path_qs)
+                redirect_with_ext('/' + c.site.path.strip('/') + request.path_qs)
             else:
-                redirect_to('/gold/about')
+                redirect_with_ext('/gold/about')
         elif c.site == RandomNSFW:
             c.site = Subreddit.random_reddit(over18=True, user=c.user)
-            redirect_to("/" + c.site.path.strip('/') + request.path_qs)
+            redirect_with_ext("/" + c.site.path.strip('/') + request.path_qs)
 
         if not request.path.startswith("/api/login/"):
             # is the subreddit banned?
