@@ -2628,6 +2628,77 @@ class ApiController(RedditController, OAuth2ResourceController):
             if lock:
                 lock.release()
 
+    @require_oauth2_scope("read")
+    @validate(link = VByName('link_id'),
+              sort = VMenu('where', CommentSortMenu),
+              children = VCommentIDs('children'))
+    @api_doc(api_section.links_and_comments)
+    def GET_morechildren(self, link, sort, children):
+        """Retrieve additional comments omitted from a base comment tree.
+
+        When a comment tree is rendered, the most relevant comments are
+        selected for display first. Remaining comments are stubbed out with
+        "MoreComments" links. This API call is used to retrieve the additional
+        comments represented by those stubs, up to 20 at a time.
+
+        The two core parameters required are `link_id` and `children`.
+        `link_id` is the fullname of the link whose comments are being fetched.
+        `children` is a comma-delimited list of comment ID36s that need to be
+        fetched.
+
+        **NOTE:** you may only make one request at a time to this API endpoint.
+        Higher concurrency will result in an error being returned.
+
+        """
+
+        CHILD_FETCH_COUNT = 20
+
+        lock = None
+        if c.user_is_loggedin:
+            lock = g.make_lock("morechildren", "morechildren-" + c.user.name,
+                               timeout=0)
+            try:
+                lock.acquire()
+            except TimeoutExpired:
+                abort(429)
+
+        try:
+            if not link or not link.subreddit_slow.can_view(c.user):
+                return abort(403,'forbidden')
+
+            if children:
+                builder = CommentBuilder(link, CommentSortMenu.operator(sort),
+                                         children)
+                listing = Listing(builder, nextprev = False)
+                items = listing.get_items(num=CHILD_FETCH_COUNT)
+
+                def _children(cur_items):
+                    items = []
+                    for cm in cur_items:
+                        items.append(cm)
+                        if hasattr(cm, 'child'):
+                            if hasattr(cm.child, 'things'):
+                                items.extend(_children(cm.child.things))
+                                cm.child = None
+                            else:
+                                items.append(cm.child)
+
+                    return items
+                # assumes there is at least one child
+                # a = _children(items[0].child.things)
+                a = []
+                for item in items:
+                    a.append(item)
+                    if hasattr(item, 'child'):
+                        a.extend(_children(item.child.things))
+                        item.child = None
+
+                comments = wrap_links(a)
+                return BoringPage(_("API"), content = comments).render()
+
+        finally:
+            if lock:
+                lock.release()
 
     @validate(uh = nop('uh'), # VModHash() will raise, check manually
               action = VOneOf('what', ('like', 'dislike', 'save')),
