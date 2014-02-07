@@ -25,6 +25,7 @@
    from r2.lib.template_helpers import media_https_if_secure
    import urllib
    from r2.lib.filters import _force_unicode, _force_utf8
+   from r2.lib.utils.utils import UrlParser
  %>
 <%namespace file="printable.compact" import="delete_report_buttons"/>
 <%namespace file="printable.html" import="arrow, score"/>
@@ -74,6 +75,11 @@
         url = thing.tblink + '.compact'
     else:
         url = thing.url
+        url_parts = UrlParser(url)
+        if url_parts.is_reddit_url() and url_parts.path_extension() != "compact":
+            # A link to non-compact reddit, let's fix it.
+            url_parts.set_extension("compact")
+            url = url_parts.unparse()
   %>
   %if c.site.link_flair_position == 'left' and thing.flair_text:
     ${flair()}
