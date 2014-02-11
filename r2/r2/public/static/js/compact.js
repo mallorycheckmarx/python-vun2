@@ -139,12 +139,19 @@ function showcover() {
     $.request("new_captcha");
     $(".login-popup:first").fadeIn()
             .find(".popup").css("top", $(window).scrollTop() + 75).end()
-            .find(".cover").css("height", $(document).height()).end()
+            .find(".cover").css("height", $(document).height()).end();
+    $("body").on({
+        "keyup": function(e){
+            e.keyCode == 27 ? $("body").trigger("keyup.esc") : 0;
+        },
+        "keyup.esc": (function(){ hidecover($(".cover").eq(0)); })()
+    });
     return false;
 }
 
 function hidecover(where) {
     $(where).parents(".cover-overlay").fadeOut();
+    $("body").off("keyup.esc");
     return false;
 }
 
