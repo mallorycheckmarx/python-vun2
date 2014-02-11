@@ -144,7 +144,7 @@ function showcover() {
         "keyup": function(e){
             e.keyCode == 27 ? $("body").trigger("keyup.esc") : 0;
         },
-        "keyup.esc": (function(){ hidecover($(".cover").eq(0)); })()
+        "keyup.esc": function(){ hidecover($(".cover").eq(0)); }
     });
     return false;
 }
