@@ -55,6 +55,7 @@
 
 <form action="${add_sr('/search')}" id="search" role="search">
   <input type="text" 
+         class="suggestfield"
          %if thing.prev_search:
            value="${thing.prev_search}" style="color:black"
          %endif
@@ -64,7 +65,7 @@
   %elif thing.simple:
   <div id="searchexpando" class="infobar">
       % if not isinstance(c.site, DefaultSR):
-      <label><input type="checkbox" name="restrict_sr" />${_('limit my search to %(path)s') % dict(path=c.site.path.rstrip('/'))}</label>
+      <label><input type="checkbox" name="restrict_sr" id="restrict_sr" />${_('limit my search to %(path)s') % dict(path=c.site.path.rstrip('/'))}</label>
       % endif
 
       ${search_faq()}

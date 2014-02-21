@@ -3423,6 +3423,16 @@ class ApiController(RedditController):
     @json_validate(query=VPrintable('query', max_length=50),
                    include_over_18=VBoolean('include_over_18', default=True))
     @api_doc(api_section.subreddits, extensions=["json"])
+    def GET_subreddit_search(self, responder, query, include_over_18):
+        if not query:
+            return {'subreddits': []}
+        subreddits = search_reddits(query, include_over_18)
+        results = [{'name': sr.name, 'description': sr.description}
+                   for sr in subreddits]
+        return {'subreddits': results}
+
+    @json_validate(query=VPrintable('query', max_length=50),
+                   include_over_18=VBoolean('include_over_18', default=True))
     def POST_search_reddit_names(self, responder, query, include_over_18):
         """List subreddit names that begin with a query string.
 

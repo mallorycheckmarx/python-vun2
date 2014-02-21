@@ -409,6 +409,10 @@ ul.flat-vert {text-align: left;}
 
 .tabpane-content { border: 1px solid #5f99cf; padding: 4px 4px 4px 4px; }
 
+#search.suggestarea {
+    font-size: 18px;
+}
+
 #search input[type=text] {
     border: 1px solid gray;
     font-size: 18px;
@@ -4264,24 +4268,6 @@ ul#image-preview-list .description pre {
     height: 12px;
  }
 
-#sr-autocomplete-area {
-    position: relative;
-    z-index: 100;
- }
-
-#sr-drop-down {
-    position: absolute;
-    width: 498px;
-    border: 1px solid gray;
-    background: white;
-    display: none;
-    left: 0;
-}
-
-#sr-drop-down  table {
-    width: 100%;
-}
-
 .sr-name-row {
     cursor: default;
  }
@@ -4514,6 +4500,10 @@ ul.tabmenu.formtab {
     padding: 3px;
     margin: 0;
     border: 1px solid gray;
+}
+
+.roundfield input.suggestquery {
+    width: 474px;
 }
 
 .roundfield.captcha .capimage {
@@ -5790,6 +5780,7 @@ dd { margin-left: 20px;  }
         .sr-name {
             border: 1px solid #ccc;
             padding: 3px;
+            padding-right: 20px;
         }
 
         button.add {
@@ -8267,5 +8258,57 @@ body.with-listing-chooser {
 
     &.enabled {
         display: inline-block;
+    }
+}
+
+.suggestarea {
+
+    .suggestbox {
+        margin: 0;
+        cursor: default;
+        position: absolute;
+        z-index: 100;
+        border: 1px solid gray;
+        background-color: white;
+
+        li {
+            white-space: nowrap;
+            overflow: hidden;
+            color: lightgrey;
+
+            &.selected {
+                background-color: #369;
+                color: white;
+                font-weight: normal;
+
+                .name {
+                    color: white;
+                }
+            }
+
+            .name {
+                color: black;
+                white-space: nowrap;
+                overflow: hidden;
+            }
+
+            .description {
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                overflow: hidden;
+                margin: 0;
+                margin-left: 15px;
+            }
+        }
+    }
+
+    input.suggestquery {
+        padding-right: 20px;
+    }
+
+    &.working {
+        .suggestquery {
+            background: white url(../throbber.gif) no-repeat right;
+        }
     }
 }

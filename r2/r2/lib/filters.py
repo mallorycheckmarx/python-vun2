@@ -219,6 +219,10 @@ def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
 
     return smd
 
+def markdown_plaintext(text):
+    text = snudown.markdown(_force_utf8(text))
+    return ''.join(BeautifulSoup(text).findAll(text=True)).strip()
+
 #TODO markdown should be looked up in batch?
 #@memoize('markdown')
 def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
