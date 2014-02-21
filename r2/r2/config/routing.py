@@ -265,6 +265,7 @@ def make_map():
        conditions={'function':not_in_sr},
        requirements={'page':'privacypolicy|useragreement'})
 
+    mc('/wiki/create', controller='wiki', action='wiki_new')
     mc('/wiki/create/*page', controller='wiki', action='wiki_create')
     mc('/wiki/edit/*page', controller='wiki', action='wiki_revise')
     mc('/wiki/revisions', controller='wiki', action='wiki_recent')

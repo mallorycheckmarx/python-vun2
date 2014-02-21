@@ -150,6 +150,34 @@ r.wiki = {
 
     helpoff: function(elem) {
         $(elem).parents("form").children(".markhelp:first").hide();
-    }
+    },
 
+    create: function(event) {
+        event.preventDefault()
+        var $this = $(event.target),
+            page = r.utils.serializeForm($this).page,
+            url = r.wiki.baseUrl() + '/create/' + encodeURIComponent(page),
+            button = $this.find("button").last(),
+            status = $this.find(".error").first()
+        status.text("")
+        $this.addClass("working")
+        button.attr("disabled", true)
+        $.ajax({
+            url: url + ".json",
+            type: 'GET',
+            dataType: 'json',
+            error: function(xhr) {
+                if(xhr.status == 404) {
+                    window.location = url
+                } else {
+                    $this.removeClass("working")
+                    button.removeAttr("disabled")
+                    status.text(r._("invalid wiki page name"))
+                }
+            },
+            success: function() {
+                window.location = url
+            }
+        })
+    }
 }

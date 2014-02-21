@@ -133,7 +133,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      
                      wikibanned        = _("ban wiki contributors"),
                      wikicontributors  = _("add wiki contributors"),
-                     
+                     wikicreate        = _("add a new wiki page"),
                      wikirecentrevisions = _("recent wiki revisions"),
                      wikipageslist = _("wiki page list"),
 

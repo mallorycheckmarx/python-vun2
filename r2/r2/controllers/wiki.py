@@ -61,7 +61,7 @@ from r2.controllers.api_docs import api_doc, api_section
 from r2.lib.pages.wiki import (WikiPageView, WikiNotFound, WikiRevisions,
                               WikiEdit, WikiSettings, WikiRecent,
                               WikiListing, WikiDiscussions,
-                              WikiCreate)
+                              WikiCreate, WikiNew, WikiBasePage)
 
 from r2.config.extensions import set_extension
 from r2.lib.template_helpers import add_sr
@@ -179,6 +179,16 @@ class WikiController(RedditController):
                                       wrap=default_thing_wrapper())
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing, page=page.name, may_revise=this_may_revise(page)).render()
+
+    def GET_wiki_new(self):
+        is_api = c.render_style in extensions.API_TYPES
+        if not this_may_revise():
+            if not is_api:
+                error = _("You do not have sufficient perrmissions to create wiki pages in this subreddit.")
+                errorpage = WikiBasePage(error, page=_("sorry :("), actionless=True)
+                request.environ['usable_error_content'] = errorpage.render()
+            self.abort403()
+        return WikiNew().render()
 
     @validate(wp=VWikiPageRevise('page'),
               page=VWikiPageName('page'))

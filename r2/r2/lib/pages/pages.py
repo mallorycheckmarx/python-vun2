@@ -291,7 +291,11 @@ class Reddit(Templated):
     def wiki_actions_menu(self, moderator=False):
         buttons = []
 
-        buttons.append(NamedButton("wikirecentrevisions",
+        buttons.append(NamedButton("wikicreate", 
+                                   css_class='reddit-edit',
+                                   dest="/wiki/create"))
+ 
+        buttons.append(NamedButton("wikirecentrevisions", 
                                    css_class="wikiaction-revisions",
                                    dest="/wiki/revisions"))
 
