@@ -40,96 +40,11 @@ from r2.lib.media import upload_media
 import re
 from urlparse import urlparse
 
-import cssutils
-from cssutils import CSSParser
-from cssutils.css import CSSStyleRule
-from cssutils.css import CSSValue, CSSValueList
-from cssutils.css import CSSPrimitiveValue
-from cssutils.css import cssproperties
-from xml.dom import DOMException
+import tinycss
+from tinycss import tokenizer
+from tinycss.css21 import Stylesheet
 
 msgs = string_dict['css_validator_messages']
-
-browser_prefixes = ['o','moz','webkit','ms','khtml','apple','xv']
-
-custom_macros = {
-    'num': r'[-]?\d+|[-]?\d*\.\d+',
-    'percentage': r'{num}%',
-    'length': r'0|{num}(em|ex|px|in|cm|mm|pt|pc)',
-    'int': r'[-]?\d+',
-    'w': r'\s*',
-    
-    # From: http://www.w3.org/TR/2008/WD-css3-color-20080721/#svg-color
-    'x11color': r'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen',
-    'csscolor': r'(maroon|red|orange|yellow|olive|purple|fuchsia|white|lime|green|navy|blue|aqua|teal|black|silver|gray|ActiveBorder|ActiveCaption|AppWorkspace|Background|ButtonFace|ButtonHighlight|ButtonShadow|ButtonText|CaptionText|GrayText|Highlight|HighlightText|InactiveBorder|InactiveCaption|InactiveCaptionText|InfoBackground|InfoText|Menu|MenuText|Scrollbar|ThreeDDarkShadow|ThreeDFace|ThreeDHighlight|ThreeDLightShadow|ThreeDShadow|Window|WindowFrame|WindowText)|#[0-9a-f]{3}|#[0-9a-f]{6}|rgb\({w}{int}{w},{w}{int}{w},{w}{int}{w}\)|rgb\({w}{num}%{w},{w}{num}%{w},{w}{num}%{w}\)',
-    'color': '{x11color}|{csscolor}',
-
-    'bg-gradient': r'none|{color}|[a-z-]*-gradient\([^;]*\)',
-    'bg-gradients': r'{bg-gradient}(?:,\s*{bg-gradient})*',
-
-    'border-radius': r'(({length}|{percentage}){w}){1,2}',
-    
-    'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
-
-    'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
-}
-
-custom_values = {
-    '_height': r'{length}|{percentage}|auto|inherit',
-    '_width': r'{length}|{percentage}|auto|inherit',
-    '_overflow': r'visible|hidden|scroll|auto|inherit',
-    'color': r'{color}',
-    'border-color': r'{color}',
-    'opacity': r'^0?\.?[0-9]*|1\.0*|1|0',
-    'filter': r'alpha\(opacity={num}\)',
-    
-    'background': r'{bg-gradients}',
-    'background-image': r'{bg-gradients}',
-    'background-color': r'{color}',
-    'background-position': r'(({percentage}|{length}){0,3})?\s*(top|center|left)?\s*(left|center|right)?',
-    
-    # http://www.w3.org/TR/css3-background/#border-top-right-radius
-    'border-radius': r'{border-radius}',
-    'border-top-right-radius': r'{border-radius}',
-    'border-bottom-right-radius': r'{border-radius}',
-    'border-bottom-left-radius': r'{border-radius}',
-    'border-top-left-radius': r'{border-radius}',
-
-    # old mozilla style (for compatibility with existing stylesheets)
-    'border-radius-topright': r'{border-radius}',
-    'border-radius-bottomright': r'{border-radius}',
-    'border-radius-bottomleft': r'{border-radius}',
-    'border-radius-topleft': r'{border-radius}',
-    
-    # http://www.w3.org/TR/css3-text/#text-shadow
-    'text-shadow': r'none|({single-text-shadow}{w},{w})*{single-text-shadow}',
-    
-    # http://www.w3.org/TR/css3-background/#the-box-shadow
-    # (This description doesn't support multiple shadows)
-    'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
-}
-
-def _build_regex_prefix(prefixes):
-    return re.compile("|".join("^-"+p+"-" for p in prefixes))
-
-prefix_regex = _build_regex_prefix(browser_prefixes)
-
-def _expand_macros(tokdict,macrodict):
-    """ Expand macros in token dictionary """
-    def macro_value(m):
-        return '(?:%s)' % macrodict[m.groupdict()['macro']]
-    for key, value in tokdict.items():
-        while re.search(r'{[a-z][a-z0-9-]*}', value):
-            value = re.sub(r'{(?P<macro>[a-z][a-z0-9-]*)}',
-                           macro_value, value)
-        tokdict[key] = value
-    return tokdict
-def _compile_regexes(tokdict):
-    """ Compile all regular expressions into callable objects """
-    for key, value in tokdict.items():
-        tokdict[key] = re.compile('\A(?:%s)\Z' % value, re.I).match
-    return tokdict
-_compile_regexes(_expand_macros(custom_values,custom_macros))
 
 class ValidationReport(object):
     def __init__(self, original_text=''):
@@ -146,50 +61,28 @@ class ValidationReport(object):
         self.errors.append(error)
 
 class ValidationError(Exception):
-    def __init__(self, message, obj = None, line = None):
-        self.message  = message
-        if obj is not None:
-            self.obj  = obj
-        # self.offending_line is the text of the actual line that
-        #  caused the problem; it's set by the ValidationReport that
-        #  owns this ValidationError
-
-        if obj is not None and line is None and hasattr(self.obj,'_linetoken'):
-            (_type1,_type2,self.line,_char) = obj._linetoken
-        elif line is not None:
-            self.line = line
+    def __init__(self, message, obj=None):
+        self.message = message
+        if hasattr(obj, 'line'):
+            self.line = obj.line
 
     def __cmp__(self, other):
-        if hasattr(self,'line') and not hasattr(other,'line'):
-            return -1
-        elif hasattr(other,'line') and not hasattr(self,'line'):
-            return 1
-        else:
-            return cmp(self.line,other.line)
+        return cmp(getattr(self, 'line', 0), getattr(other, 'line', 0))
 
-
-    def __str__(self):
-        "only for debugging"
-        line = (("(%d)" % self.line)
-                if hasattr(self,'line') else '')
-        obj = str(self.obj) if hasattr(self,'obj') else ''
-        return "ValidationError%s: %s (%s)" % (line, self.message, obj)
+    def __repr__(self):
+        return "ValidationError%s: [%s] (%s)" % (self.line, self.message)
 
 
 # substitutable urls will be css-valid labels surrounded by "%%"
 custom_img_urls = re.compile(r'%%([a-zA-Z0-9\-]+)%%')
-def valid_url(prop, value, report, generate_https_urls):
+def valid_url(rule, report, generate_https_urls):
     """Validate a URL in the stylesheet.
 
     The only valid URLs for use in a stylesheet are the custom image format
     (%%example%%) which this function will translate to actual URLs.
 
     """
-    try:
-        url = value.getStringValue()
-    except IndexError:
-        g.log.error("Problem validating [%r]" % value)
-        raise
+    url = rule.value
 
     m = custom_img_urls.match(url)
     if m:
@@ -203,67 +96,35 @@ def valid_url(prop, value, report, generate_https_urls):
                 url = images[name]
             else:
                 url = g.media_provider.convert_to_https(images[name])
-            value._setCssText("url(%s)"%url)
+            rule._as_css = 'url(%s)' % url
         else:
             # unknown image label -> error
             report.append(ValidationError(msgs['broken_url']
-                                          % dict(brokenurl = value.cssText),
-                                          value))
+                                          % dict(brokenurl = rule.as_css()),
+                                          rule))
     else:
-        report.append(ValidationError(msgs["custom_images_only"], value))
+        report.append(ValidationError(msgs["custom_images_only"], rule))
 
+class CSSParser(tinycss.CSSPage3Parser):
+    def strip_comments_safe(self, css_unicode):
+        flat = tokenizer.tokenize_flat(css_unicode, ignore_comments=False)
+        stripped = ''
+        for token in flat:
+            if token.type in ['COMMENT', 'BAD_COMMENT']:
+                stripped += '\n' * token.value.count('\n')
+            else:
+                stripped += token.as_css()
+        return stripped
 
-def strip_browser_prefix(prop):
-    t = prefix_regex.split(prop, maxsplit=1)
-    return t[len(t) - 1]
+    def parse_stylesheet(self, css_unicode):
+        css_unicode = self.strip_comments_safe(css_unicode)
+        flat = tokenizer.tokenize_flat(css_unicode)
+        tokens = tokenizer.regroup(flat)
+        rules, errors = self.parse_rules(tokens, context='stylesheet')
+        return Stylesheet(rules, errors, None), flat
 
-def valid_value(prop, value, report, generate_https_urls):
-    prop_name = strip_browser_prefix(prop.name) # Remove browser-specific prefixes eg: -moz-border-radius becomes border-radius
-    if not (value.valid and value.wellformed):
-        if (value.wellformed
-            and prop_name in cssproperties.cssvalues
-            and cssproperties.cssvalues[prop_name](prop.value)):
-            # it's actually valid. cssutils bug.
-            pass
-        elif (not value.valid
-              and value.wellformed
-              and prop_name in custom_values
-              and custom_values[prop_name](prop.value)):
-            # we're allowing it via our own custom validator
-            value.valid = True
-
-            # see if this suddenly validates the entire property
-            prop.valid = True
-            prop.cssValue.valid = True
-            if prop.cssValue.cssValueType == CSSValue.CSS_VALUE_LIST:
-                for i in range(prop.cssValue.length):
-                    if not prop.cssValue.item(i).valid:
-                        prop.cssValue.valid = False
-                        prop.valid = False
-                        break
-        elif not (prop_name in cssproperties.cssvalues or prop_name in custom_values):
-            error = (msgs['invalid_property']
-                     % dict(cssprop = prop.name))
-            report.append(ValidationError(error,value))
-        else:
-            error = (msgs['invalid_val_for_prop']
-                     % dict(cssvalue = value.cssText,
-                            cssprop  = prop.name))
-            report.append(ValidationError(error,value))
-
-    if value.primitiveType == CSSPrimitiveValue.CSS_URI:
-        valid_url(
-            prop,
-            value,
-            report,
-            generate_https_urls,
-        )
-
-error_message_extract_re = re.compile('.*\\[([0-9]+):[0-9]*:.*\\]\Z')
-only_whitespace          = re.compile('\A\s*\Z')
+only_whitespace = re.compile('\A\s*\Z')
 def validate_css(string, generate_https_urls):
-    p = CSSParser(raiseExceptions = True)
-
     if not string or only_whitespace.match(string):
         return ('',ValidationReport())
 
@@ -276,76 +137,25 @@ def validate_css(string, generate_https_urls):
                                        % dict (max_size = max_size_kb))))
         return ('', report)
 
-    if '\\' in string:
-        report.append(ValidationError(_("if you need backslashes, you're doing it wrong")))
+    parser = tinycss.make_parser(CSSParser)
 
-    try:
-        parsed = p.parseString(string)
-    except DOMException,e:
-        # yuck; xml.dom.DOMException can't give us line-information
-        # directly, so we have to parse its error message string to
-        # get it
-        line = None
-        line_match = error_message_extract_re.match(e.message)
-        if line_match:
-            line = line_match.group(1)
-            if line:
-                line = int(line)
-        error_message=  (msgs['syntax_error']
-                         % dict(syntaxerror = e.message))
-        report.append(ValidationError(error_message,e,line))
-        return (None,report)
+    parsed, flat = parser.parse_stylesheet(string)
 
-    for rule in parsed.cssRules:
-        if rule.type == CSSStyleRule.IMPORT_RULE:
-            report.append(ValidationError(msgs['no_imports'],rule))
-        elif rule.type == CSSStyleRule.COMMENT:
-            pass
-        elif rule.type == CSSStyleRule.STYLE_RULE:
-            style = rule.style
-            for prop in style.getProperties():
+    for error in parsed.errors:
+        report.append(ValidationError(error.reason, error))
 
-                if prop.cssValue.cssValueType == CSSValue.CSS_VALUE_LIST:
-                    for i in range(prop.cssValue.length):
-                        valid_value(
-                            prop,
-                            prop.cssValue.item(i),
-                            report,
-                            generate_https_urls,
-                        )
-                    if not (prop.cssValue.valid and prop.cssValue.wellformed):
-                        report.append(ValidationError(msgs['invalid_property_list']
-                                                      % dict(proplist = prop.cssText),
-                                                      prop.cssValue))
-                elif prop.cssValue.cssValueType == CSSValue.CSS_PRIMITIVE_VALUE:
-                    valid_value(
-                        prop,
-                        prop.cssValue,
-                        report,
-                        generate_https_urls,
-                    )
+    # Iterate over top level rules to find import declarations
+    for rule in parsed.rules:
+        if rule.at_keyword == '@import':
+            report.append(ValidationError(_('@import is not allowed'), rule))
 
-                # cssutils bug: because valid values might be marked
-                # as invalid, we can't trust cssutils to properly
-                # label valid properties, so we're going to rely on
-                # the value validation (which will fail if the
-                # property is invalid anyway). If this bug is fixed,
-                # we should uncomment this 'if'
+    # Iterate over flat unparsed css tokens to find URIs
+    for rule in flat:
+        if rule.type == 'URI':
+            valid_url(rule, report, generate_https_urls)
 
-                # a property is not valid if any of its values are
-                # invalid, or if it is itself invalid. To get the
-                # best-quality error messages, we only report on
-                # whether the property is valid after we've checked
-                # the values
-                #if not (prop.valid and prop.wellformed):
-                #    report.append(ValidationError(_('invalid property'),prop))
-            
-        else:
-            report.append(ValidationError(msgs['unknown_rule_type']
-                                          % dict(ruletype = rule.cssText),
-                                          rule))
-
-    return parsed.cssText if parsed else "", report
+    stylesheet = ''.join(r.as_css() for r in flat) if not report.errors else ''
+    return stylesheet, report
 
 def find_preview_comments(sr):
     from r2.lib.db.queries import get_sr_comments, get_all_comments
