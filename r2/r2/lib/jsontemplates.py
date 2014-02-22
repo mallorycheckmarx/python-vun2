@@ -539,6 +539,7 @@ class CommentJsonTemplate(ThingJsonTemplate):
         if c.profilepage:
             d['link_title'] = thing.link.title
             d['link_author'] = thing.link_author.name
+            d['link_url'] = thing.link.url
         return d
 
     def rendered_data(self, wrapped):
