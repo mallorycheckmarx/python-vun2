@@ -36,7 +36,7 @@ error_list = dict((
         ('BAD_URL', _('you should check that url')),
         ('INVALID_SCHEME', _('URI scheme must be one of: %(schemes)s')),
         ('BAD_CAPTCHA', _('care to try these again?')),
-        ('BAD_USERNAME', _('invalid user name')),
+        ('BAD_USERNAME', _('invalid username')),
         ('USERNAME_TAKEN', _('that username is already taken')),
         ('USERNAME_TAKEN_DEL', _('that username is taken by a deleted account')),
         ('USER_BLOCKED', _("you can't send to a user that you have blocked")),
