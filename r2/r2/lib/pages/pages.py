@@ -2362,7 +2362,7 @@ class Password(Templated):
 class PasswordReset(Templated):
     """Template for generating an email to the user who wishes to
     reset their password (step 2 of password recovery, after they have
-    entered their user name in Password.)"""
+    entered their username in Password.)"""
     pass
 
 class PasswordChangeEmail(Templated):

@@ -2803,7 +2803,7 @@ class ApiController(RedditController):
         if user._banned:
             return
 
-        # successfully entered user name and valid new password
+        # successfully entered username and valid new password
         change_password(user, password)
         if user.email_verified:
             emailer.password_change_email(user)

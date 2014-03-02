@@ -1359,7 +1359,7 @@ class VExistingUname(VRequired):
             except (NotFound, ValueError):
                 self.error(errors.USER_DOESNT_EXIST)
 
-        # make sure the name satisfies our user name regexp before
+        # make sure the name satisfies our username regexp before
         # bothering to look it up.
         name = chkuser(name)
         if name:
