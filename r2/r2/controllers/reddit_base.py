@@ -1088,7 +1088,7 @@ class OAuth2ResourceController(MinimalController):
 
     def check_for_bearer_token(self):
         if self._get_bearer_token(strict=False):
-            self.authenticate_with_token()
+            OAuth2ResourceController.authenticate_with_token(self)
             if c.oauth_user:
                 c.user = c.oauth_user
                 c.user_is_loggedin = True
