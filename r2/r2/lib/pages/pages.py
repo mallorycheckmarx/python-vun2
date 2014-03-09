@@ -663,6 +663,8 @@ class Reddit(Templated):
                 classes.add('moderator')
             if c.user.gold:
                 classes.add('gold')
+            if c.site.is_banned(c.user):
+                classes.add('banned')
 
         if isinstance(c.site, MultiReddit):
             classes.add('multi-page')
