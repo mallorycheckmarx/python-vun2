@@ -380,14 +380,14 @@ class ApiController(RedditController):
                 listing = hot_links_by_url_listing(url, sr=sr, num=1)
                 links = listing.things
                 if links:
-                    c.errors.add(errors.ALREADY_SUB, field='url')
-                    form.has_errors('url', errors.ALREADY_SUB)
                     check_domain = False
                     u = links[0].already_submitted_link
                     if extension:
                         u = UrlParser(u)
                         u.set_extension(extension)
                         u = u.unparse()
+                    c.errors.add(errors.ALREADY_SUB, msg_params={'redirect': u}, field='url')
+                    form.has_errors('url', errors.ALREADY_SUB)
                     form.redirect(u)
             # check for title, otherwise look it up and return it
             elif form.has_errors("title", errors.NO_TEXT):
