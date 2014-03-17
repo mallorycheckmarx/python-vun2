@@ -49,6 +49,11 @@ api('userlisting',   UserListingJsonTemplate)
 api('usertableitem', UserTableItemJsonTemplate)
 api('account',       AccountJsonTemplate)
 
+api('reltableitem', RelTableItemJsonTemplate)
+api('bannedtableitem', BannedTableItemJsonTemplate)
+api('invitedmodtableitem', InvitedModTableItemJsonTemplate)
+api('friendtableitem', FriendTableItemJsonTemplate)
+
 api('organiclisting',       OrganicListingJsonTemplate)
 api('subreddittraffic', TrafficJsonTemplate)
 api('takedownpane', TakedownJsonTemplate)

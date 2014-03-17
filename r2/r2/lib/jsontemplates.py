@@ -732,25 +732,54 @@ class UserTableItemJsonTemplate(ThingJsonTemplate):
     def thing_attr(self, thing, attr):
         return ThingJsonTemplate.thing_attr(self, thing.user, attr)
 
+    def render(self, thing, *a, **kw):
+        return ObjectTemplate(self.data(thing))
+
+class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
+    _data_attrs_ = UserTableItemJsonTemplate._data_attrs_.copy()
+    _data_attrs_["date"] = "date"
+
+    def thing_attr(self, thing, attr):
+        if attr == 'rel.note':
+            # return empty string instead of None for missing note
+            return getattr(thing.rel, attr.split('rel.')[1], '')
+        elif attr.startswith('rel.'):
+            return getattr(thing.rel, attr.split('rel.')[1], None)
+        elif attr == 'date':
+            date = self.thing_attr(thing, 'rel._date')
+            date = time.mktime(date.astimezone(pytz.UTC).timetuple())
+            return date - time.timezone
+        else:
+            return ThingJsonTemplate.thing_attr(self, thing.user, attr)
+
+class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
     def inject_data(self, thing, d):
-        if (thing.type in ("banned", "wikibanned") or
-            (c.user.gold and thing.type == "friend")):
-            d["note"] = getattr(thing.rel, 'note', '')
-        if thing.type == "moderator":
-            permissions = thing.permissions.items()
-            d["mod_permissions"] = [perm for perm, has in permissions if has]
+        if (c.user.gold and thing.type == "friend"):
+            d["note"] = self.thing_attr(thing, 'rel.note')
         return d
 
     def rendered_data(self, thing):
-        d = ThingJsonTemplate.rendered_data(self, thing)
+        d = RelTableItemJsonTemplate.rendered_data(self, thing)
         return self.inject_data(thing, d)
 
     def raw_data(self, thing):
-        d = ThingJsonTemplate.raw_data(self, thing)
+        d = RelTableItemJsonTemplate.raw_data(self, thing)
         return self.inject_data(thing, d)
 
-    def render(self, thing, *a, **kw):
-        return ObjectTemplate(self.data(thing))
+class BannedTableItemJsonTemplate(RelTableItemJsonTemplate):
+    _data_attrs_ = RelTableItemJsonTemplate._data_attrs_.copy()
+    _data_attrs_["note"] = "rel.note"
+
+class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
+    _data_attrs_ = RelTableItemJsonTemplate._data_attrs_.copy()
+    _data_attrs_["mod_permissions"] = "permissions"
+
+    def thing_attr(self, thing, attr):
+        if attr == 'permissions':
+            permissions = thing.permissions.items()
+            return [perm for perm, has in permissions if has]
+        else:
+            return RelTableItemJsonTemplate.thing_attr(self, thing, attr)
 
 class OrganicListingJsonTemplate(ListingJsonTemplate):
     def kind(self, wrapped):
