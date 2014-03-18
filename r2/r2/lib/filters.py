@@ -231,7 +231,8 @@ def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
     if "target" not in kwargs and c.cname:
         target = "_top"
 
-    text = snudown.markdown(_force_utf8(text), nofollow, target)
+    text = snudown.markdown(_force_utf8(text), nofollow, target,
+                            renderer=snudown.RENDERER_WIKI)
 
     if wrap:
         return SC_OFF + MD_START + text + MD_END + SC_ON
