@@ -32,7 +32,6 @@ from r2.controllers.reddit_base import (
 )
 from r2 import config
 from r2.models import *
-from r2.models.recommend import ExploreSettings
 from r2.config.extensions import is_api
 from r2.lib import recommender
 from r2.lib.pages import *
@@ -156,12 +155,22 @@ class FrontController(RedditController):
             kw['reverse'] = False
         return DetailsPage(thing=thing, expand_children=False, **kw).render()
 
-    @validate(VUser())
-    def GET_explore(self):
-        settings = ExploreSettings.for_user(c.user)
+    @validate(VUser(),
+              personalized=VBoolean('pers', default=False),
+              discovery=VBoolean('disc', default=False),
+              rising=VBoolean('ris', default=False),
+              over18=VBoolean('over18', default=False))
+    def GET_explore(self, personalized, discovery, rising, over18):
+        # default when no params are given is to show everything
+        if not any([personalized, discovery, rising]):
+            personalized = discovery = rising = True
+        settings = recommender.ExploreSettings(personalized=personalized,
+                                               discovery=discovery,
+                                               rising=rising,
+                                               over18=over18)
         recs = recommender.get_recommended_content_for_user(c.user,
-                                                            settings,
-                                                            record_views=True)
+                                                            record_views=True,
+                                                            settings=settings)
         content = ExploreItemListing(recs, settings)
         return BoringPage(_("explore"),
                           show_sidebar=True,
@@ -1080,9 +1089,6 @@ class FrontController(RedditController):
               before=VDate('before', format='%Y%m%d%H'),
               after=VDate('after', format='%Y%m%d%H'))
     def GET_traffic(self, link, campaign, before, after):
-        if link and campaign and link._id != campaign.link_id:
-            return self.abort404()
-
         if c.render_style == 'csv':
             return trafficpages.PromotedLinkTraffic.as_csv(campaign or link)
 
@@ -1416,27 +1422,17 @@ class FormsController(RedditController):
         if not payment_blob['goldtype'] == 'gift':
             self.abort404()
 
-        recipient = payment_blob['recipient']
-        thing = payment_blob.get('thing')
-        if not thing:
-            thing = payment_blob['comment']
-        if (not thing or
-            thing._deleted or
-            not thing.subreddit_slow.can_view(c.user)):
+        comment = payment_blob['comment']
+        if (not comment or
+            comment._deleted or
+            not comment.subreddit_slow.can_view(c.user)):
             self.abort404()
 
-        if isinstance(thing, Comment):
-            summary = strings.gold_summary_gilding_page_comment
-        else:
-            summary = strings.gold_summary_gilding_page_link
+        recipient = payment_blob['recipient']
+        summary = strings.gold_summary_comment_page
         summary = summary % {'recipient': recipient.name}
         months = 1
         price = g.gold_month_price * months
-
-        if isinstance(thing, Comment):
-            desc = thing.body
-        else:
-            desc = thing.markdown_link_slow()
 
         content = CreditGild(
             summary=summary,
@@ -1444,7 +1440,7 @@ class FormsController(RedditController):
             months=months,
             stripe_key=g.STRIPE_PUBLIC_KEY,
             passthrough=passthrough,
-            description=desc,
+            comment=comment,
             period=None,
         )
 
@@ -1461,18 +1457,17 @@ class FormsController(RedditController):
               # variables below are just for gifts
               signed=VBoolean("signed"),
               recipient_name=VPrintable("recipient", max_length=50),
-              thing=VByName("thing"),
+              comment=VByName("comment", thing_cls=Comment),
               giftmessage=VLength("giftmessage", 10000))
     def GET_gold(self, goldtype, period, months,
-                 signed, recipient_name, giftmessage, thing):
+                 signed, recipient_name, giftmessage, comment):
 
-        if thing:
-            thing_sr = Subreddit._byID(thing.sr_id, data=True)
-            if (thing._deleted or
-                    thing._spam or
-                    not thing_sr.can_view(c.user) or
-                    not thing_sr.allow_gilding):
-                thing = None
+        if comment:
+            comment_sr = Subreddit._byID(comment.sr_id, data=True)
+            if (comment._deleted or comment._spam or
+                    not comment_sr.can_view(c.user) or
+                    not comment_sr.allow_comment_gilding):
+                comment = None
 
         start_over = False
         recipient = None
@@ -1488,10 +1483,10 @@ class FormsController(RedditController):
             if months is None or months < 1:
                 start_over = True
 
-            if thing:
-                recipient = Account._byID(thing.author_id, data=True)
+            if comment:
+                recipient = Account._byID(comment.author_id, data=True)
                 if recipient._deleted:
-                    thing = None
+                    comment = None
                     recipient = None
                     start_over = True
             else:
@@ -1520,8 +1515,8 @@ class FormsController(RedditController):
                 payment_blob["signed"] = signed
                 payment_blob["recipient"] = recipient.name
                 payment_blob["giftmessage"] = _force_utf8(giftmessage)
-                if thing:
-                    payment_blob["thing"] = thing._fullname
+                if comment:
+                    payment_blob["comment"] = comment._fullname
 
             passthrough = generate_blob(payment_blob)
 
@@ -1530,7 +1525,7 @@ class FormsController(RedditController):
                               content=GoldPayment(goldtype, period, months,
                                                   signed, recipient,
                                                   giftmessage, passthrough,
-                                                  thing)
+                                                  comment)
                               ).render()
 
     @validate(VUser())

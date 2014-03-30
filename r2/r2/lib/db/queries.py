@@ -541,14 +541,6 @@ def get_hidden(user):
     return get_hidden_links(user)
 
 @cached_query(UserQueryCache, sort=[desc('action_date')])
-def get_categorized_saved_links(user_id, sr_id, category):
-    return
-
-@cached_query(UserQueryCache, sort=[desc('action_date')])
-def get_categorized_saved_comments(user_id, sr_id, category):
-    return
-
-@cached_query(UserQueryCache, sort=[desc('action_date')])
 def get_saved_links(user_id, sr_id):
     return
 
@@ -556,14 +548,9 @@ def get_saved_links(user_id, sr_id):
 def get_saved_comments(user_id, sr_id):
     return
 
-def get_saved(user, sr_id=None, category=None):
+def get_saved(user, sr_id=None):
     sr_id = sr_id or 'none'
-    if not category:
-        queries = [get_saved_links(user, sr_id),
-                   get_saved_comments(user, sr_id)]
-    else:
-        queries = [get_categorized_saved_links(user, sr_id, category),
-                   get_categorized_saved_comments(user, sr_id, category)]
+    queries = [get_saved_links(user, sr_id), get_saved_comments(user, sr_id)]
     return MergedCachedQuery(queries)
 
 @cached_srrel_query
@@ -811,58 +798,16 @@ def get_all_gilded_comments():
 
 
 @cached_query(SubredditQueryCache, sort=[desc("date")], filter_fn=filter_thing)
-def get_all_gilded_links():
-    return
-
-
-@merged_cached_query
-def get_all_gilded():
-    return [get_all_gilded_comments(), get_all_gilded_links()]
-
-
-@cached_query(SubredditQueryCache, sort=[desc("date")], filter_fn=filter_thing)
 def get_gilded_comments(sr_id):
     return
-
-
-@cached_query(SubredditQueryCache, sort=[desc("date")], filter_fn=filter_thing)
-def get_gilded_links(sr_id):
-    return
-
-
-@merged_cached_query
-def get_gilded(sr_ids):
-    queries = [get_gilded_links, get_gilded_comments]
-    return [query(sr_id)
-            for sr_id, query in itertools.product(tup(sr_ids), queries)]
-
 
 @cached_query(UserQueryCache, sort=[desc("date")], filter_fn=filter_thing)
 def get_gilded_user_comments(user_id):
     return
 
-
-@cached_query(UserQueryCache, sort=[desc("date")], filter_fn=filter_thing)
-def get_gilded_user_links(user_id):
-    return
-
-
-@merged_cached_query
-def get_gilded_users(user_ids):
-    queries = [get_gilded_user_links, get_gilded_user_comments]
-    return [query(user_id)
-            for user_id, query in itertools.product(tup(user_ids), queries)]
-
-
 @cached_query(UserQueryCache, sort=[desc("date")], filter_fn=filter_thing)
 def get_user_gildings(user_id):
     return
-
-
-@merged_cached_query
-def get_gilded_user(user):
-    return [get_gilded_user_comments(user), get_gilded_user_links(user)]
-
 
 def add_queries(queries, insert_items=None, delete_items=None, foreground=False):
     """Adds multiple queries to the query queue. If insert_items or

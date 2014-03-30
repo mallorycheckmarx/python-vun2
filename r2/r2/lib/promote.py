@@ -93,10 +93,6 @@ def cost_per_click(spend, clicks):
         return 0
 
 
-def promo_keep_fn(item):
-    return is_promoted(item) and not item.hidden
-
-
 # attrs
 
 def promo_traffic_url(l): # old traffic url
@@ -293,12 +289,8 @@ def terminate_campaign(link, campaign):
     edit_campaign(link, campaign, dates, campaign.bid, campaign.cpm, sr,
                   campaign.priority, campaign.location)
 
-    campaigns = list(PromoCampaign._by_link(link._id))
-    is_live = any(is_live_promo(link, camp) for camp in campaigns
-                                            if camp._id != campaign._id)
-    if not is_live:
-        update_promote_status(link, PROMOTE_STATUS.finished)
-        all_live_promo_srnames(_update=True)
+    update_promote_status(link, PROMOTE_STATUS.finished)
+    all_live_promo_srnames(_update=True)
 
     msg = 'terminated campaign %s (original end %s)' % (campaign._id,
                                                         original_end.date())

@@ -42,7 +42,7 @@
 </%def>
 
 <%def name="make_link(name, css_class, tabindex=0)">
-  <a class="${css_class} may-blank ${ c.user_is_loggedin and 'loggedin' or ''}"
+  <a class="${css_class} ${ c.user_is_loggedin and 'loggedin' or ''}"
      href="${thing.href_url}"
      %if tabindex:
        tabindex="${tabindex}"
@@ -50,7 +50,9 @@
      %if thing.nofollow:
        rel="nofollow"
      %endif
-     %if c.cname:
+     %if thing.newwindow:
+       target="_blank"
+     %elif c.cname:
        target="_top"
      %endif
      %if thing.mousedown_url:
@@ -171,7 +173,8 @@ ${parent.thing_data_attributes(what)} data-ups="${what.upvotes}" data-downs="${w
 
 <%def name="subreddit()" buffered="True">
   ${plain_link(thing.subreddit.name, thing.subreddit_path, sr_path = False,
-               cname = False, _class = "subreddit hover may-blank")}
+               cname = False, _class = "subreddit hover",
+               target='_blank' if thing.newwindow else '')}
 </%def>
 
 <%def name="midcol(display=True, cls = '')">
@@ -213,18 +216,8 @@ ${parent.thing_data_attributes(what)} data-ups="${what.upvotes}" data-downs="${w
                               author=WrappedUser(thing.author, thing.attribs, thing).render(),
                               lastedited=capture(edited, thing, thing.lastedited)
                               ))}
-  %if c.permalink_page or c.profilepage:
-    ${self.gildings()}
-  %endif
   %if thing.stickied:
     &#32;-&#32;<span class="stickied-tagline" title="selected by this subreddit's moderators">stickied post</span>
-  %endif
-
-  %if getattr(thing, 'savedcategory', None) is not None:
-    ${plain_link(_('category: %s') % thing.savedcategory,
-                 '/user/%s/saved/%s' % (c.user.name, thing.savedcategory),
-                 _class='save-category' + ('' if thing.savedcategory else ' hidden')
-                )}
   %endif
 </%def>
 

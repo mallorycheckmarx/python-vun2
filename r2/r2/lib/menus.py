@@ -255,13 +255,12 @@ class NavButton(Styled):
     passed to a NavMenu instance upon its construction."""
     def __init__(self, title, dest, sr_path = True, 
                  nocname=False, opt = '', aliases = [],
-                 target = "", style = "plain", use_params=False, **kw):
+                 target = "", style = "plain", **kw):
         # keep original dest to check against c.location when rendering
         aliases = set(_force_unicode(a.rstrip('/')) for a in aliases)
         if dest:
             aliases.add(_force_unicode(dest.rstrip('/')))
 
-        self.use_params = use_params
         self.request_params = dict(request.GET)
         self.stripped_path = _force_unicode(request.path.rstrip('/').lower())
 
@@ -283,7 +282,7 @@ class NavButton(Styled):
             elif self.opt in p:
                 del p[self.opt]
         else:
-            p = self.request_params.copy() if self.use_params else {}
+            p = {}
             base_path = ("%s/%s/" % (base_path, self.dest)).replace('//', '/')
 
         self.action_params = p

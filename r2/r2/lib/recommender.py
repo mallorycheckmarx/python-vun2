@@ -36,11 +36,7 @@ from r2.lib.sgm import sgm
 from r2.models import Account, Link, Subreddit
 from r2.models.builder import CommentBuilder
 from r2.models.listing import NestedListing
-from r2.models.recommend import (
-    AccountSRPrefs,
-    AccountSRFeedback,
-    ExploreSettings,
-)
+from r2.models.recommend import AccountSRPrefs, AccountSRFeedback
 
 from pylons import g
 from pylons.i18n import _
@@ -98,9 +94,9 @@ def get_recommendations(srs,
 
 
 def get_recommended_content_for_user(account,
-                                     settings,
                                      record_views=False,
-                                     src=SRC_EXPLORE):
+                                     src=SRC_EXPLORE,
+                                     settings=None):
     """Wrapper around get_recommended_content() that fills in user info.
 
     If record_views == True, the srs will be noted in the user's preferences
@@ -113,6 +109,7 @@ def get_recommended_content_for_user(account,
 
     """
     prefs = AccountSRPrefs.for_user(account)
+    settings = settings or ExploreSettings()
     recs = get_recommended_content(prefs, src, settings)
     if record_views:
         # mark as seen so they won't be shown again too soon
@@ -158,7 +155,7 @@ def get_recommended_content(prefs, src, settings):
                                               to_omit=omit_srid36s,
                                               source=src,
                                               match_set=False,
-                                              over18=settings.nsfw)
+                                              over18=settings.over18)
         random.shuffle(recommended_srs)
         # split list of recommended srs in half
         midpoint = len(recommended_srs) / 2
@@ -185,7 +182,7 @@ def get_recommended_content(prefs, src, settings):
     seen_srs = set()
     recs = []
     for r in all_recs:
-        if not settings.nsfw and r.is_over18():
+        if not settings.over18 and r.is_over18():
             continue
         if not is_visible(r.sr):  # could happen in rising items
             continue
@@ -261,6 +258,19 @@ def random_sample(items, count):
 def is_visible(sr):
     """True if sr is visible to regular users, false if private or banned."""
     return sr.type != 'private' and not sr._spam
+
+
+class ExploreSettings(object):
+    """Controls what kinds of content will be included."""
+    def __init__(self,
+                 personalized=True,
+                 discovery=True,
+                 rising=True,
+                 over18=False):
+        self.personalized = personalized
+        self.discovery = discovery
+        self.rising = rising
+        self.over18 = over18
 
 
 class SRRecommendation(tdb_cassandra.View):

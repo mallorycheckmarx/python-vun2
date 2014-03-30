@@ -638,13 +638,6 @@ class PromotedLinkTraffic(Templated):
         """Shorten range for display and add next/prev buttons."""
         start, end = promote.get_traffic_dates(thing)
 
-        # Check date of latest traffic (campaigns can end early).
-        history = list(get_promo_traffic(thing, start, end))
-        if history:
-            end = max(date for date, data in history)
-            end = end.replace(tzinfo=g.tz)  # get_promo_traffic returns tz naive
-                                            # datetimes but is actually g.tz
-
         if self.period:
             display_start = self.after
             display_end = self.before

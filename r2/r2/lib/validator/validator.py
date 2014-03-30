@@ -657,26 +657,6 @@ class VSelfText(VMarkdown):
 
     max_length = property(get_max_length, set_max_length)
 
-
-class VSavedCategory(Validator):
-    savedcategory_rx = re.compile(r"\A[a-z0-9 _]{1,20}\Z")
-
-    def run(self, name):
-        if not name:
-            return
-        name = name.lower()
-        valid = self.savedcategory_rx.match(name)
-        if not valid:
-            self.set_error('BAD_SAVE_CATEGORY')
-            return
-        return name
-
-    def param_docs(self):
-        return {
-            self.param: "a category name",
-        }
-
-
 class VSubredditName(VRequired):
     def __init__(self, item, allow_language_srs=False, *a, **kw):
         VRequired.__init__(self, item, errors.BAD_SR_NAME, *a, **kw)
@@ -1103,9 +1083,6 @@ class VSubmitParent(VByName):
         fullname = fullname or fullname2
         if fullname:
             parent = VByName.run(self, fullname)
-            if not isinstance(parent, (Comment, Link, Message)):
-                abort(403, "forbidden")
-
             if parent:
                 if c.user_is_loggedin and parent.author_id in c.user.enemies:
                     self.set_error(errors.USER_BLOCKED)

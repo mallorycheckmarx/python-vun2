@@ -32,15 +32,6 @@ r.ui.init = function() {
         $(el).data('SubredditSubmitText', new r.ui.SubredditSubmitText({el: el}))
     })
 
-    if (r.config.new_window) {
-        $(document.body).on('click', 'a.may-blank, .may-blank-within a', function() {
-            if (!this.target) {
-                this.target = '_blank'
-            }
-            return true // continue bubbling
-        })
-    }
-
     r.ui.PermissionEditor.init()
 }
 

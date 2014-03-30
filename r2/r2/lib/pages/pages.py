@@ -23,10 +23,10 @@
 from collections import Counter, OrderedDict
 
 from r2.lib.wrapped import Wrapped, Templated, CachedTemplate
-from r2.models import Account, DefaultSR, make_feedurl
+from r2.models import Account, FakeAccount, DefaultSR, make_feedurl
 from r2.models import FakeSubreddit, Subreddit, SubSR, AllMinus, AllSR
 from r2.models import Friends, All, Sub, NotFound, DomainSR, Random, Mod, RandomNSFW, RandomSubscription, MultiReddit, ModSR, Frontpage, LabeledMulti
-from r2.models import Link, Printable, Trophy, PromoCampaign, Comment
+from r2.models import Link, Printable, Trophy, PromoCampaign, PromotionWeights, Comment
 from r2.models import Flair, FlairTemplate, FlairTemplateBySubredditIndex
 from r2.models import USER_FLAIR, LINK_FLAIR
 from r2.models.bidding import Bid
@@ -247,30 +247,17 @@ class Reddit(Templated):
             and not is_api() and not self.show_wiki_actions):
             # insert some form templates for js to use
             # TODO: move these to client side templates
-            gold_link = GoldPayment("gift",
-                                    "monthly",
-                                    months=1,
-                                    signed=False,
-                                    recipient="",
-                                    giftmessage=None,
-                                    passthrough=None,
-                                    thing=None,
-                                    clone_template=True,
-                                    thing_type="link",
-                                   )
-            gold_comment = GoldPayment("gift",
-                                       "monthly",
-                                       months=1,
-                                       signed=False,
-                                       recipient="",
-                                       giftmessage=None,
-                                       passthrough=None,
-                                       thing=None,
-                                       clone_template=True,
-                                       thing_type="comment",
-                                      )
-            self._content = PaneStack([ShareLink(), content,
-                                       gold_comment, gold_link])
+            gold = GoldPayment("gift",
+                               "monthly",
+                               months=1,
+                               signed=False,
+                               recipient="",
+                               giftmessage=None,
+                               passthrough=None,
+                               comment=None,
+                               clone_template=True,
+                              )
+            self._content = PaneStack([ShareLink(), content, gold])
         else:
             self._content = content
 
@@ -1356,7 +1343,6 @@ class CommentPane(Templated):
                                   self.can_reply, c.render_style,
                                   c.user.pref_show_flair,
                                   c.user.pref_show_link_flair,
-                                  c.can_save,
                                   self.max_depth]))
 
     def __init__(self, article, sort, comment, context, num, **kw):
@@ -1388,7 +1374,6 @@ class CommentPane(Templated):
         if try_cache and c.user_is_loggedin:
             sr = article.subreddit_slow
             c.can_reply = self.can_reply = sr.can_comment(c.user)
-            c.can_save = True
             # don't cache if the current user can ban comments in the listing
             try_cache = not sr.can_ban(c.user)
             # don't cache for users with custom hide threshholds
@@ -2199,10 +2184,9 @@ class Gold(Templated):
 
 class GoldPayment(Templated):
     def __init__(self, goldtype, period, months, signed,
-                 recipient, giftmessage, passthrough, thing,
-                 clone_template=False, thing_type=None):
+                 recipient, giftmessage, passthrough, comment,
+                 clone_template=False):
         pay_from_creddits = False
-        desc = None
 
         if period == "monthly" or 1 <= months < 12:
             unit_price = g.gold_month_price
@@ -2283,17 +2267,9 @@ class GoldPayment(Templated):
                           amount=Score.somethings(months, "month"))
             elif goldtype == "gift":
                 if clone_template:
-                    if thing_type == "comment":
-                        format = strings.gold_summary_gilding_comment
-                    elif thing_type == "link":
-                        format = strings.gold_summary_gilding_link
-                elif thing:
-                    if isinstance(thing, Comment):
-                        format = strings.gold_summary_gilding_page_comment
-                        desc = thing.body
-                    else:
-                        format = strings.gold_summary_gilding_page_link
-                        desc = thing.markdown_link_slow()
+                    format = strings.gold_summary_comment_gift
+                elif comment:
+                    format = strings.gold_summary_comment_page
                 elif signed:
                     format = strings.gold_summary_signed_gift
                 else:
@@ -2322,8 +2298,7 @@ class GoldPayment(Templated):
                            summary=summary, giftmessage=giftmessage,
                            pay_from_creddits=pay_from_creddits,
                            passthrough=passthrough,
-                           thing=thing, clone_template=clone_template,
-                           description=desc, thing_type=thing_type,
+                           comment=comment, clone_template=clone_template,
                            paypal_buttonid=paypal_buttonid,
                            stripe_key=stripe_key,
                            coinbase_button_id=coinbase_button_id)
@@ -2365,7 +2340,7 @@ class GoldSubscription(Templated):
         Templated.__init__(self)
 
 class CreditGild(Templated):
-    """Page for credit card payments for gilding."""
+    """Page for credit card payments for comment gilding."""
     pass
 
 
@@ -3800,6 +3775,63 @@ class PaymentForm(Templated):
         self.budget = format_currency(float(campaign.bid), 'USD',
                                       locale=c.locale)
         Templated.__init__(self, **kw)
+
+class Promotion_Summary(Templated):
+    def __init__(self, ndays):
+        end_date = promote.promo_datetime_now().date()
+        start_date = promote.promo_datetime_now(offset = -ndays).date()
+
+        pws = PromotionWeights.get_campaigns(start_date,
+                                             end_date + datetime.timedelta(1))
+        campaign_ids = {pw.promo_idx for pw in pws}
+        campaigns = PromoCampaign._byID(campaign_ids, data=True,
+                                        return_dict=False)
+        link_ids = {camp.link_id for camp in campaigns}
+        link_names = {Link._fullname_from_id36(to36(id)) for id in link_ids}
+        wrapped_links = wrap_links(link_names)
+        wrapped_links_by_id = {link._id: link for link in wrapped_links}
+        account_ids = {camp.owner_id for camp in campaigns}
+        accounts_by_id = Account._byID(account_ids, data=True)
+
+        links = set()
+        total = 0
+        for campaign in campaigns:
+            if not campaign.trans_id or campaign.trans_id <= 0:
+                continue
+
+            link = wrapped_links_by_id[campaign.link_id]
+            if not promote.is_accepted(link):
+                continue
+
+            link.bid = getattr(link, "bid", 0)
+            link.bid += (campaign.bid - getattr(campaign, 'refund_amount', 0))
+            link.ncampaigns = getattr(link, "ncampaigns", 0) + 1
+            links.add(link)
+
+            # calculate portion of this campaign's budget to include, assuming
+            # even delivery
+            bid_per_day = campaign.bid / campaign.ndays
+            sd = max(start_date, campaign.start_date.date())
+            ed = min(end_date, campaign.end_date.date())
+            total += bid_per_day * (ed - sd).days
+
+        links = list(links)
+        links.sort(key = lambda x: x._score, reverse = True)
+
+        self.links = links
+        self.ndays = ndays
+        self.total = total
+        Templated.__init__(self)
+
+    @classmethod
+    def send_summary_email(cls, to_addr, ndays):
+        from r2.lib import emailer
+        c.site = DefaultSR()
+        c.user = FakeAccount()
+        p = cls(ndays)
+        emailer.send_html_email(to_addr, g.feedback_email,
+                                "Self-serve promotion summary for last %d days"
+                                % ndays, p.render('email'))
 
 
 class PromoteInventory(Templated):

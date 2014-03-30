@@ -124,7 +124,15 @@ ${parent.collapsed()}
     ${edited(thing, thing.lastedited)}
   %endif
 
-  ${self.gildings()}
+  % if thing.gilded_message:
+  <a href="${thing.subreddit_path}gilded">
+    <span class="gilded-comment-icon" title="${thing.gilded_message}" data-count="${thing.gildings}">
+      % if thing.gildings > 1:
+        x${thing.gildings}
+      % endif
+    </span>
+  </a>
+  % endif
 
   %if collapse:
     &nbsp;<a href="#" class="expand"
@@ -134,12 +142,6 @@ ${parent.collapsed()}
     </a>
   %endif
   ${self.approval_checkmark()}
-  %if getattr(thing, 'savedcategory', None) is not None:
-    ${plain_link(_('category: %s') % thing.savedcategory,
-                 '/user/%s/saved/%s' % (c.user.name, thing.savedcategory),
-                 _class='save-category' + ('' if thing.savedcategory else ' hidden')
-                )}
-  %endif
 </%def>
 
 <%def name="Child()">

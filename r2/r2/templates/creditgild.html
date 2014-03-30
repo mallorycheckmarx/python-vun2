@@ -33,7 +33,7 @@
     <div class="roundfield-content">
       ${unsafe(safemarkdown(thing.summary, wrap=False))}
       <div class="giftmessage">
-        ${unsafe(safemarkdown(thing.description))}
+        ${unsafe(safemarkdown(thing.comment.body))}
       </div>
       ${stripe_form(display=True)}
     </div>

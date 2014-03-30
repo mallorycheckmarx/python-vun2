@@ -45,28 +45,26 @@ from r2.lib.strings import strings, Score
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.tdb_cassandra import NotFoundException, view_of
 from r2.lib.utils import sanitize_url
-from r2.models.gold import (
-    GildedCommentsByAccount,
-    GildedLinksByAccount,
-    make_gold_message,
-)
 from r2.models.subreddit import MultiReddit
 from r2.models.query_cache import CachedQueryMutator
 from r2.models.promo import PROMOTE_STATUS, get_promote_srid
 
 from pylons import c, g, request
-from pylons.i18n import _
+from pylons.i18n import ungettext, _
 from datetime import datetime, timedelta
 from hashlib import md5
+from pycassa.util import convert_uuid_to_time
 
 import random, re
+import json
+import uuid
 
 class LinkExists(Exception): pass
 
 # defining types
 class Link(Thing, Printable):
     _data_int_props = Thing._data_int_props + (
-        'num_comments', 'reported', 'comment_tree_id', 'gildings')
+        'num_comments', 'reported', 'comment_tree_id')
     _defaults = dict(is_self=False,
                      over_18=False,
                      over_18_override=False,
@@ -89,7 +87,6 @@ class Link(Thing, Printable):
                      contest_mode=False,
                      skip_commentstree_q="",
                      ignore_reports=False,
-                     gildings=0,
                      )
     _essentials = ('sr_id', 'author_id')
     _nsfw = re.compile(r"\bnsfw\b", re.I)
@@ -175,8 +172,8 @@ class Link(Thing, Printable):
             admintools.spam(l, banner='banned user')
         return l
 
-    def _save(self, user, category=None):
-        LinkSavesByAccount._save(user, self, category)
+    def _save(self, user):
+        LinkSavesByAccount._save(user, self)
 
     def _unsave(self, user):
         LinkSavesByAccount._unsave(user, self)
@@ -302,28 +299,6 @@ class Link(Thing, Printable):
         return self.make_permalink(self.subreddit_slow,
                                    force_domain=force_domain)
 
-    def markdown_link_slow(self):
-        return "[%s](%s)" % (self.title.decode('utf-8'),
-                             self.make_permalink_slow())
-
-    def _gild(self, user):
-        now = datetime.now(g.tz)
-
-        self._incr("gildings")
-
-        GildedLinksByAccount.gild(user, self)
-
-        from r2.lib.db import queries
-        with CachedQueryMutator() as m:
-            gilding = utils.Storage(thing=self, date=now)
-            m.insert(queries.get_all_gilded_links(), [gilding])
-            m.insert(queries.get_gilded_links(self.sr_id), [gilding])
-            m.insert(queries.get_gilded_user_links(self.author_id),
-                     [gilding])
-            m.insert(queries.get_user_gildings(user), [gilding])
-
-        hooks.get_hook('link.gild').call(link=self, gilder=user)
-
     @staticmethod
     def _should_expunge_selftext(link):
         verdict = getattr(link, "verdict", "")
@@ -355,6 +330,7 @@ class Link(Thing, Printable):
         user_is_loggedin = c.user_is_loggedin
         pref_media = user.pref_media
         pref_frame = user.pref_frame
+        pref_newwindow = user.pref_newwindow
         cname = c.cname
         site = c.site
         now = datetime.now(g.tz)
@@ -371,13 +347,6 @@ class Link(Thing, Printable):
                               for ban in bans_for_domain_parts(urls)}
 
         if user_is_loggedin:
-            gilded = [thing for thing in wrapped if thing.gildings > 0]
-            try:
-                user_gildings = GildedLinksByAccount.fast_query(user, gilded)
-            except tdb_cassandra.TRANSIENT_EXCEPTIONS as e:
-                g.log.warning("Cassandra gilding lookup failed: %r", e)
-                user_gildings = {}
-
             try:
                 saved = LinkSavesByAccount.fast_query(user, wrapped)
                 hidden = LinkHidesByAccount.fast_query(user, wrapped)
@@ -452,28 +421,12 @@ class Link(Thing, Printable):
             item.urlprefix = ''
 
             if user_is_loggedin:
-                item.user_gilded = (user, item) in user_gildings
                 item.saved = (user, item) in saved
                 item.hidden = (user, item) in hidden
                 item.visited = (user, item) in visited
 
             else:
-                item.user_gilded = False
                 item.saved = item.hidden = item.visited = False
-
-            item.gilded_message = make_gold_message(item, item.user_gilded)
-            item.can_gild = (
-                c.user_is_loggedin and
-                # you can't gild your own submission
-                not (item.author and
-                     item.author._id == user._id) and
-                # no point in showing the button for things you've already gilded
-                not item.user_gilded and
-                # ick, if the author deleted their account we shouldn't waste gold
-                not item.author._deleted and
-                # some subreddits can have gilding disabled
-                item.subreddit.allow_gilding
-            )
 
             item.num = None
             item.permalink = item.make_permalink(item.subreddit)
@@ -533,6 +486,7 @@ class Link(Thing, Printable):
 
             # store user preferences locally for caching
             item.pref_frame = pref_frame
+            item.newwindow = pref_newwindow
             # is this link a member of a different (non-c.site) subreddit?
             item.different_sr = (isinstance(site, FakeSubreddit) or
                                  site.name != item.subreddit.name)
@@ -746,6 +700,45 @@ class PromotedLink(Link):
         Printable.add_props(user, wrapped)
 
 
+def make_comment_gold_message(comment, user_gilded):
+    if comment.gildings == 0 or comment._spam or comment._deleted:
+        return None
+
+    author = Account._byID(comment.author_id, data=True)
+    if not author._deleted:
+        author_name = author.name
+    else:
+        author_name = _("[deleted]")
+
+    if c.user_is_loggedin and comment.author_id == c.user._id:
+        gilded_message = ungettext(
+            "a redditor gifted you a month of reddit gold for this comment.",
+            "redditors have gifted you %(months)d months of reddit gold for "
+            "this comment.",
+            comment.gildings
+        )
+    elif user_gilded:
+        gilded_message = ungettext(
+            "you have gifted reddit gold to %(recipient)s for this comment.",
+            "you and other redditors have gifted %(months)d months of "
+            "reddit gold to %(recipient)s for this comment.",
+            comment.gildings
+        )
+    else:
+        gilded_message = ungettext(
+            "a redditor has gifted reddit gold to %(recipient)s for this "
+            "comment.",
+            "redditors have gifted %(months)d months of reddit gold to "
+            "%(recipient)s for this comment.",
+            comment.gildings
+        )
+
+    return gilded_message % dict(
+        recipient=author_name,
+        months=comment.gildings,
+    )
+
+
 class Comment(Thing, Printable):
     _data_int_props = Thing._data_int_props + ('reported', 'gildings')
     _defaults = dict(reported=0,
@@ -831,8 +824,8 @@ class Comment(Thing, Printable):
 
         return (c, inbox_rel)
 
-    def _save(self, user, category=None):
-        CommentSavesByAccount._save(user, self, category)
+    def _save(self, user):
+        CommentSavesByAccount._save(user, self)
 
     def _unsave(self, user):
         CommentSavesByAccount._unsave(user, self)
@@ -889,7 +882,7 @@ class Comment(Thing, Printable):
 
         self._incr("gildings")
 
-        GildedCommentsByAccount.gild(user, self)
+        GildedCommentsByAccount.gild_comment(user, self)
 
         from r2.lib.db import queries
         with CachedQueryMutator() as m:
@@ -983,9 +976,10 @@ class Comment(Thing, Printable):
         now = datetime.now(g.tz)
 
         if user_is_loggedin:
-            gilded = [thing for thing in wrapped if thing.gildings > 0]
+            gilded = [comment for comment in wrapped if comment.gildings > 0]
             try:
-                user_gildings = GildedCommentsByAccount.fast_query(user, gilded)
+                user_gildings = GildedCommentsByAccount.fast_query(user,
+                                                                   gilded)
             except tdb_cassandra.TRANSIENT_EXCEPTIONS as e:
                 g.log.warning("Cassandra gilding lookup failed: %r", e)
                 user_gildings = {}
@@ -1038,35 +1032,14 @@ class Comment(Thing, Printable):
                 if item.link.promoted or age.days < g.REPLY_AGE_LIMIT:
                     item.can_reply = True
 
-            item.can_save = c.can_save or False
-
             if user_is_loggedin:
                 item.user_gilded = (user, item) in user_gildings
                 item.saved = (user, item) in saved
-                item.can_save = True
             else:
                 item.user_gilded = False
                 item.saved = False
-            item.gilded_message = make_gold_message(item, item.user_gilded)
-
-            item.can_gild = (
-                # this is a way of checking if the user is logged in that works
-                # both within CommentPane instances and without.  e.g. CommentPane
-                # explicitly sets user_is_loggedin = False but can_reply is
-                # correct.  while on user overviews, you can't reply but will get
-                # the correct value for user_is_loggedin
-                (c.user_is_loggedin or getattr(item, "can_reply", True)) and
-                # you can't gild your own comment
-                not (c.user_is_loggedin and
-                     item.author and
-                     item.author._id == user._id) and
-                # no point in showing the button for things you've already gilded
-                not item.user_gilded and
-                # ick, if the author deleted their account we shouldn't waste gold
-                not item.author._deleted and
-                # some subreddits can have gilding disabled
-                item.subreddit.allow_gilding
-            )
+            item.gilded_message = make_comment_gold_message(item,
+                                                            item.user_gilded)
 
             # not deleted on profile pages,
             # deleted if spam and not author or admin
@@ -1564,6 +1537,91 @@ class Message(Thing, Printable):
         return True
 
 
+class GildedCommentsByAccount(tdb_cassandra.DenormalizedRelation):
+    _use_db = True
+    _last_modified_name = 'Gilding'
+    _views = []
+
+    @classmethod
+    def value_for(cls, thing1, thing2):
+        return ''
+
+    @classmethod
+    def gild_comment(cls, user, comment):
+        cls.create(user, [comment])
+
+
+@view_of(GildedCommentsByAccount)
+class GildingsByThing(tdb_cassandra.View):
+    _use_db = True
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.UTF8_TYPE,
+        "column_name_class": tdb_cassandra.UTF8_TYPE,
+    }
+
+    @classmethod
+    def get_gilder_ids(cls, thing):
+        columns = cls.get_time_sorted_columns(thing._fullname)
+        return [int(account_id, 36) for account_id in columns.iterkeys()]
+
+    @classmethod
+    def create(cls, user, things):
+        for thing in things:
+            cls._set_values(thing._fullname, {user._id36: ""})
+
+    @classmethod
+    def delete(cls, user, things):
+        # gildings cannot be undone
+        raise NotImplementedError()
+
+
+@view_of(GildedCommentsByAccount)
+class GildingsByDay(tdb_cassandra.View):
+    _use_db = True
+    _compare_with = tdb_cassandra.TIME_UUID_TYPE
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+        "column_name_class": tdb_cassandra.TIME_UUID_TYPE,
+        "default_validation_class": tdb_cassandra.UTF8_TYPE,
+    }
+
+    @staticmethod
+    def _rowkey(date):
+        return date.strftime("%Y-%m-%d")
+
+    @classmethod
+    def get_gildings(cls, date):
+        key = cls._rowkey(date)
+        columns = cls.get_time_sorted_columns(key)
+        gildings = []
+        for name, json_blob in columns.iteritems():
+            timestamp = convert_uuid_to_time(name)
+            date = datetime.utcfromtimestamp(timestamp).replace(tzinfo=g.tz)
+
+            gilding = json.loads(json_blob)
+            gilding["date"] = date
+            gilding["user"] = int(gilding["user"], 36)
+            gildings.append(gilding)
+        return gildings
+
+    @classmethod
+    def create(cls, user, things):
+        key = cls._rowkey(datetime.now(g.tz))
+
+        columns = {}
+        for thing in things:
+            columns[uuid.uuid1()] = json.dumps({
+                "user": user._id36,
+                "thing": thing._fullname,
+            })
+        cls._set_values(key, columns)
+
+    @classmethod
+    def delete(cls, user, things):
+        # gildings cannot be undone
+        raise NotImplementedError()
+
+
 class _SaveHideByAccount(tdb_cassandra.DenormalizedRelation):
     @classmethod
     def value_for(cls, thing1, thing2):
@@ -1574,7 +1632,7 @@ class _SaveHideByAccount(tdb_cassandra.DenormalizedRelation):
         return []
 
     @classmethod
-    def _savehide(cls, user, things, **kw):
+    def _savehide(cls, user, things):
         things = tup(things)
         now = datetime.now(g.tz)
         with CachedQueryMutator() as m:
@@ -1583,81 +1641,29 @@ class _SaveHideByAccount(tdb_cassandra.DenormalizedRelation):
                 # value, we don't want to write it. Report.new(link) needs to
                 # incr link.reported but will fail if the link is dirty.
                 thing.__setattr__('action_date', now, make_dirty=False)
-                for q in cls._cached_queries(user, thing, **kw):
+                for q in cls._cached_queries(user, thing):
                     m.insert(q, [thing])
-        cls.create(user, things, **kw)
+        cls.create(user, things)
 
     @classmethod
-    def destroy(cls, user, things, **kw):
-        things = tup(things)
-        cls._cf.remove(user._id36, (things._id36 for things in things))
-
-        for view in cls._views:
-            view.destroy(user, things, **kw)
-
-    @classmethod
-    def _unsavehide(cls, user, things, **kw):
+    def _unsavehide(cls, user, things):
         things = tup(things)
         with CachedQueryMutator() as m:
             for thing in things:
-                for q in cls._cached_queries(user, thing, **kw):
+                for q in cls._cached_queries(user, thing):
                     m.delete(q, [thing])
-        cls.destroy(user, things, **kw)
+        cls.destroy(user, things)
 
 
 class _ThingSavesByAccount(_SaveHideByAccount):
-    _read_consistency_level = tdb_cassandra.CL.QUORUM
-    _write_consistency_level = tdb_cassandra.CL.QUORUM
-
     @classmethod
-    def value_for(cls, thing1, thing2, category=None):
-        return category or ''
-    
-    @classmethod
-    def _remove_from_category_listings(cls, user, things, category):
-        things = tup(things)
-        oldcategories = cls.fast_query(user, things)
-        changedthings = []
-        for thing in things:
-            oldcategory = oldcategories.get((user, thing)) or None
-            if oldcategory != category:
-                changedthings.append(thing)
-        cls._unsavehide(user, changedthings, categories=oldcategories)
-
-    @classmethod
-    def _save(cls, user, things, category=None):
-        category = category.lower() if category else None
-        cls._remove_from_category_listings(user, things, category=category)
-        cls._savehide(user, things, category=category)
+    def _save(cls, user, things):
+        cls._savehide(user, things)
 
     @classmethod
     def _unsave(cls, user, things):
-        # Ensure we delete from existing category cached queries
-        categories = cls.fast_query(user, tup(things))
-        cls._unsavehide(user, things, categories=categories)
+        cls._unsavehide(user, things)
 
-    @classmethod
-    def _unsavehide(cls, user, things, categories=None):
-        things = tup(things)
-        with CachedQueryMutator() as m:
-            for thing in things:
-                category = categories.get((user, thing)) if categories else None
-                for q in cls._cached_queries(user, thing, category=category):
-                    m.delete(q, [thing])
-        cls.destroy(user, things, categories=categories)
-
-    @classmethod
-    def _cached_queries_category(cls, user, thing,
-                                 querycatfn, queryfn,
-                                 category=None, only_category=False):
-        from r2.lib.db import queries
-        cached_queries = []
-        if not only_category:
-            cached_queries = [queryfn(user, 'none'), queryfn(user, thing.sr_id)]
-        if category:
-            cached_queries.append(querycatfn(user, 'none', category))
-            cached_queries.append(querycatfn(user, thing.sr_id, category))
-        return cached_queries
 
 class LinkSavesByAccount(_ThingSavesByAccount):
     _use_db = True
@@ -1665,14 +1671,11 @@ class LinkSavesByAccount(_ThingSavesByAccount):
     _views = []
 
     @classmethod
-    def _cached_queries(cls, user, thing, **kw):
+    def _cached_queries(cls, user, thing):
         from r2.lib.db import queries
-        return cls._cached_queries_category(
-            user,
-            thing,
-            queries.get_categorized_saved_links,
-            queries.get_saved_links,
-            **kw)
+        return [queries.get_saved_links(user, 'none'),
+                queries.get_saved_links(user, thing.sr_id)]
+
 
 class CommentSavesByAccount(_ThingSavesByAccount):
     _use_db = True
@@ -1680,14 +1683,11 @@ class CommentSavesByAccount(_ThingSavesByAccount):
     _views = []
 
     @classmethod
-    def _cached_queries(cls, user, thing, **kw):
+    def _cached_queries(cls, user, thing):
         from r2.lib.db import queries
-        return cls._cached_queries_category(
-            user,
-            thing,
-            queries.get_categorized_saved_comments,
-            queries.get_saved_comments,
-            **kw)
+        return [queries.get_saved_comments(user, 'none'),
+                queries.get_saved_comments(user, thing.sr_id)]
+
 
 class _ThingHidesByAccount(_SaveHideByAccount):
     @classmethod
@@ -1734,23 +1734,19 @@ class _ThingSavesBySubreddit(tdb_cassandra.View):
         return {utils.to36(thing.sr_id): ''}
 
     @classmethod
-    def get_saved_values(cls, user):
-        rowkey = cls._rowkey(user, None)
+    def get_saved_subreddits(cls, user):
+        rowkey = user._id36
         try:
             columns = cls._cf.get(rowkey)
         except NotFoundException:
             return []
 
-        return columns.keys()
-
-    @classmethod
-    def get_saved_subreddits(cls, user):
-        sr_id36s = cls.get_saved_values(user)
+        sr_id36s = columns.keys()
         srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
         return sorted([sr.name for sr in srs])
 
     @classmethod
-    def create(cls, user, things, **kw):
+    def create(cls, user, things):
         for thing in things:
             rowkey = cls._rowkey(user, thing)
             column = cls._column(user, thing)
@@ -1761,55 +1757,13 @@ class _ThingSavesBySubreddit(tdb_cassandra.View):
         return False
 
     @classmethod
-    def destroy(cls, user, things, **kw):
+    def destroy(cls, user, things):
         # See if thing's sr is present anymore
         sr_ids = set([thing.sr_id for thing in things])
         for sr_id in set(sr_ids):
             if cls._check_empty(user, sr_id):
                 cls._cf.remove(user._id36, [utils.to36(sr_id)])
 
-class _ThingSavesByCategory(_ThingSavesBySubreddit):
-    @classmethod
-    def create(cls, user, things, category=None):
-        if not category:
-            return
-        for thing in things:
-            rowkey = cls._rowkey(user, thing)
-            column = {category: None}
-            cls._set_values(rowkey, column)
-
-    @classmethod
-    def _get_query_fn():
-        raise NotImplementedError 
-
-    @classmethod
-    def _check_empty(cls, user, category):
-        from r2.lib.db import queries
-        q = cls._get_query_fn()(user, 'none', category)
-        q.fetch()
-        return not q.data
-
-    @classmethod
-    def get_saved_categories(cls, user):
-        return cls.get_saved_values(user)
-
-    @classmethod
-    def destroy(cls, user, things, categories=None):
-        if not categories:
-            return
-        for category in set(categories.values()):
-            if not category or not cls._check_empty(user, category):
-                continue
-            cls._cf.remove(user._id36, [category])
-
-@view_of(LinkSavesByAccount)
-class LinkSavesByCategory(_ThingSavesByCategory):
-    _use_db = True
-
-    @classmethod
-    def _get_query_fn(cls):
-        from r2.lib.db import queries
-        return queries.get_categorized_saved_links
 
 @view_of(LinkSavesByAccount)
 class LinkSavesBySubreddit(_ThingSavesBySubreddit):
@@ -1834,14 +1788,6 @@ class CommentSavesBySubreddit(_ThingSavesBySubreddit):
         q.fetch()
         return not q.data
 
-@view_of(CommentSavesByAccount)
-class CommentSavesByCategory(_ThingSavesByCategory):
-    _use_db = True
-
-    @classmethod
-    def _get_query_fn(cls):
-        from r2.lib.db import queries
-        return queries.get_categorized_saved_comments
 
 class Inbox(MultiRelation('inbox',
                           Relation(Account, Comment),

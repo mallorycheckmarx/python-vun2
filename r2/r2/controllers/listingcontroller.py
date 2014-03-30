@@ -20,8 +20,6 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import urllib
-
 from oauth2 import require_oauth2_scope
 from reddit_base import RedditController, base_listing, paginated_listing
 
@@ -508,38 +506,22 @@ class UserController(ListingController):
             srs = Subreddit._by_name(srnames)
             srnames = [name for name, sr in srs.iteritems()
                             if sr.can_view(c.user)]
-            srnames = sorted(set(srnames), key=lambda name: name.lower())
+            srnames = sorted(list(set(srnames)), key=lambda name: name.lower())
             if len(srnames) > 1:
                 sr_buttons = [NavButton(_('all'), None, opt='sr',
                                         css_class='primary')]
                 for srname in srnames:
                     sr_buttons.append(NavButton(srname, srname, opt='sr'))
-                base_path = '/user/%s/saved' % self.vuser.name
-                if self.savedcategory:
-                    base_path += '/%s' % urllib.quote(self.savedcategory)
+                base_path = request.path
                 sr_menu = NavMenu(sr_buttons, base_path=base_path,
                                   title=_('filter by subreddit'),
                                   type='lightdrop')
                 res.append(sr_menu)
-            categories = LinkSavesByCategory.get_saved_categories(self.vuser)
-            categories += CommentSavesByCategory.get_saved_categories(self.vuser)
-            categories = sorted(set(categories))
-            if len(categories) >= 1:
-                cat_buttons = [NavButton(_('all'), '/', css_class='primary')]
-                for cat in categories:
-                    cat_buttons.append(NavButton(cat,
-                                                 urllib.quote(cat),
-                                                 use_params=True))
-                base_path = '/user/%s/saved/' % self.vuser.name
-                cat_menu = NavMenu(cat_buttons, base_path=base_path,
-                                   title=_('filter by category'),
-                                   type='lightdrop')
-                res.append(cat_menu)
         elif (self.where == 'gilded' and
                 (c.user == self.vuser or c.user_is_admin)):
             path = '/user/%s/gilded/' % self.vuser.name
-            buttons = [NavButton(_("gildings received"), dest='/'),
-                       NavButton(_("gildings given"), dest='/given')]
+            buttons = [NavButton(_("my posts"), dest='/'),
+                       NavButton(_("posts gilded by me"), dest='/given')]
             res.append(NavMenu(buttons, base_path=path, type='flatlist'))
 
         return res
@@ -548,14 +530,14 @@ class UserController(ListingController):
         titles = {'overview': _("overview for %(user)s"),
                   'comments': _("comments by %(user)s"),
                   'submitted': _("submitted by %(user)s"),
-                  'gilded': _("gilded by %(user)s"),
+                  'gilded': _("gilded comments by %(user)s"),
                   'liked': _("liked by %(user)s"),
                   'disliked': _("disliked by %(user)s"),
                   'saved': _("saved by %(user)s"),
                   'hidden': _("hidden by %(user)s"),
                   'promoted': _("promoted by %(user)s")}
         if self.where == 'gilded' and self.show == 'given':
-            return _("gildings given by %(user)s") % {'user': self.vuser.name}
+            return _("comments gilded by %(user)s") % {'user': self.vuser.name}
 
         title = titles.get(self.where, _('profile for %(user)s')) \
             % dict(user = self.vuser.name, site = c.site.name)
@@ -584,7 +566,7 @@ class UserController(ListingController):
             if self.where == 'gilded' and item.gildings <= 0:
                 return False
 
-            if self.where == 'deleted' and not item._deleted:
+            if self.where == 'deleted' and not getattr(item, 'deleted', False):
                 return False
 
             is_promoted = getattr(item, "promoted", None) is not None
@@ -616,7 +598,7 @@ class UserController(ListingController):
             if self.show == 'given':
                 q = queries.get_user_gildings(self.vuser)
             else:
-                q = queries.get_gilded_user(self.vuser)
+                q = queries.get_gilded_user_comments(self.vuser)
 
         elif self.where in ('liked', 'disliked'):
             sup.set_sup_header(self.vuser, self.where)
@@ -630,11 +612,16 @@ class UserController(ListingController):
             q = queries.get_hidden(self.vuser)
 
         elif self.where == 'saved':
-            if not self.savedcategory and c.user.gold:
-                self.builder_cls = SavedBuilder
-            sr_id = self.savedsr._id if self.savedsr else None
-            q = queries.get_saved(self.vuser, sr_id,
-                                  category=self.savedcategory)
+            srname = request.GET.get('sr')
+            if srname and c.user.gold:
+                try:
+                    sr_id = Subreddit._by_name(srname)._id
+                except NotFound:
+                    sr_id = None
+            else:
+                sr_id = None
+            q = queries.get_saved(self.vuser, sr_id)
+
         elif c.user_is_sponsor and self.where == 'promoted':
             q = queries.get_promoted_links(self.vuser._id)
 
@@ -684,19 +671,6 @@ class UserController(ListingController):
 
         if where == 'saved':
             self.show_chooser = True
-            category = VSavedCategory('category').run(env.get('category'))
-            srname = request.GET.get('sr')
-            if srname and c.user.gold:
-                try:
-                    sr = Subreddit._by_name(srname)
-                except NotFound:
-                    sr = None
-            else:
-                sr = None
-            if category and not c.user.gold:
-                category = None
-            self.savedsr = sr
-            self.savedcategory = category
 
         check_cheating('user')
 
@@ -1332,7 +1306,7 @@ class UserListListingController(ListingController):
         return self.build_listing(**kw)
 
 class GildedController(ListingController):
-    title_text = _("gilded")
+    title_text = _("gilded comments")
 
     def keep_fn(self):
         def keep(item):
@@ -1341,7 +1315,7 @@ class GildedController(ListingController):
 
     def query(self):
         try:
-            return c.site.get_gilded()
+            return c.site.get_gilded_comments()
         except NotImplementedError:
             abort(404)
 

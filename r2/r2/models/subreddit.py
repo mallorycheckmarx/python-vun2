@@ -141,9 +141,9 @@ class BaseSite(object):
         from r2.lib.db import queries
         return queries.get_sr_comments(self)
 
-    def get_gilded(self):
+    def get_gilded_comments(self):
         from r2.lib.db import queries
-        return queries.get_gilded(self._id)
+        return queries.get_gilded_comments(self)
 
     @classmethod
     def get_modactions(cls, srs, mod=None, action=None):
@@ -205,7 +205,7 @@ class Subreddit(Thing, Printable, BaseSite):
         prev_description_id="",
         prev_submit_text_id="",
         prev_public_description_id="",
-        allow_gilding=True,
+        allow_comment_gilding=True,
         hide_subscribers=False,
         public_traffic=False,
         spam_links='high',
@@ -929,7 +929,7 @@ class FakeSubreddit(BaseSite):
         from r2.lib.db import queries
         return queries.get_all_comments()
 
-    def get_gilded(self):
+    def get_gilded_comments(self):
         raise NotImplementedError()
 
     def spammy(self):
@@ -948,12 +948,13 @@ class FriendsSR(FakeSubreddit):
         friends = Account._byID(a.friends[-max_lookup:], return_dict = False,
                                 data = True)
 
-        # only include friends that have ever interacted with the site
-        last_activity = last_modified_multi(friends, "overview")
-        friends = [x for x in friends if x in last_activity]
+        # if we don't have a last visit for your friends, we don't
+        # care about them
+        last_visits = last_modified_multi(friends, "submitted")
+        friends = [x for x in friends if x in last_visits]
 
         # sort friends by most recent interactions
-        friends.sort(key = lambda x: last_activity[x], reverse = True)
+        friends.sort(key = lambda x: last_visits[x], reverse = True)
         return [x._id for x in friends[:limit]]
 
     def get_links(self, sort, time):
@@ -1005,16 +1006,19 @@ class FriendsSR(FakeSubreddit):
                for friend in friends]
         return queries.MergedCachedResults(crs)
 
-    def get_gilded(self):
-        from r2.lib.db.queries import get_gilded_users
+    def get_gilded_comments(self):
+        from r2.lib.db.queries import get_gilded_user_comments
+
         if not c.user_is_loggedin:
             raise UserRequiredException
 
         friends = self.get_important_friends(c.user._id)
+
         if not friends:
             return []
 
-        return get_gilded_users(friends)
+        queries = [get_gilded_user_comments(user_id) for user_id in friends]
+        return MergedCachedQuery(queries)
 
 
 class AllSR(FakeSubreddit):
@@ -1043,9 +1047,9 @@ class AllSR(FakeSubreddit):
         from r2.lib.db import queries
         return queries.get_all_comments()
 
-    def get_gilded(self):
+    def get_gilded_comments(self):
         from r2.lib.db import queries
-        return queries.get_all_gilded()
+        return queries.get_all_gilded_comments()
 
 
 class AllMinus(AllSR):
@@ -1192,9 +1196,11 @@ class DefaultSR(_DefaultSR):
         results = [get_sr_comments(sr) for sr in srs]
         return merge_results(*results)
 
-    def get_gilded(self):
-        from r2.lib.db.queries import get_gilded
-        return get_gilded(Subreddit.user_subreddits(c.user))
+    def get_gilded_comments(self):
+        from r2.lib.db.queries import get_gilded_comments
+        srs = Subreddit.user_subreddits(c.user)
+        queries = [get_gilded_comments(sr_id) for sr_id in srs]
+        return MergedCachedQuery(queries)
 
 
 class MultiReddit(FakeSubreddit):
@@ -1261,9 +1267,10 @@ class MultiReddit(FakeSubreddit):
         results = [get_sr_comments(sr) for sr in srs]
         return merge_results(*results)
 
-    def get_gilded(self):
-        from r2.lib.db.queries import get_gilded
-        return get_gilded(self.kept_sr_ids)
+    def get_gilded_comments(self):
+        from r2.lib.db.queries import get_gilded_comments
+        queries = [get_gilded_comments(sr_id) for sr_id in self.kept_sr_ids]
+        return MergedCachedQuery(queries)
 
 
 class TooManySubredditsError(Exception):

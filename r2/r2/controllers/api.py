@@ -2423,29 +2423,11 @@ class ApiController(RedditController):
             ModAction.create(sr, c.user, 'distinguish', target=thing, **log_kw)
 
     @require_oauth2_scope("save")
-    @json_validate(VUser())
-    @api_doc(api_section.links_and_comments, extensions=["json"])
-    def GET_saved_categories(self, responder):
-        """Get a list of categories in which things are currently saved.
-
-        See also: [/api/save](#POST_api_save).
-
-        """
-        if not c.user.gold:
-            abort(403)
-        categories = LinkSavesByCategory.get_saved_categories(c.user)
-        categories += CommentSavesByCategory.get_saved_categories(c.user)
-        categories = sorted(set(categories), key=lambda name: name.lower())
-        categories = [dict(category=category) for category in categories]
-        return {'categories': categories}
-
-    @require_oauth2_scope("save")
     @noresponse(VUser(),
                 VModhash(),
-                category = VSavedCategory('category'),
                 thing = VByName('id'))
     @api_doc(api_section.links_and_comments)
-    def POST_save(self, thing, category):
+    def POST_save(self, thing):
         """Save a link or comment.
 
         Saved things are kept in the user's saved listing for later perusal.
@@ -2454,11 +2436,8 @@ class ApiController(RedditController):
 
         """
         if not thing: return
-        if category and not c.user.gold:
-            category = None
-        if ('BAD_SAVE_CATEGORY', 'category') in c.errors:
-            abort(403)
-        thing._save(c.user, category=category)
+        if isinstance(thing, Comment) and not c.user.gold: return
+        thing._save(c.user)
 
     @require_oauth2_scope("save")
     @noresponse(VUser(),
@@ -3785,21 +3764,21 @@ class ApiController(RedditController):
 
     @json_validate(VUser(),
                    VModhash(),
-                   thing=VByName("thing"))
-    def POST_generate_payment_blob(self, responder, thing):
-        if not thing:
+                   comment=VByName("comment", thing_cls=Comment))
+    def POST_generate_payment_blob(self, responder, comment):
+        if not comment:
             abort(400, "Bad Request")
 
-        if thing._deleted:
+        if comment._deleted:
             abort(403, "Forbidden")
 
-        thing_sr = Subreddit._byID(thing.sr_id, data=True)
-        if (not thing_sr.can_view(c.user) or
-            not thing_sr.allow_gilding):
+        comment_sr = Subreddit._byID(comment.sr_id, data=True)
+        if (not comment_sr.can_view(c.user) or
+            not comment_sr.allow_comment_gilding):
             abort(403, "Forbidden")
 
         try:
-            recipient = Account._byID(thing.author_id, data=True)
+            recipient = Account._byID(comment.author_id, data=True)
         except NotFound:
             self.abort404()
 
@@ -3814,7 +3793,7 @@ class ApiController(RedditController):
             signed=False,
             recipient=recipient.name,
             giftmessage=None,
-            thing=thing._fullname,
+            comment=comment._fullname,
         ))
 
     @validate(srnames=VPrintable("srnames", max_length=2100))
@@ -3832,7 +3811,7 @@ class ApiController(RedditController):
         promo_tuples = promote.lottery_promoted_links(srnames, n=10)
         builder = CampaignBuilder(promo_tuples,
                                   wrap=default_thing_wrapper(),
-                                  keep_fn=promote.promo_keep_fn,
+                                  keep_fn=promote.is_promoted,
                                   num=1,
                                   skip=True)
         listing = LinkListing(builder, nextprev=False).listing()

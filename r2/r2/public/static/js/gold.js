@@ -5,7 +5,7 @@ r.gold = {
         $('div.content').on(
             'click',
             'a.give-gold, .gold-payment .close-button',
-            $.proxy(this, '_toggleThingGoldForm')
+            $.proxy(this, '_toggleCommentGoldForm')
         )
 
         $('.stripe-gold').click(function(){
@@ -21,11 +21,11 @@ r.gold = {
         })
     },
 
-    _toggleThingGoldForm: function (e) {
+    _toggleCommentGoldForm: function (e) {
         var $link = $(e.target),
             $thing = $link.thing(),
-            thingFullname = $link.thing_id(),
-            formId = 'gold_form_' + thingFullname,
+            commentId = $link.thing_id(),
+            formId = 'gold_form_' + commentId,
             oldForm = $('#' + formId)
 
         if ($thing.hasClass('user-gilded') ||
@@ -47,18 +47,12 @@ r.gold = {
             this._googleCheckoutAnalyticsLoaded = true
         }
 
-        if ($thing.hasClass('link')) {
-            var cloneClass = 'cloneable-link'
-        } else {
-            var cloneClass = 'cloneable-comment'
-        }
-
-        var form = $('.gold-form.' + cloneClass + ':first').clone(),
+        var form = $('.gold-form.cloneable:first').clone(),
             authorName = $link.thing().find('.entry .author:first').text(),
             passthroughs = form.find('.passthrough'),
             cbBaseUrl = form.find('[name="cbbaseurl"]').val()
 
-        form.removeClass(cloneClass)
+        form.removeClass('cloneable')
             .attr('id', formId)
             .find('p:first-child em').text(authorName).end()
             .find('button').attr('disabled', '')
@@ -72,7 +66,7 @@ r.gold = {
             form.find('button').addClass('disabled')
         }, 200)
 
-        $.request('generate_payment_blob.json', {thing: thingFullname}, function (token) {
+        $.request('generate_payment_blob.json', {comment: commentId}, function (token) {
             clearTimeout(workingTimer)
             form.removeClass('working')
             passthroughs.val(token)
@@ -84,18 +78,18 @@ r.gold = {
         return false
     },
 
-    gildThing: function (thing_fullname, new_title, specified_gilding_count) {
-        var thing = $('.id-' + thing_fullname)
+    gildComment: function (comment_id, new_title, specified_gilding_count) {
+        var comment = $('.id-' + comment_id)
 
-        if (!thing.length) {
-            console.log("couldn't gild thing " + thing_fullname)
+        if (!comment.length) {
+            console.log("couldn't gild comment " + comment_id)
             return
         }
 
-        var tagline = thing.children('.entry').find('p.tagline'),
-            icon = tagline.find('.gilded-icon')
+        var tagline = comment.children('.entry').find('p.tagline'),
+            icon = tagline.find('.gilded-comment-icon')
 
-        // when a thing is gilded interactively, we need to increment the
+        // when a comment is gilded interactively, we need to increment the
         // gilding count displayed by the UI. however, when gildings are
         // instantiated from a cached comment page via thingupdater, we can't
         // simply increment the gilding count because we do not know if the
@@ -110,10 +104,10 @@ r.gold = {
             gilding_count++
         }
 
-        thing.addClass('gilded user-gilded')
+        comment.addClass('gilded user-gilded')
         if (!icon.length) {
             icon = $('<span>')
-                        .addClass('gilded-icon')
+                        .addClass('gilded-comment-icon')
             tagline.append(icon)
         }
         icon
@@ -123,7 +117,7 @@ r.gold = {
             icon.text('x' + gilding_count)
         }
 
-        thing.children('.entry').find('.give-gold').parent().remove()
+        comment.children('.entry').find('.give-gold').parent().remove()
     },
 
     tokenThenPost: function (dest) {
@@ -205,8 +199,8 @@ r.gold = {
 };
 
 (function($) {
-    $.gild_thing = function (thing_fullname, new_title) {
-        r.gold.gildThing(thing_fullname, new_title)
-        $('#gold_form_' + thing_fullname).fadeOut(400)
+    $.gild_comment = function (comment_id, new_title) {
+        r.gold.gildComment(comment_id, new_title)
+        $('#gold_form_' + comment_id).fadeOut(400)
     }
 })(jQuery)

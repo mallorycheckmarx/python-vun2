@@ -162,9 +162,7 @@ def js_config(extra_config=None):
         "uitracker_url": g.uitracker_url,
         "static_root": static(''),
         "over_18": bool(c.over18),
-        "new_window": bool(c.user.pref_newwindow),
         "vote_hash": c.vote_hash,
-        "gold": gold,
     }
 
     if extra_config:
@@ -227,13 +225,13 @@ def comment_label(num_comments=None):
     if not num_comments:
         # generates "comment" the imperative verb
         com_label = _("comment {verb}")
-        com_cls = 'comments empty may-blank'
+        com_cls = 'comments empty'
     else:
         # generates "XX comments" as a noun
         com_label = ungettext("comment", "comments", num_comments)
         com_label = strings.number_label % dict(num=num_comments,
                                                 thing=com_label)
-        com_cls = 'comments may-blank'
+        com_cls = 'comments'
     return com_label, com_cls
 
 def replace_render(listing, item, render_func):

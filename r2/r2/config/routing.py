@@ -130,8 +130,6 @@ def make_map():
        where='overview')
     mc('/user/:username/:where', controller='user', action='listing',
        where='overview')
-    mc('/user/:username/saved/:category', controller='user', action='listing',
-       where='saved')
 
     multi_prefixes = (
        partial_connect(mc, path_prefix='/user/:username/m/:multipath'),
@@ -211,8 +209,7 @@ def make_map():
        controller='front', action='framebuster')
 
     mc('/promoted/report', controller='promote', action='report')
-    mc('/promoted/live_promos/:sr', controller='promotelisting',
-       sort='live_promos', action='listing')
+    mc('/promoted/live_promos/:sr', controller='promotelisting', action='listing')
     mc('/promoted/:sort', controller='promotelisting', action="listing",
        requirements=dict(sort="future_promos|pending_promos|unpaid_promos|"
                               "rejected_promos|live_promos|underdelivered|"
@@ -318,7 +315,7 @@ def make_map():
        requirements=dict(action="login|reg"))
     mc('/post/:action', controller='post',
        requirements=dict(action="options|over18|unlogged_options|optout"
-                         "|optin|login|reg|explore_settings"))
+                         "|optin|login|reg"))
 
     mc('/api', controller='redirect', action='redirect', dest='/dev/api')
     mc('/api/distinguish/:how', controller='api', action="distinguish")

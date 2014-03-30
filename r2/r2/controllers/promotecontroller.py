@@ -36,7 +36,6 @@ from r2.lib import cssfilter, inventory, promote
 from r2.lib.authorize import get_account_info, edit_profile, PROFILE_LIMIT
 from r2.lib.db import queries
 from r2.lib.errors import errors
-from r2.lib.filters import websafe
 from r2.lib.media import force_thumbnail, thumbnail_url
 from r2.lib.memoize import memoize
 from r2.lib.menus import NamedButton, NavButton, NavMenu
@@ -173,7 +172,7 @@ class PromoteController(RedditController):
               link=VLink("link"),
               campaign=VPromoCampaign("campaign"))
     def GET_refund(self, link, campaign):
-        if link._id != campaign.link_id:
+        if campaign.link_id != link._id:
             return self.abort404()
 
         content = RefundPage(link, campaign)
@@ -188,13 +187,12 @@ class PromoteController(RedditController):
               link=VLink("link"),
               campaign=VPromoCampaign("campaign"))
     def GET_pay(self, link, campaign):
-        if link._id != campaign.link_id:
-            return self.abort404()
-
         # no need for admins to play in the credit card area
         if c.user_is_loggedin and c.user._id != link.author_id:
             return self.abort404()
 
+        if not campaign.link_id == link._id:
+            return self.abort404()
         if g.authorizenetapi:
             data = get_account_info(c.user)
             content = PaymentForm(link, campaign,
@@ -443,9 +441,6 @@ class PromoteApiController(ApiController):
                    link=VLink("link_id36"),
                    campaign=VPromoCampaign("campaign_id36"))
     def POST_freebie(self, form, jquery, link, campaign):
-        if not link or not campaign or link._id != campaign.link_id:
-            return abort(404, 'not found')
-
         if campaign_has_oversold_error(form, campaign):
             form.set_html(".freebie", "target oversold, can't freebie")
             return
@@ -462,7 +457,7 @@ class PromoteApiController(ApiController):
         if promote.is_promo(link):
             text = PromotionLog.add(link, note)
             form.find(".notes").children(":last").after(
-                "<p>" + websafe(text) + "</p>")
+                "<p>" + text + "</p>")
 
 
     @noresponse(VSponsorAdmin(),
@@ -485,9 +480,6 @@ class PromoteApiController(ApiController):
                    link=VLink('link'),
                    campaign=VPromoCampaign('campaign'))
     def POST_refund_campaign(self, form, jquery, link, campaign):
-        if not link or not campaign or link._id != campaign.link_id:
-            return abort(404, 'not found')
-
         billable_impressions = promote.get_billable_impressions(campaign)
         billable_amount = promote.get_billable_amount(campaign,
                                                       billable_impressions)
@@ -711,9 +703,6 @@ class PromoteApiController(ApiController):
             except NotFound:
                 pass
 
-        if campaign and link._id != campaign.link_id:
-            return abort(404, 'not found')
-
         if priority.cpm:
             if form.has_errors('bid', errors.BAD_BID):
                 return
@@ -778,22 +767,18 @@ class PromoteApiController(ApiController):
                    l=VLink('link_id36'),
                    campaign=VPromoCampaign("campaign_id36"))
     def POST_delete_campaign(self, form, jquery, l, campaign):
-        if not campaign or not l or l._id != campaign.link_id:
-            return abort(404, 'not found')
-
-        promote.delete_campaign(l, campaign)
+        if l and campaign:
+            promote.delete_campaign(l, campaign)
 
     @validatedForm(VSponsorAdmin(),
                    VModhash(),
                    link=VLink('link_id36'),
                    campaign=VPromoCampaign("campaign_id36"))
     def POST_terminate_campaign(self, form, jquery, link, campaign):
-        if not link or not campaign or link._id != campaign.link_id:
-            return abort(404, 'not found')
-
-        promote.terminate_campaign(link, campaign)
-        rc = RenderableCampaign.from_campaigns(link, campaign)
-        jquery.update_campaign(campaign._fullname, rc.render_html())
+        if link and campaign:
+            promote.terminate_campaign(link, campaign)
+            rc = RenderableCampaign.from_campaigns(link, campaign)
+            jquery.update_campaign(campaign._fullname, rc.render_html())
 
     @validatedForm(VSponsor('link'),
                    VModhash(),
@@ -809,9 +794,6 @@ class PromoteApiController(ApiController):
                                            "cardCode"]))
     def POST_update_pay(self, form, jquery, link, campaign, customer_id, pay_id,
                         edit, address, creditcard):
-        if not link or not campaign or link._id != campaign.link_id:
-            return abort(404, 'not found')
-
         # Check inventory
         if campaign_has_oversold_error(form, campaign):
             return
