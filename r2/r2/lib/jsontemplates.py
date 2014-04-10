@@ -736,21 +736,24 @@ class UserTableItemJsonTemplate(ThingJsonTemplate):
         return ObjectTemplate(self.data(thing))
 
 class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
-    _data_attrs_ = UserTableItemJsonTemplate._data_attrs_.copy()
-    _data_attrs_["date"] = "date"
+    _data_attrs_ = UserTableItemJsonTemplate.data_attrs(
+        date="date"
+    )
 
     def thing_attr(self, thing, attr):
-        if attr == 'rel.note':
+        rel_attr, splitter, attr = attr.partition(".")
+        if attr == 'note':
             # return empty string instead of None for missing note
-            return getattr(thing.rel, attr.split('rel.')[1], '')
-        elif attr.startswith('rel.'):
-            return getattr(thing.rel, attr.split('rel.')[1], None)
-        elif attr == 'date':
+            return ThingJsonTemplate.thing_attr(self, thing.rel, attr) or ''
+        elif attr:
+            return ThingJsonTemplate.thing_attr(self, thing.rel, attr)
+        elif rel_attr == 'date':
+            # make date UTC
             date = self.thing_attr(thing, 'rel._date')
             date = time.mktime(date.astimezone(pytz.UTC).timetuple())
             return date - time.timezone
         else:
-            return ThingJsonTemplate.thing_attr(self, thing.user, attr)
+            return UserTableItemJsonTemplate.thing_attr(self, thing, rel_attr)
 
 class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
     def inject_data(self, thing, d):
@@ -767,12 +770,14 @@ class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
         return self.inject_data(thing, d)
 
 class BannedTableItemJsonTemplate(RelTableItemJsonTemplate):
-    _data_attrs_ = RelTableItemJsonTemplate._data_attrs_.copy()
-    _data_attrs_["note"] = "rel.note"
+    _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
+        note="rel.note"
+    )
 
 class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
-    _data_attrs_ = RelTableItemJsonTemplate._data_attrs_.copy()
-    _data_attrs_["mod_permissions"] = "permissions"
+    _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
+        mod_permissions="permissions"
+    )
 
     def thing_attr(self, thing, attr):
         if attr == 'permissions':
