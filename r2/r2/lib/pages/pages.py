@@ -688,8 +688,9 @@ class Reddit(Templated):
     def page_classes(self):
         classes = set()
 
-        random_number = randint(1,10)
-        classes.add('random-%s' % random_number)
+        if hasattr(c.site, '_id'):
+            random_number = randint(1,10)
+            classes.add('random-%s' % random_number)
 
         if c.user_is_loggedin:
             classes.add('loggedin')
