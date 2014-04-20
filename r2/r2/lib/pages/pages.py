@@ -688,7 +688,7 @@ class Reddit(Templated):
     def page_classes(self):
         classes = set()
 
-        if hasattr(c.site, '_id'):
+        if not isinstance(c.site, FakeSubreddit):
             random_number = randint(1,10)
             classes.add('random-%s' % random_number)
 
