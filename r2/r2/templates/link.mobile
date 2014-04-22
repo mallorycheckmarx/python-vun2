@@ -76,7 +76,7 @@
 
 <%def name="domain()" buffered="True">
   %if thing.is_self:
-    <a class="domain" href="${thing.subreddit.path}.mobile">${thing.subreddit.name}</a>
+    <a class="domain" href="${thing.subreddit.path}.mobile">${'/r/'+thing.subreddit.name}</a>
   %else:
     <a class="domain" href="/domain/${thing.domain}/.mobile">${thing.domain}</a>
   %endif
