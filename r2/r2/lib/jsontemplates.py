@@ -723,6 +723,7 @@ class UserListJsonTemplate(ThingJsonTemplate):
     def kind(self, wrapped):
         return "UserList"
 
+
 class UserTableItemJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         id="_fullname",
@@ -734,6 +735,7 @@ class UserTableItemJsonTemplate(ThingJsonTemplate):
 
     def render(self, thing, *a, **kw):
         return ObjectTemplate(self.data(thing))
+
 
 class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
     _data_attrs_ = UserTableItemJsonTemplate.data_attrs(
@@ -755,6 +757,7 @@ class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
         else:
             return UserTableItemJsonTemplate.thing_attr(self, thing, rel_attr)
 
+
 class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
     def inject_data(self, thing, d):
         if (c.user.gold and thing.type == "friend"):
@@ -769,10 +772,12 @@ class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
         d = RelTableItemJsonTemplate.raw_data(self, thing)
         return self.inject_data(thing, d)
 
+
 class BannedTableItemJsonTemplate(RelTableItemJsonTemplate):
     _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
         note="rel.note",
     )
+
 
 class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
     _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
@@ -785,6 +790,7 @@ class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
             return [perm for perm, has in permissions if has]
         else:
             return RelTableItemJsonTemplate.thing_attr(self, thing, attr)
+
 
 class OrganicListingJsonTemplate(ListingJsonTemplate):
     def kind(self, wrapped):
