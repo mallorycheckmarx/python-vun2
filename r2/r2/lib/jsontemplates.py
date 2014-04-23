@@ -737,7 +737,7 @@ class UserTableItemJsonTemplate(ThingJsonTemplate):
 
 class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
     _data_attrs_ = UserTableItemJsonTemplate.data_attrs(
-        date="date"
+        date="date",
     )
 
     def thing_attr(self, thing, attr):
@@ -771,12 +771,12 @@ class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
 
 class BannedTableItemJsonTemplate(RelTableItemJsonTemplate):
     _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
-        note="rel.note"
+        note="rel.note",
     )
 
 class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
     _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
-        mod_permissions="permissions"
+        mod_permissions="permissions",
     )
 
     def thing_attr(self, thing, attr):
