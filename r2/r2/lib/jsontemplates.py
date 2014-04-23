@@ -760,7 +760,7 @@ class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
 
 class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
     def inject_data(self, thing, d):
-        if (c.user.gold and thing.type == "friend"):
+        if c.user.gold and thing.type == "friend":
             d["note"] = self.thing_attr(thing, 'rel.note')
         return d
 
