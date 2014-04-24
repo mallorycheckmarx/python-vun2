@@ -755,7 +755,7 @@ class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
             date = time.mktime(date.astimezone(pytz.UTC).timetuple())
             return date - time.timezone
         else:
-            return UserTableItemJsonTemplate.thing_attr(self, thing, rel_attr)
+            return ThingJsonTemplate.thing_attr(self, thing.rel, rel_attr)
 
 
 class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
