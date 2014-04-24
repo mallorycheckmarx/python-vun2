@@ -2955,7 +2955,6 @@ class RelTableItem(UserTableItem):
     def __init__(self, rel, **kw):
         self._id = rel._id
         self.rel = rel
-        self._fullname = rel._fullname
         UserTableItem.__init__(self, rel._thing2, **kw)
 
     @property
