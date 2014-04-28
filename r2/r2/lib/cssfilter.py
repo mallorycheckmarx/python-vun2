@@ -72,6 +72,7 @@ custom_macros = {
     'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
 
     'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
+    'box-shadow-single': '(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
 }
 
 custom_values = {
@@ -105,8 +106,7 @@ custom_values = {
     'text-shadow': r'none|({single-text-shadow}{w},{w})*{single-text-shadow}',
     
     # http://www.w3.org/TR/css3-background/#the-box-shadow
-    # (This description doesn't support multiple shadows)
-    'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
+    'box-shadow': r'none|{box-shadow-single}(,\s*{box-shadow-single})*',
 }
 
 def _build_regex_prefix(prefixes):
