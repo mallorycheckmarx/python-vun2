@@ -899,7 +899,7 @@ function _do_scan_usertext_for_dox(event) {
 
 function show_dox_warning(elem, doxFound) {
     var thisParent = $(elem).closest('.usertext-edit'),
-        errmsg = $(thisParent).find('.no_personal_info')[0];
+        errmsg = $(thisParent).find('.no-personal-info');
 
     // doxFound, currently not used, is an array of types of dox found.
     $(errmsg).show();
