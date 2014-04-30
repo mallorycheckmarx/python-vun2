@@ -880,9 +880,9 @@ function save_usertext(elem) {
 }
 
 
-var scan_usertext_for_dox = _.debounce(do_scan_usertext_for_dox, 500);
+var scan_usertext_for_dox = _.debounce(_do_scan_usertext_for_dox, 500);
 
-function do_scan_usertext_for_dox(event) {
+function _do_scan_usertext_for_dox(event) {
       var elem = event.target,
           textAreaContents = $(elem).val(),
           doxFound = [];
