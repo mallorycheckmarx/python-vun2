@@ -1206,7 +1206,7 @@ $(function() {
         });
 
         /* usertext textarea dox listener */
-        $('body').on('keyup', '.usertext-edit textarea', null, scan_usertext_for_dox);
+        $('body').on('keyup', '.usertext-edit textarea', scan_usertext_for_dox);
 
         /* ajax ynbutton */
         function toggleThis() { return toggle(this); }
