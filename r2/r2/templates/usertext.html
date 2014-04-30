@@ -27,7 +27,7 @@
 %>
 
 <%namespace file="printablebuttons.html" import="toggle_button" />
-<%namespace file="utils.html" import="error_field, md"/>
+<%namespace file="utils.html" import="error_field, md, text_with_links"/>
 
 <%def name="action_button(name, btn_type, onclick, display)">
   <button type="${btn_type}" onclick="${onclick}" class="${name}"
@@ -85,7 +85,14 @@
         ${error_field("DELETED_LINK", "parent", "span")}
         ${error_field("USER_BLOCKED", "parent", "span")}
 
-        <span class="error no_personal_info" style="display: none;">Your post appears to contain personal information.<br>Have you read the <a href="/wiki/faq#wiki_is_posting_personal_information_ok.3F" class="rules" target="_blank" tabindex="101">${_('rules')}</a>?</span>
+        <span class="error no-personal-info">
+          ${text_with_links(
+                  ("Your post appears to contain personal information.<br>"
+                  "Have you read the %(rules_link)s"), nocname=True,
+            rules_link = dict(link_text=_("rules"),
+                              path="/wiki/faq#wiki_is_posting_personal_information_ok.3F",
+                              _class="rules"))}
+        </span>
 
         <div class="usertext-buttons">
           ${action_button("save", "submit", "",
