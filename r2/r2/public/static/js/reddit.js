@@ -885,23 +885,22 @@ var scan_usertext_for_dox = _.debounce(_do_scan_usertext_for_dox, 500);
 function _do_scan_usertext_for_dox(event) {
       var elem = event.target,
           textAreaContents = $(elem).val(),
-          doxFound = [];
-      for (i in doxTests) {
-        if (doxTests[i].test(textAreaContents)) {
-            doxFound.push(i);
+          doxFound = false;
+      _.each(doxTests, function(value, key) {
+        if (this.test(textAreaContents)) {
+            doxFound = true;
         }
-      }
-      if (doxFound.length) {
-        show_dox_warning(elem, doxFound);
+      });
+      if (doxFound) {
+        show_dox_warning(elem);
         return false;
       }
 }
 
-function show_dox_warning(elem, doxFound) {
+function show_dox_warning(elem) {
     var thisParent = $(elem).closest('.usertext-edit'),
         errmsg = $(thisParent).find('.no-personal-info');
 
-    // doxFound, currently not used, is an array of types of dox found.
     $(errmsg).show();
 }
 
