@@ -45,4 +45,4 @@ create or replace function domain(url text) returns text as $$
 $$ language sql immutable;
 
 create view active as
-    select pg_stat_activity.procpid, (now() - pg_stat_activity.query_start) as t, pg_stat_activity.current_query from pg_stat_activity where (pg_stat_activity.current_query <> '<IDLE>'::text) order by (now() - pg_stat_activity.query_start);
+    select pg_stat_activity.procpid, (now() - pg_stat_activity.query_start) as t, pg_stat_activity.current_query from pg_stat_activity where (pg_stat_activity.current_query <> '<IDLE>'::text) order by t;
