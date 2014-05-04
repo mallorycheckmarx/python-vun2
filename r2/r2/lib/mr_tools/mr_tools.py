@@ -85,7 +85,7 @@ def mr_map_parallel(processor, fd = stdin,
                     workers = multiprocessing.cpu_count(),
                     chunk_size = 1000):
     # `process` must be an instance of Mapper and promise that it is
-    # safe to execute in a fork()d process.  Also note that we fuck
+    # safe to execute in a fork()d process.  Also note that we mess
     # up the result ordering, but relying on result ordering breaks
     # the mapreduce contract anyway. Note also that like many of the
     # mr_tools functions, we break on newlines in the emitted output

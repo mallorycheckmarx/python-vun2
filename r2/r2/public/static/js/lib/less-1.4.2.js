@@ -582,7 +582,7 @@ less.Parser = function Parser(env) {
                 //
                 // A string, which supports escaping " and '
                 //
-                //     "milky way" 'he\'s the one!'
+                //     "milky way" 'xe\'s the one!'
                 //
                 quoted: function () {
                     var str, j = i, e, index = i;
