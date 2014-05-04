@@ -204,7 +204,7 @@ def mr_reduce_max_per_key(sort_key, post = None, num = 10, fd = sys.stdin):
             maxes = maxes[:num]
 
         if post:
-            # if we were passed a "post" function, he takes
+            # if we were passed a "post" function, xe takes
             # responsibility for emitting
             post(key, maxes)
             return []

@@ -32,7 +32,7 @@ r.recommend.RecommendationList = Backbone.Collection.extend({
     model: r.recommend.Recommendation,
 
     // names of subreddits for which recommendations are generated
-    // (if user likes srNames, he will also like...)
+    // (if user likes srNames, xe will also like...)
     srNames: [],
 
     // names of subreddits that should be excluded from future recs because
