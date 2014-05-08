@@ -419,7 +419,7 @@ function hidecomment(elem) {
     var t = $(elem).thing();
     t.hide()
         .find(".noncollapsed:first, .midcol:first").hide().end()
-        .show().find(".entry:first .collapsed").show();
+        .show().find(".entry:first .collapsed:first").show();
     if(t.hasClass("message")) {
         $.request("collapse_message", {"id": $(t).thing_id()});
     } else {
@@ -430,7 +430,7 @@ function hidecomment(elem) {
 
 function showcomment(elem) {
     var t = $(elem).thing();
-    t.find(".entry:first .collapsed").hide().end()
+    t.find(".entry:first .collapsed:first").hide().end()
         .find(".noncollapsed:first, .midcol:first").show().end()
         .show();
     if(t.hasClass("message")) {
