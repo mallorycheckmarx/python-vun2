@@ -153,7 +153,11 @@
             <td>super^script</td>
             <td>super<sup>script</sup></td>
         </tr>
-      </table>
+        <tr>
+            <td>&gt;! ${_( "spoiler")}</td>
+            <td><blockquote class="spoiler">${_( "spoiler" )}</blockquote></td>
+        </tr>
+        </table>
       </div>
     </div>
   %endif

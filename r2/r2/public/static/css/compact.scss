@@ -1499,6 +1499,20 @@ body.toolbar {
     margin: 5px;
     margin-right: 15px;
 }
+.md blockquote.spoiler {
+    border-left: 2px solid #000;
+	color: #000;
+    background: #000;
+}
+.md blockquote.spoiler > * {
+	visibility: hidden;
+}
+.md blockquote.spoiler:hover {
+    background: inherit;
+}
+.md blockquote.spoiler:hover > * {
+    visibility: visible;
+}
 .md td, .md th { border: 1px solid #EEE; padding: 1px 3px; }
 .md th { font-weight: bold;  }
 .md table { margin: 5px 10px;  }
