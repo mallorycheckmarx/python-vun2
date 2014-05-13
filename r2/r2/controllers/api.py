@@ -1749,7 +1749,7 @@ class ApiController(RedditController):
             store = False
 
         thing_age = c.start_time - thing._date
-        if thing_age.days > g.VOTE_AGE_LIMIT:
+        if thing_age.days > g.VOTE_AGE_LIMIT and dir != 0:
             g.log.debug("ignoring vote on old thing %s" % thing._fullname)
             store = False
 
