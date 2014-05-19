@@ -1066,7 +1066,7 @@ class LoginPage(BoringPage):
         if c.render_style == "compact":
             title = self.short_title
         else:
-            title = _("login or register")
+            title = _("log in or register")
         BoringPage.__init__(self,  title, **context)
 
         if self.dest:

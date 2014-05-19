@@ -71,7 +71,7 @@ string_dict = dict(
 
     user_deleted = _("your account has been deleted, but we won't judge you for it."),
 
-    cover_msg      = _("you'll need to login or register to do that"),
+    cover_msg      = _("you'll need to log in or register to do that"),
     cover_disclaim = _("(don't worry, it only takes a few seconds)"),
 
     oauth_login_msg = _(
