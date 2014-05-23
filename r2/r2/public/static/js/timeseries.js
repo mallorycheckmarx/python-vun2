@@ -18,8 +18,6 @@ r.timeseries = {
     _formatTick: function (val, axis) {
         if (val == 0)
             return '0'
-        else if (val < 10)
-            return val.toFixed(2)
 
         for (var i = 1; i < this._units.length; i++) {
             if (val / Math.pow(1000, i - 1) < 1000) {
@@ -29,7 +27,8 @@ r.timeseries = {
 
         val /= Math.pow(1000, i - 1)
 
-        return val.toFixed(axis.tickDecimals) + this._units[i - 1]
+        var sigDigit = Math.pow(10, axis.tickDecimals)
+        return Math.round(val * sigDigit) / sigDigit + this._units[i - 1]
     },
 
     makeTimeSeriesChartsFromTable: function (table) {
@@ -145,6 +144,7 @@ r.timeseries = {
 
             yaxis: {
                 min: 0,
+                tickDecimals: 1,
                 tickFormatter: $.proxy(this, '_formatTick')
             }
         }
