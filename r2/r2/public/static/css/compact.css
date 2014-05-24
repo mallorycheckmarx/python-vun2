@@ -552,9 +552,13 @@ body.toolbar { margin: 0px; padding: 0px; overflow: hidden; }
 
 .md blockquote.spoiler > * { visibility: hidden; }
 
-.md blockquote.spoiler:hover { background: inherit; }
+.md blockquote.spoiler:hover, .md blockquote.spoiler:active { background: inherit; }
 
-.md blockquote.spoiler:hover > * { visibility: visible; }
+.md blockquote.spoiler:hover > *, .md blockquote.spoiler:active > * { visibility: visible; }
+
+.md span.spoiler, .md span.spoiler * { background: #000; color: #000; }
+
+.md span.spoiler:hover, .md span.spoiler:hover *, .md span.spoiler:hover, .md span.spoiler:active * { background: none; color: inherit; }
 
 .md td, .md th { border: 1px solid #EEE; padding: 1px 3px; }
 
