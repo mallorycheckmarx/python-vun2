@@ -107,6 +107,7 @@ import sys, random, datetime, calendar, simplejson, re, time
 import time
 from itertools import chain, product
 from urllib import quote, urlencode
+from random import randint
 
 # the ip tracking code is currently deeply tied with spam prevention stuff
 # this will be open sourced as soon as it can be decoupled
@@ -700,6 +701,10 @@ class Reddit(Templated):
 
     def page_classes(self):
         classes = set()
+
+        if not isinstance(c.site, FakeSubreddit):
+            random_number = randint(1,10)
+            classes.add('random-%s' % random_number)
 
         if c.user_is_loggedin:
             classes.add('loggedin')
