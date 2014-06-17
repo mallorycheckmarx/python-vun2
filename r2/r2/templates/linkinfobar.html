@@ -64,9 +64,17 @@
 
 %if getattr(thing.a, "shortlink", None):
   <div class="shortlink">
-    shortlink:
+    <span class="word">shortlink:</span>
     &#32;
     <input type="text" value="http://${thing.a.shortlink}" readonly="readonly" id="shortlink-text" />
+  </div>
+%endif
+
+%if getattr(thing.a, "commentshortlink", None):
+  <div class="commentshortlink">
+    <span class="word">comment:</span>
+    &#32;
+    <input type="text" value="http://${thing.a.commentshortlink}" readonly="readonly" id="commentshortlink-text" />
   </div>
 %endif
 

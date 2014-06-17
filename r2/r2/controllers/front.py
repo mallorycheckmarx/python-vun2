@@ -955,10 +955,21 @@ class FrontController(RedditController):
 
         return builder.results, timing, res
 
-    @validate(VAdmin(),
-              comment=VCommentByID('comment_id'))
+    @validate(comment=VCommentByID('comment_id'))
     def GET_comment_by_id(self, comment):
-        href = comment.make_permalink_slow(context=5, anchor=True)
+        if not comment:
+            return self.abort404()
+
+        # if the user can't see this comment, halt the redirect
+        if not comment.subreddit_slow.can_view(c.user):
+            return abort(403, 'forbidden')
+
+        # don't show context if this is a top level comment
+        if comment.parent_id:
+            href = comment.make_permalink_slow(context=5, anchor=True, force_domain=True)
+        else:
+            href = comment.make_permalink_slow(anchor=True, force_domain=True)
+
         return self.redirect(href)
 
     @validate(url=VRequired('url', None),

@@ -1289,9 +1289,12 @@ class LinkInfoPage(Reddit):
         short_description = None
         if link and link.selftext:
             short_description = _truncate(link.selftext.strip(), MAX_DESCRIPTION_LENGTH)
-        # only modify the title if the comment/author are neither deleted nor spam
+        # only modify the title or show the shortlink if the comment/author are neither deleted nor spam
         if comment and not comment._deleted and not comment._spam:
             author = Account._byID(comment.author_id, data=True)
+
+            if g.shortdomain:
+                self.link.commentshortlink = g.shortdomain + '/c/' + comment._id36
 
             if not author._deleted and not author._spam:
                 params = {'author' : author.name, 'title' : _force_unicode(link_title)}

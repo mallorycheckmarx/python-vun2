@@ -1166,7 +1166,7 @@ $(function() {
         });
         
         /* Select shortlink text on click */
-        $("#shortlink-text").click(function() {
+        $("#shortlink-text, #commentshortlink-text").click(function() {
             $(this).select();
         });
 
