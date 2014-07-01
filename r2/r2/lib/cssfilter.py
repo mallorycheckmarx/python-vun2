@@ -491,12 +491,13 @@ class StylesheetValidator(object):
         for line_number, line_text in enumerate(source_lines, start=1):
             for codepoint in line_text:
                 # IE<8: *{color: expression\28 alert\28 1 \29 \29 }
-                if codepoint == "\\":
+                if codepoint in ("\t", "\n", "\r"):
+                    continue
+                    
+                # accept these characters that get classified as control
+                elif codepoint == "\\":
                     yield ValidationError(line_number, "BACKSLASH")
                     break
-                # accept these characters that get classified as control
-                elif codepoint in ("\t", "\n", "\r"):
-                    continue
                 # Safari: *{font-family:'foobar\x03;background:url(evil);';}
                 elif unicodedata.category(codepoint).startswith("C"):
                     yield ValidationError(line_number, "CONTROL_CHARACTER")
