@@ -1130,3 +1130,15 @@ class SavedBuilder(IDBuilder):
             category = categories.get(w._id, '')
             w.savedcategory = category
         return wrapped
+
+class SubmittedBuilder(IDBuilder):
+    def wrap_items(self, items):
+        from r2.lib.template_helpers import add_att
+        categories = LinksByAccount.fast_query(c.user, items).items()
+        categories = {item[1]._id: category for item, category in categories if category}
+        wrapped = QueryBuilder.wrap_items(self, items)
+        for w in wrapped:
+            category = categories.get(w._id, '')
+            w.savedcategory = category
+        return wrapped
+        
