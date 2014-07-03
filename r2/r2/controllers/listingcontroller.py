@@ -577,17 +577,23 @@ class UserController(ListingController):
             if self.sort not in ("hot", "new"):
                 res.append(TimeMenu(default = self.time))
             if c.user.gold:
-                srnames = LinksByAccount.get_saved_subreddits(self.vuser)
+                if self.where == 'submitted':
+                    srnames = LinksByAccount.get_subreddits(self.vuser)
+                elif self.where == 'comments':
+                    srnames = CommentsByAccount.get_subreddits(self.vuser)
+                else:
+                    srnames = LinksByAccount.get_subreddits(self.vuser)
+                    srnames += CommentsByAccount.get_subreddits(self.vuser)
                 srs = Subreddit._by_name(srnames)
                 
                 srnames = [name for name, sr in srs.iteritems()
                             if sr.can_view(c.user)]
                 srnames = sorted(set(srnames), key=lambda name: name.lower())
                 if len(srnames) > 1:
-                    sr_buttons = [NavButton(_('all'), None, opt='sr',
+                    sr_buttons = [QueryButton(_('all'), None, opt='sr',
                                         css_class='primary')]
                     for srname in srnames:
-                        sr_buttons.append(NavButton(srname, srname, opt='sr'))
+                        sr_buttons.append(QueryButton(srname, srname, opt='sr'))
                     if self.where == 'overview':
                         base_path = '/user/%s' % self.vuser.name
                     elif self.where == 'submitted':
@@ -696,25 +702,21 @@ class UserController(ListingController):
         if self.where == 'overview':
             self.check_modified(self.vuser, 'overview')
             if c.user.gold:
-                self.builder_cls = OverviewBuilder
-            sr_id = self.oversr._id if self.oversr else None
-            
+                sr_id = self.oversr._id if self.oversr else None
             q = queries.get_overview(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'comments':
             sup.set_sup_header(self.vuser, 'commented')
             self.check_modified(self.vuser, 'commented')
             if c.user.gold:
-                self.builder_cls = CommentBuilder
-            sr_id = self.comsr._id if self.comsr else None
+                sr_id = self.comsr._id if self.comsr else None
             q = queries.get_comments(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'submitted':
             sup.set_sup_header(self.vuser, 'submitted')
             self.check_modified(self.vuser, 'submitted')
             if c.user.gold:
-                self.builder_cls = SubmittedBuilder
-            sr_id = self.subsr._id if self.subsr else None
+                sr_id = self.subsr._id if self.subsr else None
             q = queries.get_submitted(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'gilded':
