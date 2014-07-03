@@ -493,16 +493,16 @@ def _get_sr_comments(sr_id):
                        sort = desc('_date'))
     return make_results(q)
 
-def _get_comments(user_id, sort, time):
+def _get_comments(user_id, sort, time, sr_id):
     return user_query(Comment, user_id, sort, time, sr_id)
 
-def get_comments(user, sort, time):
+def get_comments(user, sort, time, sr_id):
     return _get_comments(user._id, sort, time, sr_id)
 
-def _get_submitted(user_id, sort, time):
+def _get_submitted(user_id, sort, time, sr_id):
     return user_query(Link, user_id, sort, time, sr_id)
 
-def get_submitted(user, sort, time):
+def get_submitted(user, sort, time, sr_id):
     return _get_submitted(user._id, sort, time, sr_id)
 
 def get_overview(user, sort, time, sr_id):
