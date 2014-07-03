@@ -470,9 +470,13 @@ def get_domain_links(domain, sort, time):
 
 def user_query(kind, user_id, sort, time, sr_id=None):
     """General profile-page query."""
-    sr_id = sr_id or 'none'
-    q = kind._query(kind.c.author_id == user_id,
+    if sr_id:
+        q = kind._query(kind.c.author_id == user_id,
                     kind.c.sr_id == sr_id,
+                    kind.c._spam == (True, False),
+                    sort = db_sort(sort))
+    else:
+        q = kind._query(kind.c.author_id == user_id,
                     kind.c._spam == (True, False),
                     sort = db_sort(sort))
     if time != 'all':
