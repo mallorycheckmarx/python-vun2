@@ -468,9 +468,11 @@ def get_domain_links(domain, sort, time):
 
     return make_results(q)
 
-def user_query(kind, user_id, sort, time):
+def user_query(kind, user_id, sort, time, sr_id=None):
     """General profile-page query."""
+    sr_id = sr_id or 'none'
     q = kind._query(kind.c.author_id == user_id,
+                    kind.c.sr_id == sr_id,
                     kind.c._spam == (True, False),
                     sort = db_sort(sort))
     if time != 'all':
@@ -492,20 +494,20 @@ def _get_sr_comments(sr_id):
     return make_results(q)
 
 def _get_comments(user_id, sort, time):
-    return user_query(Comment, user_id, sort, time)
+    return user_query(Comment, user_id, sort, time, sr_id)
 
 def get_comments(user, sort, time):
-    return _get_comments(user._id, sort, time)
+    return _get_comments(user._id, sort, time, sr_id)
 
 def _get_submitted(user_id, sort, time):
-    return user_query(Link, user_id, sort, time)
+    return user_query(Link, user_id, sort, time, sr_id)
 
 def get_submitted(user, sort, time):
-    return _get_submitted(user._id, sort, time)
+    return _get_submitted(user._id, sort, time, sr_id)
 
-def get_overview(user, sort, time):
-    return merge_results(get_comments(user, sort, time),
-                         get_submitted(user, sort, time))
+def get_overview(user, sort, time, sr_id):
+    return merge_results(get_comments(user, sort, time, sr_id),
+                         get_submitted(user, sort, time, sr_id))
 
 def rel_query(rel, thing_id, name, filters = []):
     """General relationship query."""
