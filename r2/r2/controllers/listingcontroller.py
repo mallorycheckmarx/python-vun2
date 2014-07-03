@@ -576,6 +576,29 @@ class UserController(ListingController):
             res.append(ProfileSortMenu(default = self.sort))
             if self.sort not in ("hot", "new"):
                 res.append(TimeMenu(default = self.time))
+            if c.user.gold:
+                srnames = LinksByAccount.get_saved_subreddits(self.vuser)
+                srs = Subreddit._by_name(srnames)
+                
+                srnames = [name for name, sr in srs.iteritems()
+                            if sr.can_view(c.user)]
+                srnames = sorted(set(srnames), key=lambda name: name.lower())
+                if len(srnames) > 1:
+                    sr_buttons = [NavButton(_('all'), None, opt='sr',
+                                        css_class='primary')]
+                    for srname in srnames:
+                        sr_buttons.append(NavButton(srname, srname, opt='sr'))
+                    if self.where == 'overview':
+                        base_path = '/user/%s' % self.vuser.name
+                    elif self.where == 'submitted':
+                        base_path = '/user/%s/submitted' % self.vuser.name
+                    elif self.where == 'comments':
+                        base_path = '/user/%s/comments' % self.vuser.name
+                    sr_menu = NavMenu(sr_buttons, base_path=base_path,
+                              title=_('filter by subreddit'),
+                              type='lightdrop')
+                    res.append(sr_menu)
+                
         if self.where == 'saved' and c.user.gold:
             srnames = LinkSavesBySubreddit.get_saved_subreddits(self.vuser)
             srnames += CommentSavesBySubreddit.get_saved_subreddits(self.vuser)
@@ -672,17 +695,27 @@ class UserController(ListingController):
         q = None
         if self.where == 'overview':
             self.check_modified(self.vuser, 'overview')
-            q = queries.get_overview(self.vuser, self.sort, self.time)
+            if c.user.gold:
+                self.builder_cls = OverviewBuilder
+            sr_id = self.oversr._id if self.oversr else None
+            
+            q = queries.get_overview(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'comments':
             sup.set_sup_header(self.vuser, 'commented')
             self.check_modified(self.vuser, 'commented')
-            q = queries.get_comments(self.vuser, self.sort, self.time)
+            if c.user.gold:
+                self.builder_cls = CommentBuilder
+            sr_id = self.comsr._id if self.comsr else None
+            q = queries.get_comments(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'submitted':
             sup.set_sup_header(self.vuser, 'submitted')
             self.check_modified(self.vuser, 'submitted')
-            q = queries.get_submitted(self.vuser, self.sort, self.time)
+            if c.user.gold:
+                self.builder_cls = SubmittedBuilder
+            sr_id = self.subsr._id if self.subsr else None
+            q = queries.get_submitted(self.vuser, self.sort, self.time, sr_id)
 
         elif self.where == 'gilded':
             sup.set_sup_header(self.vuser, 'gilded')
@@ -771,6 +804,43 @@ class UserController(ListingController):
                 category = None
             self.savedsr = sr
             self.savedcategory = category
+            
+        if where == 'submitted':
+            self.show_chooser = True
+            srname = request.GET.get('sr')
+            if srname and c.user.gold:
+                try:
+                    sr = Subreddit._by_name(srname)
+                except NotFound:
+                    sr = None
+            else:
+                sr = None
+            self.subsr = sr
+            
+            if where == 'overview':
+            self.show_chooser = True
+            srname = request.GET.get('sr')
+            if srname and c.user.gold:
+                try:
+                    sr = Subreddit._by_name(srname)
+                except NotFound:
+                    sr = None
+            else:
+                sr = None
+            self.oversr = sr
+            
+            if where == 'comments':
+            self.show_chooser = True
+            srname = request.GET.get('sr')
+            if srname and c.user.gold:
+                try:
+                    sr = Subreddit._by_name(srname)
+                except NotFound:
+                    sr = None
+            else:
+                sr = None
+            self.comsr = sr
+            
 
         check_cheating('user')
 
