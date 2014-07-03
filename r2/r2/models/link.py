@@ -1966,7 +1966,26 @@ class ModeratorInbox(Relation(Subreddit, Message)):
             res.append(i)
         return res
 
-class CommentsByAccount(tdb_cassandra.DenormalizedRelation):
+class _ThingsByAccount(tdb_cassandra.DernormalizedRelation):
+    @classmethod
+    def get_subreddits(cls, user):
+        sr_id36s = cls.get_values(user)
+        srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
+        return sorted([sr.name for sr in srs])
+        
+    @classmethod
+    def get_values(cls, user):
+        rowkey = cls._rowkey(user, None)
+        try:
+            columns = cls._cf.get(rowkey,
+                                  column_count=tdb_cassandra.max_column_count)
+        except NotFoundException:
+            return []
+
+        return columns.keys()
+    
+
+class CommentsByAccount(_ThingsByAccount):
     _use_db = True
     _write_last_modified = False
     _views = []
@@ -1980,7 +1999,7 @@ class CommentsByAccount(tdb_cassandra.DenormalizedRelation):
         cls.create(account, [comment])
 
 
-class LinksByAccount(tdb_cassandra.DenormalizedRelation):
+class LinksByAccount(_ThingsByAccount):
     _use_db = True
     _write_last_modified = False
     _views = []
