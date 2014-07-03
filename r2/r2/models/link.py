@@ -1969,10 +1969,12 @@ class ModeratorInbox(Relation(Subreddit, Message)):
 class _ThingsByAccount(tdb_cassandra.DernormalizedRelation):
     @classmethod
     def get_subreddits(cls, user):
-        sr_id36s = cls.get_values(user)
-        srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
-        return sorted([sr.name for sr in srs])
-        
+    link_id36s = cls.get_values(user)
+    links = Link._byID36(link_id36s, data=True, return_dict=False)
+    sr_id36s = links.sr_id
+    srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
+    return sorted([sr.name for sr in srs])
+
     @classmethod
     def get_values(cls, user):
         rowkey = cls._rowkey(user, None)
