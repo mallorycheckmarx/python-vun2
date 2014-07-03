@@ -498,10 +498,7 @@ def _get_sr_comments(sr_id):
     return make_results(q)
 
 def _get_comments(user_id, sort, time, sr_id=None):
-    if sr_id:
-        return user_query(Comment, user_id, sort, time, sr_id)
-    else:
-        return user_query(Comment, user_id, sort, time)
+    return user_query(Comment, user_id, sort, time, sr_id)
 
 def get_comments(user, sort, time, sr_id=None):
     if sr_id:
@@ -510,10 +507,7 @@ def get_comments(user, sort, time, sr_id=None):
         return _get_comments(user._id, sort, time)
 
 def _get_submitted(user_id, sort, time, sr_id=None):
-    if sr_id:
-        return user_query(Link, user_id, sort, time, sr_id)
-    else:
-        return user_query(Link, user_id, sort, time)
+    return user_query(Link, user_id, sort, time, sr_id)
 
 def get_submitted(user, sort, time, sr_id=None):
     if sr_id:
