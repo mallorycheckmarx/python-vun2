@@ -1971,7 +1971,8 @@ class _ThingsByAccount(tdb_cassandra.DernormalizedRelation):
     def get_subreddits(cls, user):
     link_id36s = cls.get_values(user)
     links = Link._byID36(link_id36s, data=True, return_dict=False)
-    sr_id36s = links.sr_id
+    for link in links:
+        sr_id36s.append(link.sr_id)
     srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
     return sorted([sr.name for sr in srs])
 
