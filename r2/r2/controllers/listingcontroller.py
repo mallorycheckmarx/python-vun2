@@ -701,6 +701,7 @@ class UserController(ListingController):
         q = None
         if self.where == 'overview':
             self.check_modified(self.vuser, 'overview')
+            sr_id = None
             if c.user.gold:
                 sr_id = self.oversr._id if self.oversr else None
             q = queries.get_overview(self.vuser, self.sort, self.time, sr_id)
@@ -708,6 +709,7 @@ class UserController(ListingController):
         elif self.where == 'comments':
             sup.set_sup_header(self.vuser, 'commented')
             self.check_modified(self.vuser, 'commented')
+            sr_id = None
             if c.user.gold:
                 sr_id = self.comsr._id if self.comsr else None
             q = queries.get_comments(self.vuser, self.sort, self.time, sr_id)
@@ -715,6 +717,7 @@ class UserController(ListingController):
         elif self.where == 'submitted':
             sup.set_sup_header(self.vuser, 'submitted')
             self.check_modified(self.vuser, 'submitted')
+            sr_id = None
             if c.user.gold:
                 sr_id = self.subsr._id if self.subsr else None
             q = queries.get_submitted(self.vuser, self.sort, self.time, sr_id)
