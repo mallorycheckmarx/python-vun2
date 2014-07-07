@@ -578,12 +578,12 @@ class UserController(ListingController):
                 res.append(TimeMenu(default = self.time))
             if c.user.gold:
                 if self.where == 'submitted':
-                    srnames = LinksByAccount.get_subreddits(self.vuser)
+                    srnames = LinksBySubreddit.get_subreddits(self.vuser)
                 elif self.where == 'comments':
-                    srnames = CommentsByAccount.get_subreddits(self.vuser)
+                    srnames = CommentsBySubreddit.get_subreddits(self.vuser)
                 else:
-                    srnames = LinksByAccount.get_subreddits(self.vuser)
-                    srnames += CommentsByAccount.get_subreddits(self.vuser)
+                    srnames = LinksBySubreddit.get_subreddits(self.vuser)
+                    srnames += CommentsBySubreddit.get_subreddits(self.vuser)
                 srs = Subreddit._by_name(srnames)
                 
                 srnames = [name for name, sr in srs.iteritems()
