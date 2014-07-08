@@ -41,10 +41,6 @@
 })(jQuery);
 
 $(function() {
-    if ($(window).scrollTop() == 0) {
-        $(window).scrollTop(1);
-    }
-    ;
     /* Top menu dropdown*/
     $('#topmenu_toggle').click(function() {
         $(this).toggleClass("active");
