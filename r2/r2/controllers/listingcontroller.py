@@ -571,6 +571,7 @@ class UserController(ListingController):
 
     @property
     def menus(self):
+        a = Account._byID(user_id, data = True)
         res = []
         if (self.where in ('overview', 'submitted', 'comments')):
             res.append(ProfileSortMenu(default = self.sort))
@@ -578,12 +579,12 @@ class UserController(ListingController):
                 res.append(TimeMenu(default = self.time))
             if c.user.gold:
                 if self.where == 'submitted':
-                    srnames = LinksBySubreddit.get_subreddits(self.vuser)
+                    srnames = a.link_karma_subs()
                 elif self.where == 'comments':
-                    srnames = CommentsBySubreddit.get_subreddits(self.vuser)
+                    srnames = a.comment_karma_subs()
                 else:
-                    srnames = LinksBySubreddit.get_subreddits(self.vuser)
-                    srnames += CommentsBySubreddit.get_subreddits(self.vuser)
+                    srnames = a.link_karma_subs()
+                    srnames += a.comment_karma_subs()
                 srs = Subreddit._by_name(srnames)
                 
                 srnames = [name for name, sr in srs.iteritems()
