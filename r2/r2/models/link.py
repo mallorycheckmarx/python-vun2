@@ -1966,9 +1966,32 @@ class ModeratorInbox(Relation(Subreddit, Message)):
             res.append(i)
         return res
 
-class CommentsByAccount(tdb_cassandra.DenormalizedRelation):
+class _ThingsByAccount(tdb_cassandra.DernormalizedRelation):
+    @classmethod
+    def get_subreddits(cls, user):
+        link_id36s = cls.get_values(user)
+        links = Link._byID36(link_id36s, data=True, return_dict=False)
+        for link in links:
+            sr_id36s.append(link.sr_id)
+        srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
+        return sorted([sr.name for sr in srs])
+
+    @classmethod
+    def get_values(cls, user):
+        rowkey = cls._rowkey(user, None)
+        try:
+            columns = cls._cf.get(rowkey,
+                                  column_count=tdb_cassandra.max_column_count)
+        except NotFoundException:
+            return []
+
+        return columns.keys()
+    
+
+class CommentsByAccount(_ThingsByAccount):
     _use_db = True
     _write_last_modified = False
+    _last_modified_name = 'commentsub'
     _views = []
 
     @classmethod
@@ -1980,9 +2003,10 @@ class CommentsByAccount(tdb_cassandra.DenormalizedRelation):
         cls.create(account, [comment])
 
 
-class LinksByAccount(tdb_cassandra.DenormalizedRelation):
+class LinksByAccount(_ThingsByAccount):
     _use_db = True
     _write_last_modified = False
+    _last_modified_name = 'linksub'
     _views = []
 
     @classmethod
@@ -1993,6 +2017,59 @@ class LinksByAccount(tdb_cassandra.DenormalizedRelation):
     def add_link(cls, account, link):
         cls.create(account, [link])
 
+@view_of(LinksByAccount)
+class LinksBySubreddit(_ThingsBySubreddit):
+     _use_db = True
+
+@view_of(CommentsByAccount)
+class CommentsBySubreddit(_ThingsBySubreddit):
+    _use_db = True
+
+class _ThingsBySubreddit(tdb_cassandra.DernormalizedRelation):
+    @classmethod
+    def _rowkey(cls, user, thing):
+        return user._id36
+
+    @classmethod
+    def _column(cls, user, thing):
+        return {utils.to36(thing.sr_id): ''}
+
+    @classmethod
+    def get_values(cls, user):
+        rowkey = cls._rowkey(user, None)
+        try:
+            columns = cls._cf.get(rowkey,
+                                  column_count=tdb_cassandra.max_column_count)
+        except NotFoundException:
+            return []
+
+        return columns.keys()
+
+    @classmethod
+    def get_subreddits(cls, user):
+        sr_id36s = cls.get_values(user)
+        srs = Subreddit._byID36(sr_id36s, return_dict=False, data=True)
+        return sorted([sr.name for sr in srs])
+
+    @classmethod
+    def create(cls, user, things, **kw):
+        for thing in things:
+            rowkey = cls._rowkey(user, thing)
+            column = cls._column(user, thing)
+            cls._set_values(rowkey, column)
+
+    @classmethod
+    def _check_empty(cls, user, sr_id):
+        return False
+
+    @classmethod
+    def destroy(cls, user, things, **kw):
+        # See if thing's sr is present anymore
+        sr_ids = set([thing.sr_id for thing in things])
+        for sr_id in set(sr_ids):
+            if cls._check_empty(user, sr_id):
+                cls._cf.remove(user._id36, [utils.to36(sr_id)])
+    
 
 class MessagesByAccount(tdb_cassandra.DenormalizedRelation):
     _use_db = True

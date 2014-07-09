@@ -227,7 +227,27 @@ class Account(Thing):
                            old_link_karma, old_comment_karma))
 
         return karmas
+        
+    def link_karma_subs(self):
+        """returns a list of tuples in the form (name, hover-text, link_karma,
+        comment_karma)"""
+        link_suffix = '_link_karma'
+        sr_names = set()
+        for k in self._t.keys():
+            if k.endswith(link_suffix):
+                sr_names.add(k[:-len(link_suffix)])
+        return sr_names
 
+    def comment_karma_subs(self):
+        """returns a list of tuples in the form (name, hover-text, link_karma,
+        comment_karma)"""
+        comment_suffix = '_comment_karma'
+        sr_names = set()
+        for k in self._t.keys():
+            if k.endswith(comment_suffix):
+                sr_names.add(k[:-len(comment_suffix)])
+        return sr_names
+        
     def update_last_visit(self, current_time):
         from admintools import apply_updates
 
