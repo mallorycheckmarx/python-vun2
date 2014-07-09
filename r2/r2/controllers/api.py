@@ -3454,6 +3454,10 @@ class ApiController(RedditController):
                 'saved', css_class).val(css_class)
         elif flair_type == LINK_FLAIR:
             link.flair_text = text
+            if link.flair_css_class:
+                old_css_class = link.flair_css_class.split()
+            else:
+                old_css_class = []
             link.flair_css_class = css_class
             link._commit()
             changed(link)
@@ -3465,13 +3469,25 @@ class ApiController(RedditController):
             # Push some client-side updates back to the browser.
 
             jquery('.id-%s .entry .linkflairlabel' % link._fullname).remove()
-            title_path = '.id-%s .entry > .title > .title' % link._fullname
+            jquery('.id-%s' % link._fullname).removeClass('linkflair')
+            # remove any existing linkflair-* classes
+            jquery('.id-%s' % link._fullname).removeClass(
+                ' '.join('linkflair-' + c for c in old_css_class))
+            jquery('body.comments-page').removeClass(
+                ' '.join('post-linkflair-' + c for c in old_css_class))
 
+            title_path = '.id-%s .entry > .title > .title' % link._fullname
             # TODO: move this to a template
             if flair_template:
+                flair_classes = ' '.join('linkflair-' + c
+                    for c in css_class.split())
+                jquery('.id-%s' % link._fullname).addClass('linkflair')
+                jquery('.id-%s' % link._fullname).addClass(flair_classes)
+                jquery('body.comments-page').addClass(
+                    ' '.join('post-linkflair-' + c for c in css_class.split()))
+
                 flair = '<span class="linkflairlabel %s">%s</span>' % (
-                    ' '.join('linkflair-' + c for c in css_class.split()),
-                    websafe(text))
+                    flair_classes, websafe(text))
                 if site.link_flair_position == 'left':
                     jquery(title_path).before(flair)
                 elif site.link_flair_position == 'right':
