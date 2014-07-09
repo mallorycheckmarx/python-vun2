@@ -151,3 +151,9 @@ ul {
 .linkflair { display: inline-block; font-size: small; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.author, .flair, .linkflair { margin-right: 0.5em }
 .author.submitter { color: white; background-color: #5F99CF; padding: 0 4px; }
+.md blockquote.spoiler { color: #000; background: #000; }
+.md blockquote.spoiler > * { visibility: hidden; }
+.md blockquote.spoiler:hover, .md blockquote.spoiler:active { background: inherit; }
+.md blockquote.spoiler:hover > *, .md blockquote.spoiler:active > * { visibility: visible; }
+.md span.spoiler, .md span.spoiler * { background: #000; color: #000; }
+.md span.spoiler:hover, .md span.spoiler:hover *, .md span.spoiler:hover, .md span.spoiler:active * { background: none; color: inherit; }
