@@ -823,7 +823,7 @@ class UserController(ListingController):
                 sr = None
             self.subsr = sr
             
-            if where == 'overview':
+        if where == 'overview':
             self.show_chooser = True
             srname = request.GET.get('sr')
             if srname and c.user.gold:
@@ -835,7 +835,7 @@ class UserController(ListingController):
                 sr = None
             self.oversr = sr
             
-            if where == 'comments':
+        if where == 'comments':
             self.show_chooser = True
             srname = request.GET.get('sr')
             if srname and c.user.gold:
