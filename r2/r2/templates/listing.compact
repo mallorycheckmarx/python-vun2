@@ -33,6 +33,11 @@
   %for a in thing.things:
       ${a}
   %endfor
+  
+  %if not thing.things:
+      <p id="noresults" class="error">${_("there doesn't seem to be anything here")}</p>
+  %endif
+
 </div>
 
 %if thing.nextprev and thing.next:
@@ -45,8 +50,4 @@ $($(window).scroll(function(){
                 } 
             }))
 </script>
-%endif
-
-%if not thing.things:
-  <p id="noresults" class="error">${_("there doesn't seem to be anything here")}</p>
 %endif
