@@ -41,7 +41,7 @@
 </div>
 
 %if thing.nextprev and thing.next:
-<script type="text/javascript">
+<script type="text/javascript"> 
 $($(window).scroll(function(){
             var loading = $(".loading").length;
             if (!loading && $(window).scrollTop() > 
