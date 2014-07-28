@@ -65,7 +65,7 @@
 <%def name="num_input(s, name)">
   <input type="text" size="4" maxlength="4" 
          name="${name}" style="margin:  0 .5em 0 .5em"
-         value="${s if s is not None else ''}" />
+         value="${s if s is not None and s.isnumeric() else ''}" />
 </%def>
 
 %if c.user_is_loggedin and thing.done:
