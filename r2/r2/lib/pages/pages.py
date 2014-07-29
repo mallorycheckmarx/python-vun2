@@ -4492,7 +4492,7 @@ class SubredditSelector(Templated):
             self.subreddits = []
 
         self.subreddits.append((
-            _('popular choices'),
+            _('your subreddits'),
             Subreddit.user_subreddits(c.user, ids=False)
         ))
 
