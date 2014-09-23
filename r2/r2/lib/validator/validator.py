@@ -546,7 +546,7 @@ def chksrname(x, allow_language_srs=False):
 
 
 class VLength(Validator):
-    only_whitespace = re.compile(r"\A\s*\Z", re.UNICODE)
+    only_whitespace = re.compile(ur"\A[\s\u200B]*\Z", re.UNICODE)
 
     def __init__(self, param, max_length,
                  empty_error = errors.NO_TEXT,
