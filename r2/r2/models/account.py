@@ -585,7 +585,7 @@ class Account(Thing):
             raise NotImplementedError
 
         if self.cromulent():
-            return dict(hour=3, day=10, week=50, month=150)
+            return dict(hour=10, day=25, week=75, month=200)
         else:
             return dict(hour=1,  day=3,  week=5,   month=5)
 
