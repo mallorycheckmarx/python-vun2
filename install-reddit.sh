@@ -74,8 +74,8 @@ fi
 # if you try and use this install script on another release you're gonna
 # have a bad time.
 source /etc/lsb-release
-if [ "$DISTRIB_ID" != "Ubuntu" -o "$DISTRIB_RELEASE" != "12.04" ]; then
-    echo "ERROR: Only Ubuntu 12.04 is supported."
+if [ "$DISTRIB_ID" != "Ubuntu" -o "$DISTRIB_RELEASE" != "14.04" ]; then
+    echo "ERROR: Only Ubuntu 14.04 is supported."
     exit 1
 fi
 
