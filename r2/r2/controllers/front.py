@@ -808,7 +808,8 @@ class FrontController(RedditController):
     def GET_sticky(self):
         if c.site.sticky_fullname:
             sticky = Link._by_fullname(c.site.sticky_fullname, data=True)
-            self.redirect(sticky.make_permalink_slow())
+            qs = query_string(request.GET)
+            self.redirect(sticky.make_permalink_slow() + qs)
         else:
             abort(404)
 
