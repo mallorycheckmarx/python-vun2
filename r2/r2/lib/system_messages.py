@@ -94,7 +94,7 @@ def notify_user_added(rel_type, author, user, target, message=None, duration_msg
             return
 
         if rel_type == "banned" and message:
-            msg += "\n\n" + N_("you have been banned for %(duration_msg)s days")
+            msg += "\n\n" + N_("you have been banned for %(duration_msg)s days.")
             msg += "\n\n" + N_("note from the moderators:\n\n\"%(message)s\"")
             msg %= {'message': message}
 
