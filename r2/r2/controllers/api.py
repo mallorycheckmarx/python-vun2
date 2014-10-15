@@ -969,7 +969,7 @@ class ApiController(RedditController):
             table.find(".notfound").hide()
 
         if new:
-            notify_user_added(type, c.user, friend, container, ban_message)
+            notify_user_added(type, c.user, friend, container, ban_message, duration)
 
     @validatedForm(VGold(),
                    VModhash(),
