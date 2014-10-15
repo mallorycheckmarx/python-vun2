@@ -73,7 +73,7 @@ user_added_messages = {
 }
 
 
-def notify_user_added(rel_type, author, user, target, message=None):
+def notify_user_added(rel_type, author, user, target, message=None, duration_msg=None):
     msgs = user_added_messages.get(rel_type)
     if not msgs:
         return
@@ -94,6 +94,7 @@ def notify_user_added(rel_type, author, user, target, message=None):
             return
 
         if rel_type == "banned" and message:
+            msg += "\n\n" + N_("you have been banned for %(duration_msg)s days")
             msg += "\n\n" + N_("note from the moderators:\n\n\"%(message)s\"")
             msg %= {'message': message}
 
