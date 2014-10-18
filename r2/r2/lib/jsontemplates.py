@@ -30,6 +30,8 @@ from r2.lib.filters import spaceCompress, safemarkdown
 from r2.models import Account, Report
 from r2.models.subreddit import SubSR
 from r2.models.token import OAuth2Scope, extra_oauth2_scope
+from r2.models.bidding import Bid
+from r2.models.gold import calculate_server_seconds, gold_payments_by_user
 import time, pytz
 from pylons import c, g
 from pylons.i18n import _
@@ -326,6 +328,7 @@ class IdentityJsonTemplate(ThingJsonTemplate):
         is_mod="is_mod",
         link_karma="link_karma",
         name="name",
+        server_seconds_paid="server_seconds_paid"
     )
     _private_data_attrs = dict(
         over_18="pref_over_18",
@@ -370,6 +373,34 @@ class IdentityJsonTemplate(ThingJsonTemplate):
             if not thing.gold:
                 return None
             return calendar.timegm(thing.gold_expiration.utctimetuple())
+        elif attr == "server_seconds_paid":
+            #taken from lib/pages/pages.py's ServerSecondsBar.__init__
+            user = c.user
+
+            if user.pref_public_server_seconds:
+                seconds = 0.0
+                gold_payments = gold_payments_by_user(user)
+
+                for payment in gold_payments:
+                    seconds += calculate_server_seconds(payment.pennies, 
+                        payment.date)
+
+                try:
+                    q = (Bid.query().filter(Bid.account_id == user._id)
+                            .filter(Bid.status == Bid.STATUS.CHARGE)
+                            .filter(Bid.transaction > 0))
+                    selfserve_payments = list(q)
+                except NotFound:
+                    selfserve_payments = []
+
+                for payment in selfserve_payments:
+                    pennies = payment.charge_amount * 100
+                    seconds += calculate_server_seconds(pennies, payment.date)
+                return seconds
+
+            else:
+                return None
+
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 
