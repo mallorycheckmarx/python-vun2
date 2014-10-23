@@ -49,6 +49,7 @@ from r2.lib.db.tdb_cassandra import NotFound, view_of
 from r2.models import Account
 from r2.models.subreddit import Frontpage
 from r2.models.wiki import WikiPage
+from r2.models.bidding import Bid
 from r2.lib.memoize import memoize
 
 import stripe
@@ -608,4 +609,37 @@ def get_current_value_of_month():
     price = g.gold_month_price.pennies
     now = datetime.now(g.display_tz)
     seconds = calculate_server_seconds(price, now)
+    return seconds
+
+
+def calculate_user_paid_server_seconds(user):
+    seconds = 0.
+    gold_payments = gold_payments_by_user(user)
+
+    for payment in gold_payments:
+        seconds += calculate_server_seconds(payment.pennies, payment.date)
+
+    try:
+        q = (Bid.query().filter(Bid.account_id == user._id)
+                .filter(Bid.status == Bid.STATUS.CHARGE)
+                .filter(Bid.transaction > 0))
+        selfserve_payments = list(q)
+    except NotFound:
+        selfserve_payments = []
+
+    for payment in selfserve_payments:
+        pennies = payment.charge_amount * 100
+        seconds += calculate_server_seconds(pennies, payment.date)
+
+    return seconds
+
+
+def calculate_user_received_server_seconds(user):
+    seconds = 0.
+    gold_gifts = gold_received_by_user(user)
+
+    for payment in gold_gifts:
+        pennies = days_to_pennies(payment.days)
+        seconds += calculate_server_seconds(pennies, payment.date)
+    
     return seconds

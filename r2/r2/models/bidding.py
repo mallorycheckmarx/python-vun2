@@ -45,7 +45,6 @@ from r2.lib.db.thing import Thing, NotFound
 from r2.lib.memoize import memoize
 from r2.lib.utils import Enum, to_date, tup
 from r2.models.account import Account
-from r2.models import Link, Frontpage
 
 
 engine = g.dbm.get_engine('authorize')
@@ -385,6 +384,7 @@ class PromotionWeights(Sessionized, Base):
 
     @classmethod
     def filter_sr_name(cls, sr_name):
+        from r2.models.subreddit import Frontpage
         # LEGACY: use empty string to indicate Frontpage
         return '' if sr_name == Frontpage.name else sr_name
 
