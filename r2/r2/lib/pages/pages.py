@@ -65,10 +65,8 @@ from r2.models import (
 )
 from r2.models.bidding import Bid
 from r2.models.gold import (
-    calculate_server_seconds,
-    gold_payments_by_user,
-    gold_received_by_user,
-    days_to_pennies,
+    calculate_user_paid_server_seconds,
+    calculate_user_received_server_seconds,
     get_current_value_of_month,
     gold_goal_on,
     gold_revenue_steady,
@@ -2075,34 +2073,14 @@ class ServerSecondsBar(Templated):
         self.is_user = c.user == user
         self.user = user
 
-        seconds = 0.
-        gold_payments = gold_payments_by_user(user)
-
-        for payment in gold_payments:
-            seconds += calculate_server_seconds(payment.pennies, payment.date)
-
-        try:
-            q = (Bid.query().filter(Bid.account_id == user._id)
-                    .filter(Bid.status == Bid.STATUS.CHARGE)
-                    .filter(Bid.transaction > 0))
-            selfserve_payments = list(q)
-        except NotFound:
-            selfserve_payments = []
-
-        for payment in selfserve_payments:
-            pennies = payment.charge_amount * 100
-            seconds += calculate_server_seconds(pennies, payment.date)
-        self.message = self.make_message(seconds, self.my_message,
+        paid_seconds = calculate_user_paid_server_seconds(user)
+        self.message = self.make_message(paid_seconds, self.my_message,
                                          self.their_message)
 
-        seconds = 0.
-        gold_gifts = gold_received_by_user(user)
-
-        for payment in gold_gifts:
-            pennies = days_to_pennies(payment.days)
-            seconds += calculate_server_seconds(pennies, payment.date)
-        self.gift_message = self.make_message(seconds, self.my_gift_message,
-                                              self.their_gift_message)
+        received_seconds = calculate_user_received_server_seconds(user)
+        self.gift_message = self.make_message(received_seconds, 
+                                         self.my_gift_message,
+                                         self.their_gift_message)
 
 
 class MenuArea(Templated):

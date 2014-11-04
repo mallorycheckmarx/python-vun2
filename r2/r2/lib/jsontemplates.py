@@ -30,6 +30,11 @@ from r2.lib.filters import spaceCompress, safemarkdown
 from r2.models import Account, Report
 from r2.models.subreddit import SubSR
 from r2.models.token import OAuth2Scope, extra_oauth2_scope
+from r2.models.bidding import Bid
+from r2.models.gold import (
+    calculate_user_paid_server_seconds,
+    calculate_user_received_server_seconds,
+)
 import time, pytz
 from pylons import c, g
 from pylons.i18n import _
@@ -334,6 +339,8 @@ class IdentityJsonTemplate(ThingJsonTemplate):
         is_mod="is_mod",
         link_karma="link_karma",
         name="name",
+        server_seconds_paid="server_seconds_paid",
+        server_seconds_gifts="server_seconds_gifts"
     )
     _private_data_attrs = dict(
         over_18="pref_over_18",
@@ -378,6 +385,13 @@ class IdentityJsonTemplate(ThingJsonTemplate):
             if not thing.gold:
                 return None
             return calendar.timegm(thing.gold_expiration.utctimetuple())
+        elif attr == "server_seconds_paid":
+            if c.user.pref_public_server_seconds:
+                return calculate_user_paid_server_seconds(c.user)
+        elif attr == "server_seconds_gifts":
+            if c.user.pref_public_server_seconds:
+                return calculate_user_received_server_seconds(c.user)
+
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 
