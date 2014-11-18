@@ -66,6 +66,7 @@ from r2.lib.utils import (
     Enum,
     SimpleSillyStub,
     UniqueIterator,
+    extract_subdomain,
     http_utils,
     is_subdomain,
     is_throttled,
@@ -217,6 +218,8 @@ class UnloggedUser(FakeAccount):
         self._defaults['pref_frame_commentspanel'] = False
         self._defaults['pref_hide_locationbar'] = False
         self._defaults['pref_use_global_defaults'] = False
+        if feature.is_enabled('new_user_new_window_preference'):
+            self._defaults['pref_newwindow'] = True
         self._load()
 
     @property
@@ -1073,6 +1076,7 @@ class MinimalController(BaseController):
         c.extension = request.environ.get('extension')
         # the domain has to be set before Cookies get initialized
         set_subreddit()
+        c.subdomain = extract_subdomain()
         c.errors = ErrorSet()
         c.cookies = Cookies()
         # if an rss feed, this will also log the user in if a feed=

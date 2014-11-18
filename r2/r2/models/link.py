@@ -102,6 +102,13 @@ class Link(Thing, Printable):
         Thing.__init__(self, *a, **kw)
 
     @property
+    def body(self):
+        if self.is_self:
+            return self.selftext
+        else:
+            raise AttributeError
+
+    @property
     def has_thumbnail(self):
         return self._t.get('has_thumbnail', hasattr(self, 'thumbnail_url'))
 
@@ -357,7 +364,7 @@ class Link(Thing, Printable):
         from r2.lib.count import incr_counts
         from r2.lib import media
         from r2.lib.utils import timeago
-        from r2.lib.template_helpers import get_domain
+        from r2.lib.template_helpers import get_domain, _ws, unsafe
         from r2.models.report import Report
         from r2.models.subreddit import FakeSubreddit
         from r2.lib.wrapped import CachedVariable
@@ -644,17 +651,17 @@ class Link(Thing, Printable):
 
             taglinetext = ''
             if item.different_sr:
-                author_text = (" <span>" + _("by %(author)s to %(reddit)s") +
+                author_text = (" <span>" + _ws("by %(author)s to %(reddit)s") +
                                "</span>")
             else:
-                author_text = " <span>" + _("by %(author)s") + "</span>"
+                author_text = " <span>" + _ws("by %(author)s") + "</span>"
             if item.editted:
                 if item.score_fmt == Score.points:
                     taglinetext = ("<span>" +
-                                   _("%(score)s submitted %(when)s "
-                                     "%(lastedited)s") +
+                                   _ws("%(score)s submitted %(when)s "
+                                       "%(lastedited)s") +
                                    "</span>")
-                    taglinetext += author_text
+                    taglinetext = unsafe(taglinetext + author_text)
                 elif item.different_sr:
                     taglinetext = _("submitted %(when)s %(lastedited)s "
                                     "by %(author)s to %(reddit)s")
@@ -664,9 +671,9 @@ class Link(Thing, Printable):
             else:
                 if item.score_fmt == Score.points:
                     taglinetext = ("<span>" +
-                                   _("%(score)s submitted %(when)s") +
+                                   _ws("%(score)s submitted %(when)s") +
                                    "</span>")
-                    taglinetext += author_text
+                    taglinetext = unsafe(taglinetext + author_text)
                 elif item.different_sr:
                     taglinetext = _("submitted %(when)s by %(author)s "
                                     "to %(reddit)s")
@@ -1162,16 +1169,21 @@ class Comment(Thing, Printable):
                     item.subreddit_path += item.subreddit.path
 
             # always use the default collapse threshold in contest mode threads
-            if item.link.contest_mode:
+            # if the user has a custom collapse threshold
+            if (item.link.contest_mode and 
+                    user.pref_min_comment_score is not None):
                 min_score = Account._defaults['pref_min_comment_score']
             else:
                 min_score = user.pref_min_comment_score
 
             item.collapsed = False
+            distinguished = item.distinguished and item.distinguished != "no"
+            prevent_collapse = profilepage or user_is_admin or distinguished
+
             if (item.deleted and item.subreddit.collapse_deleted_comments and
-                    not (profilepage or user_is_admin)):
+                    not prevent_collapse):
                 item.collapsed = True
-            elif item.score < min_score and not (profilepage or user_is_admin):
+            elif item.score < min_score and not prevent_collapse:
                 item.collapsed = True
                 item.collapsed_reason = _("comment score below threshold")
             elif user_is_loggedin and item.author_id in c.user.enemies:
@@ -1360,7 +1372,10 @@ class Message(Thing, Printable):
                      sr_id=None,
                      to_collapse=None,
                      author_collapse=None,
-                     from_sr=False)
+                     from_sr=False,
+                     display_author=None,
+                     display_to=None,
+                     )
     _data_int_props = Thing._data_int_props + ('reported',)
     _essentials = ('author_id',)
     cache_ignore = set(["to", "subreddit"]).union(Printable.cache_ignore)
@@ -1521,6 +1536,26 @@ class Message(Thing, Printable):
                                   if l.parent_id and l.was_comment),
                                 data=True, return_dict=True)
 
+        # special handling for mod replies to mod PMs
+        mod_message_authors = {}
+        mod_messages = [
+            item for item in wrapped
+            if (item.to_id is None and
+                    item.sr_id and
+                    item.parent_id and
+                    (c.user_is_admin or item.subreddit.is_moderator(user)))
+        ]
+        if mod_messages:
+            parent_ids = [item.parent_id for item in mod_messages]
+            parents = Message._byID(parent_ids, data=True, return_dict=True)
+            author_ids = {item.author_id for item in parents.itervalues()}
+            authors = Account._byID(author_ids, data=True, return_dict=True)
+
+            for item in mod_messages:
+                parent = parents[item.parent_id]
+                author = authors[parent.author_id]
+                mod_message_authors[item._id] = author
+
         # load the unread list to determine message newness
         unread = set(queries.get_unread_inbox(user))
 
@@ -1567,6 +1602,7 @@ class Message(Thing, Printable):
                 item.link_title = link.title
                 item.permalink = item.lookups[0].make_permalink(link, sr=sr)
                 item.link_permalink = link.make_permalink(sr)
+                item.full_comment_count = link.num_comments
                 if item.parent_id:
                     parent = parents[item.parent_id]
                     item.parent = parent._fullname
@@ -1587,6 +1623,13 @@ class Message(Thing, Printable):
                         item.message_style = "mention"
             elif item.sr_id is not None:
                 item.subreddit = m_subreddits[item.sr_id]
+            else:
+                if item.display_author:
+                    item.author = Account._byID(item.display_author)
+                if item.display_to:
+                    item.to = Account._byID(item.display_to)
+                    if item.to_id == c.user._id:
+                        item.body = strings.anonymous_gilder_warning + item.body
 
             item.hide_author = False
             item.is_collapsed = None
@@ -1612,11 +1655,17 @@ class Message(Thing, Printable):
                 if not c.user_is_admin:
                     item.subject = _('[message from blocked user]')
                     item.body = _('[unblock user to see this message]')
+
             taglinetext = ''
             if item.hide_author:
                 taglinetext = _("subreddit message %(author)s sent %(when)s")
-            elif item.author_id == c.user._id:
+            elif (item.author_id == c.user._id and
+                  not getattr(item, "display_author", None)):
                 taglinetext = _("to %(dest)s sent %(when)s")
+            elif (item._id in mod_message_authors and
+                    (item.subreddit.is_moderator(c.user) or c.user_is_admin)):
+                item.to = mod_message_authors[item._id]
+                taglinetext = _("to %(dest)s from %(author)s sent %(when)s")
             elif item.to_id == c.user._id or item.to_id is None:
                 taglinetext = _("from %(author)s sent %(when)s")
             else:

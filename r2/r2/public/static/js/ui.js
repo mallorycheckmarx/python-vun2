@@ -10,9 +10,7 @@ r.ui.init = function() {
     }
 
     // mobile suggest infobar
-    var smallScreen = window.matchMedia
-                      ? matchMedia('(max-device-width: 700px)').matches
-                      : $(window).width() < 700,
+    var smallScreen = r.ui.isSmallScreen(),
         onFrontPage = $.url().attr('path') == '/'
     if (smallScreen && onFrontPage && r.config.renderstyle != 'compact') {
         var infobar = $('<div class="infobar mellow">')
@@ -32,7 +30,9 @@ r.ui.init = function() {
         $(el).data('SubredditSubmitText', new r.ui.SubredditSubmitText({el: el}))
     })
 
-    if (r.config.new_window) {
+    /* Open links in new tabs if they have the preference set or are logged out
+     * and on a "large" screen. */
+    if (r.config.new_window && (r.config.logged || !smallScreen)) {
         $(document.body).on('click', 'a.may-blank, .may-blank-within a', function() {
             if (!this.target) {
                 this.target = '_blank'
@@ -46,6 +46,13 @@ r.ui.init = function() {
     r.ui.initLiveTimestamps()
 
     r.ui.initTimings()
+}
+
+r.ui.isSmallScreen = function() {
+ return window.matchMedia
+          // 736px is the width of the iPhone 6+.
+          ? matchMedia('(max-device-width: 736px)').matches
+          : $(window).width() < 736;
 }
 
 r.ui.TimeTextScrollListener = r.ScrollUpdater.extend({
@@ -177,33 +184,58 @@ r.ui.Form = function(el) {
         e.preventDefault()
         this.submit(e)
     }, this))
+
+    this.$el.find('[data-validate-url]')
+        .validator()
+        .on('initialize.validator', function(e) {
+            var $el = $(this);
+
+            if ($el.hasClass('c-has-error')) {
+                $el.stateify('showError');
+            }
+        })
+        .on('valid.validator', function(e) {
+            $(this).stateify('set', 'success');
+        })
+        .on('invalid.validator', function(e, resp) {
+            var error = r.utils.parseError(resp.errors[0]);
+
+            $(this).stateify('set', 'error', error.message);
+        })
+        .on('loading.validator', function(e) {
+            $(this).stateify('set', 'loading');
+        })
+        .on('cleared.validator', function(e) {
+            $(this).stateify('clear');
+        });
 }
 r.ui.Form.prototype = $.extend(new r.ui.Base(), {
     showStatus: function(msg, isError) {
-        this.$el.find('.status')
+        this.$el.find('.status, .c-alert')
             .show()
             .toggleClass('error', !!isError)
             .text(msg)
     },
 
     showErrors: function(errors) {
-        statusMsgs = []
-        $.each(errors, $.proxy(function(i, err) {
-            var errName = err[0],
-                errMsg = err[1],
-                errField = err[2],
-                errCls = '.error.'+errName + (errField ? '.field-'+errField : ''),
-                errEl = this.$el.find(errCls)
+        var messages = [];
 
-            if (errEl.length) {
-                errEl.show().text(errMsg)
+        $.each(errors, $.proxy(function(i, err) {
+            var obj = r.utils.parseError(err);
+            var $el = this.$el.find('.error.' + obj.name + (obj.field ? '.field-' + obj.field : ''));
+            var $v2el = this.$el.filter('.form-v2').find('[name="' + obj.field + '"]');
+
+            if ($el.length) {
+                $el.show().text(obj.message);
+            } else if ($v2el.length) {
+                $v2el.stateify('set', 'error', obj.message);
             } else {
-                statusMsgs.push(errMsg)
+                messages.push(obj.message);
             }
         }, this))
 
-        if (statusMsgs.length) {
-            this.showStatus(statusMsgs.join(', '), true)
+        if (messages.length) {
+            this.showStatus(messages.join(', '), true);
         }
     },
 

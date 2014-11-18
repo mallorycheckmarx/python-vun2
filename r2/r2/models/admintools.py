@@ -400,8 +400,6 @@ def filter_quotas(unfiltered):
         # Then, make sure it's worthy of quota-clogging
         if item._spam:
             pass
-        elif item._deleted:
-            pass
         elif item._score <= 0:
             pass
         elif age < 86400 and item._score <= g.QUOTA_THRESHOLD and not approved:
@@ -434,23 +432,22 @@ def wiki_template(template_slug, sr=None):
 
 @admintools_hooks.on("account.registered")
 def send_welcome_message(user):
-    welcome_title = wiki_template("welcome_title").format(
-        username=user.name,
-    )
-    welcome_message = wiki_template("welcome_message").format(
-        username=user.name,
-    )
+    welcome_title = wiki_template("welcome_title")
+    welcome_message = wiki_template("welcome_message")
 
     if not welcome_title or not welcome_message:
         g.log.warning("Unable to send welcome message: invalid wiki templates.")
         return
+
+    welcome_title = welcome_title.format(username=user.name)
+    welcome_message = welcome_message.format(username=user.name)
 
     return send_system_message(user, welcome_title, welcome_message)
 
 
 def send_system_message(user, subject, body, system_user=None,
                         distinguished='admin', repliable=False,
-                        add_to_sent=True):
+                        add_to_sent=True, author=None):
     from r2.lib.db import queries
 
     if system_user is None:
@@ -459,11 +456,14 @@ def send_system_message(user, subject, body, system_user=None,
         g.log.warning("Can't send system message "
                       "- invalid system_user or g.system_user setting")
         return
+    if not author:
+        author = system_user
 
-    item, inbox_rel = Message._new(system_user, user, subject, body,
+    item, inbox_rel = Message._new(author, user, subject, body,
                                    ip='0.0.0.0')
     item.distinguished = distinguished
     item.repliable = repliable
+    item.display_author = system_user._id
     item._commit()
 
     try:

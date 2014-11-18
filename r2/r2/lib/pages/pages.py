@@ -115,7 +115,7 @@ from r2.lib.menus import SubredditButton, SubredditMenu, ModeratorMailButton
 from r2.lib.menus import OffsiteButton, menu, JsNavMenu
 from r2.lib.normalized_hot import normalized_hot
 from r2.lib.strings import plurals, rand_strings, strings, Score
-from r2.lib.utils import title_to_url, query_string, UrlParser
+from r2.lib.utils import is_subdomain, title_to_url, query_string, UrlParser
 from r2.lib.utils import url_links_builder, make_offset_date, median, to36
 from r2.lib.utils import trunc_time, timesince, timeuntil, weighted_lottery
 from r2.lib.template_helpers import (
@@ -245,7 +245,7 @@ class Reddit(Templated):
         self.infotext = infotext
         self.extra_js_config = extra_js_config
         self.show_wiki_actions = show_wiki_actions
-        self.loginbox = True
+        self.loginbox = loginbox
         self.show_sidebar = show_sidebar
         self.space_compress = space_compress
         # instantiate a footer
@@ -284,7 +284,7 @@ class Reddit(Templated):
                 self.infobar = InfoBar(
                     message=infotext, extra_class=infotext_class)
             elif (isinstance(c.site, DomainSR) and
-                    c.site.domain.endswith("imgur.com")):
+                    is_subdomain(c.site.domain, "imgur.com")):
                 self.infobar = InfoBar(message=
                     _("imgur.com domain listings (including this one) are "
                       "currently disabled to speed up vote processing.")
@@ -1202,11 +1202,14 @@ class LoginPage(BoringPage):
         self.dest = context.get('dest', '')
         context['loginbox'] = False
         context['show_sidebar'] = False
+        context['page_classes'] = ['login-page']
+
         if c.render_style == "compact":
             title = self.short_title
         else:
             title = _("login or register")
-        BoringPage.__init__(self,  title, **context)
+
+        BoringPage.__init__(self, "" if feature.is_enabled('new_login_flow') else title, **context)
 
         if self.dest:
             u = UrlParser(self.dest)
@@ -1424,14 +1427,13 @@ class LinkInfoPage(Reddit):
             short_description,
         )
 
-        if feature.is_enabled('link_twitter_card_data'):
-            self.twitter_card = self._build_twitter_card_data(
-                _force_unicode(link_title),
-                short_description,
-            )
-            hook = hooks.get_hook('comments_page.twitter_card')
-            hook.call(tags=self.twitter_card, sr_name=c.site.name,
-                      id36=self.link._id36)
+        self.twitter_card = self._build_twitter_card_data(
+            _force_unicode(link_title),
+            short_description,
+        )
+        hook = hooks.get_hook('comments_page.twitter_card')
+        hook.call(tags=self.twitter_card, sr_name=c.site.name,
+                  id36=self.link._id36)
 
         if hasattr(self.link, "dart_keyword"):
             c.custom_dart_keyword = self.link.dart_keyword
@@ -3635,14 +3637,16 @@ class DetailsPage(LinkInfoPage):
         after = kwargs.pop('after', None)
         reverse = kwargs.pop('reverse', False)
         count = kwargs.pop('count', None)
+        self.details = None
 
         if isinstance(thing, (Link, Comment)):
-            details = Details(thing, after=after, reverse=reverse, count=count)
+            self.details = Details(thing, after=after, reverse=reverse,
+                                   count=count)
 
         if isinstance(thing, Link):
             link = thing
             comment = None
-            content = details
+            content = self.details
         elif isinstance(thing, Comment):
             comment = thing
             link = Link._byID(comment.link_id, data=True)
@@ -3651,7 +3655,7 @@ class DetailsPage(LinkInfoPage):
             content.append(LinkCommentSep())
             content.append(CommentPane(link, CommentSortMenu.operator('new'),
                                    comment, None, 1))
-            content.append(details)
+            content.append(self.details)
 
         kwargs['content'] = content
         LinkInfoPage.__init__(self, link, comment, *args, **kwargs)

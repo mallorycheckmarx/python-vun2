@@ -90,7 +90,12 @@ except ImportError:
 
         return res
 
-class _Unsafe(unicode): pass
+
+class _Unsafe(unicode):
+    # Necessary so Wrapped instances with these can get cached
+    def cache_key(self, style):
+        return unicode(self)
+
 
 def _force_unicode(text):
     if text == None:
@@ -134,6 +139,32 @@ def websafe(text=''):
         text = _force_unicode(text)
     #wrap the response in _Unsafe so make_websafe doesn't unescape it
     return _Unsafe(c_websafe(text))
+
+
+# From https://github.com/django/django/blob/master/django/utils/html.py
+_js_escapes = {
+    ord('\\'): u'\\u005C',
+    ord('\''): u'\\u0027',
+    ord('"'): u'\\u0022',
+    ord('>'): u'\\u003E',
+    ord('<'): u'\\u003C',
+    ord('&'): u'\\u0026',
+    ord('='): u'\\u003D',
+    ord('-'): u'\\u002D',
+    ord(';'): u'\\u003B',
+    ord(u'\u2028'): u'\\u2028',
+    ord(u'\u2029'): u'\\u2029',
+}
+# Escape every ASCII character with a value less than 32.
+_js_escapes.update((ord('%c' % z), u'\\u%04X' % z) for z in range(32))
+
+
+def jssafe(text=u''):
+    """Prevents text from breaking outside of string literals in JS"""
+    if text.__class__ != unicode:
+        text = _force_unicode(text)
+    #wrap the response in _Unsafe so make_websafe doesn't unescape it
+    return _Unsafe(text.translate(_js_escapes))
 
 
 valid_link_schemes = (

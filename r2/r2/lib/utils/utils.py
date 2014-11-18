@@ -41,7 +41,7 @@ from decimal import Decimal
 from BeautifulSoup import BeautifulSoup, SoupStrainer
 
 from datetime import date, datetime, timedelta
-from pylons import c, g
+from pylons import c, g, request
 from pylons.i18n import ungettext, _
 from r2.lib.filters import _force_unicode, _force_utf8
 from mako.filters import url_escape
@@ -172,6 +172,29 @@ def domain(s):
     domain = (res and res[0]) or s
     return domain.lower()
 
+def extract_subdomain(host=None, base_domain=None):
+    """Try to extract a subdomain from the request, as compared to g.domain.
+
+    host and base_domain exist as arguments primarily for the sake of unit
+    tests, although their usage should not be considered restrained to that.
+    """
+    # These would be the argument defaults, but we need them evaluated at
+    # run-time, not definition-time.
+    if host is None:
+        host = request.host
+    if base_domain is None:
+        base_domain = g.domain
+
+    if not host:
+        return ''
+
+    end_index = host.find(base_domain) - 1 # For the conjoining dot.
+    # Is either the requested domain the same as the base domain, or the
+    # base is not a substring?
+    if end_index < 0:
+        return ''
+    return host[:end_index]
+
 r_path_component = re.compile(".*?/(.*)")
 def path_component(s):
     """
@@ -262,7 +285,7 @@ def extract_title(data):
     return title.encode('utf-8').strip()
 
 VALID_SCHEMES = ('http', 'https', 'ftp', 'mailto')
-valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
+valid_dns = re.compile('\A[-a-zA-Z0-9_]+\Z')
 def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
     """Validates that the url is of the form
 
@@ -533,6 +556,11 @@ class UrlParser(object):
             (subreddit and subreddit.domain and
                 is_subdomain(self.hostname, subreddit.domain))
         )
+        # Handle backslash trickery like /\example.com/ being treated as
+        # equal to //example.com/ by some browsers
+        if not self.hostname and not self.scheme and self.path:
+            if self.path.startswith("/\\"):
+                return False
         if not subdomain or not self.hostname or not g.offsite_subdomains:
             return subdomain
         return not any(

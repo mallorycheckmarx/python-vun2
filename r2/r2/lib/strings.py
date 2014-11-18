@@ -33,6 +33,7 @@ from pylons.i18n import _, ungettext, get_lang
 import random
 import babel.numbers
 
+from r2.lib.filters import websafe
 from r2.lib.translation import set_lang
 
 __all__ = ['StringHandler', 'strings', 'PluralManager', 'plurals',
@@ -62,9 +63,6 @@ string_dict = dict(
     # this accomodates asian languages which don't use spaces
     float_label = _("%(num)5.3f %(thing)s"),
 
-    # this is for Japanese which treats people counts differently
-    person_label = _("<span class='number'>%(num)s</span>&#32;<span class='word'>%(persons)s</span>"),
-
     already_submitted = _("that link has already been submitted, but you can try to [submit it again](%s)."),
 
     multiple_submitted = _("that link has been submitted to multiple subreddits. you can try to [submit it again](%s)."),
@@ -87,7 +85,7 @@ string_dict = dict(
 
     sr_messages = dict(
         empty =  _('you have not subscribed to any subreddits.'),
-        subscriber =  _('below are the subreddits you have subscribed to'),
+        subscriber =  _('below are the subreddits you have subscribed to.'),
         contributor =  _('below are the subreddits that you are an approved submitter on.'),
         moderator = _('below are the subreddits that you have moderator access to.')
         ),
@@ -137,6 +135,10 @@ string_dict = dict(
     giftgold_note = _("Here's a note that was included:\n\n----\n\n"),
     youve_been_gilded_comment = _("Another user liked [your comment](%(url)s) so much that they gilded it, giving you reddit gold.\n\n"),
     youve_been_gilded_link = _("Another user liked [your submission](%(url)s) so much that they gilded it, giving you reddit gold.\n\n"),
+    respond_to_anonymous_gilder = _("Want to say thanks to your mysterious benefactor? Reply to this message. You will find out their username if they choose to reply back."),
+    unsupported_respond_to_gilder = _("Sorry, replying directly to your mysterious benefactor is not yet supported for this gilding."),
+    anonymous_gilder_warning = _("***WARNING: Responding to this message will reveal your username to the gildee.***\n\n"),
+    gold_claimed_code = _("Thanks for claiming a reddit gold code.\n\n"),
     gold_summary_autorenew = _("You're about to set up an ongoing, autorenewing subscription to reddit gold for yourself (%(user)s). You'll pay %(price)s for this, %(period)s."),
     gold_summary_onetime = _("You're about to make a one-time purchase of %(amount)s of reddit gold for yourself (%(user)s). You'll pay a total of %(price)s for this."),
     gold_summary_creddits = _("You're about to purchase %(amount)s. They work like gift certificates: each creddit you have will allow you to give one month of reddit gold to someone else. You'll pay a total of %(price)s for this."),
@@ -285,24 +287,30 @@ plurals = PluralManager([P_("comment",     "comments"),
 class Score(object):
     """Convienience class for populating '10 points' in a traslatible
     fasion, used primarily by the score() method in printable.html"""
+
+    # This used to pass through _() because allegedly Japanese needed different
+    # markup, but that doesn't appear to be the case anymore
+    PERSON_LABEL = ('<span class="number">%(num)s</span>&#32;'
+                    '<span class="word">%(persons)s</span>')
+
     @staticmethod
     def number_only(x):
         return str(max(x, 0))
 
     @staticmethod
     def points(x):
-        return  strings.points_label % dict(num=x, point=plurals.N_points(x))
+        return strings.points_label % dict(num=x,
+                                           point=plurals.N_points(x))
 
     @staticmethod
     def safepoints(x):
-        return  strings.points_label % dict(num=max(x,0),
-                                            point=plurals.N_points(x))
+        return Score.points(max(x, 0))
 
     @staticmethod
     def _people(x, label, prepend=''):
         num = prepend + babel.numbers.format_number(x, c.locale)
-        return strings.person_label % \
-            dict(num=num, persons=label(x))
+        return Score.PERSON_LABEL % \
+            dict(num=num, persons=websafe(label(x)))
 
     @staticmethod
     def subscribers(x):
@@ -422,7 +430,7 @@ def generate_strings():
     # used by error pages and in the sidebar for why to create a subreddit
     for name, rand_string in rand_strings:
         for string in rand_string:
-            print "# TRANSLATORS: Do not translate literally. Come up with a funny/relevant phrase (see the English version for ideas)"
+            print "# TRANSLATORS: Do not translate literally. Come up with a funny/relevant phrase (see the English version for ideas.) Accepts markdown formatting."
             print "print _('" + string + "')"
 
     # these are used in r2.lib.pages.trafficpages

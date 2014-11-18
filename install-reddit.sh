@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 # The contents of this file are subject to the Common Public Attribution
 # License Version 1.0. (the "License"); you may not use this file except in
 # compliance with the License. You may obtain a copy of the License at
@@ -80,6 +80,15 @@ source /etc/lsb-release
 if [ "$DISTRIB_ID" != "Ubuntu" -o "$DISTRIB_RELEASE" != "12.04" ]; then
     echo "ERROR: Only Ubuntu 12.04 is supported."
     exit 1
+fi
+
+if [[ "2000000" -gt $(awk '/MemTotal/{print $2}' /proc/meminfo) ]]; then
+    LOW_MEM_PROMPT="reddit requires at least 2GB of memory to work properly, continue anyway? [y/n] "
+    read -er -n1 -p "$LOW_MEM_PROMPT" response
+    if [[ "$response" != "y" ]]; then
+      echo "Quitting."
+      exit 1
+    fi
 fi
 
 ###############################################################################
@@ -165,6 +174,7 @@ nginx
 stunnel
 gunicorn
 sutro
+libpcre3-dev
 PACKAGES
 
 # paper over stack size issues with cassandra
@@ -329,17 +339,68 @@ fi
 ###############################################################################
 # some useful helper scripts
 ###############################################################################
-cat > /usr/local/bin/reddit-run <<REDDITRUN
+function helper-script() {
+    cat > $1
+    chmod 755 $1
+}
+
+helper-script /usr/local/bin/reddit-run <<REDDITRUN
 #!/bin/bash
 exec paster --plugin=r2 run $REDDIT_HOME/src/reddit/r2/run.ini "\$@"
 REDDITRUN
 
-cat > /usr/local/bin/reddit-shell <<REDDITSHELL
+helper-script /usr/local/bin/reddit-shell <<REDDITSHELL
 #!/bin/bash
 exec paster --plugin=r2 shell $REDDIT_HOME/src/reddit/r2/run.ini
 REDDITSHELL
 
-chmod 755 /usr/local/bin/reddit-run /usr/local/bin/reddit-shell
+helper-script /usr/local/bin/reddit-start <<REDDITSTART
+#!/bin/bash
+initctl emit reddit-start
+REDDITSTART
+
+helper-script /usr/local/bin/reddit-stop <<REDDITSTOP
+#!/bin/bash
+initctl emit reddit-stop
+REDDITSTOP
+
+helper-script /usr/local/bin/reddit-restart <<REDDITRESTART
+#!/bin/bash
+initctl emit reddit-restart TARGET=${1:-all}
+REDDITRESTART
+
+helper-script /usr/local/bin/reddit-flush <<REDDITFLUSH
+#!/bin/bash
+echo flush_all | nc localhost 11211
+REDDITFLUSH
+
+###############################################################################
+# pixel and click server
+###############################################################################
+mkdir -p /var/opt/reddit/
+chown $REDDIT_USER:$REDDIT_GROUP /var/opt/reddit/
+
+mkdir -p /srv/www/pixel
+chown $REDDIT_USER:$REDDIT_GROUP /srv/www/pixel
+cp $REDDIT_HOME/src/reddit/r2/r2/public/static/pixel.png /srv/www/pixel
+
+if [ ! -f /etc/gunicorn.d/click.conf ]; then
+    cat > /etc/gunicorn.d/click.conf <<CLICK
+CONFIG = {
+    "mode": "wsgi",
+    "working_dir": "$REDDIT_HOME/src/reddit/scripts",
+    "user": "$REDDIT_USER",
+    "group": "$REDDIT_USER",
+    "args": (
+        "--bind=unix:/var/opt/reddit/click.sock",
+        "--workers=1",
+        "tracker:application",
+    ),
+}
+CLICK
+fi
+
+service gunicorn start
 
 ###############################################################################
 # nginx
@@ -360,10 +421,47 @@ server {
 }
 MEDIA
 
+cat > /etc/nginx/sites-available/reddit-pixel <<PIXEL
+upstream click_server {
+  server unix:/var/opt/reddit/click.sock fail_timeout=0;
+}
+
+server {
+  listen 8082;
+
+  log_format directlog '\$remote_addr - \$remote_user [\$time_local] '
+                      '"\$request_method \$request_uri \$server_protocol" \$status \$body_bytes_sent '
+                      '"\$http_referer" "\$http_user_agent"';
+  access_log      /var/log/nginx/traffic/traffic.log directlog;
+
+  location / {
+
+    rewrite ^/pixel/of_ /pixel.png;
+
+    add_header Last-Modified "";
+    add_header Pragma "no-cache";
+
+    expires -1;
+    root /srv/www/pixel/;
+  }
+
+  location /click {
+    proxy_pass http://click_server;
+  }
+}
+PIXEL
+
 # remove the default nginx site that may conflict with haproxy
 rm -rf /etc/nginx/sites-enabled/default
 # put our config in place
 ln -nsf /etc/nginx/sites-available/reddit-media /etc/nginx/sites-enabled/
+ln -nsf /etc/nginx/sites-available/reddit-pixel /etc/nginx/sites-enabled/
+
+# make the pixel log directory
+mkdir -p /var/log/nginx/traffic
+
+# link the ini file for the Flask click tracker
+ln -nsf $REDDIT_HOME/src/reddit/r2/development.ini $REDDIT_HOME/src/reddit/scripts/production.ini
 
 service nginx restart
 
@@ -409,6 +507,11 @@ frontend frontend
     acl is-media path_beg /media/
     use_backend media if is-media
 
+    # send pixel stuff to local nginx
+    acl is-pixel path_beg /pixel/
+    acl is-click path_beg /click
+    use_backend pixel if is-pixel || is-click
+
     default_backend reddit
 
 backend reddit
@@ -418,7 +521,7 @@ backend reddit
     timeout queue 60000
     balance roundrobin
 
-    server app01-8001 localhost:8001 maxconn 1
+    server app01-8001 localhost:8001 maxconn 30
 
 backend sutro
     mode http
@@ -436,6 +539,15 @@ backend media
     balance roundrobin
 
     server nginx localhost:9000 maxconn 20
+
+backend pixel
+    mode http
+    timeout connect 4000
+    timeout server 30000
+    timeout queue 60000
+    balance roundrobin
+
+    server nginx localhost:8082 maxconn 20
 HAPROXY
 
 # this will start it even if currently stopped
@@ -669,16 +781,25 @@ Cron jobs start with "reddit-job-" and queue processors start with
 "reddit-consumer-". The crons are managed by /etc/cron.d/reddit. You can
 initiate a restart of all the consumers by running:
 
-    sudo initctl emit reddit-restart
+    sudo reddit-restart
 
 or target specific ones:
 
-    sudo initctl emit reddit-restart TARGET=scraper_q
+    sudo reddit-restart scraper_q
 
 See the GitHub wiki for more information on these jobs:
 
 * https://github.com/reddit/reddit/wiki/Cron-jobs
 * https://github.com/reddit/reddit/wiki/Services
+
+The reddit code can be shut down or started up with
+
+    sudo reddit-stop
+    sudo reddit-start
+
+And if you think caching might be hurting you, you can flush memcache with
+
+    reddit-flush
 
 Now that the core of reddit is installed, you may want to do some additional
 steps:

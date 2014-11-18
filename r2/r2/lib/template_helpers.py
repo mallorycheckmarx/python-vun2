@@ -405,23 +405,30 @@ def dockletStr(context, type, browser):
 
 
 
-def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_extension=True):
+def add_sr(
+        path, sr_path=True, nocname=False, force_hostname=False,
+        retain_extension=True, force_https=False):
     """
     Given a path (which may be a full-fledged url or a relative path),
     parses the path and updates it to include the subreddit path
     according to the rules set by its arguments:
+
+     * sr_path: if a cname is not used for the domain, updates the
+       path to include c.site.path.
+
+     * nocname: when updating the hostname, overrides the value of
+       c.cname to set the hostname to g.domain.  The default behavior
+       is to set the hostname consistent with c.cname.
 
      * force_hostname: if True, force the url's hostname to be updated
        even if it is already set in the path, and subject to the
        c.cname/nocname combination.  If false, the path will still
        have its domain updated if no hostname is specified in the url.
 
-     * nocname: when updating the hostname, overrides the value of
-       c.cname to set the hostname to g.domain.  The default behavior
-       is to set the hostname consistent with c.cname.
+     * retain_extension: if True, sets the extention according to
+       c.render_style.
 
-     * sr_path: if a cname is not used for the domain, updates the
-       path to include c.site.path.
+     * force_https: force the URL scheme to https
 
     For caching purposes: note that this function uses:
       c.cname, c.render_style, c.site.name
@@ -441,7 +448,7 @@ def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_e
             u.hostname = get_domain(cname = (c.cname and not nocname),
                                     subreddit = False)
 
-    if c.secure:
+    if (c.secure and u.is_reddit_url()) or force_https:
         u.scheme = "https"
 
     if retain_extension:
@@ -613,3 +620,8 @@ def display_comment_karma(karma):
     if not c.user_is_admin:
         return max(karma, g.comment_karma_display_floor)
     return karma
+
+
+def _ws(*args, **kwargs):
+    """Helper function to get HTML escaped output from gettext"""
+    return websafe(_(*args, **kwargs))

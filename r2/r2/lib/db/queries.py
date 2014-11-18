@@ -43,7 +43,7 @@ from r2.models.query_cache import (
     UserQueryCache,
 )
 from r2.models.last_modified import LastModified
-from r2.lib.utils import in_chunks, SimpleSillyStub
+from r2.lib.utils import in_chunks, is_subdomain, SimpleSillyStub
 
 import cPickle as pickle
 
@@ -1067,7 +1067,7 @@ def new_vote(vote, foreground=False, timer=None):
                             ])
 
             parsed = utils.UrlParser(item.url)
-            if parsed.hostname and not parsed.hostname.endswith('imgur.com'):
+            if not is_subdomain(parsed.hostname, 'imgur.com'):
                 for domain in parsed.domain_permutations():
                     for sort in ("hot", "top", "controversial"):
                         results.append(get_domain_links(domain, sort, "all"))
@@ -1100,6 +1100,10 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
     if not from_user.update_sent_messages:
         add_to_sent = False
 
+    if message.display_author:
+        add_to_sent = False
+
+    modmail_rel_included = False
     update_recipient = False
     add_to_user = None
 
@@ -1112,7 +1116,7 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
 
             if isinstance(inbox_rel, ModeratorInbox):
                 m.insert(get_subreddit_messages(to), [inbox_rel])
-                update_modmail &= True
+                modmail_rel_included = True
             else:
                 m.insert(get_inbox_messages(to), [inbox_rel])
                 update_recipient = True
@@ -1120,6 +1124,8 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
                 add_to_user = to
 
             set_unread(message, to, unread=True, mutator=m)
+
+    update_modmail = update_modmail and modmail_rel_included
 
     amqp.add_item('new_message', message._fullname)
     add_message(message, update_recipient=update_recipient,

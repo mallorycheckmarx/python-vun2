@@ -241,11 +241,29 @@ function click_thing(elem) {
 }
 
 function hide_thing(elem) {
-    $(elem).thing().fadeOut(function() {
-            $(this).toggleClass("hidden");
+    var $thing = $(elem).thing();
+
+    if ($thing.is('.comment') && $thing.has('.child:not(:empty)').length) {
+        var deleted = '[' + _.escape(r._('deleted')) + ']';
+        var $entry = $thing.addClass('deleted').find('.entry:first');
+
+        $entry.find('.usertext')
+            .addClass('grayed')
+            .find('.md')
+                .html('<p>' + deleted + '</p>');
+
+        $entry.find('.author')
+            .replaceWith('<em>' + deleted + '</em>')  ;  
+        
+        $entry.find('.userattrs, .score, .buttons')
+            .remove();
+    } else {
+        $thing.fadeOut(function() {
+            $(this).toggleClass('hidden');
             unexpando_child(elem);
-    });
-};
+        });
+    }
+}
 
 function toggle_label (elem, callback, cancelback) {
   $(elem).parent().find(".option").toggle();
@@ -804,10 +822,13 @@ function expando_child(elem) {
 function unexpando_child(elem) {
     var thing = $(elem).thing();
     var button = thing.find(".expando-button");
-    button
-        .addClass("collapsed")
-        .removeClass("expanded")
-        .get(0).onclick = function() {expando_child(elem)};
+
+    if (button.length) {
+        button
+            .addClass("collapsed")
+            .removeClass("expanded")
+            .get(0).onclick = function() {expando_child(elem)};
+    }
 
     thing.find(".expando").hide().empty();
 }
