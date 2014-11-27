@@ -1672,11 +1672,10 @@ class ApiController(RedditController):
         VUser(),
         VModhash(),
         VRatelimit(rate_user=True, rate_ip=True, prefix="rate_comment_"),
-        parent=VSubmitParent(['thing_id', 'parent']),
-        comment=VMarkdown('text'),
+        text=VMarkdown('text'),
     )
     @api_doc(api_section.links_and_comments)
-    def POST_preview_comment(self, commentform, jquery, parent, comment):
+    def POST_preview_comment(self, commentform, jquery, text):
         """Submit a new comment for preview.
 
         `parent` is the fullname of the thing being replied to. Its value
@@ -1688,7 +1687,7 @@ class ApiController(RedditController):
 
         `text` should be the raw markdown body of the comment or message.
         """
-        return safemarkdown(comment)
+        return safemarkdown(text)
 
     @require_oauth2_scope("submit")
     @validatedForm(
