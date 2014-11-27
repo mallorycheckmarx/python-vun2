@@ -413,8 +413,8 @@ function previewon(elem) {
       }
     };
 
-    $.request("preview_comment", get_form_fields(form, {}), success, undefined,
-              "text", false, form_error(form));
+    $.request("markdown_preview", get_form_fields(form, {}), success, undefined,
+              "text", true, form_error(form));
 };
 
 function previewoff(elem) {

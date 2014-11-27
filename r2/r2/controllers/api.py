@@ -1675,15 +1675,8 @@ class ApiController(RedditController):
         text=VMarkdown('text'),
     )
     @api_doc(api_section.links_and_comments)
-    def POST_preview_comment(self, commentform, jquery, text):
-        """Submit a new comment for preview.
-
-        `parent` is the fullname of the thing being replied to. Its value
-        changes the kind of object created by this request:
-
-        * the fullname of a Link: a top-level comment in that Link's thread.
-        * the fullname of a Comment: a comment reply to that comment.
-        * the fullname of a Message: a message reply to that message.
+    def GET_markdown_preview(self, commentform, jquery, text):
+        """Get formatted markdown for preview.
 
         `text` should be the raw markdown body of the comment or message.
         """
