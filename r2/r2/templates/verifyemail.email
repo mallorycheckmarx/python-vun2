@@ -20,12 +20,12 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-your username is:
+Your username is:
 
     ${thing.user.name}
 
-visit this link to verify your email address:
+Visit this link to verify your email address:
 
     ${thing.emaillink}
 
-thanks for using the site!
+Thanks for using the site!
