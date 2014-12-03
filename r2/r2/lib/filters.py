@@ -242,9 +242,24 @@ def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
     # XHTML entities (&nbsp;, etc.).
     smd_with_dtd = markdown_dtd + smd
 
-    s = StringIO(smd_with_dtd)
-    parser = lxml.etree.XMLParser(load_dtd=True)
-    tree = lxml.etree.parse(s, parser)
+    # Now escape all unruly or unknown entities
+    while True:
+        try:
+            s = StringIO(smd_with_dtd)
+            parser = lxml.etree.XMLParser(load_dtd=True)
+            tree = lxml.etree.parse(s, parser)
+            break
+        except lxml.etree.XMLSyntaxError as e:
+            msg = str(e)
+            if 'not defined' in msg:
+                ent = msg[msg.find('\'')+1 : msg.rfind('\'')]
+            elif 'no name' in msg:
+                ent = ''
+            else:
+                raise
+            smd = smd.replace('&'+ent+';', '&amp;'+ent+';')
+            smd_with_dtd = markdown_dtd + smd
+
     handler = SouptestSaxHandler(markdown_ok_tags)
     saxify(tree, handler)
 
