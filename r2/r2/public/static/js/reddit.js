@@ -418,7 +418,7 @@ function previewon(elem) {
 };
 
 function previewoff(elem) {
-    $(elem).parents(".usertext-edit:first").children(".markpreview:first").html("<p>Loading...</p>").hide();
+    $(elem).parents(".usertext-edit:first").children(".markpreview:first").html("").hide();
 };
 
 function show_all_messages(elem) {
