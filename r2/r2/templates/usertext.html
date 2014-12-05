@@ -30,7 +30,7 @@
 <%namespace file="utils.html" import="error_field, md, _md"/>
 
 <%def name="markpreview(show_embed_preview=False)">
-  <div class="markpreview" style="display:none">
+  <div class="markpreview md" style="display:none">
   </div>
 </%def>
 
@@ -150,6 +150,7 @@
         <textarea rows="1" cols="1"
                   name="${thing.name}"
                   class="${thing.textarea_class}"
+                  onkeyup="return update_preview(this)"
                   >${keep_space(thing.text)}</textarea>
       </div>
 
