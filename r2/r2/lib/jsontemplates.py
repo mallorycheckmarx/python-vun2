@@ -460,6 +460,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         title="title",
         ups="upvotes",
         url="url",
+        votable="votable",
     )
 
     def thing_attr(self, thing, attr):
