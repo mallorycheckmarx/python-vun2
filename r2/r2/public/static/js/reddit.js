@@ -402,6 +402,19 @@ function helpoff(elem) {
     $(elem).parents(".usertext-edit:first").children(".markhelp:first").hide();
 };
 
+function update_preview(elem) {
+  $(elem).parents(".usertext-edit:first").children(".markpreview:first")
+    .html(SnuOwnd.getParser().render($(elem).val()));
+}
+
+function previewon(elem) {
+  $(elem).parents(".usertext-edit:first").children(".markpreview:first").show();
+};
+
+function previewoff(elem) {
+  $(elem).parents(".usertext-edit:first").children(".markpreview:first").hide();
+};
+
 function show_all_messages(elem) {
     var $rootMessage = $(elem).parents(".message");
     var $childMessages = $rootMessage.find(".message");
