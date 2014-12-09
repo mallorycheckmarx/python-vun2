@@ -403,8 +403,8 @@ function helpoff(elem) {
 };
 
 function update_preview(elem) {
-  var preview = $(elem).parents(".usertext-edit:first").children(".markpreview:first");
-  preview.html(SnuOwnd.getParser().render($(elem).val()));
+  $(elem).parents(".usertext-edit:first").children(".markpreview:first")
+    .html(SnuOwnd.getParser().render($(elem).val()));
 }
 
 function previewon(elem) {
@@ -412,7 +412,7 @@ function previewon(elem) {
 };
 
 function previewoff(elem) {
-  $(elem).parents(".usertext-edit:first").children(".markpreview:first").html("").hide();
+  $(elem).parents(".usertext-edit:first").children(".markpreview:first").hide();
 };
 
 function show_all_messages(elem) {
