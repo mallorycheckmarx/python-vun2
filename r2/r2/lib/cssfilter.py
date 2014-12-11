@@ -279,6 +279,7 @@ SAFE_PROPERTIES = {
     "will-change",
     "word-break",
     "word-spacing",
+    "word-wrap",
     "z-index",
 }
 assert all(property == property.lower() for property in SAFE_PROPERTIES)
