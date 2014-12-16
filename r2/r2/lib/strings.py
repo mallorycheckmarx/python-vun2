@@ -48,7 +48,7 @@ string_dict = dict(
     banned_by = "removed by %s",
     banned    = "removed",
     reports   = "reports: %d",
-    
+
     submitting = _("submitting..."),
 
     # this accomodates asian languages which don't use spaces
@@ -210,7 +210,7 @@ class StringHandler(object):
             return StringHandler(**rval)
         else:
             raise AttributeError
-    
+
     def __iter__(self):
         return iter(self.string_dict)
 
@@ -285,7 +285,7 @@ plurals = PluralManager([P_("comment",     "comments"),
 
 
 class Score(object):
-    """Convienience class for populating '10 points' in a traslatible
+    """Convenience class for populating '10 points' in a translatable
     fasion, used primarily by the score() method in printable.html"""
 
     # This used to pass through _() because allegedly Japanese needed different
