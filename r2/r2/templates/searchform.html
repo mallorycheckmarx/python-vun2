@@ -66,7 +66,7 @@
   %elif thing.simple:
   <div id="searchexpando" class="infobar">
       % if not isinstance(c.site, DefaultSR):
-      <label><input type="checkbox" name="restrict_sr" tabindex="21">${_('limit my search to %(path)s') % dict(path=c.site.path.rstrip('/'))}</label>
+      <label><input type="checkbox" name="restrict_sr" tabindex="21" checked>${_('limit my search to %(path)s') % dict(path=c.site.path.rstrip('/'))}</label>
       % endif
 
       ${search_faq()}
