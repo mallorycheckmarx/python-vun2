@@ -180,6 +180,11 @@ function fetch_more() {
         "&count=" + parseInt(last.find(".rank").html())
 
     $.getJSON(apath, function(res) {
+        if (apath.indexOf('/user/') > 0) {
+            for (i = 0; i < res.data.length; i++) {
+                res.data[i].data.parent = undefined;
+            }
+        }
         $.insert_things(res.data, true);
         $(".thing").click(function() {
         });
