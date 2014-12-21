@@ -162,8 +162,6 @@ function show_edit_usertext(form) {
 
 function fetch_more() {
     $("#siteTable").after($("<div class='loading'><img src='" + r.utils.staticURL('reddit_loading.png') + "'/></div>"));
-
-
     var o = document.location;
     var path = o.pathname.split(".");
     if (path[path.length - 1].indexOf('/') == -1) {
