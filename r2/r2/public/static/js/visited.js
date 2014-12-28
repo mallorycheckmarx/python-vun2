@@ -15,8 +15,8 @@ r.visited = {
     },
 
     onVisit: function(ev) {
-        if (ev.type == 'keydown' && ev.which != 13) {
-            // only handle enter key presses
+        if ((ev.type == 'keydown' && ev.which != 13) || (ev.which === 3)) {
+            // only handle enter key presses and/or non-right clicks
             return
         }
         this.storeVisit($(ev.target).closest('.thing').data('fullname'))
