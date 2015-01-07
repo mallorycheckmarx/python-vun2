@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -288,7 +288,7 @@ class Email(object):
     handler = EmailHandler()
 
     # Do not modify in any way other than appending new items!
-    # Database tables storing mail stuff use an int column as an index into 
+    # Database tables storing mail stuff use an int column as an index into
     # this Enum, so anything other than appending new items breaks mail history.
     Kind = Enum("SHARE", "FEEDBACK", "ADVERTISE", "OPTOUT", "OPTIN",
                 "VERIFY_EMAIL", "RESET_PASSWORD",

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -1173,7 +1173,7 @@ class Comment(Thing, Printable):
 
             # always use the default collapse threshold in contest mode threads
             # if the user has a custom collapse threshold
-            if (item.link.contest_mode and 
+            if (item.link.contest_mode and
                     user.pref_min_comment_score is not None):
                 min_score = Account._defaults['pref_min_comment_score']
             else:
@@ -1797,7 +1797,7 @@ class _ThingSavesByAccount(_SaveHideByAccount):
     @classmethod
     def value_for(cls, thing1, thing2, category=None):
         return category or ''
-    
+
     @classmethod
     def _remove_from_category_listings(cls, user, things, category):
         things = tup(things)
@@ -1966,7 +1966,7 @@ class _ThingSavesByCategory(_ThingSavesBySubreddit):
 
     @classmethod
     def _get_query_fn():
-        raise NotImplementedError 
+        raise NotImplementedError
 
     @classmethod
     def _check_empty(cls, user, category):

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -48,7 +48,7 @@ string_dict = dict(
     banned_by = "removed by %s",
     banned    = "removed",
     reports   = "reports: %d",
-    
+
     submitting = _("submitting..."),
 
     # this accomodates asian languages which don't use spaces
@@ -210,7 +210,7 @@ class StringHandler(object):
             return StringHandler(**rval)
         else:
             raise AttributeError
-    
+
     def __iter__(self):
         return iter(self.string_dict)
 

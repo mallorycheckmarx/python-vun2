@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -112,7 +112,7 @@ class BaseController(WSGIController):
         request.fullpath = environ.get('FULLPATH', request.path)
         request.fullurl = request.host_url + request.fullpath
         request.port = environ.get('request_port')
-        
+
         if_modified_since = environ.get('HTTP_IF_MODIFIED_SINCE')
         if if_modified_since:
             request.if_modified_since = read_http_date(if_modified_since)
@@ -227,4 +227,3 @@ def proxyurl(url):
     r = urllib2.Request(url, None, {})
     content = embedopen.open(r).read()
     return content
-

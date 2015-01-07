@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -34,7 +34,7 @@ def fix_trans_id():
 
     # print some info and prompt user to continue
     print ("Found %d campaigns with trans_id == 1. \n"
-           "Campaigns ids: %s \n" 
+           "Campaigns ids: %s \n"
            "Press 'c' to fix them or any other key to abort." %
            (num_bad_campaigns, [pc._id for pc in bad_campaigns]))
     input_char = sys.stdin.read(1)
@@ -43,7 +43,7 @@ def fix_trans_id():
         return
 
     # log the ids for reference
-    print ("Fixing %d campaigns with bad freebie trans_id: %s" % 
+    print ("Fixing %d campaigns with bad freebie trans_id: %s" %
            (num_bad_campaigns, [pc._id for pc in bad_campaigns]))
 
     # get corresponding links and copy trans_id from link data to campaign thing
@@ -61,7 +61,7 @@ def fix_trans_id():
     for c in bad_campaigns:
         bad_campaigns_by_link[c.link_id].append(c)
 
-    # iterate through links and copy trans_id from pickled list on the link to 
+    # iterate through links and copy trans_id from pickled list on the link to
     # the campaign thing
     failed = []
     for link in links:
@@ -85,5 +85,3 @@ def fix_trans_id():
     msg = ("%d of %d campaigns updated successfully. %d updates failed: %s" %
            (num_bad_campaigns, num_bad_campaigns - len(failed), len(failed), failed))
     print msg
-
-        

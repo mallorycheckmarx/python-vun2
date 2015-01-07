@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -155,7 +155,7 @@ class Builder(object):
                         rel = friend_rels[item.author_id]
                         note = getattr(rel, "note", None)
                         if note:
-                            label = u"%s (%s)" % (_("friend"), 
+                            label = u"%s (%s)" % (_("friend"),
                                                   _force_unicode(note))
                     add_attr(w.attribs, 'F', label)
 
@@ -168,7 +168,7 @@ class Builder(object):
             if w.distinguished == 'moderator':
                 add_attr(w.attribs, 'M', label=modlabel[item.sr_id],
                          link=modlink[item.sr_id])
-            
+
             if w.distinguished == 'special':
                 args = w.author.special_distinguish()
                 args.pop('name')
@@ -692,13 +692,13 @@ class SearchBuilder(IDBuilder):
 
 class WikiRevisionBuilder(QueryBuilder):
     show_extended = True
-    
+
     def __init__(self, revisions, page=None, **kw):
         self.user = kw.pop('user', None)
         self.sr = kw.pop('sr', None)
         self.page = page
         QueryBuilder.__init__(self, revisions, **kw)
-    
+
     def wrap_items(self, items):
         from r2.lib.validator.wiki import this_may_revise
         types = {}
@@ -711,7 +711,7 @@ class WikiRevisionBuilder(QueryBuilder):
             w.show_compare = self.show_extended
             types.setdefault(w.render_class, []).append(w)
             wrapped.append(w)
-        
+
         user = c.user
         for cls in types.keys():
             cls.add_props(user, types[cls])
@@ -1075,8 +1075,8 @@ class MessageBuilder(Builder):
                 add_child_listing(parent)
                 # if the parent is new, uncollapsed, or focal we don't
                 # want it to become a moremessages wrapper.
-                if (self.skip and 
-                    not self.parent and not parent.new and parent.is_collapsed 
+                if (self.skip and
+                    not self.parent and not parent.new and parent.is_collapsed
                     and not (self.focal and self.focal._id == parent._id)):
                     for i, child in enumerate(children):
                         if (child.new or not child.is_collapsed or

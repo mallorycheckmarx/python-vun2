@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -296,7 +296,7 @@ class Account(Thing):
             # permitted OAuth scopes.
             return None
         return modhash(self, rand = rand, test = test)
-    
+
     def valid_hash(self, hash):
         if self == c.oauth_user:
             # OAuth authenticated requests do not require CSRF protection.
@@ -418,7 +418,7 @@ class Account(Thing):
             Account._by_name(self.name, _update = True)
         except NotFound:
             pass
-        
+
         #remove from friends lists
         q = Friend._query(Friend.c._thing2_id == self._id,
                           Friend.c._name == 'friend',
@@ -457,7 +457,7 @@ class Account(Thing):
             # New PW doesn't matter, they can't log in with it anyway.
             # Even if their PW /was/ 'banned' for some reason, this
             # will change the salt and thus invalidate the cookies
-            change_password(self, 'banned') 
+            change_password(self, 'banned')
 
             # deauthorize all access tokens
             from r2.models.token import OAuth2AccessToken

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -55,15 +55,15 @@
 </%def>
 
 <%def name="media_radio(val, label)">
-  <input id="media_${val}" class="nomargin" 
+  <input id="media_${val}" class="nomargin"
          type="radio"  value="${val}" name="media"
-         ${"checked='checked'" if c.user.pref_media == val else ''} /> 
+         ${"checked='checked'" if c.user.pref_media == val else ''} />
   <label for="media_${val}">${label}</label>
   <br/>
 </%def>
 
 <%def name="num_input(s, name)">
-  <input size="4" maxlength="4" 
+  <input size="4" maxlength="4"
          name="${name}" style="margin:  0 .5em 0 .5em"
          type="number"
          value="${s if s is not None else ''}" />
@@ -75,9 +75,9 @@
 
 <%
    if c.user_is_loggedin:
-       action = "/post/options" 
+       action = "/post/options"
    else:
-       action = "/post/unlogged_options" 
+       action = "/post/unlogged_options"
    if not c.frameless_cname:
        action = add_sr(action, sr_path = False, nocname=True)
  %>
@@ -187,7 +187,7 @@
   <tr>
     <th>${_("comment options")}</th>
     <td class="prefright">
-    <% 
+    <%
        input = capture(num_input, c.user.pref_min_comment_score,
                        'min_comment_score')
        %>
@@ -196,7 +196,7 @@
       &#32;<span class="little gray">${_("(leave blank to show all comments)")}</span>
     </p>
     <p>
-      <% 
+      <%
        input = capture(num_input, c.user.pref_num_comments,
        'num_comments')
        %>
@@ -249,7 +249,7 @@
       ${checkbox(_("show link flair"), "show_link_flair")}
       %if c.user.pref_show_promote is not None:
         <br/>
-        ${checkbox(_("show self-serve advertising tab on front page"), 
+        ${checkbox(_("show self-serve advertising tab on front page"),
           "show_promote")}
       %endif
     </td>
@@ -262,7 +262,7 @@
       <br/>
         ${checkbox(_("label posts that are not safe for work (NSFW)"), "label_nsfw", disabled = c.user.pref_no_profanity, disabled_text = "(requires not 'safer for work' mode)")}
       <br/>
-        ${checkbox(_("enable private RSS feeds"), "private_feeds")} 
+        ${checkbox(_("enable private RSS feeds"), "private_feeds")}
        &#32;<span class="little gray">
         ${_("(available from the 'RSS feed' tab in prefs)")}</span>
     </td>

@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -433,7 +433,7 @@ class HotController(ListingWithPromos):
                         self.count -= 1
                         self.num += 1
                     return link_list
-            
+
             # no sticky or sticky hidden
             return c.site.get_links('hot', 'all')
 
@@ -846,7 +846,7 @@ class UserController(ListingController):
         if where in ('liked', 'disliked') and not votes_visible(vuser):
             return self.abort403()
 
-        if ((where in ('saved', 'hidden') or 
+        if ((where in ('saved', 'hidden') or
                 (where == 'gilded' and show == 'given')) and
                 not (c.user_is_loggedin and c.user._id == vuser._id) and
                 not c.user_is_admin):

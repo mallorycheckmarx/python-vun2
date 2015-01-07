@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -37,7 +37,7 @@
       id="login_${op}"
       class="login-form login-form-side">
   %if thing.cname:
-    <input type="hidden" name="${UrlParser.cname_get}" 
+    <input type="hidden" name="${UrlParser.cname_get}"
            value="${random.random()}" />
   %endif
   <input type="hidden" name="op" value="${op}" />
@@ -56,7 +56,6 @@
     <span class="throbber"></span>
     <button class="btn" type="submit" tabindex="1">${_("login")}</button>
   </div>
-  
+
   <div class="clear"></div>
 </form>
-

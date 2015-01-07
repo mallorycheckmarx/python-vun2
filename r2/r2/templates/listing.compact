@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -39,10 +39,10 @@
 <script type="text/javascript">
 $($(window).scroll(function(){
             var loading = $(".loading").length;
-            if (!loading && $(window).scrollTop() > 
+            if (!loading && $(window).scrollTop() >
               0.8*( $(document).height() - window.innerHeight) ){
                 fetch_more();
-                } 
+                }
             }))
 </script>
 %endif

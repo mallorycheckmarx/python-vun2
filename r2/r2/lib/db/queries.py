@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -136,7 +136,7 @@ class CachedResults(object):
         filtered_item = self.filter(item)
         lst = [filtered_item._fullname]
         for col in self.sort_cols:
-            #take the property of the original 
+            #take the property of the original
             attr = getattr(item, col)
             #convert dates to epochs to take less space
             if isinstance(attr, datetime):
@@ -690,8 +690,8 @@ def get_user_reported(user_id):
 
 
 def set_promote_status(link, promote_status):
-    all_queries = [promote_query(link.author_id) for promote_query in 
-                   (get_unpaid_links, get_unapproved_links, 
+    all_queries = [promote_query(link.author_id) for promote_query in
+                   (get_unpaid_links, get_unapproved_links,
                     get_rejected_links, get_live_links, get_accepted_links)]
     all_queries.extend([get_all_unpaid_links(), get_all_unapproved_links(),
                         get_all_rejected_links(), get_all_live_links(),
@@ -954,7 +954,7 @@ def new_link(link):
         results.append(get_domain_links(domain, 'new', "all"))
 
     with CachedQueryMutator() as m:
-        if link._spam:    
+        if link._spam:
             m.insert(get_spam_links(sr), [link])
         if not (sr.exclude_banned_modqueue and author._spam):
             m.insert(get_unmoderated_links(sr), [link])
@@ -1074,7 +1074,7 @@ def new_vote(vote, foreground=False, timer=None):
         add_queries(results, insert_items = item, foreground=foreground)
 
     timer.intermediate("permacache")
-    
+
     if isinstance(item, Link):
         # must update both because we don't know if it's a changed
         # vote

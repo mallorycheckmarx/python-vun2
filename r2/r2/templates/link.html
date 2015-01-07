@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -30,11 +30,11 @@
    from r2.lib.pages import WrappedUser
    from r2.lib.strings import Score, strings
 %>
- 
+
 <%inherit  file="printable.html"/>
 <%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp" />
 <%namespace file="printablebuttons.html" import="toggle_button" />
- 
+
 <%def name="numcol()">
   <span class="rank">
     ${thing.num_text}
@@ -117,7 +117,7 @@
     ${self.tagline()}
   </p>
 
-  <% 
+  <%
      child_content = ""
      if thing.link_child and thing.link_child.load:
        child_content = unsafe(thing.link_child.content())
@@ -175,9 +175,9 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
     %if thing.pref_compress:
       <div class="score-placeholder"></div>
     %elif thing.hide_score:
-      <div class="score likes">&bull;</div> 
-      <div class="score unvoted">&bull;</div> 
-      <div class="score dislikes">&bull;</div> 
+      <div class="score likes">&bull;</div>
+      <div class="score unvoted">&bull;</div>
+      <div class="score dislikes">&bull;</div>
     %else:
       ${self.score(thing, thing.likes, tag='div')}
     %endif
@@ -251,4 +251,3 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
   </%call>
   %endif
 </%def>
-

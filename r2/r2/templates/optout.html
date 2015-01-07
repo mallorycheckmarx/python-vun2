@@ -16,14 +16,14 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <div class="opt-form">
 %if thing.leave:
   %if thing.sent:
-  <p> 
+  <p>
     ${_("The address '%(email)s' will no longer receive email from us.") % dict(email=thing.email)}
   </p>
   <p>
@@ -42,7 +42,7 @@
    </p>
   %endif
 %elif thing.sent:
-  <p> 
+  <p>
     ${_("'%(email)s' has been removed from our block list.") % dict(email=thing.email)}
   </p>
 %else:

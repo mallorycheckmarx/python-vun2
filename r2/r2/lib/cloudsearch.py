@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -51,7 +51,7 @@ ILLEGAL_XML = re.compile(u'[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]
 def _safe_xml_str(s, use_encoding="utf-8"):
     '''Replace invalid-in-XML unicode control characters with '\uFFFD'.
     Also, coerces result to unicode
-    
+
     '''
     if not isinstance(s, unicode):
         if isinstance(s, str):
@@ -373,7 +373,7 @@ class CloudSearchUploader(object):
     def delete_xml(self, thing, version=None):
         '''Return the cloudsearch XML representation of
         "delete this from the index"
-        
+
         '''
         version = str(version or self._version())
         delete = etree.Element("delete", id=thing._fullname, version=version)
@@ -382,7 +382,7 @@ class CloudSearchUploader(object):
     def delete_ids(self, ids):
         '''Delete documents from the index.
         'ids' should be a list of fullnames
-        
+
         '''
         version = self._version()
         deletes = [etree.Element("delete", id=id_, version=str(version))
@@ -394,7 +394,7 @@ class CloudSearchUploader(object):
     def xml_from_things(self):
         '''Generate a <batch> XML tree to send to cloudsearch for
         adding/updating/deleting the given things
-        
+
         '''
         batch = etree.Element("batch")
         self.batch_lookups()
@@ -441,7 +441,7 @@ class CloudSearchUploader(object):
     def inject(self, quiet=False):
         '''Send things to cloudsearch. Return value is time elapsed, in seconds,
         of the communication with the cloudsearch endpoint
-        
+
         '''
         xml_things = self.xml_from_things()
 
@@ -478,7 +478,7 @@ class CloudSearchUploader(object):
         '''Open a connection to the cloudsearch endpoint, and send the documents
         for indexing. Multiple requests are sent if a large number of documents
         are being sent (see chunk_xml())
-        
+
         Raises CloudSearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
@@ -559,7 +559,7 @@ class SubredditUploader(CloudSearchUploader):
 
 def chunk_xml(xml, depth=0):
     '''Chunk POST data into pieces that are smaller than the 20 MB limit.
-    
+
     Ideally, this never happens (if chunking is necessary, would be better
     to avoid xml'ifying before testing content_length)'''
     data = etree.tostring(xml)
@@ -585,7 +585,7 @@ def chunk_xml(xml, depth=0):
 def _run_changed(msgs, chan):
     '''Consume the cloudsearch_changes queue, and print reporting information
     on how long it took and how many remain
-    
+
     '''
     start = datetime.now(g.tz)
 
@@ -615,7 +615,7 @@ def run_changed(drain=False, min_size=500, limit=1000, sleep_time=10,
                 use_safe_get=False, verbose=False):
     '''Run by `cron` (through `paster run`) on a schedule to send Things to
         Amazon CloudSearch
-    
+
     '''
     if use_safe_get:
         CloudSearchUploader.use_safe_get = True
@@ -898,9 +898,9 @@ class CloudSearchQuery(object):
                     num=1000, _update=False):
         '''Query the cloudsearch API. _update parameter allows for supposed
         easy memoization at later date.
-        
+
         Example result set:
-        
+
         {u'facets': {u'reddit': {u'constraints':
                                     [{u'count': 114, u'value': u'politics'},
                                     {u'count': 42, u'value': u'atheism'},
@@ -928,7 +928,7 @@ class CloudSearchQuery(object):
                    u'time-ms': 9},
                    u'match-expr': u"(label 'my query')",
                    u'rank': u'-text_relevance'}
-        
+
         '''
         if not query and not bq:
             return Results([], 0, {})
@@ -1011,7 +1011,7 @@ class LinkSearchQuery(CloudSearchQuery):
     def _get_sr_restriction(sr):
         '''Return a cloudsearch appropriate query string that restricts
         results to only contain results from self.sr
-        
+
         '''
         bq = []
         if (not sr) or sr == All or isinstance(sr, DefaultSR):

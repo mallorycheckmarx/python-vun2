@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -58,9 +58,9 @@ menu =   MenuHandler(hot          = _('hot'),
                      random       = _('random'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
-                     rising       = _('rising'), 
-                     admin        = _('admin'), 
-                                 
+                     rising       = _('rising'),
+                     admin        = _('admin'),
+
                      # time sort words
                      hour         = _('this hour'),
                      day          = _('today'),
@@ -68,25 +68,25 @@ menu =   MenuHandler(hot          = _('hot'),
                      month        = _('this month'),
                      year         = _('this year'),
                      all          = _('all time'),
-                                  
+
                      # "kind" words
                      spam         = _("spam"),
                      autobanned   = _("autobanned"),
 
                      # reddit header strings
-                     prefs        = _("preferences"), 
+                     prefs        = _("preferences"),
                      submit       = _("submit"),
                      wiki         = _("wiki"),
                      blog         = _("blog"),
                      logout       = _("logout"),
-                     
+
                      #reddit footer strings
                      contact      = _("contact us"),
                      buttons      = _("buttons"),
-                     widget       = _("widget"), 
+                     widget       = _("widget"),
                      code         = _("source code"),
-                     mobile       = _("mobile"), 
-                     store        = _("store"),  
+                     mobile       = _("mobile"),
+                     store        = _("store"),
                      advertising  = _("advertise"),
                      gold         = _('reddit gold'),
                      reddits      = _('subreddits'),
@@ -133,10 +133,10 @@ menu =   MenuHandler(hot          = _('hot'),
                      modqueue     = _("moderation queue"),
                      unmoderated  = _("unmoderated links"),
                      edited       = _("edited"),
-                     
+
                      wikibanned        = _("ban wiki contributors"),
                      wikicontributors  = _("add wiki contributors"),
-                     
+
                      wikirecentrevisions = _("recent wiki revisions"),
                      wikipageslist = _("wiki page list"),
 
@@ -325,7 +325,7 @@ class NavButton(Styled):
             ('path', self.path),
             ('sr_path', self.sr_path),
             ('nocname', self.nocname),
-            ('target', self.target), 
+            ('target', self.target),
             ('css_class', self.css_class),
             ('_id', self._id),
         ]
@@ -483,7 +483,7 @@ class JsButton(NavButton):
         return [
             ('title', self.title),
             ('path', self.path),
-            ('target', self.target), 
+            ('target', self.target),
             ('css_class', self.css_class),
             ('_id', self._id),
             ('tab_name', self.tab_name),

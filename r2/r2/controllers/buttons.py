@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -107,16 +107,15 @@ class ButtonsController(RedditController):
         if isinstance(c.site, DomainSR):
             return self.redirect('/buttons')
         return BoringPage(_("reddit buttons"),
-                          show_sidebar = False, 
+                          show_sidebar = False,
                           content=ButtonDemoPanel()).render()
 
     def GET_widget_demo_page(self):
         return BoringPage(_("reddit widget"),
-                          show_sidebar = False, 
+                          show_sidebar = False,
                           content=WidgetDemoPanel()).render()
 
     def GET_bookmarklets(self):
         return BoringPage(_("bookmarklets"),
-                          show_sidebar = False, 
+                          show_sidebar = False,
                           content=Bookmarklets()).render()
-

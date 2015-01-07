@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,7 +28,7 @@
   from babel.numbers import format_currency
 %>
 
-<%namespace file="utils.html" 
+<%namespace file="utils.html"
             import="error_field, checkbox, image_upload" />
 <%namespace name="utils" file="utils.html"/>
 
@@ -69,7 +69,7 @@
 
 <%def name="title_field(link, editable=False)">
   <%utils:line_field title="${_('title')}" id="title-field" css_class="rounded title-field">
-    <textarea name="title" rows="2" cols="1" 
+    <textarea name="title" rows="2" cols="1"
               ${"disabled" if not editable else ""}
               wrap="hard" class="rounded">${link.title if link else ''}</textarea>
     ${error_field("NO_TEXT", "title", "div")}
@@ -84,7 +84,7 @@
   <%utils:line_field title="${_('post type')}" id="kind-selector" css_class="rounded post-type-field">
     <div class="radio-group">
       <label class="form-group">
-        <input id="url_link" class="nomargin" 
+        <input id="url_link" class="nomargin"
                type="radio" value="link" name="kind"
                onclick="$('#text-field').hide(); $('#url-field').show()"
                ${"checked='checked'" if link_selected else ""}>
@@ -94,13 +94,13 @@
         </div>
       </label>
       <label class="form-group">
-        <input id="self_link" class="nomargin" 
+        <input id="self_link" class="nomargin"
                type="radio" value="self" name="kind"
                onclick="$('#url-field').hide(); $('#text-field').show()"
                ${"" if link_selected else "checked='checked'"}>
         <div class="label-group">
           <span class="label">${_("text")}</span>
-          <small class="label">${_("clicks through to text you customize")}</small>  
+          <small class="label">${_("clicks through to text you customize")}</small>
         </div>
       </label>
     </div>
@@ -109,7 +109,7 @@
 
 <%def name="url_field(link, editable=False, enable_override=False)">
   <%utils:line_field title="${_('url')}" id="url-field" css_class="rounded url-field">
-    <input id="url" name="url" type="text" 
+    <input id="url" name="url" type="text"
            ${"disabled" if not editable else ""}
            value="${('self' if link.is_self else link.url) if link else ""}"
            class="rounded"/>
@@ -122,7 +122,7 @@
 
     %if enable_override:
       <label style="display:block; text-align:right" for="domain">${_("Override display domain:")}</label>
-      <input id="domain" name="domain" type="text" 
+      <input id="domain" name="domain" type="text"
              %if link and link.domain_override:
                value="${link.domain_override}" class="rounded"
              %else:
@@ -146,13 +146,13 @@
 
 <%def name="image_field(link)">
   <% current_image = getattr(link, 'thumbnail_url', '') %>
-  <%utils:line_field title="${_('thumbnail')}" 
+  <%utils:line_field title="${_('thumbnail')}"
                      css_class="rounded image-field ${'has-image' if current_image else ''}">
     <div class="infotext">
       ${_('images will be resized if larger than 140x140 pixels (displayed at 70x70)')}
     </div>
     <div class="delete-field">
-      <%utils:image_upload post_target="/api/link_thumb" 
+      <%utils:image_upload post_target="/api/link_thumb"
                            current_image="${current_image}"
                            label="${_('upload header image:')}"
                            ask_type="True">
@@ -181,7 +181,7 @@
       <div class="form-group">
         ${checkbox("disable_comments", _("disable comments"), link.disable_comments)}
       </div>
-      
+
       <div class="form-group">
         ${checkbox("sendreplies", _("send comments on my ad to my inbox"), link.sendreplies)}
       </div>
@@ -303,7 +303,7 @@
     <div class="radio-group">
       %for value, text, description, default, override, cpm in thing.priorities:
         <label class="form-group checkbox">
-          <input id="${value}" class="nomargin" 
+          <input id="${value}" class="nomargin"
                  type="radio"  value="${value}" name="priority"
                  onclick="r.sponsored.priority_changed()"
                  ${"checked='checked'" if default else ""}

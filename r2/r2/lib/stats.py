@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -415,7 +415,7 @@ class Stats:
 
     def count_string(self, key, value, count=1):
         self.client.string_counts.record(key, str(value), count=count)
-   
+
 
 class CacheStats:
     def __init__(self, parent, cache_name):
@@ -523,4 +523,3 @@ class StatsCollectingConnectionPool(pool.ConnectionPool):
             f = getattr(wrapper, method_name)
             setattr(wrapper, method_name, instrument(f, get_cf_name))
         return wrapper
-

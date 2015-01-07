@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -76,10 +76,10 @@
     %if thing.sr.author:
       ${unsafe(_ws("created by %(user)s").replace(" ", "&#32;") % dict(user = unsafe(thing.creator_text)))}
     %endif
-    
+
     <span class="age">
       ${_("a community for")}&#32;${thing_timestamp(thing.sr)}
-    </span>  
+    </span>
   </div>
 
   %if c.user_is_admin:
@@ -99,7 +99,6 @@
   %endif
 
   <div class="clear"> </div>
-  
+
 
 </div>
-

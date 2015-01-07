@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,7 +28,7 @@
 <%namespace file="utils.html" import="plain_link" />
 <%namespace file="printablebuttons.html" import="toggle_button"/>
 
-  <% 
+  <%
      like_cls = ""
      if getattr(thing, "likes", None):
          like_cls = "likes"
@@ -38,8 +38,8 @@
 <div class="thing subreddit id-${thing._fullname}">
   <div class="midcol"
   ${toggle_button("fancy-toggle-button", "+", "-",
-                  "subscribe('%s')" % thing._fullname, 
-                  "unsubscribe('%s')" % thing._fullname, 
+                  "subscribe('%s')" % thing._fullname,
+                  "unsubscribe('%s')" % thing._fullname,
                   css_class = "add button", alt_css_class = "remove button",
                   reverse = thing.subscriber)}
   </div>

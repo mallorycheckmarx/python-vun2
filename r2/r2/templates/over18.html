@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -27,7 +27,7 @@
     ${_("you must be at least eighteen to view this")}
   </p>
   <img src="${static('over18.png')}" alt="" height="254" width="180" />
-  
+
   <form method="post" action="" class="pretty-form"
       ${"target='_top'" if c.cname else ""}>
     <input type="hidden" name="uh" value="${c.modhash}" />
@@ -40,4 +40,3 @@
     </p>
   </form>
 </div>
-

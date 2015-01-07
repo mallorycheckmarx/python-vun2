@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """A very simple system for event hooks for plugins etc.
@@ -26,19 +26,19 @@ hooks.  The file that contains the code you want to hook into will look
 something like this::
 
     from r2.lib import hooks
-    
+
     def foo(spam):
         # Do a little bit of this and a little bit of that.
         eggs = this(spam)
         baked_beans = that(eggs)
-    
+
         hooks.get_hook('foo').call(ingredient=baked_beans)
 
 Then, any place you want to hook into it, just throw on a decorator::
 
     from r2.lib.hooks import HookRegistrar
     hooks = HookRegistrar()
-    
+
     @hooks.on('foo')
     def bar(ingredient):
         print ingredient

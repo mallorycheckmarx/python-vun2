@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -35,7 +35,7 @@ class ExportError(Exception):
 
 def export(exported_entity):
     """Use a decorator to avoid retyping function/class names.
-  
+
     * Based on an idea by Duncan Booth:
     http://groups.google.com/group/comp.lang.python/msg/11cbb03e09611b8a
     * Improved via a suggestion by Dave Angel:
@@ -51,4 +51,3 @@ def export(exported_entity):
     return exported_entity
 
 export(export)  # Emulate decorating ourself
-

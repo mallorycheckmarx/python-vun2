@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -85,7 +85,7 @@ of the Internet's finest surfers!
 
 %elif thing.kind == Email.Kind.REJECT_PROMO:
 This email is to inform you that the self-serve ad you submitted to reddit.com
-has been rejected. 
+has been rejected.
 
 Please review the following link and optional explanation for reasons for
 rejection:
