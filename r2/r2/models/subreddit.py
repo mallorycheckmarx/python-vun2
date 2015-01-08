@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -294,12 +294,12 @@ class Subreddit(Thing, Printable, BaseSite):
     @classmethod
     def _by_name(cls, names, stale=False, _update = False):
         '''
-        Usages: 
+        Usages:
         1. Subreddit._by_name('funny') # single sr name
-        Searches for a single subreddit. Returns a single Subreddit object or 
+        Searches for a single subreddit. Returns a single Subreddit object or
         raises NotFound if the subreddit doesn't exist.
         2. Subreddit._by_name(['aww','iama']) # list of sr names
-        Searches for a list of subreddits. Returns a dict mapping srnames to 
+        Searches for a list of subreddits. Returns a dict mapping srnames to
         Subreddit objects. Items that were not found are ommitted from the dict.
         If no items are found, an empty dict is returned.
         '''
@@ -443,15 +443,15 @@ class Subreddit(Thing, Printable, BaseSite):
     @property
     def banned(self):
         return self.banned_ids()
-    
+
     @property
     def wikibanned(self):
         return self.wikibanned_ids()
-    
+
     @property
     def wikicontributor(self):
         return self.wikicontributor_ids()
-    
+
     @property
     def _should_wiki(self):
         return True
@@ -566,7 +566,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 c.user_is_admin or self.is_moderator_with_perms(user, 'config'))
         else:
             return False
-    
+
     def parse_css(self, content, verify=True):
         from r2.lib import cssfilter
         from r2.lib.template_helpers import make_url_protocol_relative
@@ -641,7 +641,7 @@ class Subreddit(Thing, Printable, BaseSite):
     def can_view(self, user):
         if c.user_is_admin:
             return True
-        
+
         if self.spammy():
             return False
         elif self.type in ('public', 'restricted',
@@ -865,7 +865,7 @@ class Subreddit(Thing, Printable, BaseSite):
         """
         subreddits that appear in a user's listings. If the user has
         subscribed, returns the stored set of subscriptions.
-        
+
         limit - if it's Subreddit.DEFAULT_LIMIT, limits to 50 subs
                 (100 for gold users)
                 if it's None, no limit is used
@@ -881,7 +881,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 limit = Subreddit.gold_limit
             else:
                 limit = Subreddit.sr_limit
-        
+
         # note: for user not logged in, the fake user account has
         # has_subscribed == False by default.
         if user and user.has_subscribed:
@@ -1275,11 +1275,11 @@ class DefaultSR(_DefaultSR):
     @property
     def _should_wiki(self):
         return True
-    
+
     @property
     def wikimode(self):
         return self._base.wikimode if self._base else "disabled"
-    
+
     @property
     def wiki_edit_karma(self):
         return self._base.wiki_edit_karma
@@ -1290,17 +1290,17 @@ class DefaultSR(_DefaultSR):
 
     def is_wikicontributor(self, user):
         return self._base.is_wikicontributor(user)
-    
+
     def is_wikibanned(self, user):
         return self._base.is_wikibanned(user)
-    
+
     def is_wikicreate(self, user):
         return self._base.is_wikicreate(user)
-    
+
     @property
     def _fullname(self):
         return "t5_6"
-    
+
     @property
     def _id36(self):
         return self._base._id36
@@ -1882,7 +1882,7 @@ class DomainSR(FakeSubreddit):
         FakeSubreddit.__init__(self)
         domain = domain.lower()
         self.domain = domain
-        self.name = domain 
+        self.name = domain
         self.title = _("%(domain)s on %(reddit.com)s") % {
             "domain": domain, "reddit.com": g.domain}
         idn = domain.decode('idna')

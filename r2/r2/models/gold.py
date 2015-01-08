@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -319,7 +319,7 @@ def create_gold_code(trans_id, payer_email, paying_id, pennies, days, date):
                 date=date)
             return code
 
-                
+
 def account_by_payingid(paying_id):
     s = sa.select([sa.distinct(gold_table.c.account_id)],
                   gold_table.c.paying_id == paying_id)

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -51,7 +51,7 @@ ${captcha_field()}
 
 <%def name="to_field()">
   <div class="spacer">
-    <%utils:round_field title="${_('to')}", 
+    <%utils:round_field title="${_('to')}",
                         description="${_('(username, or /r/name for that subreddit\'s mods)')}">
       <input type="text" name="to" value="${thing.to or ''}"
              onchange="${'admincheck(this)' if thing.admin_check else ''}"/>
@@ -134,7 +134,7 @@ ${captcha_field()}
            <span class="admin-to">${thing.to}</span>
            &#32;<i>is</i>&#32; is a moderator of a specific subreddit you're
            inquiring about, and that's actually the reason you're writing, please
-           message 
+           message
            &#32;
            <a href="http://www.reddit.com/wiki/faq#wiki_how_can_i_tell_who_moderates_a_given_subreddit.3F">
             all of the moderators of the subreddit
@@ -144,7 +144,7 @@ ${captcha_field()}
            reason you're writing about.
          </li>
 
-         <li>If you're concerned that something is wrong with your entire account, please send your message to the admin list by 
+         <li>If you're concerned that something is wrong with your entire account, please send your message to the admin list by
            &#32;<a href="/message/compose?to=${g.admin_message_acct|u}">messaging all of the admins of ${g.admin_message_acct}</a>&#32;(It'll be dealt with faster).
          </li>
        </ul>

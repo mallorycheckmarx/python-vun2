@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -24,7 +24,7 @@ import paste.deploy.config
 import paste.fixture
 from paste.registry import RegistryManager
 from paste.script import command
-from paste.deploy import appconfig        
+from paste.deploy import appconfig
 from r2.config.environment import load_environment
 from paste.script.pluginlib import find_egg_info_dir
 from pylons.wsgiapp import PylonsApp

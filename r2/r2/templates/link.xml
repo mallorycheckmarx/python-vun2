@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -51,8 +51,8 @@
             <a href="${url}"><img src="${thing.thumbnail}" alt="${thing.title}" title="${thing.title}" /></a>
           </td><td>
       %endif
-      <% 
-         domain = get_domain(cname = c.cname, subreddit = False) 
+      <%
+         domain = get_domain(cname = c.cname, subreddit = False)
        %>
       %if getattr(thing, 'selftext', None):
         %if not thing.expunged:
@@ -71,7 +71,7 @@
       %endif
        %if thing.different_sr:
         to <a href="http://${domain}${thing.subreddit.path}">
-         ${thing.subreddit.name}</a> 
+         ${thing.subreddit.name}</a>
       %endif
       <br/>
       <a href="${thing.url}">[link]</a>
@@ -87,4 +87,3 @@
     <media:thumbnail url="${thing.thumbnail}" />
   %endif
 </item>
-

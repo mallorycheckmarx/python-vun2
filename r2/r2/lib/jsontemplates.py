@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -65,7 +65,7 @@ class ObjectTemplate(StringTemplate):
 
     def finalize(self, kw = {}):
         return self.update(kw).d
-    
+
 class JsonTemplate(Template):
     def __init__(self): pass
 
@@ -89,7 +89,7 @@ class ThingJsonTemplate(JsonTemplate):
         d = cls._data_attrs_.copy()
         d.update(kw)
         return d
-    
+
     def kind(self, wrapped):
         """
         Returns a string literal which identifies the type of this
@@ -115,7 +115,7 @@ class ThingJsonTemplate(JsonTemplate):
         res =  dict(id = thing._fullname,
                     content = thing.render(style=get_api_subtype()))
         return res
-        
+
     def raw_data(self, thing):
         """
         Complement to rendered_data.  Called when a dictionary of
@@ -123,7 +123,7 @@ class ThingJsonTemplate(JsonTemplate):
         """
         return dict((k, self.thing_attr(thing, v))
                     for k, v in self._data_attrs_.iteritems())
-            
+
     def thing_attr(self, thing, attr):
         """
         For the benefit of subclasses, to lookup attributes which may
@@ -170,7 +170,7 @@ class ThingJsonTemplate(JsonTemplate):
             if distinguished == 'no':
                 return None
             return distinguished
-        
+
         if attr in ["num_reports", "report_reasons", "banned_by", "approved_by"]:
             if c.user_is_loggedin and thing.subreddit.is_moderator(c.user):
                 if attr == "num_reports":
@@ -717,7 +717,7 @@ class ListingJsonTemplate(ThingJsonTemplate):
         children="things",
         modhash="modhash",
     )
-    
+
     def thing_attr(self, thing, attr):
         if attr == "modhash":
             return c.modhash
@@ -729,11 +729,11 @@ class ListingJsonTemplate(ThingJsonTemplate):
                 res.append(r)
             return res
         return ThingJsonTemplate.thing_attr(self, thing, attr)
-        
+
 
     def rendered_data(self, thing):
         return self.thing_attr(thing, "things")
-    
+
     def kind(self, wrapped):
         return "Listing"
 
@@ -865,7 +865,7 @@ class WikiJsonTemplate(JsonTemplate):
 class WikiPageListingJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
         return "wikipagelisting"
-    
+
     def data(self, thing):
         pages = [p.name for p in thing.linear_pages]
         return pages
@@ -873,7 +873,7 @@ class WikiPageListingJsonTemplate(ThingJsonTemplate):
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
         return "wikipage"
-    
+
     def data(self, thing):
         edit_date = time.mktime(thing.edit_date.timetuple()) if thing.edit_date else None
         edit_by = None
@@ -888,7 +888,7 @@ class WikiViewJsonTemplate(ThingJsonTemplate):
 class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def kind(self, thing):
          return "wikipagesettings"
-    
+
      def data(self, thing):
          editors = [Wrapped(e).render() for e in thing.mayedit]
          return dict(permlevel=thing.permlevel,

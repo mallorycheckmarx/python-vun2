@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -151,7 +151,7 @@ class Trophy(Relation(Account, Award)):
         t._commit()
         t.update_caches()
         return t
-    
+
     def update_caches(self):
         self.by_account(self._thing1, _update=True)
         self.by_award(self._thing2, _update=True)

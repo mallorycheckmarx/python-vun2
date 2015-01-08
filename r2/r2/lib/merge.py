@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -65,15 +65,15 @@ def threewaymerge(original, a, b):
 if __name__ == "__main__":
     class test_globals:
         diff3_temp_location = None
-    
+
     g = test_globals()
-    
+
     original = "Hello people of the human rance\n\nHow are you tday"
     a = "Hello people of the human rance\n\nHow are you today"
     b = "Hello people of the human race\n\nHow are you tday"
-    
+
     print threewaymerge(original, a, b)
-    
+
     g.diff3_temp_location = '/dev/shm'
-    
+
     print threewaymerge(original, a, b)

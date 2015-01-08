@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -73,7 +73,7 @@ class SimpleXMLObjectTest(RedditTestCase):
         expected = SimpleXMLObject(color="black",
                                    breed="mixed",
                                    )
-        self.assertEqual(constructed.toXML(), expected.toXML(), 
+        self.assertEqual(constructed.toXML(), expected.toXML(),
                          "Constructed does not match expected")
 
     def test_address(self):
@@ -137,10 +137,10 @@ class SimpleXMLObjectTest(RedditTestCase):
         transaction = Transaction(amount="42.42",
                                   profile_id="112233",
                                   pay_id="1111",
-                                  trans_id="2222", 
+                                  trans_id="2222",
                                   order="42",
                                   )
-     
+
         expected = ("<transaction>" +
                         "<amount>42.42</amount>" +
                         "<customerProfileId>112233</customerProfileId>" +
@@ -149,7 +149,7 @@ class SimpleXMLObjectTest(RedditTestCase):
                         "<order>42</order>" +
                     "</transaction>")
         self.assertEqual(transaction.toXML(), expected)
-    
+
 class ImportTest(RedditTestCase):
 
     def test_importable(self):

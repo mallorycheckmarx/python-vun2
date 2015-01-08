@@ -17,7 +17,7 @@
 * The Original Developer is the Initial Developer.  The Initial Developer of
 * the Original Code is reddit Inc.
 *
-* All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+* All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 * Inc. All Rights Reserved.
 ******************************************************************************/
 
@@ -40,7 +40,7 @@ PyObject *unicode_arg(PyObject *args) {
 
 
 static PyObject *
-filters_uwebsafe(PyObject * self, PyObject *args) 
+filters_uwebsafe(PyObject * self, PyObject *args)
 {
   PyObject * com;
   Py_UNICODE * input_buffer;
@@ -81,7 +81,7 @@ filters_uwebsafe(PyObject * self, PyObject *args)
       buffer[ib++] = (Py_UNICODE)'u';
       buffer[ib++] = (Py_UNICODE)'o';
       buffer[ib++] = (Py_UNICODE)'t';
-      buffer[ib]   = (Py_UNICODE)';';      
+      buffer[ib]   = (Py_UNICODE)';';
     }
     else {
       buffer[ib] = input_buffer[ic];
@@ -94,7 +94,7 @@ filters_uwebsafe(PyObject * self, PyObject *args)
 }
 
 static PyObject *
-filters_uwebsafe_json(PyObject * self, PyObject *args) 
+filters_uwebsafe_json(PyObject * self, PyObject *args)
 {
   PyObject * com;
   Py_UNICODE * input_buffer;
@@ -141,7 +141,7 @@ filters_uwebsafe_json(PyObject * self, PyObject *args)
 
 
 static PyObject *
-filters_websafe(PyObject * self, PyObject *args) 
+filters_websafe(PyObject * self, PyObject *args)
 {
   const char * input_buffer;
   char *buffer;
@@ -255,7 +255,7 @@ filters_uspace_compress(PyObject * self, PyObject *args) {
       }
       /* does the next part of the string match the SC_OFF label */
       if (len - ic >= SC_OFF_LEN &&
-          memcmp(&input_buffer[ic], SC_OFF_U, 
+          memcmp(&input_buffer[ic], SC_OFF_U,
                  sizeof(Py_UNICODE)*SC_OFF_LEN) == 0) {
         /* disable gobbling, and bypass that part of the string */
         gobble = 0;
@@ -265,7 +265,7 @@ filters_uspace_compress(PyObject * self, PyObject *args) {
     }
     /* not gobbling, but find the SC_ON tag */
     else if (len - ic >= SC_ON_LEN &&
-          memcmp(&input_buffer[ic], SC_ON_U, 
+          memcmp(&input_buffer[ic], SC_ON_U,
                  sizeof(Py_UNICODE)*SC_ON_LEN) == 0) {
         gobble = 1;
         ic += SC_ON_LEN;
@@ -274,7 +274,7 @@ filters_uspace_compress(PyObject * self, PyObject *args) {
     if(c) {
       buffer[ib++] = c;
     }
-  }  
+  }
 
   res = PyUnicode_FromUnicode(buffer, ib);
   free(buffer);
@@ -314,4 +314,3 @@ initCfilters(void)
 
   (void) Py_InitModule("Cfilters", FilterMethods);
 }
-

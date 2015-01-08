@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -2559,7 +2559,7 @@ class GoldPayment(Templated):
             user_creddits = 50
         else:
             user_creddits = c.user.gold_creddits
-            
+
         if (goldtype in ("gift", "code", "onetime") and
                 months <= user_creddits):
             can_use_creddits = True
@@ -3749,7 +3749,7 @@ class PromoteLinkBase(Templated):
     max_start = None
     max_end = None
 
-    def get_locations(self): 
+    def get_locations(self):
         # geotargeting
         def location_sort(location_tuple):
             code, name, default = location_tuple
@@ -3858,7 +3858,7 @@ class PromoteLinkEdit(PromoteLinkBase):
         self.max_start = max_start.strftime("%m/%d/%Y")
         self.max_end = max_end.strftime("%m/%d/%Y")
         self.default_start = default_start.strftime("%m/%d/%Y")
-        self.default_end = default_end.strftime("%m/%d/%Y") 
+        self.default_end = default_end.strftime("%m/%d/%Y")
 
         self.link = link
         self.listing = listing
@@ -4801,7 +4801,7 @@ class ExploreItem(Templated):
             useful for comparing performance of data sources or algorithms
         sr and link are required
         comment is optional
-        
+
         See r2.lib.recommender for valid values of item_type and rec_src.
 
         """

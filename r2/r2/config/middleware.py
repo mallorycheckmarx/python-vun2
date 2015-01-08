@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -92,7 +92,7 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
             error_data = getattr(exception, 'error_data', None)
             if error_data:
                 environ['extra_error_data'] = error_data
-        
+
         if environ.get('REDDIT_CNAME'):
             d['cnameframe'] = 1
         if environ.get('REDDIT_NAME'):
@@ -241,7 +241,7 @@ class DomainListingMiddleware(object):
 
 class ExtensionMiddleware(object):
     ext_pattern = re.compile(r'\.([^/]+)\Z')
-    
+
     def __init__(self, app):
         self.app = app
 

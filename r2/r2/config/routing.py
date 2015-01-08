@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -153,7 +153,7 @@ def make_map():
           requirements=dict(controller="hot|new|rising|randomrising|ads"))
 
     mc('/user/:username/:where/:show', controller='user', action='listing')
-    
+
     mc('/explore', controller='front', action='explore')
     mc('/api/recommend/feedback', controller='api', action='rec_feedback')
 
@@ -280,7 +280,7 @@ def make_map():
     mc('/gold/thanks', controller='front', action='goldthanks')
     mc('/gold/subscription', controller='forms', action='subscription')
     mc('/gilding', controller='front', action='gilding')
-    mc('/creddits', controller='redirect', action='redirect', 
+    mc('/creddits', controller='redirect', action='redirect',
        dest='/gold?goldtype=creddits')
 
     mc('/password', controller='forms', action="password")
@@ -378,7 +378,7 @@ def make_map():
        requirements=dict(type='wikibannednote|bannednote'),
        action='relnote')
     mc('/api/:action', controller='api')
-    
+
     mc('/api/recommend/sr/:srnames', controller='api',
        action='subreddit_recommendations')
 

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -43,7 +43,7 @@
       %if thing.login:
         $.cookie_write({name: "redditSession", data: "cname",
                         domain: "${c.site.domain}" });
-        if(parent.$ && parent.$.framebuster) 
+        if(parent.$ && parent.$.framebuster)
            parent.$.framebuster();
       %else:
         $.cookie_write({name: "redditSession", data: "",
@@ -56,8 +56,8 @@
 
 <%def name="framebuster()">
   %if c.cname and (c.frameless_cname or not c.user_is_loggedin) and not c.authorized_cname:
-    <% 
-       import random 
+    <%
+       import random
        from r2.lib.template_helpers import get_domain
        %>
     <script type="text/javascript">
@@ -76,7 +76,7 @@
       })(jQuery);
       document.write('<iframe name="reddit-window" id="reddit-window"' +
        'src="http://${get_domain(cname=False, subreddit=True)}/framebuster/'
-       + Math.random() + 
+       + Math.random() +
        '" width="1" height="1" style="visibility: hidden"></iframe>');
     </script>
   %endif

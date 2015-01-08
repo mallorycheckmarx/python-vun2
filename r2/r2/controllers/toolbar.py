@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 import re
@@ -108,7 +108,7 @@ class ToolbarController(RedditController):
         '''/tb/$id36, show a given link with the toolbar
         If the user doesn't have the toolbar enabled, redirect to comments
         page.
-        
+
         '''
         from r2.lib.media import thumbnail_url
         if not link:
@@ -120,7 +120,7 @@ class ToolbarController(RedditController):
             return self.redirect(link.url)
         elif not (c.user_is_loggedin and c.user.uses_toolbar):
             return self.redirect(link.make_permalink_slow(force_domain=True))
-        
+
         # if the domain is shame-banned, bail out.
         if is_shamed_domain(link.url)[0]:
             self.abort404()
@@ -158,7 +158,7 @@ class ToolbarController(RedditController):
 
         if c.cname and not c.authorized_cname:
             # In this case, we make some bad guesses caused by the
-            # cname frame on unauthorised cnames. 
+            # cname frame on unauthorised cnames.
             # 1. User types http://foo.com/http://myurl?cheese=brie
             #    (where foo.com is an unauthorised cname)
             # 2. We generate a frame that points to
@@ -252,4 +252,3 @@ class ToolbarController(RedditController):
         if not link:
             return self.abort404()
         return self.redirect(add_sr("/tb/" + link._id36))
-

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -79,7 +79,7 @@ INIFILES := $(UPDATE_FILES:.update=.ini)
 ini: $(INIFILES)
 
 $(INIFILES): %.ini: %.update example.ini
-	  ./updateini.py example.ini $< > $@ || rm $@ 
+	  ./updateini.py example.ini $< > $@ || rm $@
 
 clean_ini:
 	rm $(INIFILES)

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -30,6 +30,6 @@ We promise not to hold it against you.
 
 %else:
 
-Your email address is once again to allowed to receive messages from ${g.domain}.  Welcome back.  
+Your email address is once again to allowed to receive messages from ${g.domain}.  Welcome back.
 
 %endif

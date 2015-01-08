@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -48,7 +48,7 @@ __all__ = ["PROFILE_LIMIT"]
 # list of the most common errors.
 Errors = Storage(TESTMODE="E00009",
                  TRANSACTION_FAIL="E00027",
-                 DUPLICATE_RECORD="E00039", 
+                 DUPLICATE_RECORD="E00039",
                  RECORD_NOT_FOUND="E00040",
                  TOO_MANY_PAY_PROFILES="E00042",
                  TOO_MANY_SHIP_ADDRESSES="E00043")
@@ -59,7 +59,7 @@ PROFILE_LIMIT = 10 # max payment profiles per user allowed by authorize.net
 class AuthorizeNetException(Exception):
     def __init__(self, msg):
         # don't let CC info show up in logs
-        msg = re.sub("<cardNumber>\d+(\d{4})</cardNumber>", 
+        msg = re.sub("<cardNumber>\d+(\d{4})</cardNumber>",
                      "<cardNumber>...\g<1></cardNumber>",
                      msg)
         msg = re.sub("<cardCode>\d+</cardCode>",
@@ -69,7 +69,7 @@ class AuthorizeNetException(Exception):
 
 
 
-# xml tags whose content shouldn't be escaped 
+# xml tags whose content shouldn't be escaped
 _no_escape_list = ["extraOptions"]
 
 
@@ -133,7 +133,7 @@ class SimpleXMLObject(object):
     def _name(self):
         name = self.__class__.__name__
         return name[0].lower() + name[1:]
-    
+
     def _wrapper(self, content):
         return content
 
@@ -283,8 +283,8 @@ class AuthorizeNetRequest(SimpleXMLObject):
 
     def handle_response(self, res):
         res = self._autoclose_re.sub(self._autoclose_handler, res)
-        res = BeautifulStoneSoup(res, 
-                                 markupMassage=False, 
+        res = BeautifulStoneSoup(res,
+                                 markupMassage=False,
                                  convertEntities=BeautifulStoneSoup.XML_ENTITIES)
         if res.resultcode.contents[0] == u"Ok":
             return self.process_response(res)
@@ -321,7 +321,7 @@ class CreateCustomerProfileRequest(AuthorizeNetRequest):
         # cache the user object passed in
         self._user = user
         AuthorizeNetRequest.__init__(self,
-                                     profile=Profile(user, None, None), 
+                                     profile=Profile(user, None, None),
                                      validationMode=validationMode)
 
     def process_response(self, res):
@@ -347,7 +347,7 @@ class CreateCustomerProfileRequest(AuthorizeNetRequest):
             else:
                 # could happen if the format of the error message changes.
                 msg = ("Failed to fix duplicate authorize.net profile id. "
-                       "re_lost_id regexp may need to be updated. Response: %r" 
+                       "re_lost_id regexp may need to be updated. Response: %r"
                        % res)
                 raise AuthorizeNetException(msg)
         # otherwise, we might have sent a user that already had a customer ID
@@ -447,7 +447,7 @@ class GetCustomerShippingAddressRequest(CustomerRequest):
         if self.is_error_code(res, Errors.RECORD_NOT_FOUND):
             ShippingAddress.delete(self._user, self.customerAddressId)
         return CustomerRequest.process_error(self, res)
- 
+
 
 class GetCustomerProfileIdsRequest(AuthorizeNetRequest):
     """
@@ -458,7 +458,7 @@ class GetCustomerProfileIdsRequest(AuthorizeNetRequest):
         return [int(x.contents[0]) for x in res.ids.findAll('numericstring')]
 
 
-class GetCustomerProfileRequest(CustomerRequest): 
+class GetCustomerProfileRequest(CustomerRequest):
     """
     Given a user, find their customer information.
     """
@@ -493,7 +493,7 @@ class GetCustomerProfileRequest(CustomerRequest):
             profiles.append(payprof)
 
         return acct, Profile(acct, profiles, ship_to)
-    
+
 class DeleteCustomerProfileRequest(CustomerRequest):
     """
     Delete a customer shipping address
@@ -501,7 +501,7 @@ class DeleteCustomerProfileRequest(CustomerRequest):
     def process_response(self, res):
         if self._user:
             CustomerID.delete(self._user)
-        return 
+        return
 
     def process_error(self, res):
         if self.is_error_code(res, Errors.RECORD_NOT_FOUND):
@@ -541,7 +541,7 @@ class UpdateCustomerPaymentProfileRequest(CreateCustomerPaymentProfileRequest):
     """
     For updating the user's payment profile
     """
-    def __init__(self, user, paymentid, address, creditcard, 
+    def __init__(self, user, paymentid, address, creditcard,
                  validationMode=None):
         CustomerRequest.__init__(self, user,
                                  paymentProfile=PaymentProfile(address,
@@ -588,7 +588,7 @@ class CreateCustomerProfileTransactionRequest(AuthorizeNetRequest):
                      "customerID",
                      "firstName", "lastName",
                      "company", "address", "city", "state",
-                     "zip", "country", 
+                     "zip", "country",
                      "phoneNumber", "faxNumber", "email",
                      "shipTo_firstName", "shipTo_lastName",
                      "shipTo_company", "shipTo_address",
@@ -639,11 +639,11 @@ class CreateCustomerProfileTransactionRequest(AuthorizeNetRequest):
 
 
 class GetSettledBatchListRequest(AuthorizeNetRequest):
-    _keys = AuthorizeNetRequest._keys + ["includeStatistics", 
-                                         "firstSettlementDate", 
+    _keys = AuthorizeNetRequest._keys + ["includeStatistics",
+                                         "firstSettlementDate",
                                          "lastSettlementDate"]
     def __init__(self, start_date, end_date, **kw):
-        AuthorizeNetRequest.__init__(self, 
+        AuthorizeNetRequest.__init__(self,
                                      includeStatistics=1,
                                      firstSettlementDate=start_date.isoformat(),
                                      lastSettlementDate=end_date.isoformat(),
@@ -651,4 +651,3 @@ class GetSettledBatchListRequest(AuthorizeNetRequest):
 
     def process_response(self, res):
         return res
-

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -100,7 +100,7 @@
          ${distinguish_setter('yes')}
          &#32;/
          %endif
-         
+
          &#32;
          ${distinguish_setter('no')}
          &#32;
@@ -110,7 +110,7 @@
          ${distinguish_setter('admin')}
          &#32;
          %endif
-         
+
          %if c.user_special_distinguish:
          /&#32;
          ${distinguish_setter(c.user_special_distinguish['name'], 'special')}
@@ -155,7 +155,7 @@
         ${pretty_button(_("spam"), "big_mod_action", -2, "negative")}
         ${pretty_button(_("remove"), "big_mod_action", -1, "neutral")}
       %endif
-  
+
       %if getattr(thing, "approval_checkmark", None):
         ${pretty_button(_("reapprove"), "big_mod_action",  1, "positive")}
       %else:
@@ -181,7 +181,7 @@
 </%def>
 
 <%def name="reports_button()">
-<li 
+<li
     %if thing.mod_reports or thing.user_reports:
       class="rounded reported-stamp stamp has-reasons"
       title="${_('click to show report reasons')}"
@@ -278,7 +278,7 @@
            <label>Reason:</label><br/>
            <textarea name="reason" value="" ></textarea>
            <br/>
-           <a href="#" 
+           <a href="#"
               onclick="change_state(this, 'unpromote', complete_reject_promo)">
              submit
            </a>/
@@ -339,7 +339,7 @@
       </li>
       <li class="first">
       ${self.comment_button("comment",
-                            _("full comments") + " (%d)" % thing.full_comment_count, 
+                            _("full comments") + " (%d)" % thing.full_comment_count,
                             thing.full_comment_path,
                             _sr_path=True,
                             a_class="may-blank")}
@@ -395,7 +395,7 @@
 </%def>
 
 
-<%def name="messagebuttons()"> 
+<%def name="messagebuttons()">
   %if thing.was_comment:
     <li>
       ${self.bylink_button(_("context"), thing.permalink + "?context=3")}
@@ -447,7 +447,7 @@
   <%def name="_link()" buffered="True">
     <a href="javascript:void(0)"
        %if a_class:
-         class="${a_class}" 
+         class="${a_class}"
        %endif
        onclick="${onclick}">${title}</a>
   </%def>
@@ -457,12 +457,12 @@
          link = mako_websafe(fmt) % {fmt_param: link}
          ## preserve spaces before and after < & > for space compression
          link = link.replace(" <", "&#32;<").replace("> ", ">&#32;")
-   %>   
+   %>
 
   %if clicked:
     ${executed}
   %else:
-    <form action="/post/${name}" method="post" 
+    <form action="/post/${name}" method="post"
           class="state-button ${name}-button">
         <input type="hidden" name="executed" value="${executed}" />
         %for key, value in hidden_data.iteritems():
@@ -496,7 +496,7 @@
   </form>
 </%def>
 
-<%def name="ynbutton(title, executed, op, callback = 'null', 
+<%def name="ynbutton(title, executed, op, callback = 'null',
                      question = None,
                      post_callback = 'null',
                      format = '%(link)s',
@@ -532,12 +532,12 @@
 </%def>
 
 <%def name="simple_button(title, nameFunc, css_class='')">
- <a class="${css_class}" href="javascript:void(0)" 
+ <a class="${css_class}" href="javascript:void(0)"
     onclick="return ${nameFunc}(this)">${title}</a>
 </%def>
 
-<%def name="toggle_button(class_name, title, alt_title, 
-                    callback, cancelback, 
+<%def name="toggle_button(class_name, title, alt_title,
+                    callback, cancelback,
                     css_class = '', alt_css_class = '',
                     reverse = False,
                     login_required = False,
@@ -574,7 +574,7 @@
 ### originally in commentbutton
 <%def name="comment_button(name, link_text, link,\
             _sr_path = True, a_class='', title='')">
-  ${plain_link(link_text, link, 
+  ${plain_link(link_text, link,
                _sr_path = _sr_path,
                _class=a_class, title=title)}
 </%def>
@@ -604,4 +604,3 @@
   )
 </span>
 </%def>
-

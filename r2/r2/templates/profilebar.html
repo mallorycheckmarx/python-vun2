@@ -16,11 +16,11 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%! 
+<%!
    from r2.lib.filters import unsafe, safemarkdown
    from r2.lib.template_helpers import static, format_number, display_comment_karma, display_link_karma
  %>
@@ -101,7 +101,7 @@
           <a href="/gold/about">${_("view gold features/benefits")}</a>
         </div>
         %if hasattr(thing, "paypal_subscr_id"):
-          <%  
+          <%
             paypal_link = ("https://www.paypal.com/cgi-bin/webscr?cmd=_subscr-find&alias=%s" % g.goldthanks_email)
            %>
            <div>

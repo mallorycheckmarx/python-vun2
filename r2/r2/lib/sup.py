@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -110,4 +110,3 @@ def set_expires_header():
     seconds = make_cur_time(MIN_PERIOD) + MIN_PERIOD
     expire_time = datetime.fromtimestamp(seconds, g.tz)
     response.headers['expires'] = http_date_str(expire_time)
-

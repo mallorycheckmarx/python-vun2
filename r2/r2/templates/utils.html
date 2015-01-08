@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -64,7 +64,7 @@ data-${name}="${value}"
 </%def>
 
 <%def name="submit_form(onsubmit='', action='', _class='', method='post', _id='', **params)">
-<form class="${_class or ''}" onsubmit="${onsubmit or ''}" 
+<form class="${_class or ''}" onsubmit="${onsubmit or ''}"
       action="${action or ''}" ${_id and "id='" + _id + "'" or ""} method="${method}"
       %if c.cname:
         target="_top"
@@ -102,7 +102,7 @@ ${first_defined(kw[1:])}
 
 <%def name="error_field(error_name, field_name, kind='span')">
   <% error_key = (error_name, field_name) %>
-  <${kind} class="error ${error_name} field-${field_name}" 
+  <${kind} class="error ${error_name} field-${field_name}"
   style="${'' if error_key in c.errors else 'display:none'}">
    %if error_key in c.errors:
      ${c.errors[error_key].message}
@@ -127,7 +127,7 @@ ${first_defined(kw[1:])}
 </%def>
 
 <%def name="img_link(link_text, img, path, _id='', target='', img_id=None, size=None, **kw)">
-  <% 
+  <%
      if (not target or target == '_parent') and c.cname:
          target = '_top'
      if target:
@@ -135,7 +135,7 @@ ${first_defined(kw[1:])}
 
      path = add_sr(path, sr_path = False)
      kw['target'] = target
-     
+
      if size is None:
          size_str = ""
      else:
@@ -147,14 +147,14 @@ ${first_defined(kw[1:])}
 </%def>
 
 <%def name="plain_link(link_text, path, _sr_path = True, nocname=False, fmt='', target='', **kw)">
-  ## caching comment: 
-  ##  in addition to the args, this function also makes use of c.cname, 
-  ##  and, via add_sr, both c.site.name and c.render_style. 
+  ## caching comment:
+  ##  in addition to the args, this function also makes use of c.cname,
+  ##  and, via add_sr, both c.site.name and c.render_style.
   ##
   ##  This function is called by (among other places) NavMenu as the
-  ##  primary rendering view.  Any changes to the c-usage of this function 
-  ##  will have to be propagated up. 
-  <% 
+  ##  primary rendering view.  Any changes to the c-usage of this function
+  ##  will have to be propagated up.
+  <%
      if (not target or target == '_parent') and c.cname:
          target = '_top'
      if c.cname and path and path.startswith('http://'):
@@ -162,9 +162,9 @@ ${first_defined(kw[1:])}
      if target:
          kw['target'] = target
 
-     link = _a_buffered(link_text, 
+     link = _a_buffered(link_text,
                         href=path and add_sr(path, sr_path=_sr_path, nocname=nocname),
-                        **kw) 
+                        **kw)
   %>
 
   ${unsafe((fmt % link) if fmt else link)}
@@ -207,12 +207,12 @@ ${first_defined(kw[1:])}
 ${unsafe(txt)}
 </%def>
 
-<%def name="language_tool(name='lang', allow_blank = False, 
+<%def name="language_tool(name='lang', allow_blank = False,
                           default_lang = g.lang,
-                          show_regions = False, 
+                          show_regions = False,
                           all_langs = False)">
-<% 
-   langs = g.all_languages if all_langs else g.languages 
+<%
+   langs = g.all_languages if all_langs else g.languages
    if not show_regions:
        langs = [x for x in langs if len(x) == 2]
 %>
@@ -280,7 +280,7 @@ ${unsafe(txt)}
   </form>
 </%def>
 
-<%def name="image_upload(post_target, current_image = None, onsubmit = '', 
+<%def name="image_upload(post_target, current_image = None, onsubmit = '',
                          onchange = '', label = '', form_id = 'image-upload',
                          ask_type = False, hidden_data=None)">
   <form id="${form_id}" enctype="multipart/form-data"
@@ -311,10 +311,10 @@ ${unsafe(txt)}
             <label><input type="radio" name="img_type" checked value="png" />PNG</label>
             <br/>
           %endif
-          <input type="file" name="file" id="file" 
+          <input type="file" name="file" id="file"
                  onchange="$(this).next().prop('disabled', false); ${onchange}"/>
           <button id="submit-img" class="submit-img primary-button"
-                  type="submit" name="upload" 
+                  type="submit" name="upload"
                   onclick="$(this).siblings('.img-status').show().html('${jssafe(_('uploading'))}'); return true;"
                   disabled>
             ${_('upload')}
@@ -329,12 +329,12 @@ ${unsafe(txt)}
        function completedUploadImage(status, img_src, name, errors, form_id) {
            form_id = $.with_default(form_id, "${form_id}");
            var form = $("#" + form_id);
-           if (status) 
+           if (status)
                form.find(".img-status").show().html(status);
            else
                form.find(".img-status").hide().html("");
            $.map(errors, function(e) {
-                   if(e[1]) 
+                   if(e[1])
                        form.find("." + e[0]).html(e[1]).show();
                    else
                        form.find("." + e[0]).html('').hide();
@@ -343,7 +343,7 @@ ${unsafe(txt)}
               form.get(0).reset();
               var img = (name) ? $("#img-preview-" + name) :
                   form.find("img.img-preview:first");
-              if(!$.defined(img) || img.length == 0) 
+              if(!$.defined(img) || img.length == 0)
                   img = create_new_image(name);
               if(img)
                   img.attr("src", "").attr("src", img_src);
@@ -353,14 +353,14 @@ ${unsafe(txt)}
           }
        }
           </script>
-          
-          <iframe src="about:blank" width="600" height="200" 
+
+          <iframe src="about:blank" width="600" height="200"
                   style="display: none;"
                   name="upload-iframe" id="upload-iframe"></iframe>
 
           <div id="img-preview-container" class="img-preview-container"
                style="${'' if current_image else 'display:none;'}">
-            <img id="img-preview-upload" alt="header preview" 
+            <img id="img-preview-upload" alt="header preview"
                  class="img-preview"
                  %if current_image:
                    src="${make_url_protocol_relative(current_image)}"
@@ -382,7 +382,7 @@ ${unsafe(txt)}
         $(this).width(max_width);
       });
     });
-       
+
   </script>
 </%def>
 
@@ -434,10 +434,10 @@ ${unsafe(txt)}
     %if dest:
       <input type="hidden" name="dest" value="${dest}"/>
     %endif
-    
+
     <a href="javascript:void(0)" onclick="$(this).parent().submit()"
        %if a_class:
-         class="${a_class}" 
+         class="${a_class}"
        %endif
     >
       ${_("logout")}

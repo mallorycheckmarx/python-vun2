@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -72,7 +72,7 @@ def upgrade_messages(update_comments = True, update_messages = True,
     def batch_fn(items):
         g.reset_caches()
         return items
-    
+
     if update_messages or update_trees:
         q = Message._query(Message.c.new == True,
                            sort = desc("_date"),

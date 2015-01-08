@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -515,7 +515,7 @@ def set_content_type():
             if request.GET.get("keep_extension"):
                 c.cookies['reddit_mobility'] = Cookie(ext, expires=NEVER)
     # allow JSONP requests to generate callbacks, but do not allow
-    # the user to be logged in for these 
+    # the user to be logged in for these
     callback = request.GET.get("jsonp")
     if is_api() and request.method.upper() == "GET" and callback:
         if not valid_jsonp_callback(callback):
@@ -1459,7 +1459,7 @@ class RedditController(OAuth2ResourceController):
 
         delete_obsolete_cookies()
 
-        # the user could have been logged in via one of the feeds 
+        # the user could have been logged in via one of the feeds
         maybe_admin = False
         is_otpcookie_valid = False
 

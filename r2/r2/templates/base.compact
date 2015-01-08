@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,9 +28,9 @@
 <%namespace file="utils.html" import="js_setup, googleanalytics, classes"/>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="${c.lang}">
   <head>
-    <link rel="apple-touch-icon" 
+    <link rel="apple-touch-icon"
           href="/static/compact/reddit-apple-mobile-device.png"/>
-    <link rel="apple-touch-startup-image" 
+    <link rel="apple-touch-startup-image"
           href="/static/compact/reddit_startimg.png" />
     <link rel="canonical" href="${thing.canonical_link}" />
     %if hasattr(thing, "shortlink"):
@@ -75,4 +75,3 @@ ${thing.title}
      <meta name="robots" content="${thing.robots}" />
    %endif
 </%def>
-
