@@ -694,7 +694,7 @@ fi
 service gunicorn start
 
 ###############################################################################
-# Job Environment
+# job environment
 ###############################################################################
 CONSUMER_CONFIG_ROOT=$REDDIT_HOME/consumer-count.d
 
