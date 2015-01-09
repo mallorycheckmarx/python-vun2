@@ -1229,6 +1229,17 @@ $(function() {
             $("#moresearchinfo").slideUp();
             event.preventDefault();
         });
+
+        /* Add a scheme to URL input fields if not already present */
+        $("input[type=url]").blur(function() {
+            var input = $(this).val();
+            if (input && input.length > 0) {
+                var schemePresent = input.match(/^[a-z]+:\/\/.*/i);
+                if (!schemePresent) {
+                    $(this).val("http://" + input);
+                }
+            }
+        });
         
         /* Select shortlink text on click */
         $("#shortlink-text").click(function() {
