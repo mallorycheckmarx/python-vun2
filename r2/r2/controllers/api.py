@@ -469,6 +469,7 @@ class ApiController(RedditController):
 
         if kind == 'link':
             if not url or form.has_errors("url", errors.NO_URL, errors.BAD_URL):
+                form.set_error(errors.BAD_URL, 'url')
                 return
 
             if form.has_errors("url", errors.DOMAIN_BANNED):
