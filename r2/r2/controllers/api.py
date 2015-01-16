@@ -3328,12 +3328,12 @@ class ApiController(RedditController):
         jquery('.tagline .id-%s' % user._fullname).parent().html(unflair)
 
     @require_oauth2_scope("modflair")
-    @validate(VSrModerator(perms='flair'),
-              VModhash(),
-              flair_csv = nop(
-                          "flair_csv",
-                          docs={"flair_csv":
-                          "Comma-seperated flair information"}),
+    @validatedForm(VSrModerator(perms='flair'),
+                   VModhash(),
+                   flair_csv = nop(
+                               "flair_csv",
+                               docs={"flair_csv":
+                               "Comma-seperated flair information"}))
     @api_doc(api_section.flair, uses_site=True)
     def POST_flaircsv(self, flair_csv):
         """Change the flair of multiple users in the same subreddit with a
