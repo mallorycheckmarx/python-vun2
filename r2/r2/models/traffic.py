@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """
@@ -251,7 +251,7 @@ def make_history_query(cls, interval):
     return time_points, q
 
 
-def top_last_month(cls, key, ids=None):
+def top_last_month(cls, key, ids=None, num=None):
     """Aggregate a listing of the top items (by pageviews) last month.
 
     We use the last month because it's guaranteed to be fully computed and
@@ -270,7 +270,8 @@ def top_last_month(cls, key, ids=None):
     if ids:
         q = q.filter(getattr(cls, key).in_(ids))
     else:
-        q = q.limit(55)
+        num = num or 55
+        q = q.limit(num)
 
     return [(getattr(r, key), (r.unique_count, r.pageview_count))
             for r in q.all()]
@@ -332,15 +333,20 @@ def total_by_codename(cls, codenames):
     return list(q)
 
 
-def promotion_history(cls, codename, start, stop):
+def promotion_history(cls, count_column, codename, start, stop):
     """Get hourly traffic for a self-serve promotion.
 
     Traffic stats are summed over all targets for classes that include a target.
 
+    count_column should be cls.pageview_count or cls.unique_count.
+
+    NOTE: when retrieving uniques the counts for ALL targets are summed, which
+    isn't strictly correct but is the best we can do for now.
+
     """
 
     time_points = get_time_points('hour', start, stop)
-    q = (Session.query(cls.date, sum(cls.pageview_count))
+    q = (Session.query(cls.date, sum(count_column))
                 .filter(cls.interval == "hour")
                 .filter(cls.codename == codename)
                 .filter(cls.date.in_(time_points))
@@ -424,9 +430,14 @@ class PageviewsBySubreddit(Base):
 
     @classmethod
     @memoize_traffic(time=3600 * 6)
-    def top_last_month(cls, srs=None):
-        ids = [sr.name for sr in srs] if srs else None
-        return top_last_month(cls, "subreddit", ids)
+    def top_last_month(cls, num=None):
+        return top_last_month(cls, "subreddit", num=num)
+
+    @classmethod
+    @memoize_traffic(time=3600 * 6)
+    def last_month(cls, srs):
+        ids = [sr.name for sr in srs]
+        return top_last_month(cls, "subreddit", ids=ids)
 
 
 class PageviewsBySubredditAndPath(Base):
@@ -493,7 +504,7 @@ class ClickthroughsByCodename(Base):
     @classmethod
     @memoize_traffic(time=3600)
     def promotion_history(cls, codename, start, stop):
-        return promotion_history(cls, codename, start, stop)
+        return promotion_history(cls, cls.unique_count, codename, start, stop)
 
     @classmethod
     @memoize_traffic(time=3600)
@@ -521,7 +532,7 @@ class TargetedClickthroughsByCodename(Base):
     @classmethod
     @memoize_traffic(time=3600)
     def promotion_history(cls, codename, start, stop):
-        return promotion_history(cls, codename, start, stop)
+        return promotion_history(cls, cls.unique_count, codename, start, stop)
 
     @classmethod
     @memoize_traffic(time=3600)
@@ -554,7 +565,7 @@ class AdImpressionsByCodename(Base):
     @classmethod
     @memoize_traffic(time=3600)
     def promotion_history(cls, codename, start, stop):
-        return promotion_history(cls, codename, start, stop)
+        return promotion_history(cls, cls.pageview_count, codename, start, stop)
 
     @classmethod
     @memoize_traffic(time=3600)
@@ -602,7 +613,7 @@ class TargetedImpressionsByCodename(Base):
     @classmethod
     @memoize_traffic(time=3600)
     def promotion_history(cls, codename, start, stop):
-        return promotion_history(cls, codename, start, stop)
+        return promotion_history(cls, cls.pageview_count, codename, start, stop)
 
     @classmethod
     @memoize_traffic(time=3600)

@@ -16,25 +16,31 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import NotFound
 from r2.lib.errors import MessageError
 from r2.lib.utils import tup, fetch_things2
 from r2.lib.filters import websafe
+from r2.lib.hooks import HookRegistrar
 from r2.lib.log import log_text
 from r2.models import Account, Message, Report, Subreddit
 from r2.models.award import Award
-from r2.models.gold import append_random_bottlecap_phrase
+from r2.models.gold import append_random_bottlecap_phrase, creddits_lock
 from r2.models.token import AwardClaimToken
+from r2.models.wiki import WikiPage
 
 from _pylibmc import MemcachedError
-from pylons import g
+from pylons import g, c, config
 from pylons.i18n import _
 
 from datetime import datetime, timedelta
 from copy import copy
+
+admintools_hooks = HookRegistrar()
 
 class AdminTools(object):
 
@@ -163,33 +169,42 @@ class AdminTools(object):
                 sr._commit()
                 sr._incr('mod_actions', len(sr_things))
 
-    def engolden(self, account, days):
-        account.gold = True
-
+    def adjust_gold_expiration(self, account, days=0, months=0, years=0):
         now = datetime.now(g.display_tz)
+        if months % 12 == 0:
+            years += months / 12
+        else:
+            days += months * 31
+        days += years * 366
 
         existing_expiration = getattr(account, "gold_expiration", None)
         if existing_expiration is None or existing_expiration < now:
             existing_expiration = now
         account.gold_expiration = existing_expiration + timedelta(days)
+        
+        if account.gold_expiration > now and not account.gold:
+            self.engolden(account)
+        elif account.gold_expiration <= now and account.gold:
+            self.degolden(account)
 
+        account._commit()     
+
+    def engolden(self, account):
+        now = datetime.now(g.display_tz)
+        account.gold = True
         description = "Since " + now.strftime("%B %Y")
+        
         trophy = Award.give_if_needed("reddit_gold", account,
                                      description=description,
                                      url="/gold/about")
         if trophy and trophy.description.endswith("Member Emeritus"):
             trophy.description = description
             trophy._commit()
-        account._commit()
 
+        account._commit()
         account.friend_rels_cache(_update=True)
 
-    def degolden(self, account, severe=False):
-
-        if severe:
-            account.gold_charter = False
-            Award.take_away("charter_subscriber", account)
-
+    def degolden(self, account):
         Award.take_away("reddit_gold", account)
         account.gold = False
         account._commit()
@@ -232,24 +247,22 @@ def all_gold_users():
                        data=True, sort="_id")
     return fetch_things2(q)
 
-def accountid_from_paypalsubscription(subscr_id):
+def accountid_from_subscription(subscr_id):
     if subscr_id is None:
         return None
 
     q = Account._query(Account.c.gold_subscr_id == subscr_id,
-                       Account.c._spam == (True, False), data=False)
+                       Account.c._spam == (True, False),
+                       Account.c._deleted == (True, False), data=False)
     l = list(q)
     if l:
         return l[0]._id
     else:
         return None
 
-def update_gold_users(verbose=False):
+def update_gold_users():
     now = datetime.now(g.display_tz)
-    minimum = None
-    count = 0
-    expiration_dates = {}
-
+    warning_days = 3
     renew_msg = _("[Click here for details on how to set up an "
                   "automatically-renewing subscription or to renew.]"
                   "(/gold) If you have any thoughts, complaints, "
@@ -259,19 +272,18 @@ def update_gold_users(verbose=False):
                   "patronage.") % {'gold_email': g.goldthanks_email}
 
     for account in all_gold_users():
-        if not hasattr(account, "gold_expiration"):
-            g.log.error("%s has no gold_expiration" % account.name)
-            continue
-
-        delta = account.gold_expiration - now
-        days_left = delta.days
-
-        hc_key = "gold_expiration_notice-" + account.name
-
+        days_left = (account.gold_expiration - now).days
         if days_left < 0:
-            if verbose:
-                print "%s just expired" % account.name
+            if account.pref_creddit_autorenew:
+                with creddits_lock(account):
+                    if account.gold_creddits > 0:
+                        admintools.adjust_gold_expiration(account, days=31)
+                        account.gold_creddits -= 1
+                        account._commit()
+                        continue
+
             admintools.degolden(account)
+
             subject = _("Your reddit gold subscription has expired.")
             message = _("Your subscription to reddit gold has expired.")
             message += "\n\n" + renew_msg
@@ -279,30 +291,12 @@ def update_gold_users(verbose=False):
 
             send_system_message(account, subject, message,
                                 distinguished='gold-auto')
-            continue
-
-        count += 1
-
-        if verbose:
-            exp_date = account.gold_expiration.strftime('%Y-%m-%d')
-            expiration_dates.setdefault(exp_date, 0)
-            expiration_dates[exp_date] += 1
-
-#           print "%s expires in %d days" % (account.name, days_left)
-            if minimum is None or delta < minimum[0]:
-                minimum = (delta, account)
-
-        if days_left <= 3 and not g.hardcache.get(hc_key):
-            if verbose:
-                print "%s expires soon: %s days" % (account.name, days_left)
-            if account.has_gold_subscription:
-                if verbose:
-                    print "Not sending notice to %s (%s)" % (account.name,
-                                                     account.gold_subscr_id)
-            else:
-                if verbose:
-                    print "Sending notice to %s" % account.name
-                g.hardcache.set(hc_key, True, 86400 * 10)
+        elif days_left <= warning_days and not account.gold_will_autorenew:
+            hc_key = "gold_expiration_notice-" + account.name
+            already_warned = g.hardcache.get(hc_key)
+            if not already_warned:
+                g.hardcache.set(hc_key, True, 86400 * (warning_days + 1))
+                
                 subject = _("Your reddit gold subscription is about to "
                             "expire!")
                 message = _("Your subscription to reddit gold will be "
@@ -313,22 +307,9 @@ def update_gold_users(verbose=False):
                 send_system_message(account, subject, message,
                                     distinguished='gold-auto')
 
-    if verbose:
-        for exp_date in sorted(expiration_dates.keys()):
-            num_expiring = expiration_dates[exp_date]
-            print '%s %3d %s' % (exp_date, num_expiring, '*' * num_expiring)
-        print "%s goldmembers" % count
-        if minimum is None:
-            print "Nobody found."
-        else:
-            delta, account = minimum
-            print "Next expiration is %s, in %d days" % (account.name, delta.days)
 
 def admin_ratelimit(user):
     return True
-
-def is_banned_IP(ip):
-    return False
 
 def is_banned_domain(dom):
     return None
@@ -345,10 +326,6 @@ def valid_thing(v, karma, *a, **kw):
 def valid_user(v, sr, karma, *a, **kw):
     return True
 
-# Returns whether this person is being suspicious
-def login_throttle(username, wrong_password):
-    return False
-
 def apply_updates(user):
     pass
 
@@ -356,9 +333,31 @@ def update_score(obj, up_change, down_change, vote, old_valid_thing):
      obj._incr('_ups',   up_change)
      obj._incr('_downs', down_change)
 
+
+def _is_controversial(w, item):
+    """Determine if an item meets all criteria to display as controversial."""
+    cfg = g.live_config
+    votes = max(item._ups + item._downs, 1)
+
+    # A sample-size threshold before posts can be considered controversial
+    if votes < cfg['cflag_min_votes']:
+        return False
+
+    # If an item falls within a boundary of upvote ratios, it's controversial
+    # e.g. 0.4 < x < 0.6
+    if cfg['cflag_lower_bound'] <= w.upvote_ratio <= cfg['cflag_upper_bound']:
+        return True
+
+    return False
+
+
 def compute_votes(wrapper, item):
     wrapper.upvotes   = item._ups
     wrapper.downvotes = item._downs
+    total_votes = max(item._ups + item._downs, 1)
+    wrapper.upvote_ratio = float(item._ups) / total_votes
+    wrapper.is_controversial = (c.user.pref_highlight_controversial and
+                                _is_controversial(wrapper, item))
 
 def ip_span(ip):
     ip = websafe(ip)
@@ -402,8 +401,6 @@ def filter_quotas(unfiltered):
         # Then, make sure it's worthy of quota-clogging
         if item._spam:
             pass
-        elif item._deleted:
-            pass
         elif item._score <= 0:
             pass
         elif age < 86400 and item._score <= g.QUOTA_THRESHOLD and not approved:
@@ -421,8 +418,40 @@ def filter_quotas(unfiltered):
         return baskets, None
 
 
+def wiki_template(template_slug, sr=None):
+    """Pull content from a subreddit's wiki page for internal use."""
+    if not sr:
+        try:
+            sr = Subreddit._by_name(g.default_sr)
+        except NotFound:
+            return None
+
+    try:
+        wiki = WikiPage.get(sr, "templates/%s" % template_slug)
+    except tdb_cassandra.NotFound:
+        return None
+
+    return wiki._get("content")
+
+
+@admintools_hooks.on("account.registered")
+def send_welcome_message(user):
+    welcome_title = wiki_template("welcome_title")
+    welcome_message = wiki_template("welcome_message")
+
+    if not welcome_title or not welcome_message:
+        g.log.warning("Unable to send welcome message: invalid wiki templates.")
+        return
+
+    welcome_title = welcome_title.format(username=user.name)
+    welcome_message = welcome_message.format(username=user.name)
+
+    return send_system_message(user, welcome_title, welcome_message)
+
+
 def send_system_message(user, subject, body, system_user=None,
-                        distinguished='admin', repliable=False):
+                        distinguished='admin', repliable=False,
+                        add_to_sent=True, author=None):
     from r2.lib.db import queries
 
     if system_user is None:
@@ -431,20 +460,21 @@ def send_system_message(user, subject, body, system_user=None,
         g.log.warning("Can't send system message "
                       "- invalid system_user or g.system_user setting")
         return
+    if not author:
+        author = system_user
 
-    item, inbox_rel = Message._new(system_user, user, subject, body,
+    item, inbox_rel = Message._new(author, user, subject, body,
                                    ip='0.0.0.0')
     item.distinguished = distinguished
     item.repliable = repliable
+    item.display_author = system_user._id
     item._commit()
 
     try:
-        queries.new_message(item, inbox_rel)
+        queries.new_message(item, inbox_rel, add_to_sent=add_to_sent)
     except MemcachedError:
         raise MessageError('reddit_inbox')
 
 
-try:
+if config['r2.import_private']:
     from r2admin.models.admintools import *
-except ImportError:
-    pass

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -30,6 +30,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Date,
+    distinct,
     Float,
     func as safunc,
     Integer,
@@ -42,9 +43,9 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from r2.lib.db.thing import Thing, NotFound
 from r2.lib.memoize import memoize
-from r2.lib.utils import Enum, to_date
+from r2.lib.utils import Enum, to_date, tup
 from r2.models.account import Account
-from r2.models import Link
+from r2.models import Link, Frontpage
 
 
 engine = g.dbm.get_engine('authorize')
@@ -383,14 +384,19 @@ class PromotionWeights(Sessionized, Base):
     finished   = Column(Boolean)
 
     @classmethod
-    def reschedule(cls, thing, idx, sr, start_date, end_date, total_weight,
+    def filter_sr_name(cls, sr_name):
+        # LEGACY: use empty string to indicate Frontpage
+        return '' if sr_name == Frontpage.name else sr_name
+
+    @classmethod
+    def reschedule(cls, thing, idx, sr_names, start_date, end_date, total_weight,
                    finished = False):
         cls.delete_unfinished(thing, idx)
-        cls.add(thing, idx, sr, start_date, end_date, total_weight,
+        cls.add(thing, idx, sr_names, start_date, end_date, total_weight,
                 finished = finished)
 
     @classmethod
-    def add(cls, thing, idx, sr, start_date, end_date, total_weight,
+    def add(cls, thing, idx, sr_names, start_date, end_date, total_weight,
             finished = False):
         start_date = to_date(start_date)
         end_date   = to_date(end_date)
@@ -399,11 +405,13 @@ class PromotionWeights(Sessionized, Base):
         duration = max((end_date - start_date).days, 1)
         weight = total_weight / duration
 
-        d = start_date
-        while d < end_date:
-            cls._new(thing, idx, sr, d,
-                     thing.author_id, weight, weight, finished = finished)
-            d += datetime.timedelta(1)
+        for sr_name in tup(sr_names):
+            sr_name = cls.filter_sr_name(sr_name)
+            d = start_date
+            while d < end_date:
+                cls._new(thing, idx, sr_name, d,
+                         thing.author_id, weight, weight, finished = finished)
+                d += datetime.timedelta(days=1)
 
     @classmethod
     def delete_unfinished(cls, thing, idx):
@@ -416,26 +424,41 @@ class PromotionWeights(Sessionized, Base):
             item._delete()
 
     @classmethod
-    def get_campaigns(cls, start, end=None, link=None, author_id=None,
-                      sr_names=None):
+    def _filter_query(cls, query, start, end=None, link=None,
+                      author_id=None, sr_names=None):
         start = to_date(start)
-        q = cls.query()
+
         if end:
             end = to_date(end)
-            q = q.filter(and_(cls.date >= start, cls.date < end))
+            query = query.filter(and_(cls.date >= start, cls.date < end))
         else:
-            q = q.filter(cls.date == start)
+            query = query.filter(cls.date == start)
 
         if link:
-            q = q.filter(cls.thing_name == link._fullname)
+            query = query.filter(cls.thing_name == link._fullname)
 
         if author_id:
-            q = q.filter(cls.account_id == author_id)
+            query = query.filter(cls.account_id == author_id)
 
         if sr_names:
-            q = q.filter(cls.sr_name.in_(sr_names))
+            sr_names = [cls.filter_sr_name(sr_name) for sr_name in sr_names]
+            query = query.filter(cls.sr_name.in_(sr_names))
 
-        return list(q)
+        return query
+
+    @classmethod
+    def get_campaign_ids(cls, start, end=None, link=None, author_id=None,
+                         sr_names=None):
+        query = cls.session.query(distinct(cls.promo_idx))
+        query = cls._filter_query(query, start, end, link, author_id, sr_names)
+        return {i[0] for i in query}
+
+    @classmethod
+    def get_link_names(cls, start, end=None, link=None, author_id=None,
+                       sr_names=None):
+        query = cls.session.query(distinct(cls.thing_name))
+        query = cls._filter_query(query, start, end, link, author_id, sr_names)
+        return {i[0] for i in query}
 
 
 # do all the leg work of creating/connecting to tables

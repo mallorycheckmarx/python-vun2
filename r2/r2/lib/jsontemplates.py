@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -27,11 +27,11 @@ from wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Template
 from mako.template import Template
 from r2.config.extensions import get_api_subtype
 from r2.lib.filters import spaceCompress, safemarkdown
-from r2.models import Account
+from r2.models import Account, Report
 from r2.models.subreddit import SubSR
 from r2.models.token import OAuth2Scope, extra_oauth2_scope
 import time, pytz
-from pylons import c, g
+from pylons import c, g, response
 from pylons.i18n import _
 
 from r2.models.wiki import ImagesByWikiPage
@@ -75,37 +75,6 @@ class JsonTemplate(Template):
 class TakedownJsonTemplate(JsonTemplate):
     def render(self, thing = None, *a, **kw):
         return thing.explanation
-
-class TableRowTemplate(JsonTemplate):
-    def cells(self, thing):
-        raise NotImplementedError
-    
-    def css_id(self, thing):
-        return ""
-
-    def css_class(self, thing):
-        return ""
-
-    def render(self, thing = None, *a, **kw):
-        return ObjectTemplate(dict(id = self.css_id(thing),
-                                   css_class = self.css_class(thing),
-                                   cells = self.cells(thing)))
-
-class UserItemHTMLJsonTemplate(TableRowTemplate):
-    def cells(self, thing):
-        cells = []
-        for cell in thing.cells:
-            thing.name = cell
-            r = thing.part_render('cell_type', style = "html")
-            cells.append(spaceCompress(r))
-        return cells
-
-    def css_id(self, thing):
-        return thing.user._fullname
-
-    def css_class(self, thing):
-        return "thing"
-
 
 class ThingJsonTemplate(JsonTemplate):
     _data_attrs_ = dict(
@@ -191,6 +160,10 @@ class ThingJsonTemplate(JsonTemplate):
                     - time.timezone)
         elif attr == "child":
             return CachedVariable("childlisting")
+        elif attr == "upvotes":
+            return thing.score
+        elif attr == "downvotes":
+            return 0
 
         if attr == 'distinguished':
             distinguished = getattr(thing, attr, 'no')
@@ -198,10 +171,13 @@ class ThingJsonTemplate(JsonTemplate):
                 return None
             return distinguished
         
-        if attr in ["num_reports", "banned_by", "approved_by"]:
+        if attr in ["num_reports", "report_reasons", "banned_by", "approved_by"]:
             if c.user_is_loggedin and thing.subreddit.is_moderator(c.user):
                 if attr == "num_reports":
                     return thing.reported
+                elif attr == "report_reasons":
+                    return Report.get_reasons(thing)
+
                 ban_info = getattr(thing, "ban_info", {})
                 if attr == "banned_by":
                     banner = (ban_info.get("banner")
@@ -226,6 +202,7 @@ class ThingJsonTemplate(JsonTemplate):
 class SubredditJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
         accounts_active="accounts_active",
+        collapse_deleted_comments="collapse_deleted_comments",
         comment_score_hide_mins="comment_score_hide_mins",
         description="description",
         description_html="description_html",
@@ -235,6 +212,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         header_title="header_title",
         over18="over_18",
         public_description="public_description",
+        public_description_html="public_description_html",
         public_traffic="public_traffic",
         submission_type="link_type",
         submit_link_label="submit_link_label",
@@ -252,18 +230,26 @@ class SubredditJsonTemplate(ThingJsonTemplate):
     )
 
     # subreddit *attributes* (right side of the equals)
-    # that are only accessible if the user can view the subreddit
-    _private_attrs = set([
-        "accounts_active",
-        "comment_score_hide_mins",
-        "description",
-        "description_html",
-        "header",
-        "header_size",
-        "header_title",
-        "submit_link_label",
-        "submit_text_label",
-    ])
+    # that are accessible even if the user can't view the subreddit
+    _public_attrs = {
+        "_id36",
+        # subreddit ID with prefix
+        "_fullname",
+        # Creation date
+        "created",
+        "created_utc",
+        # Canonically-cased subreddit name
+        "name",
+        # Canonical subreddit URL, relative to reddit.com
+        "path",
+        # Text shown on the access denied page
+        "public_description",
+        "public_description_html",
+        # Title shown in search
+        "title",
+        # Type of subreddit, so people know that it's private
+        "type",
+    }
 
     def raw_data(self, thing):
         data = ThingJsonTemplate.raw_data(self, thing)
@@ -274,7 +260,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         return data
 
     def thing_attr(self, thing, attr):
-        if attr in self._private_attrs and not thing.can_view(c.user):
+        if attr not in self._public_attrs and not thing.can_view(c.user):
             return None
 
         if attr == "_ups" and thing.hide_subscribers:
@@ -284,6 +270,8 @@ class SubredditJsonTemplate(ThingJsonTemplate):
             return None
         elif attr == 'description_html':
             return safemarkdown(thing.description)
+        elif attr == 'public_description_html':
+            return safemarkdown(thing.public_description)
         elif attr in ('is_banned', 'is_contributor', 'is_moderator',
                       'is_subscriber'):
             if c.user_is_loggedin:
@@ -344,15 +332,22 @@ class IdentityJsonTemplate(ThingJsonTemplate):
         has_verified_email="email_verified",
         is_gold="gold",
         is_mod="is_mod",
-        link_karma="safe_karma",
+        link_karma="link_karma",
         name="name",
+        hide_from_robots="pref_hide_from_robots",
     )
-    _private_data_attrs = dict(over_18="pref_over_18")
+    _private_data_attrs = dict(
+        over_18="pref_over_18",
+        gold_creddits="gold_creddits",
+        gold_expiration="gold_expiration",
+    )
 
     def raw_data(self, thing):
         attrs = self._data_attrs_.copy()
         if c.user_is_loggedin and thing._id == c.user._id:
             attrs.update(self._private_data_attrs)
+        if thing.pref_hide_from_robots:
+            response.headers['X-Robots-Tag'] = 'noindex, nofollow'
         data = {k: self.thing_attr(thing, v) for k, v in attrs.iteritems()}
         try:
             self.add_message_data(data, thing)
@@ -369,6 +364,8 @@ class IdentityJsonTemplate(ThingJsonTemplate):
             data['has_mod_mail'] = self.thing_attr(thing, 'has_mod_mail')
 
     def thing_attr(self, thing, attr):
+        from r2.lib.template_helpers import (
+            display_comment_karma, display_link_karma)
         if attr == "is_mod":
             t = thing.lookups[0] if isinstance(thing, Wrapped) else thing
             return t.is_moderator_somewhere
@@ -376,6 +373,14 @@ class IdentityJsonTemplate(ThingJsonTemplate):
             return bool(c.have_messages)
         elif attr == "has_mod_mail":
             return bool(c.have_mod_messages)
+        elif attr == "comment_karma":
+            return display_comment_karma(thing.comment_karma)
+        elif attr == "link_karma":
+            return display_link_karma(thing.link_karma)
+        elif attr == "gold_expiration":
+            if not thing.gold:
+                return None
+            return calendar.timegm(thing.gold_expiration.utctimetuple())
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 
@@ -411,8 +416,6 @@ class PrefsJsonTemplate(ThingJsonTemplate):
     def thing_attr(self, thing, attr):
         if attr == "pref_clickgadget":
             return bool(thing.pref_clickgadget)
-        elif attr == "pref_content_langs":
-            return tup(thing.pref_content_langs)
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 
@@ -439,6 +442,9 @@ class LinkJsonTemplate(ThingJsonTemplate):
         media_embed="media_embed",
         num_comments="num_comments",
         num_reports="num_reports",
+        report_reasons="report_reasons",
+        mod_reports="mod_reports",
+        user_reports="user_reports",
         over_18="over_18",
         permalink="permalink",
         saved="saved",
@@ -492,6 +498,14 @@ class LinkJsonTemplate(ThingJsonTemplate):
                 return safemarkdown(_("[removed]"))
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
+    def raw_data(self, thing):
+        d = ThingJsonTemplate.raw_data(self, thing)
+
+        if c.permalink_page:
+            d["upvote_ratio"] = thing.upvote_ratio
+
+        return d
+
     def rendered_data(self, thing):
         d = ThingJsonTemplate.rendered_data(self, thing)
         d['sr'] = thing.subreddit._fullname
@@ -514,15 +528,20 @@ class CommentJsonTemplate(ThingJsonTemplate):
         body="body",
         body_html="body_html",
         distinguished="distinguished",
+        controversiality="controversiality",
         downs="downvotes",
         edited="editted",
         gilded="gilded",
         likes="likes",
         link_id="link_id",
         num_reports="num_reports",
+        report_reasons="report_reasons",
+        mod_reports="mod_reports",
+        user_reports="user_reports",
         parent_id="parent_id",
         replies="child",
         saved="saved",
+        score="score",
         score_hidden="score_hidden",
         subreddit="subreddit",
         subreddit_id="subreddit_id",
@@ -533,6 +552,8 @@ class CommentJsonTemplate(ThingJsonTemplate):
         from r2.models import Comment, Link, Subreddit
         if attr == 'link_id':
             return make_fullname(Link, thing.link_id)
+        elif attr == "controversiality":
+            return 1 if thing.is_controversial else 0
         elif attr == "editted" and not isinstance(thing.editted, bool):
             return (time.mktime(thing.editted.astimezone(pytz.UTC).timetuple())
                     - time.timezone)
@@ -549,6 +570,7 @@ class CommentJsonTemplate(ThingJsonTemplate):
             return spaceCompress(safemarkdown(thing.body))
         elif attr == "gilded":
             return thing.gildings
+
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def kind(self, wrapped):
@@ -606,6 +628,7 @@ class MessageJsonTemplate(ThingJsonTemplate):
         context="context",
         created="created",
         dest="dest",
+        distinguished="distinguished",
         first_message="first_message",
         first_message_name="first_message_name",
         new="new",
@@ -743,6 +766,7 @@ class UserListJsonTemplate(ThingJsonTemplate):
     def kind(self, wrapped):
         return "UserList"
 
+
 class UserTableItemJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         id="_fullname",
@@ -752,25 +776,64 @@ class UserTableItemJsonTemplate(ThingJsonTemplate):
     def thing_attr(self, thing, attr):
         return ThingJsonTemplate.thing_attr(self, thing.user, attr)
 
+    def render(self, thing, *a, **kw):
+        return ObjectTemplate(self.data(thing))
+
+
+class RelTableItemJsonTemplate(UserTableItemJsonTemplate):
+    _data_attrs_ = UserTableItemJsonTemplate.data_attrs(
+        date="date",
+    )
+
+    def thing_attr(self, thing, attr):
+        rel_attr, splitter, attr = attr.partition(".")
+        if attr == 'note':
+            # return empty string instead of None for missing note
+            return ThingJsonTemplate.thing_attr(self, thing.rel, attr) or ''
+        elif attr:
+            return ThingJsonTemplate.thing_attr(self, thing.rel, attr)
+        elif rel_attr == 'date':
+            # make date UTC
+            date = self.thing_attr(thing, 'rel._date')
+            date = time.mktime(date.astimezone(pytz.UTC).timetuple())
+            return date - time.timezone
+        else:
+            return UserTableItemJsonTemplate.thing_attr(self, thing, rel_attr)
+
+
+class FriendTableItemJsonTemplate(RelTableItemJsonTemplate):
     def inject_data(self, thing, d):
-        if (thing.type in ("banned", "wikibanned") or
-            (c.user.gold and thing.type == "friend")):
-            d["note"] = getattr(thing.rel, 'note', '')
-        if thing.type == "moderator":
-            permissions = thing.permissions.items()
-            d["mod_permissions"] = [perm for perm, has in permissions if has]
+        if c.user.gold and thing.type == "friend":
+            d["note"] = self.thing_attr(thing, 'rel.note')
         return d
 
     def rendered_data(self, thing):
-        d = ThingJsonTemplate.rendered_data(self, thing)
+        d = RelTableItemJsonTemplate.rendered_data(self, thing)
         return self.inject_data(thing, d)
 
     def raw_data(self, thing):
-        d = ThingJsonTemplate.raw_data(self, thing)
+        d = RelTableItemJsonTemplate.raw_data(self, thing)
         return self.inject_data(thing, d)
 
-    def render(self, thing, *a, **kw):
-        return ObjectTemplate(self.data(thing))
+
+class BannedTableItemJsonTemplate(RelTableItemJsonTemplate):
+    _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
+        note="rel.note",
+    )
+
+
+class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
+    _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
+        mod_permissions="permissions",
+    )
+
+    def thing_attr(self, thing, attr):
+        if attr == 'permissions':
+            permissions = thing.permissions.items()
+            return [perm for perm, has in permissions if has]
+        else:
+            return RelTableItemJsonTemplate.thing_attr(self, thing, attr)
+
 
 class OrganicListingJsonTemplate(ListingJsonTemplate):
     def kind(self, wrapped):
@@ -854,7 +917,7 @@ class FlairListJsonTemplate(JsonTemplate):
                           flair_css_class=row.flair_css_class)
             else:
               # prev/next link
-              return dict(after=row.after, reverse=row.reverse)
+              return dict(after=row.after, reverse=row.previous)
 
         json_rows = [row_to_json(row) for row in thing.flair]
         result = dict(users=[row for row in json_rows if 'user' in row])
@@ -930,7 +993,6 @@ class FlairSelectorJsonTemplate(JsonTemplate):
 class StylesheetTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         images='_images',
-        prevstyle='prev_stylesheet',
         stylesheet='stylesheet_contents',
         subreddit_id='_fullname',
     )
@@ -952,12 +1014,11 @@ class StylesheetTemplate(ThingJsonTemplate):
             return self.images()
         elif attr == '_fullname':
             return c.site._fullname
-        elif attr == 'prev_stylesheet':
-            return c.site.prev_stylesheet
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 class SubredditSettingsTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
+        collapse_deleted_comments='site.collapse_deleted_comments',
         comment_score_hide_mins='site.comment_score_hide_mins',
         content_options='site.link_type',
         default_set='site.allow_top',
@@ -969,9 +1030,6 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
         header_hover_text='site.header_title',
         language='site.lang',
         over_18='site.over_18',
-        prev_description_id='site.prev_description_id',
-        prev_public_description_id='site.prev_public_description_id',
-        prev_submit_text_id='site.prev_submit_text_id',
         public_description='site.public_description',
         public_traffic='site.public_traffic',
         show_media='site.show_media',
@@ -997,6 +1055,15 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
             return getattr(thing.site, attr[5:])
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
+
+class UploadedImageJsonTemplate(JsonTemplate):
+    def render(self, thing, *a, **kw):
+        return ObjectTemplate({
+            "errors": list(k for (k, v) in thing.errors if v),
+            "img_src": thing.img_src,
+        })
+
+
 class ModActionTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         action='action',
@@ -1004,17 +1071,33 @@ class ModActionTemplate(ThingJsonTemplate):
         description='description',
         details='details',
         id='_fullname',
-        mod='author',
+        mod='moderator',
         mod_id36='mod_id36',
         sr_id36='sr_id36',
         subreddit='sr_name',
+        target_author='target_author',
         target_fullname='target_fullname',
+        target_permalink='target_permalink',
     )
 
     def thing_attr(self, thing, attr):
         if attr == 'date':
             return (time.mktime(thing.date.astimezone(pytz.UTC).timetuple())
                     - time.timezone)
+        elif attr == 'target_author':
+            if thing.target_author and thing.target_author._deleted:
+                return "[deleted]"
+            elif thing.target_author:
+                return thing.target_author.name
+            return ""
+        elif attr == 'target_permalink':
+            try:
+                return thing.target.make_permalink_slow()
+            except AttributeError:
+                return None
+        elif attr == "moderator":
+            return thing.moderator.name
+
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def kind(self, wrapped):
@@ -1034,11 +1117,13 @@ class PolicyViewJsonTemplate(ThingJsonTemplate):
 
 class KarmaListJsonTemplate(ThingJsonTemplate):
     def data(self, karmas):
+        from r2.lib.template_helpers import (
+            display_comment_karma, display_link_karma)
         karmas = [{
-            'sr': label,
-            'link_karma': lc,
-            'comment_karma': cc,
-        } for label, title, lc, cc in karmas]
+            'sr': sr,
+            'link_karma': display_link_karma(link_karma),
+            'comment_karma': display_comment_karma(comment_karma),
+        } for sr, (link_karma, comment_karma) in karmas.iteritems()]
         return karmas
 
     def kind(self, wrapped):

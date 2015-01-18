@@ -203,6 +203,8 @@ body[orient="landscape"] > #topbar > h1 { margin-left: -125px; width: 250px; }
 /*Image*/
 .link .thumbnail { float: right; margin: 0 0 5px 5px; overflow: hidden; max-height: 50px; }
 
+.link .thumbnail img { max-width: 50px; max-height: 50px; }
+
 /* Entry*/
 .link .entry { margin: 0px 50px 3px 0px; }
 
@@ -302,6 +304,13 @@ body[orient="landscape"] > #topbar > h1 { margin-left: -125px; width: 250px; }
 .comment.collapsed { font-style: italcs; }
 
 .comment.collapsed .tagline { margin-left: 20px; font-style: italcs; color: #AAA; }
+
+.comment.controversial > .entry .score:after {
+  content: '†';
+  position: relative;
+  top: -3px;
+  font-size: 9px;
+}
 
 /** gilding */
 .gilded-icon { position: relative; display: inline-block; margin: 0 0 -15px 8px; top: -8px; color: #99895F; font-size: .9em; vertical-align: middle; }
@@ -508,6 +517,11 @@ body.toolbar { margin: 0px; padding: 0px; overflow: hidden; }
 
 #suggested-reddits ul li a { background: -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #becfe0), color-stop(100%, #81a3c5)); background: -webkit-linear-gradient(top, #becfe0, #81a3c5); background: -moz-linear-gradient(top, #becfe0, #81a3c5); background: -o-linear-gradient(top, #becfe0, #81a3c5); background: linear-gradient(top, #becfe0, #81a3c5); background-color: #9fb9d2; -webkit-border-radius: 10px; -moz-border-radius: 10px; -ms-border-radius: 10px; -o-border-radius: 10px; border-radius: 10px; display: inline-block; margin: 5px; padding: 3px 7px; text-decoration: none; border: 1px solid #507faf; color: #304c69; }
 
+.rulespage { padding: 3px; }
+.rulespage li { padding: 3px; }
+.rulespage li .good-example { background: #bcf5a9; }
+.rulespage li .bad-example { background: #f5a9a9; }
+
 /* Autocomplete */
 #sr-autocomplete-area { position: relative; z-index: 50; }
 
@@ -688,4 +702,24 @@ a.author { margin-right: 0.5em; }
     margin: 10px 0;
     padding-left: 5px;
     font-weight: bold;
+}
+
+.wiki-page {
+    background-color: white;
+}
+
+.wiki {
+    padding: 0 5px;
+}
+
+.wiki img {
+    display: block;
+}
+
+.wiki p {
+    padding: 0 10px;
+}
+
+.wiki .toc {
+    display: none;
 }

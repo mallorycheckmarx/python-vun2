@@ -16,19 +16,19 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
    from r2.lib.template_helpers import add_sr
-   from r2.lib.template_helpers import media_https_if_secure
+   from r2.lib.template_helpers import make_url_protocol_relative
    import urllib
    from r2.lib.filters import _force_unicode, _force_utf8
  %>
 <%namespace file="printable.compact" import="delete_report_buttons"/>
 <%namespace file="printable.html" import="arrow, score"/>
-<%namespace file="link.html" import="tagline"/>
+<%namespace file="link.html" import="tagline, thumbnail"/>
 <%namespace file="utils.html" import="plain_link" />
 <%namespace file="utils.compact" import="icon_button, toggle_button" />
 <%namespace file="printablebuttons.html" import="state_button" />
@@ -46,9 +46,7 @@
 %>
 <div class="${div_class}">
   <span class="rank">
-    %if thing.num > 0:
-      ${thing.num}
-    %endif
+    ${thing.num_text}
   </span>
   <% 
      like_cls = "unvoted"
@@ -78,13 +76,9 @@
   %if c.site.link_flair_position == 'left' and thing.flair_text:
     ${flair()}
   %endif
-  %if thing.has_thumbnail and thing.thumbnail:
-    <a href="${url}" class="thumbnail">
-      <img src="${media_https_if_secure(thing.thumbnail)}" alt=""/>
-     </a>
-  %endif
+    ${thumbnail()}
     <p class="title">
-    <a href="${url}">${thing.title}</a>
+    <a href="${url}" class="may-blank">${thing.title}</a>
     %if c.site.link_flair_position == 'right' and thing.flair_text:
       ${flair()}
     %endif
@@ -121,7 +115,7 @@
      %>
   <div class="expando" ${"style='display: none'" if not expand else ""}>
     %if thing.link_child:
-      ${thing.link_child.content()}
+      ${unsafe(thing.link_child.content())}
     %endif
   </div>
   <div class="clear options_expando hidden">

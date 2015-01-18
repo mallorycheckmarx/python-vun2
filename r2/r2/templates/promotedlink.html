@@ -16,11 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from r2.lib.filters import conditional_websafe
    from r2.lib.promote import promo_edit_url
    from r2.lib import promote
    from r2.lib.pages.things import LinkButtons
@@ -37,12 +38,11 @@
      taglinetext = _("to be promoted by %(author)s") 
    else:
      taglinetext = _("promoted by %(author)s") 
-   taglinetext = taglinetext.replace(" ", "&#32;")
+   taglinetext = conditional_websafe(taglinetext).replace(" ", "&#32;")
    author = WrappedUser(thing.author, thing.attribs, thing,
                         force_show_flair=False).render()
  %>
-${unsafe(taglinetext % dict(date = thing._date.strftime("%Y-%m-%d"), 
-                            author= author))}
+${unsafe(taglinetext % dict(author=author))}
 </%def>
 
 <%def name="buttons(comments=True, delete=True, report=True, additional='')">

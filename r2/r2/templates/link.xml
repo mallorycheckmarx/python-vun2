@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -55,11 +55,20 @@
          domain = get_domain(cname = c.cname, subreddit = False) 
        %>
       %if getattr(thing, 'selftext', None):
-        ${unsafe(safemarkdown(thing.selftext))}
+        %if not thing.expunged:
+          ${unsafe(safemarkdown(thing.selftext))}
+        %else:
+          ${_('[removed]')}
+        %endif
       %endif
-      submitted by <a href="http://${domain}/user/${thing.author.name}">
-         ${thing.author.name}
-      </a>
+      submitted by
+      %if not thing.author._deleted:
+        <a href="http://${domain}/user/${thing.author.name}">
+           ${thing.author.name}
+        </a>
+      %else:
+        ${_("[deleted]")}
+      %endif
        %if thing.different_sr:
         to <a href="http://${domain}${thing.subreddit.path}">
          ${thing.subreddit.name}</a> 

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,6 +29,7 @@
 <head>
 
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="referrer" content="${c.referrer_policy}" />
 <link rel="canonical" href="${thing.canonical_link}" />
 
 <title>${self.Title()}</title>

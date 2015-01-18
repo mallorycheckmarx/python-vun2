@@ -16,13 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
     from r2.lib.pages import WrappedUser
-    from r2.lib.template_helpers import add_sr
+    from r2.lib.template_helpers import add_sr, _wsf
 %>
 <%namespace file="printable.compact" import="delete_report_buttons"/>
 <%namespace file="printable.html" import="arrow, score, thing_css_rowclass"/>
@@ -59,8 +59,7 @@
    %>
   <div class="entry ${like_cls}">
     <div class="tagline">
-     ${WrappedUser(thing.author, thing.attribs, thing,
-                   gray = collapse).render()}&#32;
+     ${WrappedUser(thing.author, thing.attribs, thing, gray=collapse)}&#32;
      %if thing.score_hidden:
        [${_("score hidden")}]
      %else:
@@ -68,7 +67,7 @@
      %endif
      &#32;
      ## thing.timesince is a cache stub
-     ${unsafe(_("%(timeago)s ago") % dict(timeago=thing.timesince))}
+     ${_wsf("%(timeago)s", timeago=thing.timesince)}
      % if thing.gilded_message:
        <span class="gilded-icon" title="${thing.gilded_message}" data-count="${thing.gildings}">
          % if thing.gildings > 1:
@@ -108,5 +107,8 @@
   %else:
     <div class="child">
   %endif
-  ${thing.childlisting}</div>
+  %if thing.childlisting:
+    ${thing.childlisting}
+  %endif
+  </div>
 </div>

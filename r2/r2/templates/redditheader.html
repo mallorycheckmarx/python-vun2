@@ -16,13 +16,14 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
    from pylons import request
-   from r2.lib.template_helpers import add_sr, header_url
+   from r2.config import feature
+   from r2.lib.template_helpers import add_sr, display_link_karma, header_url
    from r2.models import Sub, FakeSubreddit
    from r2.models.subreddit import DefaultSR
    from r2.lib.pages import SearchForm
@@ -71,31 +72,27 @@
           login_url = add_sr(base + "/login", sr_path=False)
         %>
         ${text_with_links(_("want to join? %(login_or_register)s in seconds"),
-            login_or_register = dict(link_text=_("login or register"), path=login_url, _class="login-required"))}
+            login_or_register = dict(link_text=_("sign in or create an account"), path=login_url, _class="login-required"))}
       </span>
       ${separator("|")}
       %endif
     %else:
       <span class="user">
          ${plain_link(c.user.name, "/user/%s/" % c.user.name, _sr_path=False)}
-         &nbsp;(<span class="userkarma" title="${_("link karma")}">${c.user.safe_karma}</span>)
+         &nbsp;(<span class="userkarma" title="${_("link karma")}">${display_link_karma(c.user.link_karma)}</span>)
       </span>
 
       ${separator("|")}
 
-      <%
-         if c.have_messages:
-           mail_img_class = 'havemail'
-           mail_img_title = "new mail!"
-           mail_path = "/message/unread/"
-         else:
-           mail_img_class = 'nohavemail'
-           mail_img_title = "no new mail"
-           mail_path = "/message/inbox/"
-       %>
-      ${plain_link(_("messages"), path=mail_path,
-                 title = mail_img_title, _sr_path = False,
-                 _id = "mail", _class=mail_img_class)}
+
+      %if c.have_messages:
+        ${plain_link(_("messages"), path="/message/unread/", title=_("new mail!"), _class="havemail", _sr_path=False, _id="mail")}
+        %if c.user.inbox_count > 0 and feature.is_enabled('show_inbox_count'):
+          ${plain_link(c.user.inbox_count, path="/message/unread/", _class="message-count", _sr_path=False)}
+        %endif
+      %else:
+        ${plain_link(_("messages"), path="/message/inbox/", title=_("no new mail"), _class="nohavemail", _sr_path=False, _id="mail")}
+      %endif
       ${separator("|")}
       %if c.user_is_loggedin and c.user.is_moderator_somewhere:
          <%

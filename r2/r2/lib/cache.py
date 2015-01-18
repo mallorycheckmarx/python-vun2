@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -24,6 +24,8 @@ from threading import local
 from hashlib import md5
 import cPickle as pickle
 from copy import copy
+
+from pylons import g
 
 import pylibmc
 from _pylibmc import MemcachedError
@@ -62,24 +64,32 @@ class CacheUtils(object):
     def get_multi(self, keys, prefix='', **kw):
         return prefix_keys(keys, prefix, lambda k: self.simple_get_multi(k, **kw))
 
+
+class MemcachedMaximumRetryException(Exception): pass
+
 class CMemcache(CacheUtils):
     def __init__(self,
                  servers,
-                 debug = False,
-                 noreply = False,
-                 no_block = False,
+                 debug=False,
+                 noreply=False,
+                 no_block=False,
                  min_compress_len=512 * 1024,
-                 num_clients = 10):
+                 num_clients=10,
+                 timeout_retry=5,
+                 binary=False):
         self.servers = servers
         self.clients = pylibmc.ClientPool(n_slots = num_clients)
+        self.timeout_retry = timeout_retry
         for x in xrange(num_clients):
-            client = pylibmc.Client(servers, binary=True)
+            client = pylibmc.Client(servers, binary=binary)
             behaviors = {
                 'no_block': no_block, # use async I/O
                 'tcp_nodelay': True, # no nagle
                 '_noreply': int(noreply),
                 'ketama': True, # consistent hashing
-                }
+            }
+            if not binary:
+                behaviors['verify_keys'] = True
 
             client.behaviors.update(behaviors)
             self.clients.put(client)
@@ -88,16 +98,39 @@ class CMemcache(CacheUtils):
 
         _CACHE_SERVERS.update(servers)
 
+
+    def retry(self, times, fn):
+        ex = None
+        for i in xrange(times):
+            try:
+                return fn()
+            except (pylibmc.NotFound,
+                    pylibmc.BadKeyProvided,
+                    pylibmc.UnknownStatKey,
+                    pylibmc.InvalidHostProtocolError,
+                    pylibmc.NotSupportedError):
+                raise
+            except MemcachedError as e:
+                ex = e
+
+        raise MemcachedMaximumRetryException(ex)
+
     def get(self, key, default = None):
-        with self.clients.reserve() as mc:
-            ret =  mc.get(key)
-            if ret is None:
-                return default
-            return ret
+        def do_get():
+            with self.clients.reserve() as mc:
+                ret = mc.get(key)
+                if ret is None:
+                    return default
+                return ret
+
+        return self.retry(self.timeout_retry, do_get)
 
     def get_multi(self, keys, prefix = ''):
-        with self.clients.reserve() as mc:
-            return mc.get_multi(keys, key_prefix = prefix)
+        def do_get_multi():
+            with self.clients.reserve() as mc:
+                return mc.get_multi(keys, key_prefix = prefix)
+
+        return self.retry(self.timeout_retry, do_get_multi)
 
     # simple_get_multi exists so that a cache chain can
     # single-instance the handling of prefixes for performance, but
@@ -108,18 +141,25 @@ class CMemcache(CacheUtils):
     simple_get_multi = get_multi
 
     def set(self, key, val, time = 0):
-        with self.clients.reserve() as mc:
-            return mc.set(key, val, time = time,
-                          min_compress_len = self.min_compress_len)
+        def do_set():
+            with self.clients.reserve() as mc:
+                return mc.set(key, val, time = time,
+                                min_compress_len = self.min_compress_len)
+
+        return self.retry(self.timeout_retry, do_set)
 
     def set_multi(self, keys, prefix='', time=0):
         new_keys = {}
         for k,v in keys.iteritems():
             new_keys[str(k)] = v
-        with self.clients.reserve() as mc:
-            return mc.set_multi(new_keys, key_prefix = prefix,
-                                time = time,
-                                min_compress_len = self.min_compress_len)
+
+        def do_set_multi():
+            with self.clients.reserve() as mc:
+                return mc.set_multi(new_keys, key_prefix = prefix,
+                                    time = time,
+                                    min_compress_len = self.min_compress_len)
+
+        return self.retry(self.timeout_retry, do_set_multi)
 
     def add_multi(self, keys, prefix='', time=0):
         new_keys = {}
@@ -152,12 +192,18 @@ class CMemcache(CacheUtils):
             return None
 
     def delete(self, key, time=0):
-        with self.clients.reserve() as mc:
-            return mc.delete(key)
+        def do_delete():
+            with self.clients.reserve() as mc:
+                return mc.delete(key)
+
+        return self.retry(self.timeout_retry, do_delete)
 
     def delete_multi(self, keys, prefix=''):
-        with self.clients.reserve() as mc:
-            return mc.delete_multi(keys, key_prefix=prefix)
+        def do_delete_multi():
+            with self.clients.reserve() as mc:
+                return mc.delete_multi(keys, key_prefix=prefix)
+
+        return self.retry(self.timeout_retry, do_delete_multi)
 
     def __repr__(self):
         return '<%s(%r)>' % (self.__class__.__name__,
@@ -306,7 +352,9 @@ class TransitionalCache(CacheUtils):
 
     `original_cache` is the cache chain previously in use (this'll frequently
     be `g.cache` since it's the catch-all for most things) and
-    `replacement_cache` is the new place for the keys using this chain to live.
+    `replacement_cache` is the new place for the keys using this chain to
+    live.  `key_transform` is an optional function to translate the key names
+    into different names on the `replacement_cache`.
 
     To use this cache chain, do three separate deployments as follows:
 
@@ -323,10 +371,13 @@ class TransitionalCache(CacheUtils):
 
     """
 
-    def __init__(self, original_cache, replacement_cache, read_original):
+    def __init__(
+            self, original_cache, replacement_cache, read_original,
+            key_transform=None):
         self.original = original_cache
         self.replacement = replacement_cache
         self.read_original = read_original
+        self.key_transform = key_transform
 
     @property
     def stats(self):
@@ -335,11 +386,44 @@ class TransitionalCache(CacheUtils):
         else:
             return self.replacement.stats
 
+    @stats.setter
+    def stats(self, value):
+        """No-op.
+
+        TransitionCache is designed to wrap two cache chains. We can ignore
+        the set (which happens at the end of reset_caches in app_globals.py)
+        because each chain will separately get dealt with on its own.
+        """
+        pass
+
+    @property
+    def caches(self):
+        if self.read_original:
+            return self.original.caches
+        else:
+            return self.replacement.caches
+
+    def transform_memcache_key(self, args):
+        if self.key_transform:
+            old_key = args[0]
+            if isinstance(old_key, dict):  # multiget passes a dict
+                new_key = {self.key_transform(k): v for k,v in
+                           old_key.iteritems()}
+            elif isinstance(old_key, list):
+                new_key = [self.key_transform(k) for k in old_key]
+            else:
+                new_key = self.key_transform(old_key)
+
+            return (new_key,) + args[1:]
+        else:
+            return args
+
     def make_get_fn(fn_name):
         def transitional_cache_get_fn(self, *args, **kwargs):
             if self.read_original:
                 return getattr(self.original, fn_name)(*args, **kwargs)
             else:
+                args = self.transform_memcache_key(args)
                 return getattr(self.replacement, fn_name)(*args, **kwargs)
         return transitional_cache_get_fn
 
@@ -349,8 +433,13 @@ class TransitionalCache(CacheUtils):
 
     def make_set_fn(fn_name):
         def transitional_cache_set_fn(self, *args, **kwargs):
-            getattr(self.original, fn_name)(*args, **kwargs)
-            getattr(self.replacement, fn_name)(*args, **kwargs)
+            ret_original = getattr(self.original, fn_name)(*args, **kwargs)
+            args = self.transform_memcache_key(args)
+            ret_replacement = getattr(self.replacement, fn_name)(*args, **kwargs)
+            if self.read_original:
+                return ret_original
+            else:
+                return ret_replacement
         return transitional_cache_set_fn
 
     add = make_set_fn("add")

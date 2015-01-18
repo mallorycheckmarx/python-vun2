@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -45,7 +45,9 @@ from r2.lib.authorize.api import (
     UpdateCustomerPaymentProfileRequest,
 )
 
-__all__ = []
+__all__ = ['TRANSACTION_NOT_FOUND']
+
+TRANSACTION_NOT_FOUND = 16
 
 # useful test data:
 test_card = dict(AMEX       = ("370000000000002"  , 1234),
@@ -94,11 +96,16 @@ def get_account_info(user, recursed=False):
 @export
 def edit_profile(user, address, creditcard, pay_id=None):
     if pay_id:
-        return UpdateCustomerPaymentProfileRequest(
-            user, pay_id, address, creditcard).make_request()
+        request = UpdateCustomerPaymentProfileRequest(user, pay_id, address,
+                                                      creditcard)
     else:
-        return CreateCustomerPaymentProfileRequest(
-            user, address, creditcard).make_request()
+        request = CreateCustomerPaymentProfileRequest(user, address, creditcard)
+
+    try:
+        pay_id = request.make_request()
+        return pay_id
+    except AuthorizeNetException:
+        return None
 
 
 def _make_transaction(trans_cls, amount, user, pay_id,
@@ -130,7 +137,7 @@ def _make_transaction(trans_cls, amount, user, pay_id,
 
 
 @export
-def auth_transaction(amount, user, payid, thing, campaign, test=None):
+def auth_transaction(amount, user, payid, thing, campaign):
     # use negative pay_ids to identify freebies, coupons, or anything
     # that doesn't require a CC.
     if payid < 0:
@@ -150,26 +157,22 @@ def auth_transaction(amount, user, payid, thing, campaign, test=None):
         order = Order(invoiceNumber="T%dC%d" % (thing._id, campaign))
         success, res = _make_transaction(ProfileTransAuthOnly,
                                          amount, user, payid,
-                                         order=order, test=test)
+                                         order=order)
         if success:
-            if test:
-                return auth_transaction(amount, user, -1, thing, campaign,
-                                        test = test)
-            else:
-                Bid._new(res.trans_id, user, payid, thing._id, amount, campaign)
-                return res.trans_id, ""
-        elif res is None:
-            # we are in test mode!
-            return auth_transaction(amount, user, -1, thing, test=test)
-        # duplicate transaction, which is bad, but not horrible.  Log
-        # the transaction id, creating a new bid if necessary. 
-        elif res.trans_id and (res.response_code, res.response_reason_code) == (3,11):
+            Bid._new(res.trans_id, user, payid, thing._id, amount, campaign)
+            return res.trans_id, ""
+
+        elif (res.trans_id and
+              (res.response_code, res.response_reason_code) == (3, 11)):
+            # duplicate transaction, which is bad, but not horrible.  Log
+            # the transaction id, creating a new bid if necessary.
             g.log.error("Authorize.net duplicate trans %d on campaign %d" % 
                         (res.trans_id, campaign))
             try:
                 Bid.one(res.trans_id, campaign=campaign)
             except NotFound:
                 Bid._new(res.trans_id, user, payid, thing._id, amount, campaign)
+
         return res.trans_id, res.response_reason_text
 
 
@@ -200,21 +203,27 @@ def is_charged_transaction(trans_id, campaign):
 
 @export
 def charge_transaction(user, trans_id, campaign, test=None):
-    bid =  Bid.one(transaction=trans_id, campaign=campaign)
-    if not bid.is_charged():
-        bid.charged()
-        if trans_id < 0:
-            # freebies are automatically authorized
-            return True
-        elif bid.account_id == user._id:
-            res = _make_transaction(ProfileTransPriorAuthCapture,
-                                    bid.bid, user,
-                                    bid.pay_id, trans_id=trans_id,
-                                    test=test)
-            return bool(res)
+    bid = Bid.one(transaction=trans_id, campaign=campaign)
+    if bid.is_charged():
+        return True
 
-    # already charged
-    return True
+    if trans_id < 0:
+        success = True
+        response_reason_code = None
+    else:
+        success, res = _make_transaction(ProfileTransPriorAuthCapture,
+                                         bid.bid, user,
+                                         bid.pay_id, trans_id=trans_id,
+                                         test=test)
+        response_reason_code = res.get("response_reason_code")
+
+    if success:
+        bid.charged()
+    elif response_reason_code == TRANSACTION_NOT_FOUND:
+        # authorization hold has expired
+        bid.void()
+
+    return success, response_reason_code
 
 
 @export

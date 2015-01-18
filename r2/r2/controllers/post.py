@@ -16,11 +16,14 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 from r2.lib.pages import *
-from reddit_base import cross_domain
+from reddit_base import (
+    hsts_eligible,
+    hsts_modify_redirect,
+)
 from api import ApiController
 from r2.lib.errors import BadRequestError, errors
 from r2.lib.utils import Storage, query_string, UrlParser
@@ -28,32 +31,24 @@ from r2.lib.emailer import opt_in, opt_out
 from r2.lib.validator import *
 from r2.lib.validator.preferences import (
     filter_prefs,
-    format_content_lang_pref,
     PREFS_VALIDATORS,
     set_prefs,
 )
+from r2.lib.csrf import csrf_exempt
 from r2.models.recommend import ExploreSettings
 from pylons import request, c, g
 from pylons.controllers.util import redirect_to
 from pylons.i18n import _
 from r2.models import *
 import hashlib
+from r2.lib.base import abort
 
 class PostController(ApiController):
-    def _langs_from_post(self, all_or_some):
-        if all_or_some == 'all':
-            return 'all'
-        langs = []
-        for lang in g.all_languages:
-            if request.POST.get('lang-' + lang):
-                langs.append(str(lang))
-        return format_content_lang_pref(langs)
-
+    @csrf_exempt
     @validate(pref_lang = VLang('lang'),
               all_langs = VOneOf('all-langs', ('all', 'some'), default='all'))
     def POST_unlogged_options(self, all_langs, pref_lang):
-        content_langs = self._langs_from_post(all_langs)
-        prefs = {"pref_content_lang": content_langs, "pref_lang": pref_lang}
+        prefs = {"pref_lang": pref_lang}
         set_prefs(c.user, prefs)
         c.user._commit()
         return self.redirect(request.referer)
@@ -62,8 +57,6 @@ class PostController(ApiController):
               all_langs=VOneOf('all-langs', ('all', 'some'), default='all'),
               **PREFS_VALIDATORS)
     def POST_options(self, all_langs, **prefs):
-        pref_content_langs = self._langs_from_post(all_langs)
-        prefs['pref_content_langs'] = pref_content_langs
         filter_prefs(prefs, c.user)
         if c.errors.errors:
             return abort(BadRequestError(errors.INVALID_PREF))
@@ -76,8 +69,8 @@ class PostController(ApiController):
         return self.redirect(u.unparse())
 
     def GET_over18(self):
-        return BoringPage(_("over 18?"),
-                          content = Over18()).render()
+        return BoringPage(_("over 18?"), content=Over18(),
+                          show_sidebar=False).render()
 
     @validate(VModhash(fatal=False),
               over18 = nop('over18'),
@@ -94,6 +87,7 @@ class PostController(ApiController):
             return self.redirect('/')
 
 
+    @csrf_exempt
     @validate(msg_hash = nop('x'))
     def POST_optout(self, msg_hash):
         email, sent = opt_out(msg_hash)
@@ -104,6 +98,7 @@ class PostController(ApiController):
                                            sent = True,
                                            msg_hash = msg_hash)).render()
 
+    @csrf_exempt
     @validate(msg_hash = nop('x'))
     def POST_optin(self, msg_hash):
         email, sent = opt_in(msg_hash)
@@ -115,6 +110,7 @@ class PostController(ApiController):
                                            msg_hash = msg_hash)).render()
 
 
+    @csrf_exempt
     @validate(dest = VDestination(default = "/"))
     def POST_login(self, dest, *a, **kw):
         ApiController._handle_login(self, *a, **kw)
@@ -125,8 +121,11 @@ class PostController(ApiController):
             return LoginPage(user_login = request.POST.get('user'),
                              dest = dest).render()
 
+        if hsts_eligible():
+            dest = hsts_modify_redirect(dest)
         return self.redirect(dest)
 
+    @csrf_exempt
     @validate(dest = VDestination(default = "/"))
     def POST_reg(self, dest, *a, **kw):
         ApiController._handle_register(self, *a, **kw)
@@ -137,6 +136,8 @@ class PostController(ApiController):
             return LoginPage(user_reg = request.POST.get('user'),
                              dest = dest).render()
 
+        if hsts_eligible():
+            dest = hsts_modify_redirect(dest)
         return self.redirect(dest)
 
     def GET_login(self, *a, **kw):

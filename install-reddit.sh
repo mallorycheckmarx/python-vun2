@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 # The contents of this file are subject to the Common Public Attribution
 # License Version 1.0. (the "License"); you may not use this file except in
 # compliance with the License. You may obtain a copy of the License at
@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -61,6 +61,9 @@ REDDIT_HOME=${REDDIT_HOME:-/home/$REDDIT_USER}
 # domains. an IP address will suffice if nothing else is available.
 REDDIT_DOMAIN=${REDDIT_DOMAIN:-reddit.local}
 
+#The plugins to clone and register in the ini file
+REDDIT_PLUGINS=${REDDIT_PLUGINS:-meatspace about liveupdate}
+
 ###############################################################################
 # Sanity Checks
 ###############################################################################
@@ -77,6 +80,15 @@ source /etc/lsb-release
 if [ "$DISTRIB_ID" != "Ubuntu" -o "$DISTRIB_RELEASE" != "12.04" ]; then
     echo "ERROR: Only Ubuntu 12.04 is supported."
     exit 1
+fi
+
+if [[ "2000000" -gt $(awk '/MemTotal/{print $2}' /proc/meminfo) ]]; then
+    LOW_MEM_PROMPT="reddit requires at least 2GB of memory to work properly, continue anyway? [y/n] "
+    read -er -n1 -p "$LOW_MEM_PROMPT" response
+    if [[ "$response" != "y" ]]; then
+      echo "Quitting."
+      exit 1
+    fi
 fi
 
 ###############################################################################
@@ -123,7 +135,6 @@ python-babel
 cython
 python-sqlalchemy
 python-beautifulsoup
-python-cssutils
 python-chardet
 python-psycopg2
 python-pycassa
@@ -138,9 +149,16 @@ python-lxml
 python-zope.interface
 python-kazoo
 python-stripe
+python-tinycss2
+
+python-flask
+geoip-bin
+geoip-database
+python-geoip
 
 nodejs
 node-less
+node-uglify
 gettext
 make
 optipng
@@ -156,6 +174,7 @@ nginx
 stunnel
 gunicorn
 sutro
+libpcre3-dev
 PACKAGES
 
 # paper over stack size issues with cassandra
@@ -206,9 +225,9 @@ function clone_reddit_plugin_repo {
 
 clone_reddit_repo reddit reddit/reddit
 clone_reddit_repo i18n reddit/reddit-i18n
-clone_reddit_plugin_repo about
-clone_reddit_plugin_repo liveupdate
-clone_reddit_plugin_repo meatspace
+for plugin in $REDDIT_PLUGINS; do
+    clone_reddit_plugin_repo $plugin
+done
 
 ###############################################################################
 # Configure Cassandra
@@ -230,7 +249,7 @@ IS_DATABASE_CREATED=$(sudo -u postgres psql -t -c "$SQL")
 
 if [ $IS_DATABASE_CREATED -ne 1 ]; then
     cat <<PGSCRIPT | sudo -u postgres psql
-CREATE DATABASE reddit WITH ENCODING = 'utf8' TEMPLATE template0;
+CREATE DATABASE reddit WITH ENCODING = 'utf8' TEMPLATE template0 LC_COLLATE='en_US.utf8' LC_CTYPE='en_US.utf8';
 CREATE USER reddit WITH PASSWORD 'password';
 PGSCRIPT
 fi
@@ -263,20 +282,21 @@ function install_reddit_repo {
 
 install_reddit_repo reddit/r2
 install_reddit_repo i18n
-install_reddit_repo about
-install_reddit_repo liveupdate
-install_reddit_repo meatspace
+for plugin in $REDDIT_PLUGINS; do
+    install_reddit_repo $plugin
+done
 
 # generate binary translation files from source
 cd $REDDIT_HOME/src/i18n/
-sudo -u $REDDIT_USER make
+sudo -u $REDDIT_USER make clean all
 
 # this builds static files and should be run *after* languages are installed
 # so that the proper language-specific static files can be generated and after
 # plugins are installed so all the static files are available.
 cd $REDDIT_HOME/src/reddit/r2
-sudo -u $REDDIT_USER make
+sudo -u $REDDIT_USER make clean all
 
+plugin_str=$(echo -n "$REDDIT_PLUGINS" | tr " " ,)
 if [ ! -f development.update ]; then
     cat > development.update <<DEVELOPMENT
 # after editing this file, run "make ini" to
@@ -294,39 +314,92 @@ page_cache_time = 0
 
 domain = $REDDIT_DOMAIN
 
-plugins = about, liveupdate, meatspace
+plugins = $plugin_str
 
 media_provider = filesystem
 media_fs_root = /srv/www/media
 media_fs_base_url_http = http://%(domain)s/media/
-media_fs_base_url_https = https://%(domain)s/media/
 
 [server:main]
 port = 8001
 DEVELOPMENT
     chown $REDDIT_USER development.update
+else
+    sed -i "s/^plugins = .*$/plugins = $plugin_str/" $REDDIT_HOME/src/reddit/r2/development.update
+    sed -i "s/^domain = .*$/domain = $REDDIT_DOMAIN/" $REDDIT_HOME/src/reddit/r2/development.update
 fi
 
 sudo -u $REDDIT_USER make ini
 
 if [ ! -L run.ini ]; then
-    sudo -u $REDDIT_USER ln -s development.ini run.ini
+    sudo -u $REDDIT_USER ln -nsf development.ini run.ini
 fi
 
 ###############################################################################
 # some useful helper scripts
 ###############################################################################
-cat > /usr/local/bin/reddit-run <<REDDITRUN
+function helper-script() {
+    cat > $1
+    chmod 755 $1
+}
+
+helper-script /usr/local/bin/reddit-run <<REDDITRUN
 #!/bin/bash
 exec paster --plugin=r2 run $REDDIT_HOME/src/reddit/r2/run.ini "\$@"
 REDDITRUN
 
-cat > /usr/local/bin/reddit-shell <<REDDITSHELL
+helper-script /usr/local/bin/reddit-shell <<REDDITSHELL
 #!/bin/bash
 exec paster --plugin=r2 shell $REDDIT_HOME/src/reddit/r2/run.ini
 REDDITSHELL
 
-chmod 755 /usr/local/bin/reddit-run /usr/local/bin/reddit-shell
+helper-script /usr/local/bin/reddit-start <<REDDITSTART
+#!/bin/bash
+initctl emit reddit-start
+REDDITSTART
+
+helper-script /usr/local/bin/reddit-stop <<REDDITSTOP
+#!/bin/bash
+initctl emit reddit-stop
+REDDITSTOP
+
+helper-script /usr/local/bin/reddit-restart <<REDDITRESTART
+#!/bin/bash
+initctl emit reddit-restart TARGET=${1:-all}
+REDDITRESTART
+
+helper-script /usr/local/bin/reddit-flush <<REDDITFLUSH
+#!/bin/bash
+echo flush_all | nc localhost 11211
+REDDITFLUSH
+
+###############################################################################
+# pixel and click server
+###############################################################################
+mkdir -p /var/opt/reddit/
+chown $REDDIT_USER:$REDDIT_GROUP /var/opt/reddit/
+
+mkdir -p /srv/www/pixel
+chown $REDDIT_USER:$REDDIT_GROUP /srv/www/pixel
+cp $REDDIT_HOME/src/reddit/r2/r2/public/static/pixel.png /srv/www/pixel
+
+if [ ! -f /etc/gunicorn.d/click.conf ]; then
+    cat > /etc/gunicorn.d/click.conf <<CLICK
+CONFIG = {
+    "mode": "wsgi",
+    "working_dir": "$REDDIT_HOME/src/reddit/scripts",
+    "user": "$REDDIT_USER",
+    "group": "$REDDIT_USER",
+    "args": (
+        "--bind=unix:/var/opt/reddit/click.sock",
+        "--workers=1",
+        "tracker:application",
+    ),
+}
+CLICK
+fi
+
+service gunicorn start
 
 ###############################################################################
 # nginx
@@ -347,10 +420,47 @@ server {
 }
 MEDIA
 
+cat > /etc/nginx/sites-available/reddit-pixel <<PIXEL
+upstream click_server {
+  server unix:/var/opt/reddit/click.sock fail_timeout=0;
+}
+
+server {
+  listen 8082;
+
+  log_format directlog '\$remote_addr - \$remote_user [\$time_local] '
+                      '"\$request_method \$request_uri \$server_protocol" \$status \$body_bytes_sent '
+                      '"\$http_referer" "\$http_user_agent"';
+  access_log      /var/log/nginx/traffic/traffic.log directlog;
+
+  location / {
+
+    rewrite ^/pixel/of_ /pixel.png;
+
+    add_header Last-Modified "";
+    add_header Pragma "no-cache";
+
+    expires -1;
+    root /srv/www/pixel/;
+  }
+
+  location /click {
+    proxy_pass http://click_server;
+  }
+}
+PIXEL
+
 # remove the default nginx site that may conflict with haproxy
-rm /etc/nginx/sites-enabled/default
+rm -rf /etc/nginx/sites-enabled/default
 # put our config in place
-ln -s /etc/nginx/sites-available/reddit-media /etc/nginx/sites-enabled/
+ln -nsf /etc/nginx/sites-available/reddit-media /etc/nginx/sites-enabled/
+ln -nsf /etc/nginx/sites-available/reddit-pixel /etc/nginx/sites-enabled/
+
+# make the pixel log directory
+mkdir -p /var/log/nginx/traffic
+
+# link the ini file for the Flask click tracker
+ln -nsf $REDDIT_HOME/src/reddit/r2/development.ini $REDDIT_HOME/src/reddit/scripts/production.ini
 
 service nginx restart
 
@@ -396,6 +506,11 @@ frontend frontend
     acl is-media path_beg /media/
     use_backend media if is-media
 
+    # send pixel stuff to local nginx
+    acl is-pixel path_beg /pixel/
+    acl is-click path_beg /click
+    use_backend pixel if is-pixel || is-click
+
     default_backend reddit
 
 backend reddit
@@ -405,7 +520,7 @@ backend reddit
     timeout queue 60000
     balance roundrobin
 
-    server app01-8001 localhost:8001 maxconn 1
+    server app01-8001 localhost:8001 maxconn 30
 
 backend sutro
     mode http
@@ -423,6 +538,15 @@ backend media
     balance roundrobin
 
     server nginx localhost:9000 maxconn 20
+
+backend pixel
+    mode http
+    timeout connect 4000
+    timeout server 30000
+    timeout queue 60000
+    balance roundrobin
+
+    server nginx localhost:8082 maxconn 20
 HAPROXY
 
 # this will start it even if currently stopped
@@ -545,7 +669,29 @@ exec gunicorn_paster /etc/sutro.ini
 UPSTART_SUTRO
 fi
 
-start sutro
+service sutro restart
+
+###############################################################################
+# geoip service
+###############################################################################
+if [ ! -f /etc/gunicorn.d/geoip.conf ]; then
+    cat > /etc/gunicorn.d/geoip.conf <<GEOIP
+CONFIG = {
+    "mode": "wsgi",
+    "working_dir": "$REDDIT_HOME/src/reddit/scripts",
+    "user": "$REDDIT_USER",
+    "group": "$REDDIT_USER",
+    "args": (
+        "--bind=127.0.0.1:5000",
+        "--workers=1",
+         "--limit-request-line=8190",
+         "geoip_service:application",
+    ),
+}
+GEOIP
+fi
+
+service gunicorn start
 
 ###############################################################################
 # Job Environment
@@ -578,6 +724,7 @@ function set_consumer_count {
 set_consumer_count log_q 0
 set_consumer_count cloudsearch_q 0
 set_consumer_count scraper_q 1
+set_consumer_count markread_q 1
 set_consumer_count commentstree_q 1
 set_consumer_count newcomments_q 1
 set_consumer_count vote_link_q 1
@@ -585,6 +732,7 @@ set_consumer_count vote_comment_q 1
 
 chown -R $REDDIT_USER:$REDDIT_GROUP $CONSUMER_CONFIG_ROOT/
 
+initctl emit reddit-stop
 initctl emit reddit-start
 
 ###############################################################################
@@ -632,16 +780,25 @@ Cron jobs start with "reddit-job-" and queue processors start with
 "reddit-consumer-". The crons are managed by /etc/cron.d/reddit. You can
 initiate a restart of all the consumers by running:
 
-    sudo initctl emit reddit-restart
+    sudo reddit-restart
 
 or target specific ones:
 
-    sudo initctl emit reddit-restart TARGET=scraper_q
+    sudo reddit-restart scraper_q
 
 See the GitHub wiki for more information on these jobs:
 
 * https://github.com/reddit/reddit/wiki/Cron-jobs
 * https://github.com/reddit/reddit/wiki/Services
+
+The reddit code can be shut down or started up with
+
+    sudo reddit-stop
+    sudo reddit-start
+
+And if you think caching might be hurting you, you can flush memcache with
+
+    reddit-flush
 
 Now that the core of reddit is installed, you may want to do some additional
 steps:

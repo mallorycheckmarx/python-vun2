@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -32,7 +32,8 @@
     data-startdate="${thing.campaign.start_date.strftime('%m/%d/%Y')}"
     data-enddate="${thing.campaign.end_date.strftime('%m/%d/%Y')}"
     data-bid="${'%.2f' % thing.campaign.bid}"
-    data-targeting="${thing.campaign.sr_name}"
+    data-targeting-collection="${thing.campaign.target.is_collection}"
+    data-targeting="${thing.targeting_data}"
     data-country="${thing.country}"
     data-region="${thing.region}"
     data-metro="${thing.metro}"
@@ -61,27 +62,27 @@
   </td>
 
   <td class="campaign-bid ${'paid' if thing.paid else ''}">
-    <div class="bid-amount">
+    <span class="bid-amount">
       %if thing.campaign.priority.cpm:
-      ${format_currency(thing.campaign.bid, 'USD', locale=c.locale)}
+        ${format_currency(thing.campaign.bid, 'USD', locale=c.locale)}
       %else:
-      ${_("N/A")}
+        ${_("N/A")}
       %endif
-    </div>
+    </span>
 
     %if thing.campaign.priority.cpm:
       %if not thing.paid:
         %if c.user_is_sponsor:
-          <button class="free fancybutton" onclick="free_campaign(${jquery_row})">
+          <button class="free" onclick="free_campaign(${jquery_row})">
             ${_("free")}
           </button>
         %else:
-          <button class="pay fancybutton" onclick="$.redirect('${thing.pay_url}')">
+          <button class="pay" onclick="$.redirect('${thing.pay_url}')">
             ${_("pay")}
           </button>
         %endif
       %elif not thing.free and not (thing.is_complete or thing.is_live):
-        <button class="pay fancybutton" onclick="$.redirect('${thing.pay_url}')">
+        <button class="pay" onclick="$.redirect('${thing.pay_url}')">
           ${_("change")}
         </button>
       %endif
@@ -92,7 +93,7 @@
     %endif
 
     %if not thing.free and c.user_is_sponsor and thing.needs_refund:
-      <button class="refund fancybutton" onclick="$.redirect('${thing.refund_url}')">
+      <button class="refund" onclick="$.redirect('${thing.refund_url}')">
         ${_("refund")}
       </button>
     %endif
@@ -106,13 +107,12 @@
     %endif
   </td>
 
-  <td class="campaign-target">
-    ${'/r/%s' % thing.campaign.sr_name if thing.campaign.sr_name else _('frontpage')}
+  <td class="campaign-target" title="${thing.campaign.target.pretty_name}">
+    ${thing.campaign.target.pretty_name}
   </td>
 
-  <td class="campaign-geotarget"
-      style="${'display:none' if not c.user_is_sponsor else ''}">
-    ${thing.geotarget}
+  <td class="campaign-location" title="${thing.location_str}">
+    ${thing.location_str}
   </td>
 
   <td class="campaign-buttons">
@@ -120,25 +120,25 @@
       <span class='info'>${_("complete")}</span>
     %else:
       %if not thing.is_live or c.user_is_sponsor:
-        <button class="edit fancybutton" onclick="edit_campaign(${jquery_row})">
+        <button class="edit" onclick="edit_campaign(${jquery_row})">
           ${_("edit")}
         </button>
       %endif
 
       %if not thing.is_live:
-        <button class="delete fancybutton" onclick="del_campaign(${jquery_row})">
+        <button class="delete" onclick="del_campaign(${jquery_row})">
           ${_("delete")}
         </button>
       %endif
 
       %if thing.is_live:
-        <button class="view fancybutton" onclick="$.redirect('${thing.view_live_url}')">
+        <button class="view" onclick="$.redirect('${thing.view_live_url}')">
           ${_("view live")}
         </button>
       %endif
 
       %if thing.is_live and c.user_is_sponsor:
-        <button class="terminate fancybutton" onclick="terminate_campaign(${jquery_row})">
+        <button class="terminate" onclick="terminate_campaign(${jquery_row})">
           ${_("terminate")}
         </button>
       %endif

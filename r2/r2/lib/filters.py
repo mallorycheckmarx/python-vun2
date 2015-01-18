@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -90,7 +90,12 @@ except ImportError:
 
         return res
 
-class _Unsafe(unicode): pass
+
+class _Unsafe(unicode):
+    # Necessary so Wrapped instances with these can get cached
+    def cache_key(self, style):
+        return unicode(self)
+
 
 def _force_unicode(text):
     if text == None:
@@ -116,7 +121,8 @@ def unsafe(text=''):
 def websafe_json(text=""):
     return c_websafe_json(_force_unicode(text))
 
-def mako_websafe(text = ''):
+
+def conditional_websafe(text = ''):
     if text.__class__ == _Unsafe:
         return text
     elif isinstance(text, Templated):
@@ -129,11 +135,43 @@ def mako_websafe(text = ''):
         text = _force_unicode(text)
     return c_websafe(text)
 
+
+def mako_websafe(text=''):
+    """Wrapper for conditional_websafe so cached templates don't explode"""
+    return conditional_websafe(text)
+
+
 def websafe(text=''):
     if text.__class__ != unicode:
         text = _force_unicode(text)
     #wrap the response in _Unsafe so make_websafe doesn't unescape it
     return _Unsafe(c_websafe(text))
+
+
+# From https://github.com/django/django/blob/master/django/utils/html.py
+_js_escapes = {
+    ord('\\'): u'\\u005C',
+    ord('\''): u'\\u0027',
+    ord('"'): u'\\u0022',
+    ord('>'): u'\\u003E',
+    ord('<'): u'\\u003C',
+    ord('&'): u'\\u0026',
+    ord('='): u'\\u003D',
+    ord('-'): u'\\u002D',
+    ord(';'): u'\\u003B',
+    ord(u'\u2028'): u'\\u2028',
+    ord(u'\u2029'): u'\\u2029',
+}
+# Escape every ASCII character with a value less than 32.
+_js_escapes.update((ord('%c' % z), u'\\u%04X' % z) for z in range(32))
+
+
+def jssafe(text=u''):
+    """Prevents text from breaking outside of string literals in JS"""
+    if text.__class__ != unicode:
+        text = _force_unicode(text)
+    #wrap the response in _Unsafe so make_websafe doesn't unescape it
+    return _Unsafe(text.translate(_js_escapes))
 
 
 valid_link_schemes = (
@@ -239,11 +277,13 @@ def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
         return SC_OFF + text + SC_ON
 
 def wikimarkdown(text, include_toc=True, target=None):
-    from r2.lib.template_helpers import media_https_if_secure
+    from r2.lib.template_helpers import make_url_protocol_relative
 
     # this hard codes the stylesheet page for now, but should be parameterized
     # in the future to allow per-page images.
     from r2.models.wiki import ImagesByWikiPage
+    from r2.lib.utils import UrlParser
+    from r2.lib.template_helpers import add_sr
     page_images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
     
     def img_swap(tag):
@@ -252,7 +292,7 @@ def wikimarkdown(text, include_toc=True, target=None):
         name = name and name.group(1)
         if name and name in page_images:
             url = page_images[name]
-            url = media_https_if_secure(url)
+            url = make_url_protocol_relative(url)
             tag['src'] = url
         else:
             tag.extract()
@@ -268,7 +308,16 @@ def wikimarkdown(text, include_toc=True, target=None):
     
     if images:
         [img_swap(image) for image in images]
-    
+
+    def add_ext_to_link(link):
+        url = UrlParser(link.get('href'))
+        if url.is_reddit_url():
+            link['href'] = add_sr(link.get('href'), sr_path=False)
+
+    if c.render_style == 'compact':
+        links = soup.findAll('a')
+        [add_ext_to_link(a) for a in links]
+
     if include_toc:
         tocdiv = generate_table_of_contents(soup, prefix="wiki")
         if tocdiv:
@@ -324,7 +373,9 @@ def generate_table_of_contents(soup, prefix):
         if previous and thislevel > previous:
             newul = Tag(soup, "ul")
             newul.level = thislevel
-            parent.append(newul)
+            newli = Tag(soup, "li", [("class", "toc_child")])
+            newli.append(newul)
+            parent.append(newli)
             parent = newul
             level += 1
         elif level and thislevel < previous:

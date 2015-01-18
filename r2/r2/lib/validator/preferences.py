@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 from pylons import g
@@ -51,6 +51,7 @@ PREFS_VALIDATORS = dict(
     pref_min_comment_score=VInt('min_comment_score', -100, 100),
     pref_num_comments=VInt('num_comments', 1, g.max_comments,
                            default=g.num_comments),
+    pref_highlight_controversial=VBoolean('highlight_controversial'),
     pref_show_stylesheets=VBoolean('show_stylesheets'),
     pref_show_flair=VBoolean('show_flair'),
     pref_show_link_flair=VBoolean('show_link_flair'),
@@ -61,27 +62,17 @@ PREFS_VALIDATORS = dict(
     pref_threaded_messages=VBoolean("threaded_messages"),
     pref_collapse_read_messages=VBoolean("collapse_read_messages"),
     pref_private_feeds=VBoolean("private_feeds"),
-    pref_local_js=VBoolean('local_js'),
     pref_store_visits=VBoolean('store_visits'),
     pref_show_adbox=VBoolean("show_adbox"),
     pref_show_sponsors=VBoolean("show_sponsors"),
     pref_show_sponsorships=VBoolean("show_sponsorships"),
+    pref_show_trending=VBoolean("show_trending"),
     pref_highlight_new_comments=VBoolean("highlight_new_comments"),
     pref_monitor_mentions=VBoolean("monitor_mentions"),
+    pref_hide_locationbar=VBoolean("hide_locationbar"),
+    pref_use_global_defaults=VBoolean("use_global_defaults"),
+    pref_creddit_autorenew=VBoolean("creddit_autorenew"),
 )
-
-
-def format_content_lang_pref(content_langs):
-    pref_content_langs = []
-    for lang in content_langs:
-        if lang in g.all_languages:
-            pref_content_langs.append(lang)
-    pref_content_langs = tuple(sorted(pref_content_langs))
-
-    if not pref_content_langs or "all" in pref_content_langs:
-        return "all"
-    else:
-        return pref_content_langs
 
 
 def set_prefs(user, prefs):
@@ -114,5 +105,6 @@ def filter_prefs(prefs, user):
                      'pref_show_sponsors',
                      'pref_show_sponsorships',
                      'pref_highlight_new_comments',
-                     'pref_monitor_mentions'):
+                     'pref_creddit_autorenew',
+                    ):
             prefs[pref] = True

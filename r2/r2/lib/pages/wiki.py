@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -106,7 +106,7 @@ class WikiBasePage(Reddit):
                 pageactions += [('edit', _("edit"), True)]
             pageactions += [('revisions/%s' % page, _("history"), False)]
             pageactions += [('discussions', _("talk"), True)]
-            if c.is_wiki_mod:
+            if c.is_wiki_mod and may_revise:
                 pageactions += [('settings', _("settings"), True)]
 
         action = context.get('wikiaction', (page, 'wiki'))
@@ -137,7 +137,7 @@ class WikiBasePage(Reddit):
 
         Reddit.__init__(self, extra_js_config={'wiki_page': page}, 
                         show_wiki_actions=True, page_classes=page_classes,
-                        content=content, **context)
+                        content=content, short_title=page, **context)
 
     def content(self):
         return self._content

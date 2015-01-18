@@ -17,15 +17,15 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 import inspect
 import sys
 import os.path
-from subprocess import Popen, PIPE
 import re
+import subprocess
 import json
 
 from r2.lib.translation import (
@@ -56,29 +56,18 @@ script_tag = '<script type="text/javascript" src="{src}"></script>\n'
 inline_script_tag = '<script type="text/javascript">{content}</script>'
 
 
-class ClosureError(Exception): pass
+class Uglify(object):
+    def compile(self, data, dest):
+        process = subprocess.Popen(
+            ["/usr/bin/uglifyjs", "-nc"],
+            stdin=subprocess.PIPE,
+            stdout=dest,
+        )
 
+        process.communicate(input=data)
 
-class ClosureCompiler(object):
-    def __init__(self, jarpath, args=None):
-        self.jarpath = jarpath
-        self.args = args or []
-
-    def _run(self, data, out=PIPE, args=None, expected_code=0):
-        args = args or []
-        p = Popen(["java", "-jar", self.jarpath] + self.args + args,
-                stdin=PIPE, stdout=out, stderr=PIPE)
-        out, msg = p.communicate(data)
-        if p.returncode != expected_code:
-            raise ClosureError(msg)
-        else:
-            return out, msg
-
-    def compile(self, data, dest, args=None):
-        """Run closure compiler on a string of source code `data`, writing the
-        result to output file `dest`. A ClosureError exception will be raised if
-        the operation is unsuccessful."""
-        return self._run(data, dest, args)[0]
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, "uglifyjs")
 
 
 class Source(object):
@@ -166,7 +155,7 @@ class Module(Source):
         """The destination path of the module file on the filesystem."""
         return os.path.join(STATIC_ROOT, "static", self.name)
 
-    def build(self, closure):
+    def build(self, minifier):
         with open(self.path, "w") as out:
             source = self.get_source()
             if self.wrap:
@@ -174,7 +163,7 @@ class Module(Source):
 
             if self.should_compile:
                 print >> sys.stderr, "Compiling {0}...".format(self.name),
-                closure.compile(source, out)
+                minifier.compile(source, out)
             else:
                 print >> sys.stderr, "Concatenating {0}...".format(self.name),
                 out.write(source)
@@ -214,8 +203,9 @@ class DataSource(Source):
         return self.wrap.format(content=json_data) + "\n"
 
     def use(self):
-        from r2.lib.filters import SC_OFF, SC_ON
-        return (SC_OFF + inline_script_tag.format(content=self.get_source()) +
+        from r2.lib.filters import SC_OFF, SC_ON, websafe_json
+        escaped_json = websafe_json(self.get_source())
+        return (SC_OFF + inline_script_tag.format(content=escaped_json) +
                 SC_ON + "\n")
 
     @property
@@ -281,17 +271,16 @@ class TemplateFileSource(DataSource, FileSource):
             }]
 
 
-class StringsSource(DataSource):
+class LocaleSpecificSource(object):
+    def get_localized_source(self, lang):
+        raise NotImplementedError
+
+
+class StringsSource(LocaleSpecificSource):
     """Translations sourced from a gettext catalog."""
 
-    def __init__(self, lang, keys):
-        DataSource.__init__(self, wrap="r.i18n.addMessages({content})")
-        self.catalog = get_catalog(lang)
+    def __init__(self, keys):
         self.keys = keys
-
-    def get_plural_forms(self):
-        validate_plural_forms(self.catalog.plural_expr)
-        return "r.i18n.setPluralForms('%s');" % self.catalog.plural_expr
 
     invalid_formatting_specifier_re = re.compile(r"(?<!%)%\w|(?<!%)%\(\w+\)[^s]")
     def _check_formatting_specifiers(self, string):
@@ -301,7 +290,9 @@ class StringsSource(DataSource):
         if self.invalid_formatting_specifier_re.search(string):
             raise ValueError("Invalid string formatting specifier: %r" % string)
 
-    def get_content(self):
+    def get_localized_source(self, lang):
+        catalog = get_catalog(lang)
+
         # relies on pyx files, so it can't be imported at global scope
         from r2.lib.utils import tup
 
@@ -309,7 +300,7 @@ class StringsSource(DataSource):
         for key in self.keys:
             key = tup(key)[0]  # because the key for plurals is (sing, plur)
             self._check_formatting_specifiers(key)
-            msg = self.catalog[key]
+            msg = catalog[key]
 
             if not msg or not msg.string:
                 continue
@@ -318,7 +309,14 @@ class StringsSource(DataSource):
             # so we'll just make it null
             strings = tup(msg.string)
             data[key] = [None] + list(strings)
-        return data
+        return "r.i18n.addMessages(%s)" % json.dumps(data)
+
+
+class PluralForms(LocaleSpecificSource):
+    def get_localized_source(self, lang):
+        catalog = get_catalog(lang)
+        validate_plural_forms(catalog.plural_expr)
+        return "r.i18n.setPluralForms('%s')" % catalog.plural_expr
 
 
 class LocalizedModule(Module):
@@ -328,14 +326,10 @@ class LocalizedModule(Module):
     r._, r.P_, and r.N_) are extracted from the source and their translations
     are built into the compiled source.
 
-    If `inject_plural_forms` is `True`, then the language's plural forms
-    expression will be baked into the module as well. This is only necessary
-    once per page.
-
     """
 
     def __init__(self, *args, **kwargs):
-        self.inject_plural_forms = kwargs.pop("inject_plural_forms", False)
+        self.localized_appendices = kwargs.pop("localized_appendices", [])
         Module.__init__(self, *args, **kwargs)
 
     @staticmethod
@@ -343,17 +337,19 @@ class LocalizedModule(Module):
         path_name, path_ext = os.path.splitext(path)
         return path_name + "." + lang + path_ext
 
-    def build(self, closure):
-        Module.build(self, closure)
+    def build(self, minifier):
+        Module.build(self, minifier)
 
         with open(self.path) as f:
             reddit_source = f.read()
 
+        localized_appendices = self.localized_appendices
         msgids = extract_javascript_msgids(reddit_source)
+        if msgids:
+            localized_appendices = localized_appendices + [StringsSource(msgids)]
 
         print >> sys.stderr, "Creating language-specific files:"
         for lang, unused in iter_langs():
-            strings = StringsSource(lang, msgids)
             lang_path = LocalizedModule.languagize_path(self.path, lang)
 
             # make sure we're not rewriting a different mangled file
@@ -364,13 +360,13 @@ class LocalizedModule(Module):
             with open(lang_path, "w") as out:
                 print >> sys.stderr, "  " + lang_path
                 out.write(reddit_source)
-                if self.inject_plural_forms:
-                    out.write(strings.get_plural_forms())
-                out.write(strings.get_source())
+                for appendix in localized_appendices:
+                    out.write(appendix.get_localized_source(lang) + ";")
 
     def use(self):
         from pylons.i18n import get_lang
         from r2.lib.template_helpers import static
+        from r2.lib.filters import SC_OFF, SC_ON
 
         if g.uncompressedJS:
             if c.lang == "en" or c.lang not in g.all_languages:
@@ -379,12 +375,14 @@ class LocalizedModule(Module):
                 return Module.use(self)
 
             msgids = extract_javascript_msgids(Module.get_source(self))
-            strings = StringsSource(c.lang, msgids)
-            return "\n".join((
-                Module.use(self),
-                inline_script_tag.format(content=strings.get_plural_forms()),
-                strings.use(),
-            ))
+            localized_appendices = self.localized_appendices + [StringsSource(msgids)]
+
+            lines = [Module.use(self)]
+            for appendix in localized_appendices:
+                line = SC_OFF + inline_script_tag.format(
+                    content=appendix.get_localized_source(c.lang)) + SC_ON
+                lines.append(line)
+            return "\n".join(lines)
         else:
             langs = get_lang() or [g.lang]
             url = LocalizedModule.languagize_path(self.name, langs[0])
@@ -395,61 +393,61 @@ class LocalizedModule(Module):
         for lang, unused in iter_langs():
             yield LocalizedModule.languagize_path(self.path, lang)
 
-
-class JQuery(Module):
-    version = "1.7.2"
-
-    def __init__(self, cdn_url="http://ajax.googleapis.com/ajax/libs/jquery/{version}/jquery"):
-        self.jquery_src = FileSource("lib/jquery-{0}.min.js".format(self.version))
-        Module.__init__(self, "jquery.js", self.jquery_src, should_compile=False)
-        self.cdn_src = cdn_url.format(version=self.version)
-
-    def use(self):
-        from r2.lib.template_helpers import static
-        if c.secure or (c.user and c.user.pref_local_js):
-            return Module.use(self)
-        else:
-            ext = ".js" if g.uncompressedJS else ".min.js"
-            return script_tag.format(src=self.cdn_src+ext)
-
-
 module = {}
-
-
-module["jquery"] = JQuery()
-
-
-module["html5shiv"] = Module("html5shiv.js",
-    "lib/html5shiv.js",
-    should_compile=False
-)
 
 catch_errors = "try {{ {content} }} catch (err) {{ r.sendError('Error running module', '{name}', ':', err) }}"
 
-module["reddit-init"] = LocalizedModule("reddit-init.js",
+
+module["reddit-init-base"] = LocalizedModule("reddit-init-base.js",
+    "lib/es5-shim.js",
+    "lib/modernizr.js",
     "lib/json2.js",
     "lib/underscore-1.4.4.js",
     "lib/store.js",
     "lib/jed.js",
+    "lib/bootstrap.transition.js",
+    "lib/bootstrap.tooltip.js",
+    "bootstrap.tooltip.extension.js",
     "base.js",
     "preload.js",
     "logging.js",
+    "client-error-logger.js",
+    "jquery.html-patch.js",
     "uibase.js",
     "i18n.js",
     "utils.js",
     "analytics.js",
     "jquery.reddit.js",
+    "stateify.js",
+    "validator.js",
+    "strength-meter.js",
     "reddit.js",
     "spotlight.js",
-    inject_plural_forms=True,
+    localized_appendices=[
+        PluralForms(),
+    ],
     wrap=catch_errors,
+)
+
+module["reddit-init-legacy"] = LocalizedModule("reddit-init-legacy.js",
+    "lib/html5shiv.js",
+    "lib/jquery-1.11.1.js",
+    module["reddit-init-base"],
+)
+
+module["reddit-init"] = LocalizedModule("reddit-init.js",
+    "lib/jquery-2.1.1.js",
+    module["reddit-init-base"],
 )
 
 module["reddit"] = LocalizedModule("reddit.js",
     "lib/jquery.cookie.js",
     "lib/jquery.url.js",
     "lib/backbone-1.0.0.js",
+    "timings.js",
     "templates.js",
+    "scrollupdater.js",
+    "timetext.js",
     "ui.js",
     "login.js",
     "flair.js",
@@ -459,8 +457,11 @@ module["reddit"] = LocalizedModule("reddit.js",
     "apps.js",
     "gold.js",
     "multi.js",
+    "filter.js",
     "recommender.js",
+    "action-forms.js",
     "saved.js",
+    "messages.js",
     PermissionsDataSource({
         "moderator": ModeratorPermissionSet,
         "moderator_invite": ModeratorPermissionSet,
@@ -469,8 +470,9 @@ module["reddit"] = LocalizedModule("reddit.js",
 )
 
 module["admin"] = Module("admin.js",
-    # include Backbone so it is available early to render admin bar fast.
+    # include Backbone and timings so they are available early to render admin bar fast.
     "lib/backbone-1.0.0.js",
+    "timings.js",
     "adminbar.js",
 )
 
@@ -493,9 +495,10 @@ module["policies"] = Module("policies.js",
 )
 
 
-module["sponsored"] = Module("sponsored.js",
+module["sponsored"] = LocalizedModule("sponsored.js",
     "lib/ui.core.js",
     "lib/ui.datepicker.js",
+    "lib/react-with-addons-0.11.2.js",
     "sponsored.js"
 )
 
@@ -580,8 +583,8 @@ def enumerate_outputs(*names):
 
 @build_command
 def build_module(name):
-    closure = ClosureCompiler("r2/lib/contrib/closure_compiler/compiler.jar")
-    module[name].build(closure)
+    minifier = Uglify()
+    module[name].build(minifier)
 
 
 if __name__ == "__main__":

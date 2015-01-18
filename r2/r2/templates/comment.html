@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -33,16 +33,8 @@
 ### specific fill-in functions for comment
 ##################
 
-<%def name="thing_data_attributes(what)" buffered="True">
-  %if what.score_hidden:
-    ${parent.thing_data_attributes(what)} data-ups="0" data-downs="0"
-  %else:
-    ${parent.thing_data_attributes(what)} data-ups="${what.upvotes}" data-downs="${what.downvotes}"
-  %endif
-</%def>
-
 <%def name="midcol(display=True, cls = '')">
-${parent.midcol(not thing.collapsed, cls = cls)}
+${parent.midcol(cls = cls)}
 </%def>
 
 <%def name="ParentDiv()">
@@ -67,7 +59,7 @@ ${parent.midcol(not thing.collapsed, cls = cls)}
     &#32;
     ${_("by")}
     &#32;
-    ${thing.link_author.render()}
+    ${thing.link_author}
     ${_("in")}
     &#32;
     ${plain_link('/r/'+thing.subreddit.name, thing.subreddit_path, sr_path = False,
@@ -75,64 +67,49 @@ ${parent.midcol(not thing.collapsed, cls = cls)}
   %endif
 </%def>
 
-<%def name="collapsed()">
-${parent.collapsed()}
-</%def>
-
-<%def name="tagline(collapse=False,showexpandcollapse=True)">
+<%def name="tagline()">
   <%
      if c.user_is_admin:
        show = True
      else:
        show = not thing.deleted
   %>
-  %if showexpandcollapse:
-    <a href="#" class="expand"
-       %if collapse:
-         onclick="return showcomment(this)">
-       %else:
-         onclick="return hidecomment(this)">
-       %endif
-       [${"+" if collapse else unsafe("&ndash;")}]
-    </a>
-  %endif
+
+  <a href="javascript:void(0)" class="expand" onclick="return togglecomment(this)">
+    ${"[%s]" % ("+" if thing.collapsed else "–")}
+  </a>
 
   %if show:
      %if thing.deleted:
        <em>${_("deleted comment from")}</em>&#32;
      %endif
-     ${WrappedUser(thing.author, thing.attribs, thing,
-                   gray = collapse).render()}
+     ${WrappedUser(thing.author, thing.attribs, thing)}
      &#32;
   %else:
      <em>${_("[deleted]")}</em>&#32;
   %endif
 
-  %if collapse and thing.collapsed and show:
-    ${thing.collapsed_reason}
-  %else:
-    %if show:
-      %if thing.score_hidden:
-        <span title="${_('this subreddit hides comment scores for %d minutes') % thing.subreddit.comment_score_hide_mins}">
-          [${_("score hidden")}]
-        </span>&#32;
-      %else:
-        ${unsafe(self.score(thing, likes = thing.likes))}&#32;
-      %endif
-    %endif
-    ${thing_timestamp(thing, thing.timesince)}&#32;${_("ago")}
-    ${edited(thing, thing.lastedited)}
+  %if thing.collapsed and show:
+    <span class="collapsed-reason">${thing.collapsed_reason}</span>
   %endif
 
+  %if show and thing.score_hidden:
+    <span title="${_('this subreddit hides comment scores for %d minutes') % thing.subreddit.comment_score_hide_mins}">
+      [${_("score hidden")}]
+    </span>&#32;
+  %elif show and not thing.score_hidden:
+    ${unsafe(self.score(thing, likes = thing.likes))}&#32;
+  %endif
+
+  ${thing_timestamp(thing, thing.timesince, live=True, include_tense=True)}
+  ${edited(thing, thing.lastedited)}
   ${self.gildings()}
 
-  %if collapse:
-    &nbsp;<a href="#" class="expand"
-       onclick="return showcomment(this)">
-       (${thing.num_children} 
-        ${ungettext("child", "children", thing.num_children)})
-    </a>
-  %endif
+  &nbsp;
+  <a href="javascript:void(0)" class="numchildren" onclick="return togglecomment(this)">
+    (${thing.numchildren_text})
+  </a>
+
   ${self.approval_checkmark()}
   %if getattr(thing, 'savedcategory', None) is not None:
     ${plain_link(_('category: %s') % thing.savedcategory,
@@ -143,16 +120,18 @@ ${parent.collapsed()}
 </%def>
 
 <%def name="Child()">
-%if thing.link.contest_mode and hasattr(thing, "child") and not thing.parent_id:
+%if not c.profilepage and thing.link.contest_mode and hasattr(thing, "child") and not thing.parent_id:
   <a href="#" class="showreplies"
      onclick="$(this).hide();$(this).parent().find('.noncollapsed').show();return false;">
     [${_("show replies")}]
   </a>
   <div class="child noncollapsed" style="display:none">
 %else:
-  <div class="child" ${thing.collapsed and "style='display:none'" or ""}>
+  <div class="child">
 %endif
+  %if thing.childlisting:
     ${thing.childlisting}
+  %endif
   </div>
 </%def>
 

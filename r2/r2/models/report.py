@@ -16,18 +16,19 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
+
+from collections import Counter
 
 from r2.lib.db.thing import Thing, Relation, MultiRelation, thing_prefix
 from r2.lib.utils import tup
 from r2.lib.memoize import memoize
 from r2.models import Link, Comment, Message, Subreddit, Account
-from r2.models.vote import score_changes
 from datetime import datetime
 
-from pylons import g
+from pylons import g, c
 
 class Report(MultiRelation('report',
                            Relation(Account, Link),
@@ -39,7 +40,7 @@ class Report(MultiRelation('report',
     _field = 'reported'
 
     @classmethod
-    def new(cls, user, thing):
+    def new(cls, user, thing, reason=None):
         from r2.lib.db import queries
 
         # check if this report exists already!
@@ -53,7 +54,11 @@ class Report(MultiRelation('report',
             g.log.debug("Ignoring duplicate report %s" % oldreport)
             return oldreport
 
-        r = Report(user, thing, '0')
+        kw = {}
+        if reason:
+            kw['reason'] = reason
+
+        r = Report(user, thing, '0', **kw)
         if not thing._loaded:
             thing._load()
 
@@ -71,24 +76,20 @@ class Report(MultiRelation('report',
             author = Account._byID(thing.author_id, data=True)
             author._incr('reported')
 
-        item_age = datetime.now(g.tz) - thing._date
-        ignore_reports = getattr(thing, 'ignore_reports', False)
-        if item_age.days < g.REPORT_AGE_LIMIT and not ignore_reports:
+        if not getattr(thing, "ignore_reports", False):
             # update the reports queue if it exists
             queries.new_report(thing, r)
 
             # if the thing is already marked as spam, accept the report
             if thing._spam:
                 cls.accept(thing)
-        else:
-            g.log.debug("Ignoring report %s" % r)
 
         return r
 
     @classmethod
     def for_thing(cls, thing):
         rel = cls.rel(Account, thing.__class__)
-        rels = rel._query(rel.c._thing2_id == thing._id)
+        rels = rel._query(rel.c._thing2_id == thing._id, data=True)
 
         return list(rels)
 
@@ -102,9 +103,8 @@ class Report(MultiRelation('report',
         for thing in things:
             things_by_cls.setdefault(thing.__class__, []).append(thing)
 
-        to_clear = []
-
         for thing_cls, cls_things in things_by_cls.iteritems():
+            to_clear = []
             # look up all of the reports for each thing
             rel_cls = cls.rel(Account, thing_cls)
             thing_ids = [t._id for t in cls_things]
@@ -120,5 +120,55 @@ class Report(MultiRelation('report',
                     thing._commit()
                     to_clear.append(thing)
 
-        queries.clear_reports(to_clear, rels)
+            queries.clear_reports(to_clear, rels)
 
+    @classmethod
+    def get_reports(cls, wrapped, max_user_reasons=20):
+        """Get two lists of mod and user reports on the item."""
+        if (wrapped.reported > 0 and
+                (wrapped.can_ban or
+                 getattr(wrapped, "promoted", None) and c.user_is_sponsor)):
+            from r2.models import SRMember
+
+            reports = cls.for_thing(wrapped.lookups[0])
+
+            query = SRMember._query(SRMember.c._thing1_id == wrapped.sr_id,
+                                    SRMember.c._name == "moderator")
+            mod_dates = {rel._thing2_id: rel._date for rel in query}
+
+            mod_reports = []
+            user_reports = []
+
+            for report in reports:
+                # include in mod reports if made after the user became a mod
+                if (report._thing1_id in mod_dates and
+                        report._date >= mod_dates[report._thing1_id]):
+                    mod_reports.append(report)
+                else:
+                    user_reports.append(report)
+
+            # mod reports return as tuples with (reason, name)
+            mods = Account._byID([report._thing1_id
+                                  for report in mod_reports],
+                                 data=True, return_dict=True)
+            mod_reports = [(getattr(report, "reason", None),
+                            mods[report._thing1_id].name)
+                            for report in mod_reports]
+
+            # user reports return as tuples with (reason, count)
+            user_reports = Counter([getattr(report, "reason", None)
+                                    for report in user_reports])
+            user_reports = user_reports.most_common(max_user_reasons)
+
+            return mod_reports, user_reports
+        else:
+            return [], []
+
+    @classmethod
+    def get_reasons(cls, wrapped):
+        """Transition method in case API clients were already using this."""
+        if wrapped.can_ban and wrapped.reported > 0:
+            return [("This attribute is deprecated. Please use mod_reports "
+                     "and user_reports instead.")]
+        else:
+            return []

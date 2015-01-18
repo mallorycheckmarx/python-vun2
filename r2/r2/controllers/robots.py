@@ -16,13 +16,14 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 from pylons import request, response, g
 
 from r2.controllers.reddit_base import MinimalController
-from r2.lib.pages import Robots
+from r2.lib.base import abort
+from r2.lib.pages import Robots, CrossDomain
 from r2.lib import utils
 
 
@@ -37,7 +38,22 @@ class RobotsController(MinimalController):
         pass
 
     def on_crawlable_domain(self):
-        return utils.domain(request.host) == g.domain
+        # This ensures we don't have the port included.
+        requested_domain = utils.domain(request.host)
+
+        # If someone CNAMEs myspammysite.com to reddit.com or something, we
+        # don't want search engines to index that.
+        if not utils.is_subdomain(requested_domain, g.domain):
+            return False
+
+        # Only allow the canonical desktop site and mobile subdomains, since
+        # we have canonicalization set up appropriately for them.
+        # Note: in development, DomainMiddleware needs to be temporarily
+        # modified to not skip assignment of reddit-domain-extension on
+        # localhost for this to work properly.
+        return (requested_domain == g.domain or
+                request.environ.get('reddit-domain-extension') in
+                    ('mobile', 'compact'))
 
     def GET_robots(self):
         response.content_type = "text/plain"
@@ -46,3 +62,10 @@ class RobotsController(MinimalController):
         else:
             return "User-Agent: *\nDisallow: /\n"
 
+    def GET_crossdomain(self):
+        # Our middleware is weird and won't let us add a route for just
+        # '/crossdomain.xml'. Just 404 for other extensions.
+        if request.environ.get('extension', None) != 'xml':
+            abort(404)
+        response.content_type = "text/x-cross-domain-policy"
+        return CrossDomain().render(style='xml')

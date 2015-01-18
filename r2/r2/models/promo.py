@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -33,7 +33,7 @@ from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import Thing, NotFound
 from r2.lib.memoize import memoize
 from r2.lib.utils import Enum, to_datetime, to_date
-from r2.models.subreddit import Subreddit
+from r2.models.subreddit import Subreddit, Frontpage
 
 
 PROMOTE_STATUS = Enum("unpaid", "unseen", "accepted", "rejected",
@@ -140,19 +140,16 @@ class Location(object):
                 else:
                     return self.metro == other.metro
 
+    def __eq__(self, other):
+        if not isinstance(other, Location):
+            return False
 
-@memoize("get_promote_srid")
-def get_promote_srid(name = 'promos'):
-    try:
-        sr = Subreddit._by_name(name, stale=True)
-    except NotFound:
-        sr = Subreddit._new(name = name,
-                            title = "promoted links",
-                            # negative author_ids make this unlisable
-                            author_id = -1,
-                            type = "public", 
-                            ip = '0.0.0.0')
-    return sr._id
+        return (self.country == other.country and
+                self.region == other.region and
+                self.metro == other.metro)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 def calc_impressions(bid, cpm_pennies):
@@ -163,12 +160,146 @@ def calc_impressions(bid, cpm_pennies):
 
 NO_TRANSACTION = 0
 
+
+class Collection(object):
+    def __init__(self, name, sr_names, description=None):
+        self.name = name
+        self.sr_names = sr_names
+        self.description = description
+
+    @classmethod
+    def by_name(cls, name):
+        return CollectionStorage.get_collection(name)
+
+    @classmethod
+    def get_all(cls):
+        return CollectionStorage.get_all()
+
+    def __repr__(self):
+        return "<%s: %s>" % (self.__class__.__name__, self.name)
+
+
+class CollectionStorage(tdb_cassandra.View):
+    _use_db = True
+    _connection_pool = 'main'
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.UTF8_TYPE,
+        "column_name_class": tdb_cassandra.UTF8_TYPE,
+        "default_validation_class": tdb_cassandra.UTF8_TYPE,
+    }
+    _compare_with = tdb_cassandra.UTF8_TYPE
+    _read_consistency_level = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.QUORUM
+    SR_NAMES_DELIM = '|'
+
+    @classmethod
+    def set(cls, name, description, srs):
+        rowkey = name
+        columns = {
+            'description': description,
+            'sr_names': cls.SR_NAMES_DELIM.join(sr.name for sr in srs),
+        }
+        cls._set_values(rowkey, columns)
+
+    @classmethod
+    def get_collection(cls, name):
+        if not name:
+            return None
+
+        rowkey = name
+        try:
+            columns = cls._cf.get(rowkey)
+        except tdb_cassandra.NotFoundException:
+            return None
+
+        description = columns['description']
+        sr_names = columns['sr_names'].split(cls.SR_NAMES_DELIM)
+        return Collection(name, sr_names, description=description)
+
+    @classmethod
+    def get_all(cls):
+        ret = []
+        for name, columns in cls._cf.get_range():
+            description = columns['description']
+            sr_names = columns['sr_names'].split(cls.SR_NAMES_DELIM)
+            ret.append(Collection(name, sr_names, description=description))
+        return ret
+
+    def delete(cls, name):
+        rowkey = name
+        cls._cf.remove(rowkey)
+
+
+class Target(object):
+    """Wrapper around either a Collection or a Subreddit name"""
+    def __init__(self, target):
+        if isinstance(target, Collection):
+            self.collection = target
+            self.is_collection = True
+        elif isinstance(target, basestring):
+            self.subreddit_name = target
+            self.is_collection = False
+        else:
+            raise ValueError("target must be a Collection or Subreddit name")
+
+        # defer looking up subreddits, we might only need their names
+        self._subreddits = None
+
+    @property
+    def subreddit_names(self):
+        if self.is_collection:
+            return self.collection.sr_names
+        else:
+            return [self.subreddit_name]
+
+    @property
+    def subreddits_slow(self):
+        if self._subreddits is not None:
+            return self._subreddits
+
+        sr_names = self.subreddit_names
+        srs = Subreddit._by_name(sr_names).values()
+        self._subreddits = srs
+        return srs
+
+    def __eq__(self, other):
+        if self.is_collection != other.is_collection:
+            return False
+
+        return set(self.subreddit_names) == set(other.subreddit_names)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    @property
+    def pretty_name(self):
+        if self.is_collection:
+            return _("collection: %(name)s") % {'name': self.collection.name}
+        elif self.subreddit_name == Frontpage.name:
+            return _("frontpage")
+        else:
+            return "/r/%s" % self.subreddit_name
+
+    def __repr__(self):
+        return "<%s: %s>" % (self.__class__.__name__, self.pretty_name)
+
 class PromoCampaign(Thing):
     _defaults = dict(
         priority_name=PROMOTE_DEFAULT_PRIORITY.name,
         trans_id=NO_TRANSACTION,
         location_code=None,
     )
+
+    # special attributes that shouldn't set Thing data attributes because they
+    # have special setters that set other data attributes
+    _derived_attrs = (
+        "location",
+        "priority",
+        "target",
+    )
+
+    SR_NAMES_DELIM = '|'
+    SUBREDDIT_TARGET = "subreddit"
 
     def __getattr__(self, attr):
         val = Thing.__getattr__(self, attr)
@@ -178,26 +309,62 @@ class PromoCampaign(Thing):
                 val = val.replace(tzinfo=g.tz)
         return val
 
+    def __setattr__(self, attr, val, make_dirty=True):
+        if attr in self._derived_attrs:
+            object.__setattr__(self, attr, val)
+        else:
+            Thing.__setattr__(self, attr, val, make_dirty=make_dirty)
+
+    def __getstate__(self):
+        """
+        Remove _target before returning object state for pickling.
+
+        Thing objects are pickled for caching. The state of the object is
+        obtained by calling the __getstate__ method. Remove the _target
+        attribute because it may contain Subreddits or other non-trivial objects
+        that shouldn't be included.
+
+        """
+
+        state = self.__dict__
+        if "_target" in state:
+            state = {k: v for k, v in state.iteritems() if k != "_target"}
+        return state
+
     @classmethod
-    def get_priority_name(cls, priority):
+    def priority_name_from_priority(cls, priority):
         if not priority in PROMOTE_PRIORITIES.values():
             raise ValueError("%s is not a valid priority" % val)
         return priority.name
 
-    @classmethod 
-    def _new(cls, link, sr_name, bid, cpm, start_date, end_date, priority,
+    @classmethod
+    def location_code_from_location(cls, location):
+        return location.to_code() if location else None
+
+    @classmethod
+    def unpack_target(cls, target):
+        """Convert a Target into attributes suitable for storage."""
+        sr_names = target.subreddit_names
+        target_sr_names = cls.SR_NAMES_DELIM.join(sr_names)
+        target_name = (target.collection.name if target.is_collection
+                                              else cls.SUBREDDIT_TARGET)
+        return target_sr_names, target_name
+
+    @classmethod
+    def create(cls, link, target, bid, cpm, start_date, end_date, priority,
              location):
-        location_code = location.to_code() if location else None
-        pc = PromoCampaign(link_id=link._id,
-                           sr_name=sr_name,
-                           bid=bid,
-                           cpm=cpm,
-                           start_date=start_date,
-                           end_date=end_date,
-                           trans_id=NO_TRANSACTION,
-                           owner_id=link.author_id,
-                           priority_name=cls.get_priority_name(priority),
-                           location_code=location_code)
+        pc = PromoCampaign(
+            link_id=link._id,
+            bid=bid,
+            cpm=cpm,
+            start_date=start_date,
+            end_date=end_date,
+            trans_id=NO_TRANSACTION,
+            owner_id=link.author_id,
+        )
+        pc.priority = priority
+        pc.location = location
+        pc.target = target
         pc._commit()
         return pc
 
@@ -208,7 +375,6 @@ class PromoCampaign(Thing):
         list if there are none.
         '''
         return cls._query(PromoCampaign.c.link_id == link_id, data=True)
-
 
     @classmethod
     def _by_user(cls, account_id):
@@ -235,12 +401,56 @@ class PromoCampaign(Thing):
     def priority(self):
         return PROMOTE_PRIORITIES[self.priority_name]
 
+    @priority.setter
+    def priority(self, priority):
+        self.priority_name = self.priority_name_from_priority(priority)
+
     @property
     def location(self):
         if self.location_code is not None:
             return Location.from_code(self.location_code)
         else:
             return None
+
+    @location.setter
+    def location(self, location):
+        self.location_code = self.location_code_from_location(location)
+
+    @property
+    def target(self):
+        if hasattr(self, "_target"):
+            return self._target
+
+        sr_names = self.target_sr_names.split(self.SR_NAMES_DELIM)
+        if self.target_name == self.SUBREDDIT_TARGET:
+            sr_name = sr_names[0]
+            target = Target(sr_name)
+        else:
+            collection = Collection(self.target_name, sr_names)
+            target = Target(collection)
+
+        self._target = target
+        return target
+
+    @target.setter
+    def target(self, target):
+        self.target_sr_names, self.target_name = self.unpack_target(target)
+
+        # set _target so we don't need to lookup on subsequent access
+        self._target = target
+
+    @property
+    def location_str(self):
+        if not self.location:
+            return ''
+        elif self.location.metro:
+            country = self.location.country
+            region = self.location.region
+            metro_str = (g.locations[country]['regions'][region]
+                         ['metros'][self.location.metro]['name'])
+            return '/'.join([country, region, metro_str])
+        else:
+            return g.locations[self.location.country]['name']
 
     def is_freebie(self):
         return self.trans_id < 0
@@ -249,22 +459,20 @@ class PromoCampaign(Thing):
         now = datetime.now(g.tz)
         return self.start_date < now and self.end_date > now
 
-    def update(self, start_date, end_date, bid, cpm, sr_name, trans_id,
-               priority, location, commit=True):
-        self.start_date = start_date
-        self.end_date = end_date
-        self.bid = bid
-        self.cpm = cpm
-        self.sr_name = sr_name
-        self.trans_id = trans_id
-        self.priority_name = self.get_priority_name(priority)
-        self.location_code = location.to_code() if location else None
-        if commit:
-            self._commit()
-
     def delete(self):
         self._deleted = True
         self._commit()
+
+
+def backfill_campaign_targets():
+    from r2.lib.db.operators import desc
+    from r2.lib.utils import fetch_things2
+
+    q = PromoCampaign._query(sort=desc("_date"), data=True)
+    for campaign in fetch_things2(q):
+        sr_name = campaign.sr_name or Frontpage.name
+        campaign.target = Target(sr_name)
+        campaign._commit()
 
 class PromotionLog(tdb_cassandra.View):
     _use_db = True
@@ -363,3 +571,106 @@ class PromotedLinkRoadblock(tdb_cassandra.View):
                 start, end = cls._dates_from_key(key)
                 ret.append((sr.name, start, end))
         return ret
+
+
+class PromotionPrices(tdb_cassandra.View):
+    """
+    Price rules:
+    * Location targeting trumps all: Anything targeting a metro gets the global
+      metro price.
+    * Any collection or subreddit with a specified price gets that price
+    * Any collection or subreddit without a specified price gets the global
+      collection or subreddit price
+    * Frontpage gets the global collection price.
+
+    """
+
+    _use_db = True
+    _connection_pool = 'main'
+    _read_consistency_level = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.ALL
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.UTF8_TYPE,
+        "column_name_class": tdb_cassandra.UTF8_TYPE,
+        "default_validation_class": tdb_cassandra.INT_TYPE,
+    }
+
+    @classmethod
+    def _get_components(cls, target, cpm):
+        rowkey = column_name = None
+        column_value = cpm
+
+        if isinstance(target, Target):
+            if target.is_collection:
+                rowkey = "COLLECTION"
+                column_name = target.collection.name
+            else:
+                rowkey = "SUBREDDIT"
+                column_name = target.subreddit_name
+
+        if not rowkey or not column_name:
+            raise ValueError("target must be Target")
+
+        return rowkey, column_name, column_value
+
+    @classmethod
+    def set_price(cls, target, cpm):
+        rowkey, column_name, column_value = cls._get_components(target, cpm)
+        cls._cf.insert(rowkey, {column_name: column_value})
+
+    @classmethod
+    def get_price(cls, target, location):
+        if location and location.metro:
+            return g.cpm_selfserve_geotarget_metro.pennies
+
+        # check for Frontpage
+        if (isinstance(target, Target) and
+                not target.is_collection and
+                target.subreddit_name == Frontpage.name):
+            return g.cpm_selfserve_collection.pennies
+
+        # check for target specific override price
+        rowkey, column_name, _ = cls._get_components(target, None)
+        try:
+            columns = cls._cf.get(rowkey, columns=[column_name])
+        except tdb_cassandra.NotFoundException:
+            columns = {}
+        if column_name in columns:
+            return columns[column_name]
+
+        # use global price
+        if isinstance(target, Target):
+            if target.is_collection:
+                return g.cpm_selfserve_collection.pennies
+            else:
+                return g.cpm_selfserve.pennies
+
+        raise ValueError("target must be Target")
+
+    @classmethod
+    def get_price_dict(cls):
+        r = {
+            "COLLECTION": {},
+            "SUBREDDIT": {},
+            "METRO": g.cpm_selfserve_geotarget_metro.pennies,
+            "COLLECTION_DEFAULT": g.cpm_selfserve_collection.pennies,
+            "SUBREDDIT_DEFAULT": g.cpm_selfserve.pennies,
+        }
+
+        try:
+            collections = cls._cf.get("COLLECTION")
+        except tdb_cassandra.NotFoundException:
+            collections = {}
+
+        try:
+            subreddits = cls._cf.get("SUBREDDIT")
+        except tdb_cassandra.NotFoundException:
+            subreddits = {}
+
+        for name, cpm in collections.iteritems():
+            r["COLLECTION"][name] = cpm
+
+        for name, cpm in subreddits.iteritems():
+            r["SUBREDDIT"][name] = cpm
+
+        return r

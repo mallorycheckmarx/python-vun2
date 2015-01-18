@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -58,6 +58,8 @@ def add_comments(comments):
 
     for link_id, coms in link_map.iteritems():
         link = links[link_id]
+        add_comments = [comment for comment in coms if not comment._deleted]
+        delete_comments = (comment for comment in coms if comment._deleted)
         timer = g.stats.get_timer('comment_tree.add.%s'
                                   % link.comment_tree_version)
         timer.start()
@@ -66,7 +68,10 @@ def add_comments(comments):
                 timer.intermediate('lock')
                 cache = get_comment_tree(link, timer=timer)
                 timer.intermediate('get')
-                cache.add_comments(coms)
+                if add_comments:
+                    cache.add_comments(add_comments)
+                for comment in delete_comments:
+                    cache.delete_comment(comment, link)
                 timer.intermediate('update')
         except:
             g.log.exception(
@@ -97,21 +102,6 @@ def update_comment_votes(comments, write_consistency_level = None):
             CommentSortsCache._set_values(c_key, c_r,
                                           write_consistency_level = write_consistency_level)
 
-def delete_comment(comment):
-    link = Link._byID(comment.link_id, data=True)
-    timer = g.stats.get_timer('comment_tree.delete.%s'
-                              % link.comment_tree_version)
-    timer.start()
-    with CommentTree.mutation_context(link):
-        timer.intermediate('lock')
-        cache = get_comment_tree(link)
-        timer.intermediate('get')
-        cache.delete_comment(comment, link)
-        timer.intermediate('update')
-        from r2.lib.db.queries import changed
-        changed([link])
-        timer.intermediate('changed')
-    timer.stop()
 
 def _comment_sorter_from_cids(cids, sort):
     comments = Comment._byID(cids, data = False, return_dict = False)
@@ -226,19 +216,22 @@ def messages_key(user_id):
 def messages_lock_key(user_id):
     return 'message_conversations_lock_' + str(user_id)
 
-def add_message(message):
-    # add the message to the author's list and the recipient
+def add_message(message, update_recipient=True, update_modmail=True,
+                add_to_user=None):
     with g.make_lock("message_tree", messages_lock_key(message.author_id)):
         add_message_nolock(message.author_id, message)
-    if message.to_id:
+
+    if update_recipient and message.to_id:
         with g.make_lock("message_tree", messages_lock_key(message.to_id)):
             add_message_nolock(message.to_id, message)
-    # Messages to a subreddit should end in its inbox. Messages
-    # FROM a subreddit (currently, just ban messages) should NOT
-    if message.sr_id and not message.from_sr:
+
+    if update_modmail and message.sr_id:
         with g.make_lock("modmail_tree", sr_messages_lock_key(message.sr_id)):
             add_sr_message_nolock(message.sr_id, message)
 
+    if add_to_user and add_to_user._id != message.to_id:
+        with g.make_lock("message_tree", messages_lock_key(add_to_user._id)):
+            add_message_nolock(add_to_user._id, message)
 
 def _add_message_nolock(key, message):
     from r2.models import Account, Message

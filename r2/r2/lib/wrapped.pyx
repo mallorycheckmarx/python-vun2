@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,6 +25,8 @@ from datetime import datetime
 import re, types
 
 from hashlib import md5
+
+RENDER_CACHE_SAMPLE_RATE = 0.001
 
 class _TemplateUpdater(object):
     # this class is just a hack to get around Cython's closure rules
@@ -152,38 +154,17 @@ class Templated(object):
         if not hasattr(self, "render_class"):
             self.render_class = self.__class__
 
-    def _notfound(self, style):
-        from pylons import g, request
-        from pylons.controllers.util import abort
-        from r2.lib.log import log_text
-        if g.debug:
-            raise NotImplementedError (repr(self), style)
-        else:
-            if style == 'png':
-                level = "debug"
-            else:
-                level = "warning"
-            log_text("missing template",
-                     "Couldn't find %s template for %r %s" %
-                      (style, self, request.path),
-                     level)
-            abort(404)
-
-    def template(self, style = 'html'):
+    def template(self, style='html'):
         """
         Fetches template from the template manager
         """
         from r2.config.templates import tpm
-        from pylons import g
 
-        use_cache = not g.reload_templates
-        template = None
-        try:
-            template = tpm.get(self.render_class,
-                               style, cache = use_cache)
-        except AttributeError:
-            self._notfound(style)
-        return template
+        return tpm.get(self.render_class, style)
+
+    def template_is_null(self, style='html'):
+        template = self.template(style)
+        return getattr(template, "is_null", False)
 
     def cache_key(self, *a):
         """
@@ -195,7 +176,7 @@ class Templated(object):
     def render_class_name(self):
         return self.render_class.__name__
 
-    def render_nocache(self, attr, style):
+    def render_nocache(self, style):
         """
         No-frills (or caching) rendering of the template.  The
         template is returned as a subclass of StringTemplate and
@@ -217,30 +198,22 @@ class Templated(object):
         # fetch template
         template = self.template(style)
         if timer: timer.intermediate('template')
-        if template:
-            # store the global render style (since child templates)
-            render_style = c.render_style
-            c.render_style = style
-            # are we doing a partial render?
-            if attr:
-                template = template.get_def(attr)
-            # render the template
-            res = template.render(thing = self)
-            if timer: timer.intermediate('render')
-            if not isinstance(res, StringTemplate):
-                res = StringTemplate(res)
-            # reset the global render style
-            c.render_style = render_style
-            if timer: timer.stop()
-            return res
-        else:
-            # timings for not found templates will not be sent.
-            self._notfound(style)
+        # store the global render style (since child templates)
+        render_style = c.render_style
+        c.render_style = style
+        # render the template
+        res = template.render(thing = self)
+        if timer: timer.intermediate('render')
+        if not isinstance(res, StringTemplate):
+            res = StringTemplate(res)
+        # reset the global render style
+        c.render_style = render_style
+        if timer: timer.stop()
+        return res
 
-    def _render(self, attr, style, **kwargs):
+    def _render(self, style, **kwargs):
         """
-        Renders the current template with the current style, possibly
-        doing a part_render if attr is not None.
+        Renders the current template with the current style.
 
         if this is the first template to be rendered, it is will track
         cachable templates, insert stubs for them in the output,
@@ -270,21 +243,22 @@ class Templated(object):
         if not isinstance(c.render_tracker, dict):
             primary = True
             c.render_tracker = {}
-        
-        # insert a stub for cachable non-primary templates
-        if self.cachable:
+
+        if (self.cachable and
+                not self.template_is_null(style) and
+                style != "api"):
+            # insert a stub for cachable non-primary templates
             res = CacheStub(self, style)
-            cache_key = self.cache_key(attr, style)
+            cache_key = self.cache_key(style)
             # in the tracker, we need to store:
             #  The render cache key (res.name)
             #  The memcached cache key(cache_key)
-            #  who I am (self) and what am I doing (attr, style) with what
+            #  who I am (self) and what am I doing (style) with what
             #  (kwargs)
-            c.render_tracker[res.name] = (cache_key, (self,
-                                                      (attr, style, kwargs)))
+            c.render_tracker[res.name] = (cache_key, (self, (style, kwargs)))
         else:
             # either a primary template or not cachable, so render it
-            res = self.render_nocache(attr, style)
+            res = self.render_nocache(style)
         timer.intermediate('self-render')
 
         # if this is the primary template, let the caching games begin
@@ -316,14 +290,20 @@ class Templated(object):
                 # render items that didn't make it into the cached list
                 for key, (cache_key, others) in current.iteritems():
                     # unbundle the remaining args
-                    item, (attr, style, kw) = others
+                    item, (style, kw) = others
                     if cache_key not in cached:
                         # this had to be rendered, so cache it later
                         to_cache.add(cache_key)
                         # render the item and apply the stored kw args
-                        r = item.render_nocache(attr, style)
+                        r = item.render_nocache(style)
                     else:
                         r = cached[cache_key]
+
+                    event_name = 'render-cache.%s' % item.render_class_name
+                    name = 'hit' if cache_key in cached else 'miss'
+                    g.stats.event_count(
+                        event_name, name, sample_rate=RENDER_CACHE_SAMPLE_RATE)
+
                     # store the unevaluated templates in
                     # cached for caching
                     replacements[key] = r.finalize(kw)
@@ -419,30 +399,16 @@ class Templated(object):
 
     def render(self, style = None, **kw):
         from r2.lib.filters import unsafe
-        res = self._render(None, style, **kw)
+        res = self._render(style, **kw)
         return unsafe(res) if isinstance(res, str) else res
-        
-    def part_render(self, attr, **kw):
-        style = kw.get('style')
-        if style: del kw['style']
-        return self._render(attr, style, **kw)
 
-    def call(self, name, *args, **kwargs):
-        from pylons import g
-        from r2.lib.filters import spaceCompress
-        res = self.template().get_def(name).render(*args, **kwargs)
-        if not g.template_debug:
-            res = spaceCompress(res)
-        return res
 
 class Uncachable(Exception): pass
 
 _easy_cache_cls = set([bool, int, long, float, unicode, str, types.NoneType,
                       datetime])
-def make_cachable(v, *a):
-    """
-    Given an arbitrary object, 
-    """
+
+def make_cachable(v, style):
     if v.__class__ in _easy_cache_cls or isinstance(v, type):
         try:
             return unicode(v)
@@ -451,22 +417,30 @@ def make_cachable(v, *a):
                 return unicode(v, "utf8")
             except (TypeError, UnicodeDecodeError):
                 return repr(v)
-    elif isinstance(v, (types.MethodType, CachedVariable) ):
+    elif isinstance(v, (types.MethodType, CachedVariable)):
        return
     elif isinstance(v, (tuple, list, set)):
-        return repr([make_cachable(x, *a) for x in v])
+        return repr([make_cachable(x, style) for x in v])
     elif isinstance(v, dict):
         ret = {}
         for k in sorted(v.iterkeys()):
-            ret[k] = make_cachable(v[k], *a)
+            ret[k] = make_cachable(v[k], style)
         return repr(ret)
     elif hasattr(v, "cache_key"):
-        return v.cache_key(*a)
+        return v.cache_key(style)
     else:
         raise Uncachable, "%s, %s" % (v, type(v))
 
 class CachedTemplate(Templated):
     cachable = True
+
+    def template_hash(self, style):
+        template = self.template(style)
+
+        # if template debugging is on, there will be no hash and we can make the
+        # caching process-local
+        template_hash = getattr(template, "hash", id(self.__class__))
+        return template_hash
 
     def cachable_attrs(self):
         """
@@ -479,40 +453,25 @@ class CachedTemplate(Templated):
                 ret.append((k, self.__dict__[k]))
         return ret
 
-    def cache_key(self, attr, style, *a):
-        from pylons import c
-
-        # if template debugging is on, there will be no hash and we
-        # can make the caching process-local.
-        template_hash = getattr(self.template(style), "hash",
-                                id(self.__class__))
+    def cache_key(self, style):
+        from pylons import c, request
 
         # these values are needed to render any link on the site, and
         # a menu is just a set of links, so we best cache against
         # them.
         keys = [c.user_is_loggedin, c.user_is_admin, c.domain_prefix,
                 style, c.secure, c.cname, c.lang, c.site.path,
-                getattr(c.user, "gold", False),
-                template_hash]
+                self.template_hash(style)]
 
-        # if viewing a single subreddit, take flair settings into account.
-        if c.user and hasattr(c.site, '_id'):
-            keys.extend([
-                c.site.flair_enabled, c.site.flair_position,
-                c.site.link_flair_position,
-                c.user.flair_enabled_in_sr(c.site._id),
-                c.user.pref_show_flair, c.user.pref_show_link_flair])
-        keys = [make_cachable(x, *a) for x in keys]
+        if c.secure:
+            keys.append(request.host)
+
+        keys = [make_cachable(x, style) for x in keys]
 
         # add all parameters sent into __init__, using their current value
-        auto_keys = [(k,  make_cachable(v, attr, style, *a))
+        auto_keys = [(k,  make_cachable(v, style))
                      for k, v in self.cachable_attrs()]
-        
-        # lastly, add anything else that was passed in.
         keys.append(repr(auto_keys))
-        for x in a:
-            keys.append(make_cachable(x))
-        
         return "<%s:[%s]>" % (self.__class__.__name__, u''.join(keys))
 
 
@@ -521,7 +480,7 @@ class Wrapped(CachedTemplate):
     cachable = False
     cache_ignore = set(['lookups'])
     
-    def cache_key(self, attr, style):
+    def cache_key(self, style):
         if self.cachable:
             for i, l in enumerate(self.lookups):
                 if hasattr(l, "wrapped_cache_key"):
@@ -530,7 +489,7 @@ class Wrapped(CachedTemplate):
                     setattr(self, "lookup%d_cache_key" % i,
                             ''.join(map(repr,
                                         l.wrapped_cache_key(self, style))))
-        return CachedTemplate.cache_key(self, attr, style)
+        return CachedTemplate.cache_key(self, style)
 
     def __init__(self, *lookups, **context):
         self.lookups = lookups
@@ -603,9 +562,17 @@ class Styled(CachedTemplate):
         self.style = style
         CachedTemplate.__init__(self, **kw)
 
-    def render(self, **kw):
-        """Using the canonical template file, only renders the <%def>
-        in the template whose name is given by self.style"""
-        return CachedTemplate.part_render(self, self.style, **kw)
-            
+    def template(self, style='html'):
+        base_template = CachedTemplate.template(self, style)
+        template = base_template.get_def(self.style)
+        return template
 
+    def template_hash(self, style):
+        # use the hash of the base template so changes to the template file
+        # will be recognized
+        base_template = CachedTemplate.template(self, style)
+
+        # if template debugging is on, there will be no hash and we can make the
+        # caching process-local
+        template_hash = getattr(base_template, "hash", id(self.__class__))
+        return template_hash

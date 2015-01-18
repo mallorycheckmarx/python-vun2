@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -233,7 +233,7 @@ class EmailHandler(object):
 
 
     def from_queue(self, max_date, batch_limit = 50, kind = None):
-        from r2.models import is_banned_IP, Account, Thing
+        from r2.models import Account, Thing
         keep_trying = True
         min_id = None
         s = self.queue_table
@@ -264,10 +264,6 @@ class EmailHandler(object):
             things = Thing._by_fullname(tids, data = True,
                                         return_dict = True) if tids else {}
 
-            # make sure no IPs have been banned in the mean time
-            ips = set(x[6] for x in res)
-            ips = dict((ip, is_banned_IP(ip)) for ip in ips)
-
             # get the lower bound date for next iteration
             min_id = max(x[8] for x in res)
 
@@ -277,7 +273,7 @@ class EmailHandler(object):
             for (addr, acct, fname, fulln, body, kind, ip, date, uid,
                  msg_hash, fr_addr, reply_to) in res:
                 yield (accts.get(acct), things.get(fulln), addr,
-                       fname, date, ip, ips[ip], kind, msg_hash, body,
+                       fname, date, ip, kind, msg_hash, body,
                        fr_addr, reply_to)
 
     def clear_queue(self, max_date, kind = None):
@@ -291,6 +287,9 @@ class EmailHandler(object):
 class Email(object):
     handler = EmailHandler()
 
+    # Do not modify in any way other than appending new items!
+    # Database tables storing mail stuff use an int column as an index into 
+    # this Enum, so anything other than appending new items breaks mail history.
     Kind = Enum("SHARE", "FEEDBACK", "ADVERTISE", "OPTOUT", "OPTIN",
                 "VERIFY_EMAIL", "RESET_PASSWORD",
                 "BID_PROMO",
@@ -306,12 +305,17 @@ class Email(object):
                 "EMAIL_CHANGE",
                 "REFUNDED_PROMO",
                 "VOID_PAYMENT",
+                "GOLD_GIFT_CODE",
+                "SUSPICIOUS_PAYMENT",
+                "FRAUD_ALERT",
+                "USER_FRAUD",
                 )
 
+    # Do not remove anything from this dictionary!  See above comment.
     subjects = {
         Kind.SHARE : _("[reddit] %(user)s has shared a link with you"),
         Kind.FEEDBACK : _("[feedback] feedback from '%(user)s'"),
-        Kind.ADVERTISE :  _("[ad_inq] feedback from '%(user)s'"),
+        Kind.ADVERTISE :  _("[advertising] feedback from '%(user)s'"),
         Kind.OPTOUT : _("[reddit] email removal notice"),
         Kind.OPTIN  : _("[reddit] email addition notice"),
         Kind.RESET_PASSWORD : _("[reddit] reset your password"),
@@ -329,9 +333,13 @@ class Email(object):
         Kind.EMAIL_CHANGE : _("[reddit] your email address has been changed"),
         Kind.REFUNDED_PROMO: _("[reddit] your campaign didn't get enough impressions"),
         Kind.VOID_PAYMENT: _("[reddit] your payment has been voided"),
+        Kind.GOLD_GIFT_CODE: _("[reddit] your reddit gold gift code"),
+        Kind.SUSPICIOUS_PAYMENT: _("[selfserve] suspicious payment alert"),
+        Kind.FRAUD_ALERT: _("[selfserve] fraud alert"),
+        Kind.USER_FRAUD: _("[selfserve] a user has committed fraud"),
         }
 
-    def __init__(self, user, thing, email, from_name, date, ip, banned_ip,
+    def __init__(self, user, thing, email, from_name, date, ip,
                  kind, msg_hash, body = '', from_addr = '',
                  reply_to = ''):
         self.user = user
@@ -341,7 +349,6 @@ class Email(object):
         self._from_name = from_name
         self.date = date
         self.ip = ip
-        self.banned_ip = banned_ip
         self.kind = kind
         self.sent = False
         self.body = body
@@ -373,7 +380,6 @@ class Email(object):
     def should_queue(self):
         return (not self.user  or not self.user._spam) and \
                (not self.thing or not self.thing._spam) and \
-               not self.banned_ip and \
                (self.kind == self.Kind.OPTOUT or
                 not has_opted_out(self.to_addr))
 

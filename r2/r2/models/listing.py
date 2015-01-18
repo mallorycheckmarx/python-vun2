@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,10 +25,11 @@ from link import *
 from vote import *
 from report import *
 from subreddit import DefaultSR, AllSR, Frontpage
+
 from pylons import i18n, request, g
 from pylons.i18n import _
 
-from r2.lib.wrapped import Wrapped
+from r2.lib.wrapped import Wrapped, CachedVariable
 from r2.lib import utils
 from r2.lib.db import operators
 from r2.lib.cache import sgm
@@ -93,8 +94,9 @@ class Listing(object):
             self.next = (request.path + utils.query_string(p))
 
         for count, thing in enumerate(self.things):
-            thing.rowstyle = getattr(thing, 'rowstyle', "")
-            thing.rowstyle += ' ' + ('even' if (count % 2) else 'odd')
+            thing.rowstyle_cls = getattr(thing, 'rowstyle_cls', "")
+            thing.rowstyle_cls += ' ' + ('even' if (count % 2) else 'odd')
+            thing.rowstyle = CachedVariable("rowstyle")
 
         #TODO: need name for template -- must be better way
         return Wrapped(self)
@@ -170,6 +172,15 @@ class EnemyListing(UserListing):
 class BannedListing(UserListing):
     type = 'banned'
 
+    @classmethod
+    def populate_from_tempbans(cls, item, tempbans=None):
+        if not tempbans:
+            return
+        time = tempbans.get(item.user.name)
+        if time:
+            delay = time - datetime.now(g.tz)
+            item.tempban = max(delay.days, 0)
+
     @property
     def form_title(self):
         return _("ban users")
@@ -178,6 +189,16 @@ class BannedListing(UserListing):
     def title(self):
         return _("users banned from"
                  " /r/%(subreddit)s") % dict(subreddit=c.site.name)
+
+    def get_items(self, *a, **kw):
+        items = UserListing.get_items(self, *a, **kw)
+        wrapped_items = items[0]
+        names = [item.user.name for item in wrapped_items]
+        tempbans = c.site.get_tempbans(self.type, names)
+        for wrapped in wrapped_items:
+            BannedListing.populate_from_tempbans(wrapped, tempbans)
+        return items
+
 
 class WikiBannedListing(BannedListing):
     type = 'wikibanned'
@@ -231,20 +252,6 @@ class InvitedModListing(UserListing):
             editable=True,
             embedded=True,
         )
-
-    def sort_moderators(self, items):
-        items = [(item, item.rel.get_permissions()) for item in items]
-        for item, permissions in items:
-            if permissions is None or permissions.is_superuser():
-                yield item
-        for item, permissions in items:
-            if permissions is not None and not permissions.is_superuser():
-                yield item
-
-    def get_items(self, **kw):
-        things, prev, next, bcount, acount = UserListing.get_items(self, **kw)
-        things = list(self.sort_moderators(things))
-        return things, prev, next, bcount, acount
 
     @property
     def title(self):
@@ -336,5 +343,5 @@ class SpotlightListing(Listing):
     def listing(self):
         res = Listing.listing(self)
         for t in res.things:
-            t.num = ""
+            t.num_text = ""
         return Wrapped(self)

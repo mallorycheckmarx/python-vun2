@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -47,7 +47,7 @@
 </%def>
 
 <%def name="author(friend = False, gray = False)" buffered="True">
-  ${WrappedUser(thing.author, thing.attribs, thing, gray = collapse).render()}
+  ${WrappedUser(thing.author, thing.attribs, thing, gray = collapse)}
 </%def>
 
 <%def name="score(this, likes=None, inline=True, label = True, _id = True)">

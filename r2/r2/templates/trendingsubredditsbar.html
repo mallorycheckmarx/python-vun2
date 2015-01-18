@@ -16,16 +16,20 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <div class="trending-subreddits">
-  <strong>${_('trending subreddits')}</strong>
-  <ul>
-  %for subreddit_name in thing.subreddit_names:
-    <li><a href="/r/${subreddit_name}" target="_blank">/r/${subreddit_name}</a></li>
-  %endfor
-  </ul>
-  <a href="${thing.comment_url}" class="${thing.comment_label_cls}">${thing.comment_label}</a>
+  <div class="rank-spacer"></div>
+  <div class="midcol-spacer"></div>
+  <div class="trending-subreddits-content">
+    <strong>${_('trending subreddits')}</strong>
+    <ul>
+    %for subreddit_name in thing.subreddit_names:
+      <li><a href="/r/${subreddit_name}" target="_blank">/r/${subreddit_name}</a></li>
+    %endfor
+    </ul>
+    <a href="${thing.comment_url}" class="${thing.comment_label_cls}">${thing.comment_label}</a>
+  </div>
 </div>

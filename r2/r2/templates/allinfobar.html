@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -37,6 +37,10 @@
     <a href="${thing.allminus_url}">${_("Exclude your subscribed subreddits")}</a>
   </div>
 %endif
+
+<div class="giftgold allminus-link">
+    <a href="/me/f/all">${_("Exclude custom subreddits")}</a>
+</div>
 
 %if not thing.gilding_listing:
 <div class="gilded-link">

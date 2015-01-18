@@ -16,12 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%! 
     from pylons.i18n import _, ungettext
+    from r2.lib.filters import conditional_websafe
     from r2.lib.template_helpers import add_sr
 %>
 
@@ -68,7 +69,7 @@
     &#32;|${tagline()}</p>
     %if thing.link_child and thing.link_child.expand:
       <div class="expando">
-        ${thing.link_child.content()}
+        ${unsafe(thing.link_child.content())}
       </div>
     %endif
   </div>
@@ -100,10 +101,10 @@
         taglinetext = _("%(when)s ago by %(author)s to %(reddit)s from %(domain)s")
     else:
         taglinetext = _("%(when)s ago by %(author)s from %(domain)s")
-    taglinetext = taglinetext.replace(" ", "&#32;")
+    taglinetext = conditional_websafe(taglinetext).replace(" ", "&#32;")
   %>
-  ${unsafe(taglinetext % dict(reddit = self.subreddit(), 
+  ${unsafe(taglinetext % dict(reddit = self.subreddit(),
                               domain = self.domain(),
-                              when = thing.timesince, 
+                              when = thing.timesince,
                               author= self.author()))}
 </%def>

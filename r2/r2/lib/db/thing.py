@@ -16,13 +16,14 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 import hashlib
 import new
 import sys
+import itertools
 
 from copy import copy, deepcopy
 from datetime import datetime
@@ -32,7 +33,6 @@ from pylons import g
 from r2.lib import hooks
 from r2.lib.cache import sgm
 from r2.lib.db import tdb_sql as tdb, sorts, operators
-from r2.lib.log import log_text
 from r2.lib.utils import Results, tup, to36
 
 
@@ -79,7 +79,6 @@ class DataThing(object):
     _essentials = ()
     c = operators.Slots()
     __safe__ = False
-    _asked_for_data = False
     _cache = g.cache
 
     def __init__(self):
@@ -90,8 +89,6 @@ class DataThing(object):
             self._t = {}
             self._created = False
             self._loaded = True
-            self._asked_for_data = True # You just created it; of course
-                                        # you're allowed to touch its data
 
     #TODO some protection here?
     def __setattr__(self, attr, val, make_dirty=True):
@@ -112,82 +109,64 @@ class DataThing(object):
         if make_dirty and val != old_val:
             self._dirties[attr] = (old_val, val)
 
+    def __setstate__(self, state):
+        # pylibmc's automatic unpicking will call __setstate__ if it exists.
+        # if we don't implement __setstate__ the check for existence will fail
+        # in an atypical (and not properly handled) way because we override
+        # __getattr__. the implementation provided here is identical to what
+        # would happen in the default unimplemented case.
+        self.__dict__ = state
+
     def __getattr__(self, attr):
-        #makes pickling work for some reason
-        if attr.startswith('__'):
-            raise AttributeError, attr
-
-        if not (attr.startswith('_')
-                or self._asked_for_data
-                or getattr(self, "_nodb", False)):
-            msg = ("getattr(%r) called on %r, " +
-                   "but you didn't say data=True") % (attr, self)
-            raise ValueError(msg)
-
         try:
-            if hasattr(self, '_t'):
-                rv = self._t[attr]
-                return rv
-            else:
-                raise AttributeError, attr
+            return self._t[attr]
         except KeyError:
             try:
-                return getattr(self, '_defaults')[attr]
+                return self._defaults[attr]
             except KeyError:
-                try:
-                    _id = object.__getattribute__(self, "_id")
-                except AttributeError:
-                    _id = "???"
-                try:
-                    cl = object.__getattribute__(self, "__class__").__name__
-                except AttributeError:
-                    cl = "???"
+                # attr didn't exist--continue on to error recovery below
+                pass
 
-                if self._loaded:
-                    nl = "it IS loaded"
-                else:
-                    nl = "it is NOT loaded"
+        try:
+            _id = object.__getattribute__(self, "_id")
+        except AttributeError:
+            _id = "???"
 
-                # The %d format is nicer since it has no "L" at the
-                # end, but if we can't do that, fall back on %r.
-                try:
-                    id_str = "%d" % _id
-                except TypeError:
-                    id_str = "%r" % _id
+        try:
+            cl = object.__getattribute__(self, "__class__").__name__
+        except AttributeError:
+            cl = "???"
 
-                descr = '%s(%s).%s' % (cl, id_str, attr)
+        if self._loaded:
+            nl = "it IS loaded"
+        else:
+            nl = "it is NOT loaded"
 
-                try:
-                    essentials = object.__getattribute__(self, "_essentials")
-                except AttributeError:
-                    print "%s has no _essentials" % descr
-                    essentials = ()
+        try:
+            id_str = "%d" % _id
+        except TypeError:
+            id_str = "%r" % _id
 
-                if isinstance(essentials, str):
-                    print "Some dumbass forgot a comma."
-                    essentials = essentials,
+        descr = '%s(%s).%s' % (cl, id_str, attr)
 
-                deleted = object.__getattribute__(self, "_deleted")
+        essentials = object.__getattribute__(self, "_essentials")
+        deleted = object.__getattribute__(self, "_deleted")
 
-                if deleted:
-                    nl += " and IS deleted."
-                else:
-                    nl += " and is NOT deleted."
+        if deleted:
+            nl += " and IS deleted."
+        else:
+            nl += " and is NOT deleted."
 
-                if attr in essentials and not deleted:
-                    log_text ("essentials-bandaid-reload",
-                          "%s not found; %s Forcing reload." % (descr, nl),
-                          "warning")
-                    self._load()
+        if attr in essentials and not deleted:
+            g.log.error("%s not found; %s forcing reload.", descr, nl)
+            self._load()
 
-                    try:
-                        return self._t[attr]
-                    except KeyError:
-                        log_text ("essentials-bandaid-failed",
-                              "Reload of %s didn't help. I recommend deletion."
-                              % descr, "error")
+            try:
+                return self._t[attr]
+            except KeyError:
+                g.log.error("reload of %s didn't help.", descr)
 
-                raise AttributeError, '%s not found; %s' % (descr, nl)
+        raise AttributeError, '%s not found; %s' % (descr, nl)
 
     def _cache_key(self):
         return thing_prefix(self.__class__.__name__, self._id)
@@ -315,7 +294,6 @@ class DataThing(object):
             for attr in essentials:
                 if attr not in i._t:
                     print "Warning: %s is missing %s" % (i._fullname, attr)
-            i._asked_for_data = True
             to_save[i._id] = i
 
         prefix = thing_prefix(cls.__name__)
@@ -383,8 +361,13 @@ class DataThing(object):
         ids, single = tup(ids, True)
         prefix = thing_prefix(cls.__name__)
 
-        if not all(x <= tdb.MAX_THING_ID for x in ids):
-            raise NotFound('huge thing_id in %r' % ids)
+        for x in ids:
+            if not isinstance(x, (int, long)):
+                raise ValueError('non-integer thing_id in %r' % ids)
+            if x > tdb.MAX_THING_ID:
+                raise NotFound('huge thing_id in %r' % ids)
+            elif x < tdb.MIN_THING_ID:
+                raise NotFound('negative thing_id in %r' % ids)
 
         def count_found(ret, still_need):
             cls._cache.stats.cache_report(
@@ -422,18 +405,11 @@ class DataThing(object):
         if data:
             need = []
             for v in bases.itervalues():
-                v._asked_for_data = True
                 if not v._loaded:
                     need.append(v)
             if need:
                 cls._load_multi(need)
-### The following is really handy for debugging who's forgetting data=True:
-#       else:
-#           for v in bases.itervalues():
-#                if v._id in (1, 2, 123):
-#                    raise ValueError
 
-        #e.g. add the sort prop
         if extra_props:
             for _id, props in extra_props.iteritems():
                 for k, v in props.iteritems():
@@ -609,6 +585,10 @@ class Thing(DataThing):
                 self._thing_id = thing_id
 
     @property
+    def _age(self):
+        return datetime.now(g.tz) - self._date
+
+    @property
     def _hot(self):
         return sorts.hot(self._ups, self._downs, self._date)
 
@@ -661,10 +641,6 @@ class Thing(DataThing):
 
         return Things(cls, *rules, **kw)
 
-    def __getattr__(self, attr):
-        return DataThing.__getattr__(self, attr)
-
-
 
 class RelationMeta(type):
     def __init__(cls, name, bases, dct):
@@ -703,6 +679,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
         _incr_data = staticmethod(tdb.incr_rel_data)
         _type_prefix = Relation._type_prefix
         _eagerly_loaded_data = False
+        _fast_cache = g.relcache
 
         # data means, do you load the reddit_data_rel_* fields (the data on the
         # rel itself). eager_load means, do you load thing1 and thing2
@@ -788,27 +765,36 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                      self._type2.__name__,self._thing2_id,
                      '[unsaved]' if not self._created else '\b'))
 
+        @staticmethod
+        def _fast_cache_key_from_parts(class_name, thing1_id, thing2_id, name):
+            return thing_prefix(class_name) + '_'.join([
+                str(thing1_id),
+                str(thing2_id),
+                name]
+            ).replace(' ', '_')
+
+        def _fast_cache_key(self):
+            return self._fast_cache_key_from_parts(
+                self.__class__.__name__,
+                self._thing1_id,
+                self._thing2_id,
+                self._name)
+
         def _commit(self):
             DataThing._commit(self)
             #if i denormalized i need to check here
             if denorm1: self._thing1._commit(denorm1[0])
             if denorm2: self._thing2._commit(denorm2[0])
             #set fast query cache
-            self._cache.set(thing_prefix(self.__class__.__name__)
-                      + str((self._thing1_id, self._thing2_id, self._name)),
-                      self._id)
+            self._fast_cache.set(self._fast_cache_key(), self._id)
 
         def _delete(self):
             tdb.del_rel(self._type_id, self._id)
-            
+
             #clear cache
-            prefix = thing_prefix(self.__class__.__name__)
-            #TODO - there should be just one cache key for a rel?
-            self._cache.delete(prefix + str(self._id))
+            self._cache.delete(self._cache_key())
             #update fast query cache
-            self._cache.set(prefix + str((self._thing1_id,
-                                    self._thing2_id,
-                                    self._name)), None)
+            self._fast_cache.set(self._fast_cache_key(), None)
             #temporarily set this property so the rest of this request
             #know it's deleted. save -> unsave, hide -> unhide
             self._name = 'un' + self._name
@@ -818,63 +804,84 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                         thing_data=False):
             """looks up all the relationships between thing1_ids and
                thing2_ids and caches them"""
-            prefix = thing_prefix(cls.__name__)
 
-            thing1_dict = dict((t._id, t) for t in tup(thing1s))
-            thing2_dict = dict((t._id, t) for t in tup(thing2s))
+            cache_key_lookup = dict()
 
-            thing1_ids = thing1_dict.keys()
-            thing2_ids = thing2_dict.keys()
-
-            name = tup(name)
-
-            # permute all of the pairs
-            pairs = set((x, y, n)
-                        for x in thing1_ids
-                        for y in thing2_ids
-                        for n in name)
-
-            def lookup_rel_ids(pairs):
+            # We didn't find these keys in the cache, look them up in the
+            # database
+            def lookup_rel_ids(uncached_keys):
                 rel_ids = {}
 
+                # Lookup thing ids and name from cache key
                 t1_ids = set()
                 t2_ids = set()
                 names = set()
-                for t1, t2, name in pairs:
-                    t1_ids.add(t1)
-                    t2_ids.add(t2)
+                for cache_key in uncached_keys:
+                    (thing1, thing2, name) = cache_key_lookup[cache_key]
+                    t1_ids.add(thing1._id)
+                    t2_ids.add(thing2._id)
                     names.add(name)
 
-                if t1_ids and t2_ids and names:
-                    q = cls._query(cls.c._thing1_id == t1_ids,
-                                   cls.c._thing2_id == t2_ids,
-                                   cls.c._name == names)
-                else:
-                    q = []
+                q = cls._query(
+                        cls.c._thing1_id == t1_ids,
+                        cls.c._thing2_id == t2_ids,
+                        cls.c._name == names)
 
                 for rel in q:
-                    rel_ids[(rel._thing1_id, rel._thing2_id, rel._name)] = rel._id
+                    rel_ids[cls._fast_cache_key_from_parts(
+                        cls.__name__,
+                        rel._thing1_id,
+                        rel._thing2_id,
+                        str(rel._name)
+                    )] = rel._id
 
-                for p in pairs:
-                    if p not in rel_ids:
-                        rel_ids[p] = None
+                for cache_key in uncached_keys:
+                    if cache_key not in rel_ids:
+                        rel_ids[cache_key] = None
 
                 return rel_ids
 
+            # make lookups for thing ids and names
+            thing1_dict = dict((t._id, t) for t in tup(thing1s))
+            thing2_dict = dict((t._id, t) for t in tup(thing2s))
+
+            names = map(str, tup(name))
+
+            # permute all of the pairs via cartesian product
+            rel_tuples = itertools.product(
+                thing1_dict.values(),
+                thing2_dict.values(),
+                names)
+
+            # create cache keys for all permutations and initialize lookup
+            for t in rel_tuples:
+                thing1, thing2, name = t
+                cache_key = cls._fast_cache_key_from_parts(
+                    cls.__name__,
+                    thing1._id,
+                    thing2._id,
+                    name)
+                cache_key_lookup[cache_key] = t
+
             # get the relation ids from the cache or query the db
-            res = sgm(cls._cache, pairs, lookup_rel_ids, prefix)
+            res = sgm(cls._fast_cache, cache_key_lookup.keys(), lookup_rel_ids)
 
             # get the relation objects
             rel_ids = {rel_id for rel_id in res.itervalues()
                               if rel_id is not None}
-            rels = cls._byID_rel(rel_ids, data=data, eager_load=eager_load,
-                                 thing_data=thing_data)
+            rels = cls._byID_rel(
+                rel_ids,
+                data=data,
+                eager_load=eager_load,
+                thing_data=thing_data)
 
+            # Takes aggregated results from cache and db (res) and transforms
+            # the values from ids to Relations.
             res_obj = {}
-            for (thing1_id, thing2_id, name), rel_id in res.iteritems():
-                pair = (thing1_dict[thing1_id], thing2_dict[thing2_id], name)
+            for cache_key, rel_id in res.iteritems():
+                t = cache_key_lookup[cache_key]
                 rel = rels[rel_id] if rel_id is not None else None
-                res_obj[pair] = rel
+                res_obj[t] = rel
 
             return res_obj
 
@@ -903,6 +910,7 @@ class Query(object):
         self._write_cache = kw.get('write_cache')
         self._cache_time = kw.get('cache_time', 0)
         self._limit = kw.get('limit')
+        self._offset = kw.get('offset')
         self._data = kw.get('data')
         self._sort = kw.get('sort', ())
         self._filter_primary_sort_only = kw.get('filter_primary_sort_only', False)
@@ -996,6 +1004,10 @@ class Query(object):
 
     def _iden(self):
         i = str(self._sort) + str(self._kind) + str(self._limit)
+
+        if self._offset:
+            i += str(self._offset)
+
         if self._rules:
             rules = copy(self._rules)
             rules.sort()
@@ -1061,6 +1073,7 @@ class Things(Query):
                   get_cols,
                   self._sort,
                   self._limit,
+                  self._offset,
                   self._rules)
         if self._use_data:
             c = tdb.find_data(*params)
@@ -1130,6 +1143,7 @@ class Relations(Query):
                           False,
                           sort = self._sort,
                           limit = self._limit,
+                          offset = self._offset,
                           constraints = self._rules)
         return Results(c, self._make_rel, True)
 

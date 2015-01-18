@@ -16,12 +16,11 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from pylons import request, g, c
-from pylons.controllers.util import redirect_to
 from reddit_base import RedditController
 from r2.controllers.oauth2 import require_oauth2_scope
 from r2.lib.utils import url_links_builder
@@ -69,7 +68,7 @@ from r2.lib.template_helpers import add_sr
 from r2.lib.db import tdb_cassandra
 from r2.models.listing import WikiRevisionListing
 from r2.lib.pages.things import default_thing_wrapper
-from r2.lib.pages import BoringPage
+from r2.lib.pages import BoringPage, CssError
 from reddit_base import base_listing
 from r2.models import IDBuilder, LinkListing, DefaultSR
 from r2.lib.merge import ConflictException, make_htmldiff
@@ -177,7 +176,8 @@ class WikiController(RedditController):
         builder = WikiRevisionBuilder(revisions, user=wikiuser, sr=c.site,
                                       num=num, reverse=reverse, count=count,
                                       after=after, skip=not c.is_wiki_mod,
-                                      wrap=default_thing_wrapper())
+                                      wrap=default_thing_wrapper(),
+                                      page=page)
         listing = WikiRevisionListing(builder).listing()
         return WikiRevisions(listing, page=page.name, may_revise=this_may_revise(page)).render()
 
@@ -242,7 +242,7 @@ class WikiController(RedditController):
         return WikiListing(pages, linear_pages).render()
 
     def GET_wiki_redirect(self, page='index'):
-        return redirect_to(str("%s/%s" % (c.wiki_base_url, page)), _code=301)
+        return self.redirect(str("%s/%s" % (c.wiki_base_url, page)), code=301)
 
     @require_oauth2_scope("wikiread")
     @api_doc(api_section.wiki, uri='/wiki/discussions/{page}', uses_site=True)
@@ -371,11 +371,11 @@ class WikiApiController(WikiController):
         previous = previous._id if previous else request.POST.get('previous')
         try:
             if page.name == 'config/stylesheet':
-                report, parsed = c.site.parse_css(content, verify=False)
-                if report is None:  # g.css_killswitch
+                css_errors, parsed = c.site.parse_css(content, verify=False)
+                if g.css_killswitch:
                     self.handle_error(403, 'STYLESHEET_EDIT_DENIED')
-                if report.errors:
-                    error_items = [x.message for x in sorted(report.errors)]
+                if css_errors:
+                    error_items = [CssError(x).message for x in css_errors]
                     self.handle_error(415, 'SPECIAL_ERRORS', special_errors=error_items)
                 c.site.change_css(content, parsed, previous, reason=reason)
             else:
@@ -388,7 +388,6 @@ class WikiApiController(WikiController):
                 # object. TODO: change this to minimize subreddit get sizes.
                 if page.special:
                     setattr(c.site, ATTRIBUTE_BY_PAGE[page.name], content)
-                    setattr(c.site, "prev_" + ATTRIBUTE_BY_PAGE[page.name] + "_id", page.revision)
                     c.site._commit()
 
                 if page.special or c.is_wiki_mod:
@@ -460,8 +459,8 @@ class WikiApiController(WikiController):
         content = revision.content
         reason = 'reverted back %s' % timesince(revision.date)
         if page.name == 'config/stylesheet':
-            report, parsed = c.site.parse_css(content)
-            if report.errors:
+            css_errors, parsed = c.site.parse_css(content)
+            if css_errors:
                 self.handle_error(403, 'INVALID_CSS')
             c.site.change_css(content, parsed, prev=None, reason=reason, force=True)
         else:
@@ -472,7 +471,6 @@ class WikiApiController(WikiController):
                 # object. TODO: change this to minimize subreddit get sizes.
                 if page.special:
                     setattr(c.site, ATTRIBUTE_BY_PAGE[page.name], content)
-                    setattr(c.site, "prev_" + ATTRIBUTE_BY_PAGE[page.name] + "_id", page.revision)
                     c.site._commit()
             except ContentLengthError as e:
                 self.handle_error(403, 'CONTENT_LENGTH_ERROR', max_length=e.max_length)

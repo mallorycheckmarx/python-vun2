@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -70,7 +70,6 @@ class TimingStatBuffer:
                 break
 
             total_time, count = v.real, v.imag
-            yield k, str(int(count)) + '|c'
             divisor = count or 1
             mean = total_time / divisor
             yield k, str(mean * 1000) + '|ms'
@@ -239,6 +238,14 @@ class Timer:
         self._stop = None
         self._timings = []
 
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, type, value, tb):
+        self.stop()
+        return self
+
     def flush(self):
         for timing in self._timings:
             self.send(*timing)
@@ -290,6 +297,10 @@ class Stats:
     def get_timer(self, name, publish=True):
         return Timer(self.client, name, publish)
 
+    # Just a convenience method to use timers as context managers clearly
+    def quick_time(self, *args, **kwargs):
+        return self.get_timer(*args, **kwargs)
+
     def transact(self, action, start, end):
         timer = self.get_timer('service_time')
         timer.send(action, start, end)
@@ -316,6 +327,9 @@ class Stats:
         counter = self.get_counter('.'.join(['event'] + parts[:-1]))
         if counter:
             counter.increment(parts[-1], delta=delta)
+
+    def simple_timing(self, event_name, ms):
+        self.client.timing_stats.record(event_name, start=0, end=ms)
 
     def event_count(self, event_name, name, sample_rate=None):
         if sample_rate is None:

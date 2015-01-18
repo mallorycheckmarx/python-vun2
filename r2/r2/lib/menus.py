@@ -16,19 +16,19 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from wrapped import CachedTemplate, Styled
-from pylons import c, request, g
-from utils import  query_string, timeago
-from strings import StringHandler, plurals
-from r2.lib.db import operators
-import r2.lib.search as search
-from r2.lib.filters import _force_unicode
+from pylons import c, request
 from pylons.i18n import _, N_
 
+from r2.lib.db import operators
+from r2.lib.filters import _force_unicode
+from r2.lib.search import sorts as search_sorts
+from r2.lib.strings import StringHandler, plurals
+from r2.lib.utils import  query_string, timeago
+from r2.lib.wrapped import Styled
 
 
 class MenuHandler(StringHandler):
@@ -87,7 +87,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      code         = _("source code"),
                      mobile       = _("mobile"), 
                      store        = _("store"),  
-                     ad_inq       = _("advertise"),
+                     advertising  = _("advertise"),
                      gold         = _('reddit gold'),
                      reddits      = _('subreddits'),
                      team         = _('team'),
@@ -102,7 +102,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      blocked      = _("blocked"),
                      update       = _("password/email"),
                      delete       = _("delete"),
-                     otp          = _("two-factor authentication"),
+                     security     = _("security"),
 
                      # messages
                      compose      = _("compose"),
@@ -122,7 +122,8 @@ menu =   MenuHandler(hot          = _('hot'),
                      about        = _("about"),
                      edit_subscriptions = _("edit subscriptions"),
                      community_settings = _("subreddit settings"),
-                     moderators   = _("edit moderators"),
+                     edit_stylesheet    = _("edit stylesheet"),
+                     moderators   = _("moderators"),
                      modmail      = _("moderator mail"),
                      contributors = _("edit approved submitters"),
                      banned       = _("ban users"),
@@ -131,6 +132,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      log          = _("moderation log"),
                      modqueue     = _("moderation queue"),
                      unmoderated  = _("unmoderated links"),
+                     edited       = _("edited"),
                      
                      wikibanned        = _("ban wiki contributors"),
                      wikicontributors  = _("add wiki contributors"),
@@ -147,6 +149,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      awards       = _("awards"),
                      ads          = _("ads"),
                      promoted     = _("promoted"),
+                     sponsor      = _("sponsor"),
                      reporters    = _("reporters"),
                      reports      = _("reports"),
                      reportedauth = _("reported authors"),
@@ -187,8 +190,7 @@ def menu_style(type):
     (style, css_class) pair given a 'type', defaulting to style =
     'dropdown' with no css_class."""
     default = ('dropdown', '')
-    d = dict(heavydrop = ('dropdown', 'heavydrop'),
-             lightdrop = ('dropdown', 'lightdrop'),
+    d = dict(lightdrop = ('dropdown', 'lightdrop'),
              tabdrop = ('dropdown', 'tabdrop'),
              srdrop = ('dropdown', 'srdrop'),
              flatlist =  ('flatlist', 'flat-list'),
@@ -198,38 +200,39 @@ def menu_style(type):
              )
     return d.get(type, default)
 
+
 class NavMenu(Styled):
     """generates a navigation menu.  The intention here is that the
     'style' parameter sets what template/layout to use to differentiate, say,
     a dropdown from a flatlist, while the optional _class, and _id attributes
     can be used to set individualized CSS."""
 
-    use_post = False
-
-    def __init__(self, options, default = None, title = '', type = "dropdown",
-                 base_path = '', separator = '|', **kw):
+    def __init__(self, options, default=None, title='', type="dropdown",
+                 base_path='', separator='|', _id='', css_class=''):
         self.options = options
+        self.default = default
+        self.title = title
         self.base_path = base_path
-
-        #add the menu style, but preserve existing css_class parameter
-        kw['style'], css_class = menu_style(type)
-        kw['css_class'] = css_class + ' ' + kw.get('css_class', '')
-
-        #used by flatlist to delimit menu items
         self.separator = separator
+
+        # add the menu style, but preserve existing css_class parameter
+        style, base_css_class = menu_style(type)
+        css_class = base_css_class + ((' ' + css_class) if css_class else '')
 
         # since the menu contains the path info, it's buttons need a
         # configuration pass to get them pointing to the proper urls
         for opt in self.options:
             opt.build(self.base_path)
 
-        # selected holds the currently selected button defined as the
-        # one whose path most specifically matches the current URL
-        # (possibly None)
-        self.default = default
+            # add "choice" css class to each button
+            if opt.css_class:
+                opt.css_class += " choice"
+            else:
+                opt.css_class = "choice"
+
         self.selected = self.find_selected()
 
-        Styled.__init__(self, title = title, **kw)
+        Styled.__init__(self, style, _id=_id, css_class=css_class)
 
     def find_selected(self):
         maybe_selected = [o for o in self.options if o.is_selected()]
@@ -248,78 +251,140 @@ class NavMenu(Styled):
         for opt in self.options:
             yield opt
 
+    def cachable_attrs(self):
+        return [
+            ('options', self.options),
+            ('title', self.title),
+            ('selected', self.selected),
+            ('separator', self.separator),
+        ]
+
+
 class NavButton(Styled):
     """Smallest unit of site navigation.  A button once constructed
     must also have its build() method called with the current path to
     set self.path.  This step is done automatically if the button is
     passed to a NavMenu instance upon its construction."""
-    def __init__(self, title, dest, sr_path = True, 
-                 nocname=False, opt = '', aliases = [],
-                 target = "", style = "plain", use_params=False, **kw):
-        # keep original dest to check against c.location when rendering
+
+    _style = "plain"
+
+    def __init__(self, title, dest, sr_path=True, nocname=False, aliases=None,
+                 target="", use_params=False, css_class=''):
+        aliases = aliases or []
         aliases = set(_force_unicode(a.rstrip('/')) for a in aliases)
         if dest:
             aliases.add(_force_unicode(dest.rstrip('/')))
 
+        self.title = title
+        self.dest = dest
+        self.selected = False
+
+        self.sr_path = sr_path
+        self.nocname = nocname
+        self.aliases = aliases
+        self.target = target
         self.use_params = use_params
-        self.request_params = dict(request.GET)
-        self.stripped_path = _force_unicode(request.path.rstrip('/').lower())
 
-        Styled.__init__(self, style = style, sr_path = sr_path, 
-                        nocname = nocname, target = target,
-                        aliases = aliases, dest = dest,
-                        selected = False, 
-                        title = title, opt = opt, **kw)
+        Styled.__init__(self, self._style, css_class=css_class)
 
-    def build(self, base_path = ''):
-        '''Generates the href of the button based on the base_path provided.'''
-
-        # append to the path or update the get params dependent on presence
-        # of opt 
-        if self.opt:
-            p = self.request_params.copy()
-            if self.dest:
-                p[self.opt] = self.dest
-            elif self.opt in p:
-                del p[self.opt]
-        else:
-            p = self.request_params.copy() if self.use_params else {}
-            base_path = ("%s/%s/" % (base_path, self.dest)).replace('//', '/')
-
-        self.action_params = p
-
+    def build(self, base_path=''):
+        base_path = ("%s/%s/" % (base_path, self.dest)).replace('//', '/')
         self.bare_path = _force_unicode(base_path.replace('//', '/')).lower()
         self.bare_path = self.bare_path.rstrip('/')
         self.base_path = base_path
-        
-        # append the query string
-        base_path += query_string(p)
-        
+
+        if self.use_params:
+            base_path += query_string(dict(request.GET))
+
         # since we've been sloppy of keeping track of "//", get rid
         # of any that may be present
         self.path = base_path.replace('//', '/')
 
     def is_selected(self):
-        """Given the current request path, would the button be selected."""
-        if self.opt:
-            if not self.dest and self.opt not in self.request_params:
-                return True
-            return self.request_params.get(self.opt, '') in self.aliases
-        else:
-            if self.stripped_path == self.bare_path:
-                return True
-            site_path = c.site.user_path.lower() + self.bare_path
-            if self.sr_path and self.stripped_path == site_path:
-                return True
-            if self.bare_path and self.stripped_path.startswith(self.bare_path):
-                return True
-            if self.stripped_path in self.aliases:
-                return True
+        stripped_path = _force_unicode(request.path.rstrip('/').lower())
+
+        if stripped_path == self.bare_path:
+            return True
+        site_path = c.site.user_path.lower() + self.bare_path
+        if self.sr_path and stripped_path == site_path:
+            return True
+        if self.bare_path and stripped_path.startswith(self.bare_path):
+            return True
+        if stripped_path in self.aliases:
+            return True
 
     def selected_title(self):
         """returns the title of the button when selected (for cases
         when it is different from self.title)"""
         return self.title
+
+    def cachable_attrs(self):
+        return [
+            ('selected', self.selected),
+            ('title', self.title),
+            ('path', self.path),
+            ('sr_path', self.sr_path),
+            ('nocname', self.nocname),
+            ('target', self.target), 
+            ('css_class', self.css_class),
+            ('_id', self._id),
+        ]
+
+
+class QueryButton(NavButton):
+    def __init__(self, title, dest, query_param, sr_path=True, aliases=None,
+                 target="", css_class=''):
+        self.query_param = query_param
+        NavButton.__init__(self, title, dest, sr_path=sr_path, nocname=True,
+                           aliases=aliases, target=target, use_params=False,
+                           css_class=css_class)
+
+    def build(self, base_path=''):
+        params = dict(request.GET)
+        if self.dest:
+            params[self.query_param] = self.dest
+        elif self.query_param in params:
+            del params[self.query_param]
+
+        self.base_path = base_path
+        base_path += query_string(params)
+        self.path = base_path.replace('//', '/')
+
+    def is_selected(self):
+        if not self.dest and self.query_param not in dict(request.GET):
+            return True
+        return dict(request.GET).get(self.query_param, '') in self.aliases
+
+
+class PostButton(NavButton):
+    _style = "post"
+
+    def __init__(self, title, dest, input_name, sr_path=True, aliases=None,
+                 target="", css_class=''):
+        self.input_name = input_name
+        NavButton.__init__(self, title, dest, sr_path=sr_path, nocname=True,
+                           aliases=aliases, target=target, use_params=False,
+                           css_class=css_class)
+
+    def build(self, base_path=''):
+        self.base_path = base_path
+        self.action_params = {self.input_name: self.dest}
+
+    def cachable_attrs(self):
+        return [
+            ('selected', self.selected),
+            ('title', self.title),
+            ('base_path', self.base_path),
+            ('action_params', self.action_params),
+            ('sr_path', self.sr_path),
+            ('target', self.target),
+            ('css_class', self.css_class),
+            ('_id', self._id),
+        ]
+
+    def is_selected(self):
+        return False
+
 
 class ModeratorMailButton(NavButton):
     def is_selected(self):
@@ -328,18 +393,22 @@ class ModeratorMailButton(NavButton):
         elif not c.default_sr and self.sr_path:
             return NavButton.is_selected(self)
 
+
 class OffsiteButton(NavButton):
-    def build(self, base_path = ''):
+    def build(self, base_path=''):
         self.sr_path = False
         self.path = self.bare_path = self.dest
 
     def cachable_attrs(self):
-        return [('path', self.path), ('title', self.title)]
+        return [
+            ('path', self.path),
+            ('title', self.title),
+            ('css_class', self.css_class),
+        ]
+
 
 class SubredditButton(NavButton):
     from r2.models.subreddit import Frontpage, Mod, All, Random, RandomSubscription
-    # Translation is deferred (N_); must be done per-request,
-    # not at import/class definition time.
     # TRANSLATORS: This refers to /r/mod
     name_overrides = {Mod: N_("mod"),
     # TRANSLATORS: This refers to the user's front page
@@ -349,44 +418,59 @@ class SubredditButton(NavButton):
     # TRANSLATORS: Gold feature, "myrandom", a random subreddit from your subscriptions
                       RandomSubscription: N_("myrandom")}
 
-    def __init__(self, sr, **kw):
+    def __init__(self, sr, css_class=''):
         self.path = sr.path
         name = self.name_overrides.get(sr)
-        # Run the name through deferred translation
         name = _(name) if name else sr.name
-        NavButton.__init__(self, name, sr.path, False,
-                           isselected = (c.site == sr), **kw)
+        self.isselected = (c.site == sr)
+        NavButton.__init__(self, name, sr.path, sr_path=False, nocname=True,
+                           css_class=css_class)
 
-    def build(self, base_path = ''):
+    def build(self, base_path=''):
         self.bare_path = ""
 
     def is_selected(self):
         return self.isselected
 
     def cachable_attrs(self):
-        return [('path', self.path), ('title', self.title),
-                ('isselected', self.isselected)]
+        return [
+            ('path', self.path),
+            ('title', self.title),
+            ('isselected', self.isselected),
+            ('css_class', self.css_class),
+        ]
+
 
 class NamedButton(NavButton):
     """Convenience class for handling the majority of NavButtons
     whereby the 'title' is just the translation of 'name' and the
     'dest' defaults to the 'name' as well (unless specified
     separately)."""
-    
-    def __init__(self, name, sr_path = True, nocname=False, dest = None, fmt_args = {}, **kw):
+
+    def __init__(self, name, sr_path=True, nocname=False, aliases=None,
+                 dest=None, fmt_args={}, use_params=False, css_class=''):
         self.name = name.strip('/')
         menutext = menu[self.name] % fmt_args
-        NavButton.__init__(self, menutext, name if dest is None else dest,
-                           sr_path = sr_path, nocname=nocname, **kw)
+        dest = dest if dest is not None else name
+        NavButton.__init__(self, menutext, dest, sr_path=sr_path,
+                           nocname=nocname, aliases=aliases,
+                           use_params=use_params, css_class=css_class)
+
 
 class JsButton(NavButton):
     """A button which fires a JS event and thus has no path and cannot
     be in the 'selected' state"""
-    def __init__(self, title, style = 'js', tab_name = None, **kw):
-        NavButton.__init__(self, title, '#', style = style, tab_name = tab_name,
-                           **kw)
 
-    def build(self, *a, **kw):
+    _style = "js"
+
+    def __init__(self, title, tab_name=None, onclick='', css_class=''):
+        self.tab_name = tab_name
+        self.onclick = onclick
+        dest = '#'
+        NavButton.__init__(self, title, dest, sr_path=False, nocname=True,
+                           css_class=css_class)
+
+    def build(self, base_path=''):
         if self.tab_name:
             self.path = '#' + self.tab_name
         else:
@@ -395,128 +479,126 @@ class JsButton(NavButton):
     def is_selected(self):
         return False
 
+    def cachable_attrs(self):
+        return [
+            ('title', self.title),
+            ('path', self.path),
+            ('target', self.target), 
+            ('css_class', self.css_class),
+            ('_id', self._id),
+            ('tab_name', self.tab_name),
+            ('onclick', self.onclick),
+        ]
+
+
 class PageNameNav(Styled):
     """generates the links and/or labels which live in the header
     between the header image and the first nav menu (e.g., the
     subreddit name, the page name, etc.)"""
     pass
 
-class SimplePostMenu(NavMenu):
-    """Parent class of menus used for sorting and time sensitivity of
-    results. Defines a type of menu that uses hidden forms to POST the user's
-    selection to a handler that may commit the user's choice as a preference
-    change before redirecting to a URL that also includes the user's choice.
-    If other user's load this URL, they won't affect their own preferences, but
-    the given choice will apply for that page load.
 
-    The value of the POST/GET parameter must be one of the entries in
-    'cls.options'.  This parameter is also used to construct the list
-    of NavButtons contained in this Menu instance.  The goal here is
-    to have a menu object which 'out of the box' is self validating."""
-    options   = []
+class SortMenu(NavMenu):
+    name = 'sort'
     hidden_options = []
-    name      = ''
-    title     = ''
-    default = None
-    type = 'lightdrop'
+    button_cls = QueryButton
 
-    def __init__(self, **kw):
+    # these are _ prefixed to avoid colliding with NavMenu attributes
+    _default = 'hot'
+    _options = ('hot', 'new', 'top', 'old', 'controversial')
+    _type = 'lightdrop'
+    _title = N_("sorted by")
+
+    def __init__(self, default=None, title='', base_path='', separator='|',
+                 _id='', css_class=''):
+        options = self.make_buttons()
+        default = default or self._default
+        base_path = base_path or request.path
+        NavMenu.__init__(self, options, default=default, title=_(self._title),
+                         type=self._type, base_path=base_path,
+                         separator=separator, _id=_id, css_class=css_class)
+
+    def make_buttons(self):
         buttons = []
-        for name in self.options:
+        for name in self._options:
             css_class = 'hidden' if name in self.hidden_options else ''
-            button = NavButton(self.make_title(name), name, opt=self.name,
-                               style='post', css_class=css_class)
+            button = self.button_cls(self.make_title(name), name, self.name,
+                                     css_class=css_class)
             buttons.append(button)
-
-        kw['default'] = kw.get('default', self.default)
-        kw['base_path'] = kw.get('base_path') or request.path
-        NavMenu.__init__(self, buttons, type = self.type, **kw)
+        return buttons
 
     def make_title(self, attr):
         return menu[attr]
 
-    @classmethod
-    def operator(self, sort):
-        """Converts the opt into a DB-esque operator used for sorting results"""
-        return None
-
-class SortMenu(SimplePostMenu):
-    """The default sort menu."""
-    name      = 'sort'
-    default   = 'hot'
-    options   = ('hot', 'new', 'top', 'old', 'controversial')
-
-    def __init__(self, **kw):
-        kw['title'] = _("sorted by")
-        SimplePostMenu.__init__(self, **kw)
+    _mapping = {
+        "hot": operators.desc('_hot'),
+        "new": operators.desc('_date'),
+        "old": operators.asc('_date'),
+        "top": operators.desc('_score'),
+        "controversial": operators.desc('_controversy'),
+        "confidence": operators.desc('_confidence'),
+        "random": operators.shuffled('_confidence'),
+    }
+    _reverse_mapping = {v: k for k, v in _mapping.iteritems()}
 
     @classmethod
-    def operator(self, sort):
-        if sort == 'hot':
-            return operators.desc('_hot')
-        elif sort == 'new':
-            return operators.desc('_date')
-        elif sort == 'old':
-            return operators.asc('_date')
-        elif sort == 'top':
-            return operators.desc('_score')
-        elif sort == 'controversial':
-            return operators.desc('_controversy')
-        elif sort == 'confidence':
-            return operators.desc('_confidence')
-        elif sort == 'random':
-            return operators.shuffled('_confidence')
+    def operator(cls, sort):
+        return cls._mapping.get(sort)
+
+    @classmethod
+    def sort(cls, operator):
+        return cls._reverse_mapping.get(operator)
+
 
 class ProfileSortMenu(SortMenu):
-    default   = 'new'
-    options   = ('hot', 'new', 'top', 'controversial')
+    _default = 'new'
+    _options = ('hot', 'new', 'top', 'controversial')
+
 
 class CommentSortMenu(SortMenu):
     """Sort menu for comments pages"""
-    default   = 'confidence'
-    options   = ('confidence', 'top', 'new', 'hot', 'controversial', 'old',
+    _default = 'confidence'
+    _options = ('confidence', 'top', 'new', 'hot', 'controversial', 'old',
                  'random')
     hidden_options = ('random',)
-    use_post  = True
+    button_cls = PostButton
+
 
 class SearchSortMenu(SortMenu):
     """Sort menu for search pages."""
-    default   = 'relevance'
-    mapping   = search.sorts
-    options   = mapping.keys()
+    _default = 'relevance'
+    mapping = search_sorts
+    _options = mapping.keys()
 
     @classmethod
     def operator(cls, sort):
         return cls.mapping.get(sort, cls.mapping[cls.default])
 
+
 class RecSortMenu(SortMenu):
     """Sort menu for recommendation page"""
-    default   = 'new'
-    options   = ('hot', 'new', 'top', 'controversial', 'relevance')
+    _default = 'new'
+    _options = ('hot', 'new', 'top', 'controversial', 'relevance')
 
-class KindMenu(SimplePostMenu):
-    name    = 'kind'
-    default = 'all'
-    options = ('links', 'comments', 'messages', 'all')
 
-    def __init__(self, **kw):
-        kw['title'] = _("kind")
-        SimplePostMenu.__init__(self, **kw)
+class KindMenu(SortMenu):
+    name = 'kind'
+    _default = 'all'
+    _options = ('links', 'comments', 'messages', 'all')
+    _title = N_("kind")
 
     def make_title(self, attr):
         if attr == "all":
             return _("all")
         return menu[attr]
 
-class TimeMenu(SimplePostMenu):
-    """Menu for setting the time interval of the listing (from 'hour' to 'all')"""
-    name      = 't'
-    default   = 'all'
-    options   = ('hour', 'day', 'week', 'month', 'year', 'all')
 
-    def __init__(self, **kw):
-        kw['title'] = _("links from")
-        SimplePostMenu.__init__(self, **kw)
+class TimeMenu(SortMenu):
+    """Menu for setting the time interval of the listing (from 'hour' to 'all')"""
+    name = 't'
+    _default = 'all'
+    _options = ('hour', 'day', 'week', 'month', 'year', 'all')
+    _title = N_("links from")
 
     @classmethod
     def operator(self, time):
@@ -524,15 +606,18 @@ class TimeMenu(SimplePostMenu):
         if time != 'all':
             return Link.c._date >= timeago(time)
 
+
 class ControversyTimeMenu(TimeMenu):
     """time interval for controversial sort.  Make default time 'day' rather than 'all'"""
-    default = 'day'
-    use_post = True
+    _default = 'day'
+    button_cls = PostButton
+
 
 class SubredditMenu(NavMenu):
     def find_selected(self):
         """Always return False so the title is always displayed"""
         return None
+
 
 class JsNavMenu(NavMenu):
     def find_selected(self):
@@ -551,7 +636,5 @@ class AdminKindMenu(KindMenu):
 
 class AdminTimeMenu(TimeMenu):
     get_param = 't'
-    default   = 'day'
-    options   = ('hour', 'day', 'week')
-
-
+    _default = 'day'
+    _options = ('hour', 'day', 'week')

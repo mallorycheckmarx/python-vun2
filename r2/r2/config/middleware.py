@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -27,6 +27,7 @@ import urllib
 import tempfile
 import urlparse
 from threading import Lock
+import itertools
 
 from paste.cascade import Cascade
 from paste.registry import RegistryManager
@@ -38,9 +39,11 @@ from pylons.middleware import ErrorDocuments, ErrorHandler
 from pylons.wsgiapp import PylonsApp
 from routes.middleware import RoutesMiddleware
 
+from r2.config import hooks
 from r2.config.environment import load_environment
 from r2.config.extensions import extension_mapping, set_extension
 from r2.lib.utils import is_subdomain
+from r2.lib import csrf
 
 
 # patch in WebOb support for HTTP 429 "Too Many Requests"
@@ -313,8 +316,8 @@ class LimitUploadSize(object):
                 return ['<html><body>bad request</body></html>']
 
             if cl_int > self.max_size:
-                from r2.lib.strings import string_dict
-                error_msg = string_dict['css_validator_messages']['max_size'] % dict(max_size = self.max_size/1024)
+                error_msg = "too big. keep it under %d KiB" % (
+                    self.max_size / 1024)
                 start_response("413 Too Big", [])
                 return ["<html>"
                         "<head>"
@@ -380,24 +383,49 @@ class RedditApp(PylonsApp):
         super(RedditApp, self).__init__(*args, **kwargs)
         self._loading_lock = Lock()
         self._controllers = None
+        self._hooks_registered = False
 
     def setup_app_env(self, environ, start_response):
         PylonsApp.setup_app_env(self, environ, start_response)
-        self.load_controllers()
+        self.load()
+
+    def load(self):
+        if self._controllers and self._hooks_registered:
+            return
+
+        with self._loading_lock:
+            self.load_controllers()
+            self.register_hooks()
+
+    def _check_csrf_prevention(self):
+        from r2 import controllers
+        from pylons import g
+
+        if not g.running_as_script:
+            controllers_iter = itertools.chain(
+                controllers._reddit_controllers.itervalues(),
+                controllers._plugin_controllers.itervalues(),
+            )
+            for controller in controllers_iter:
+                csrf.check_controller_csrf_prevention(controller)
 
     def load_controllers(self):
         if self._controllers:
             return
 
-        with self._loading_lock:
-            if self._controllers:
-                return
+        controllers = importlib.import_module(self.package_name +
+                                              '.controllers')
+        controllers.load_controllers()
+        config['r2.plugins'].load_controllers()
+        self._controllers = controllers
+        self._check_csrf_prevention()
 
-            controllers = importlib.import_module(self.package_name +
-                                                  '.controllers')
-            controllers.load_controllers()
-            config['r2.plugins'].load_controllers()
-            self._controllers = controllers
+    def register_hooks(self):
+        if self._hooks_registered:
+            return
+
+        hooks.register_hooks()
+        self._hooks_registered = True
 
     def find_controller(self, controller_name):
         if controller_name in self.controller_classes:

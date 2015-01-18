@@ -16,28 +16,28 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from pylons import g
+
+   from r2.lib.filters import conditional_websafe
    from r2.lib.template_helpers import get_domain
-   from r2.lib.template_helpers import media_https_if_secure
+   from r2.lib.template_helpers import make_url_protocol_relative
    from r2.lib.pages.things import LinkButtons
    from r2.lib.pages import WrappedUser
    from r2.lib.strings import Score, strings
 %>
  
 <%inherit  file="printable.html"/>
-<%namespace file="utils.html" import="plain_link, thing_timestamp, edited" />
+<%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp" />
 <%namespace file="printablebuttons.html" import="toggle_button" />
  
 <%def name="numcol()">
-  <% num = thing.num %>
   <span class="rank">
-    %if thing.num > 0:
-      ${thing.num}
-    %endif
+    ${thing.num_text}
   </span>
 </%def>
 
@@ -68,9 +68,7 @@
   <ul class="flat-list buttons">
     %if thing.nsfw:
      <li class="rounded nsfw-stamp stamp">
-       <acronym title="${_('Adult content: Not Safe For Work')}">
-         ${_("NSFW")}
-       </acronym>
+      ${nsfw_stamp()}
      </li>
     %endif
     ${self.buttons()}
@@ -165,10 +163,6 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
 %endif
 </%def>
 
-<%def name="thing_data_attributes(what)" buffered="True">
-${parent.thing_data_attributes(what)} data-ups="${what.upvotes}" data-downs="${what.downvotes}"
-</%def>
-
 <%def name="subreddit()" buffered="True">
   ${plain_link('/r/' + thing.subreddit.name, thing.subreddit_path, sr_path = False,
                cname = False, _class = "subreddit hover may-blank")}
@@ -205,17 +199,15 @@ ${parent.thing_data_attributes(what)} data-ups="${what.upvotes}" data-downs="${w
 
 <%def name="tagline()">
   <%
-    taglinetext = thing.taglinetext.replace(" ", "&#32;")
+    taglinetext = conditional_websafe(thing.taglinetext).replace(" ", "&#32;")
   %>
   ${unsafe(taglinetext % dict(reddit=self.subreddit(),
                               score=capture(self.score, thing, thing.likes, tag='span'),
-                              when=capture(thing_timestamp, thing, thing.timesince),
+                              when=capture(thing_timestamp, thing, thing.timesince, live=True, include_tense=True),
                               author=WrappedUser(thing.author, thing.attribs, thing).render(),
                               lastedited=capture(edited, thing, thing.lastedited)
                               ))}
-  %if c.permalink_page or c.profilepage:
-    ${self.gildings()}
-  %endif
+  ${self.gildings()}
   %if thing.stickied:
     &#32;-&#32;<span class="stickied-tagline" title="selected by this subreddit's moderators">stickied post</span>
   %endif
@@ -243,11 +235,18 @@ ${parent.thing_data_attributes(what)} data-ups="${what.upvotes}" data-downs="${w
     % if not thing.thumbnail_sprited:
         <%
             if hasattr(thing, 'thumbnail_size'):
-                size_str = "width='%d' height='%d'" % (thing.thumbnail_size[0], thing.thumbnail_size[1])
+                scaling_factor = 1
+                if thing.thumbnail_size[0] > g.thumbnail_size[0]:
+                  # hidpi scaling, calculate in case hidpi changes definition in the future and
+                  # we have multiple sets of image dimensions. Currently should always be 1 or 2.
+                  # Width is always the maximum allowed, so we don't need to check height.
+                  scaling_factor = thing.thumbnail_size[0] // g.thumbnail_size[0]
+
+                size_str = "width='%d' height='%d'" % (thing.thumbnail_size[0] // scaling_factor, thing.thumbnail_size[1] // scaling_factor)
             else:
                 size_str = ""
         %>
-        <img src="${media_https_if_secure(thing.thumbnail)}" ${size_str} alt=""/>
+        <img src="${make_url_protocol_relative(thing.thumbnail)}" ${size_str} alt="">
     % endif
   </%call>
   %endif

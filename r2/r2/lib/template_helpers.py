@@ -16,13 +16,16 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import hmac
+import hashlib
+
 from r2.models import *
-from filters import unsafe, websafe, _force_unicode, _force_utf8
-from r2.lib.utils import UrlParser, timesince, is_subdomain
+from filters import unsafe, websafe, _force_utf8, conditional_websafe
+from r2.lib.utils import UrlParser, timeago, timesince, is_subdomain
 
 from r2.lib import hooks
 from r2.lib.static import static_mtime
@@ -46,7 +49,7 @@ static_text_extensions = {
     '.css': 'css',
     '.less': 'css'
 }
-def static(path, allow_gzip=True):
+def static(path):
     """
     Simple static file maintainer which automatically paths and
     versions files being served out of static.
@@ -58,21 +61,13 @@ def static(path, allow_gzip=True):
     dirname, filename = os.path.split(path)
     extension = os.path.splitext(filename)[1]
     is_text = extension in static_text_extensions
-    can_gzip = is_text and 'gzip' in request.accept_encoding
-    should_gzip = allow_gzip and can_gzip
     should_cache_bust = False
 
     path_components = []
     actual_filename = None
 
-    if not c.secure and g.static_domain:
-        scheme = "http"
+    if g.static_domain:
         domain = g.static_domain
-        suffix = ".gzip" if should_gzip and g.static_pre_gzipped else ""
-    elif c.secure and g.static_secure_domain:
-        scheme = "https"
-        domain = g.static_secure_domain
-        suffix = ".gzip" if should_gzip and g.static_secure_pre_gzipped else ""
     else:
         path_components.append(c.site.static_path)
 
@@ -84,14 +79,12 @@ def static(path, allow_gzip=True):
             should_cache_bust = True
             actual_filename = filename
 
-        scheme = None
         domain = None
-        suffix = ""
 
     path_components.append(dirname)
     if not actual_filename:
         actual_filename = g.static_names.get(filename, filename)
-    path_components.append(actual_filename + suffix)
+    path_components.append(actual_filename)
 
     actual_path = os.path.join(*path_components)
 
@@ -101,7 +94,7 @@ def static(path, allow_gzip=True):
         query = 'v=' + str(file_id)
 
     return urlparse.urlunsplit((
-        scheme,
+        None,
         domain,
         actual_path,
         query,
@@ -109,22 +102,37 @@ def static(path, allow_gzip=True):
     ))
 
 
-def media_https_if_secure(url):
-    if not c.secure:
+def make_url_protocol_relative(url):
+    if not url or url.startswith("//"):
         return url
-    return g.media_provider.convert_to_https(url)
+
+    scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+    return urlparse.urlunsplit((None, netloc, path, query, fragment))
+
+
+def make_url_https(url):
+    if not url or url.startswith("https://"):
+        return url
+
+    scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+    return urlparse.urlunsplit(("https", netloc, path, query, fragment))
 
 
 def header_url(url):
     if url == g.default_header_url:
         return static(url)
     else:
-        return media_https_if_secure(url)
+        return make_url_protocol_relative(url)
 
 
 def js_config(extra_config=None):
     logged = c.user_is_loggedin and c.user.name
     gold = bool(logged and c.user.gold)
+
+    controller_name = request.environ['pylons.routes_dict']['controller']
+    action_name = request.environ['pylons.routes_dict']['action']
+    mac = hmac.new(g.secrets["action_name"], controller_name + '.' + action_name, hashlib.sha1)
+    verification = mac.hexdigest()
 
     config = {
         # is the user logged in?
@@ -144,8 +152,12 @@ def js_config(extra_config=None):
         "cur_domain": get_domain(cname=c.frameless_cname, subreddit=False, no_www=True),
         # where do ajax requests go?
         "ajax_domain": get_domain(cname=c.authorized_cname, subreddit=False),
+        "stats_domain": g.stats_domain or '',
+        "stats_sample_rate": g.stats_sample_rate or 0,
         "extension": c.extension,
         "https_endpoint": is_subdomain(request.host, g.domain) and g.https_endpoint,
+        # does the client only want to communicate over HTTPS?
+        "https_forced": c.user.https_forced,
         # debugging?
         "debug": g.debug,
         "send_logs": g.live_config["frontend_logging"],
@@ -156,7 +168,6 @@ def js_config(extra_config=None):
           "loading": _("loading...")
         },
         "is_fake": isinstance(c.site, FakeSubreddit),
-        "fetch_trackers_url": g.fetch_trackers_url,
         "adtracker_url": g.adtracker_url,
         "clicktracker_url": g.clicktracker_url,
         "uitracker_url": g.uitracker_url,
@@ -166,7 +177,14 @@ def js_config(extra_config=None):
         "vote_hash": c.vote_hash,
         "gold": gold,
         "has_subscribed": logged and c.user.has_subscribed,
+        "pageInfo": {
+          "verification": verification,
+          "actionName": controller_name + '.' + action_name,
+        },
     }
+
+    if g.uncompressedJS:
+        config["uncompressedJS"] = True
 
     if extra_config:
         config.update(extra_config)
@@ -189,7 +207,7 @@ class JSPreload(js.DataSource):
         from r2.lib.pages.things import wrap_things
         if not isinstance(wrapped, Wrapped):
             wrapped = wrap_things(wrapped)[0]
-        self.data[url] = wrapped.render_nocache('', style='api').finalize()
+        self.data[url] = wrapped.render_nocache('api').finalize()
 
     def use(self):
         hooks.get_hook("js_preload.use").call(js_preload=self)
@@ -259,7 +277,14 @@ def replace_render(listing, item, render_func):
 
         #only LinkListing has a show_nums attribute
         if listing and hasattr(listing, "show_nums"):
-            replacements["num"] = str(item.num) if listing.show_nums else ""
+            if listing.show_nums and item.num > 0:
+                num = str(item.num)
+            else:
+                num = ""
+            replacements["num"] = num
+
+        if getattr(item, "rowstyle_cls", None):
+            replacements["rowstyle"] = item.rowstyle_cls
 
         if hasattr(item, "num_comments"):
             com_label, com_cls = comment_label(item.num_comments)
@@ -267,6 +292,12 @@ def replace_render(listing, item, render_func):
                 com_label = unicode(item.num_comments)
             replacements['numcomments'] = com_label
             replacements['commentcls'] = com_cls
+
+        if hasattr(item, "num_children"):
+            label = ungettext("child", "children", item.num_children)
+            numchildren_text = strings.number_label % {'num': item.num_children,
+                                                       'thing': label}
+            replacements['numchildren_text'] = numchildren_text
 
         replacements['display'] =  "" if display else "style='display:none'"
 
@@ -281,16 +312,16 @@ def replace_render(listing, item, render_func):
             if hasattr(item, "promoted") and item.promoted is not None:
                 from r2.lib import promote
                 # promoted links are special in their date handling
-                replacements['timesince'] = timesince(item._date -
-                                                      promote.timezone_offset)
+                replacements['timesince'] = \
+                    simplified_timesince(item._date - promote.timezone_offset)
             else:
-                replacements['timesince'] = timesince(item._date)
+                replacements['timesince'] = simplified_timesince(item._date)
 
             replacements['time_period'] = calc_time_period(item._date)
 
         # compute the last edited time here so we don't end up caching it
         if hasattr(item, "editted") and not isinstance(item.editted, bool):
-            replacements['lastedited'] = timesince(item.editted)
+            replacements['lastedited'] = simplified_timesince(item.editted)
 
         # Set in front.py:GET_comments()
         replacements['previous_visits_hex'] = c.previous_visits_hex
@@ -377,23 +408,30 @@ def dockletStr(context, type, browser):
 
 
 
-def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_extension=True):
+def add_sr(
+        path, sr_path=True, nocname=False, force_hostname=False,
+        retain_extension=True, force_https=False):
     """
     Given a path (which may be a full-fledged url or a relative path),
     parses the path and updates it to include the subreddit path
     according to the rules set by its arguments:
+
+     * sr_path: if a cname is not used for the domain, updates the
+       path to include c.site.path.
+
+     * nocname: when updating the hostname, overrides the value of
+       c.cname to set the hostname to g.domain.  The default behavior
+       is to set the hostname consistent with c.cname.
 
      * force_hostname: if True, force the url's hostname to be updated
        even if it is already set in the path, and subject to the
        c.cname/nocname combination.  If false, the path will still
        have its domain updated if no hostname is specified in the url.
 
-     * nocname: when updating the hostname, overrides the value of
-       c.cname to set the hostname to g.domain.  The default behavior
-       is to set the hostname consistent with c.cname.
+     * retain_extension: if True, sets the extention according to
+       c.render_style.
 
-     * sr_path: if a cname is not used for the domain, updates the
-       path to include c.site.path.
+     * force_https: force the URL scheme to https
 
     For caching purposes: note that this function uses:
       c.cname, c.render_style, c.site.name
@@ -413,7 +451,7 @@ def add_sr(path, sr_path = True, nocname=False, force_hostname = False, retain_e
             u.hostname = get_domain(cname = (c.cname and not nocname),
                                     subreddit = False)
 
-    if c.secure:
+    if (c.secure and u.is_reddit_url()) or force_https:
         u.scheme = "https"
 
     if retain_extension:
@@ -549,6 +587,10 @@ def format_number(number, locale=None):
     return babel.numbers.format_number(number, locale=locale)
 
 
+def format_percent(ratio, locale=None):
+    return babel.numbers.format_percent(ratio, locale=locale or c.locale)
+
+
 def html_datetime(date):
     # Strip off the microsecond to appease the HTML5 gods, since
     # datetime.isoformat() returns too long of a microsecond value.
@@ -558,3 +600,65 @@ def html_datetime(date):
 
 def js_timestamp(date):
     return '%d' % (calendar.timegm(date.timetuple()) * 1000)
+
+
+def simplified_timesince(date, include_tense=True):
+    if date > timeago("1 minute"):
+        return _("just now")
+
+    since = []
+    since.append(timesince(date))
+    if include_tense:
+        since.append(_("ago"))
+    return " ".join(since)
+
+
+def display_link_karma(karma):
+    if not c.user_is_admin:
+        return max(karma, g.link_karma_display_floor)
+    return karma
+
+
+def display_comment_karma(karma):
+    if not c.user_is_admin:
+        return max(karma, g.comment_karma_display_floor)
+    return karma
+
+
+def format_html(format_string, *args, **kwargs):
+    """
+    Similar to str % foo, but passes all arguments through conditional_websafe,
+    and calls 'unsafe' on the result. This function should be used instead
+    of str.format or % interpolation to build up small HTML fragments.
+
+    Example:
+
+      format_html("Are you %s? %s", name, unsafe(checkbox_html))
+    """
+    if args and kwargs:
+        raise ValueError("Can't specify both positional and keyword args")
+    args_safe = tuple(map(conditional_websafe, args))
+    kwargs_gen = ((k, conditional_websafe(v)) for (k, v) in kwargs.iteritems())
+    kwargs_safe = dict(kwargs_gen)
+
+    format_args = args_safe or kwargs_safe
+    return unsafe(format_string % format_args)
+
+
+def _ws(*args, **kwargs):
+    """Helper function to get HTML escaped output from gettext"""
+    return websafe(_(*args, **kwargs))
+
+
+def _wsf(format_trans, *args, **kwargs):
+    """
+    format_html, but with an escaped, translated string as the format str
+
+    Sometimes trusted HTML needs to be included in a translatable string,
+    but we don't trust translators to write HTML themselves.
+
+    Example:
+
+      _wsf("Are you %s? %s", name, unsafe(checkbox_html))
+    """
+    return format_html(_ws(format_trans), *args, **kwargs)

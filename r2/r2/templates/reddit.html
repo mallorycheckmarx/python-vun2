@@ -16,11 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%! 
+   from r2.config import feature
    from r2.lib.template_helpers import add_sr, static, join_urls, class_dict, get_domain
    from r2.lib.filters import unsafe
    from r2.lib.pages import SearchForm, ClickGadget, SideContentBox, Login, ListingChooser
@@ -45,27 +46,24 @@
 
 <%def name="global_stylesheets()">
   ${less_stylesheet("reddit.less")}
+  %if feature.is_enabled('new_markdown_style'):
+    ${less_stylesheet("markdown.less")}
+  %else:
+    ${less_stylesheet("old-markdown.less")}
+  %endif
   %if c.site.stylesheet:
     <link rel="stylesheet" href="${static(c.site.stylesheet)}" type="text/css" >
   %endif
-
-  <!--[if lt IE 7]>
-    <link rel="stylesheet" href="${static('reddit-ie6-hax.css')}"
-          type="text/css" />
-  <![endif]-->
-
-  <!--[if lt IE 8]>
-    <link rel="stylesheet" href="${static('reddit-ie7-hax.css')}"
-          type="text/css" />
-  <![endif]-->
 </%def>
 
 <%def name="sr_stylesheets()">
   %if thing.subreddit_stylesheet_url:
+    <!--[if gte IE 8]> <!-->
     <link rel="stylesheet"
           href="${thing.subreddit_stylesheet_url}"
           title="applied_subreddit_stylesheet"
           type="text/css">
+    <!-- <![endif]-->
   %endif
 </%def>
 
@@ -79,6 +77,18 @@
 <%def name="pagemeta()">
   %if hasattr(thing, "shortlink"):
     <link rel="shorturl" href="http://${thing.shortlink}"/>
+  %endif
+
+  %if hasattr(thing, "og_data"):
+    %for (og_property, og_value) in thing.og_data.iteritems():
+      <meta property="og:${og_property}" content="${og_value}">
+    %endfor
+  %endif
+
+  %if hasattr(thing, "twitter_card"):
+    %for (twitter_card_property, twitter_card_value) in thing.twitter_card.iteritems():
+      <meta property="twitter:${twitter_card_property}" content="${twitter_card_value}">
+    %endfor
   %endif
 
   <link rel='icon' href="${static('icon.png')}" sizes="256x256" type="image/png" />
@@ -103,9 +113,12 @@
 
 <%def name="javascript()">
   <% from r2.lib import js %>
-  ${unsafe(js.use('jquery', 'reddit-init'))}
+  <!--[if gte IE 9]> <!-->
+    ${unsafe(js.use('reddit-init'))}
+  <!-- <![endif]-->
+
   <!--[if lt IE 9]>
-    ${unsafe(js.use('html5shiv'))}
+    ${unsafe(js.use('reddit-init-legacy'))}
   <![endif]-->
   ${less_js()}
 </%def>
@@ -136,8 +149,8 @@
 
   <% content = getattr(self, "content", None) or thing.content %>
   %if content:
-    ##<div class="fixedwidth"><!--IE6sux--></div>
-    ##<div class="clearleft"><!--IE6sux--></div>
+    ##<div class="fixedwidth"></div>
+    ##<div class="clearleft"></div>
     <a name="content"></a>
     <div ${tags(id=thing.content_id)} ${classes("content", thing.css_class)} role="main">
       ${content()}
@@ -150,16 +163,38 @@
 
     %if not c.user_is_loggedin and not g.read_only_mode:
       %if thing.enable_login_cover:
-      <div class="login-popup cover-overlay" style="display: none">
-        <div class="cover" onclick="return hidecover(this)"></div>
-        <div class="popup">
-          <a href="#" onclick="return hidecover(this)" class="hidecover">
-            ${_("close this window")}
-          </a>
-          <h1 class="cover-msg">${strings.cover_msg}</h1>
-          ${Login(is_popup=True)}
-        </div>
-      </div>
+        %if feature.is_enabled('new_login_flow'):
+          <script>
+            var BETA_HOST = 'beta.reddit.com';
+            if (location.host === BETA_HOST) {
+              r.config.https_endpoint = 'https://' + BETA_HOST;
+            }
+          </script>
+          <div id="login-popup-v2" class="login-popup cover-overlay" tabindex="-1" style="display: none">
+            <div class="cover"></div>
+            <div class="popup-v2">
+              <a href="javascript: void 0;" class="hidecover c-hide-text">
+                ${_("close this window")}
+              </a>
+              <div class="clear"></div>
+              <div class="popup-v2-body">
+                <h2 class="cover-msg">${strings.cover_msg}</h2>
+                ${Login(is_popup=True)}
+              </div>
+            </div>
+          </div>
+        %else:
+          <div class="login-popup cover-overlay" style="display: none">
+            <div class="cover" onclick="return hidecover(this)"></div>
+            <div class="popup">
+              <a href="#" onclick="return hidecover(this)" class="hidecover">
+                ${_("close this window")}
+              </a>
+              <h1 class="cover-msg">${strings.cover_msg}</h1>
+              ${Login(is_popup=True)}
+            </div>
+          </div>
+        %endif
       %endif
       <div class="lang-popup cover-overlay" style="display: none">
         <div class="cover" onclick="return hidecover(this)"></div>

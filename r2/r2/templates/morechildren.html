@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,8 +25,6 @@
  %>
 <%inherit file="comment_skeleton.html"/>
 
-<%def name="collapsed()">
-</%def>
 
 <%def name="commentBody()">
 <%
@@ -35,7 +33,7 @@
 <span class="morecomments">
 <a style="font-size: smaller; font-weight: bold" class="button"
    id="more_${thing._fullname}" href="javascript:void(0)"
-   onclick="return morechildren(this, '${thing.link_name}', '${",".join(cids)}', ${thing.depth}, '${thing.previous_visits_hex}')">
+   onclick="return morechildren(this, '${thing.link_name}', '${thing.sort}', '${",".join(cids)}', ${thing.depth}, '${thing.previous_visits_hex}')">
 ${_("load more comments")}
 <span class="gray">&nbsp;(${thing.count} ${ungettext("reply", "replies", thing.count)})</span>
 </a>
@@ -43,12 +41,6 @@ ${_("load more comments")}
 </%def>
 
 <%def name="arrows()">
-</%def>
-
-<%def name="buttons()">
-</%def>
-
-<%def name="tagline(collapse=False)">
 </%def>
 
 <%def name="midcol(cls = '')">

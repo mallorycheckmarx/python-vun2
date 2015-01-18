@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,9 +28,16 @@ from time import time, sleep
 from boto.emr.step import InstallPigStep, PigStep
 from boto.emr.bootstrap_action import BootstrapAction
 
-from r2.lib.emr_helpers import (EmrJob, get_compatible_jobflows,
-    get_step_state, EmrException, update_jobflows_cached,
-    LIVE_STATES, COMPLETED, PENDING, NOTFOUND)
+from r2.lib.emr_helpers import (
+    EmrException,
+    EmrJob,
+    get_compatible_jobflows,
+    get_step_state,
+    LIVE_STATES,
+    COMPLETED,
+    PENDING,
+    NOTFOUND,
+)
 
 
 class TrafficBase(EmrJob):
@@ -44,7 +51,7 @@ class TrafficBase(EmrJob):
     BOOTSTRAP_NAME = 'traffic binaries'
     BOOTSTRAP_SCRIPT = os.path.join(g.TRAFFIC_SRC_DIR, 'traffic_bootstrap.sh')
     _defaults = dict(master_instance_type='m1.small',
-                     slave_instance_type='m1.xlarge', num_slaves=1)
+                     slave_instance_type='m3.xlarge', num_slaves=1)
 
     def __init__(self, emr_connection, jobflow_name, steps=None, **kw):
         combined_kw = copy(self._defaults)
@@ -145,8 +152,8 @@ def _wait_for_step(emr_connection, step, jobflowid, sleeptime):
     """Poll EMR and wait for a step to finish."""
     sleep(180)
     start = time()
-    update_jobflows_cached(emr_connection)
-    step_state = get_step_state(emr_connection, jobflowid, step.name)
+    step_state = get_step_state(emr_connection, jobflowid, step.name,
+                                update=True)
     while step_state in LIVE_STATES + [PENDING]:
         sleep(sleeptime)
         step_state = get_step_state(emr_connection, jobflowid, step.name)

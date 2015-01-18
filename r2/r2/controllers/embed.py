@@ -16,12 +16,13 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from r2.controllers.reddit_base import RedditController
 from r2.lib.base import proxyurl
+from r2.lib.csrf import csrf_exempt
 from r2.lib.template_helpers import get_domain
 from r2.lib.pages import Embed, BoringPage, HelpPage
 from r2.lib.filters import websafe, SC_OFF, SC_ON
@@ -68,6 +69,7 @@ class EmbedController(RedditController):
                         content = Embed(content=output),
                         show_sidebar = None).render()
 
+    @csrf_exempt
     def renderurl(self, override=None):
         if override:
             path = override

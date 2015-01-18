@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,7 +25,10 @@
 %if thing.suggestion_type:
 
 <span class="next-suggestions">
-%if thing.suggestion_type == 'multis':
+%if thing.suggestion_type == 'explore':
+  ${_('or')}
+  <a href="/explore">${_('explore some new subreddits')}</a>
+%elif thing.suggestion_type == 'multis':
   ${_('or try a multi:')}
   %for multi in thing.suggestions:
       <a href="${multi.path}">/m/${multi.name}</a>

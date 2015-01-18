@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -73,7 +73,7 @@ user_added_messages = {
 }
 
 
-def notify_user_added(rel_type, author, user, target):
+def notify_user_added(rel_type, author, user, target, message=None):
     msgs = user_added_messages.get(rel_type)
     if not msgs:
         return
@@ -93,6 +93,10 @@ def notify_user_added(rel_type, author, user, target):
         if rel_type == "banned" and not user.has_interacted_with(target):
             return
 
+        if rel_type == "banned" and message:
+            msg += "\n\n" + N_("note from the moderators:\n\n\"%(message)s\"")
+            msg %= {'message': message}
+
         if rel_type in ("banned", "moderator_invite"):
             # send the message from the subreddit
             item, inbox_rel = Message._new(author, user, subject, msg, request.ip,
@@ -100,7 +104,7 @@ def notify_user_added(rel_type, author, user, target):
         else:
             item, inbox_rel = Message._new(author, user, subject, msg, request.ip)
 
-        queries.new_message(item, inbox_rel)
+        queries.new_message(item, inbox_rel, update_modmail=False)
 
     if "modmail" in msgs:
         subject = msgs["modmail"]["subject"] % d

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,13 +31,6 @@ from r2.lib.utils import timeago
 from r2.models import Email, DefaultSR, Account, Award
 from r2.models.token import EmailVerificationToken, PasswordResetToken
 
-
-def _feedback_email(email, body, kind, name='', reply_to = ''):
-    """Function for handling feedback and ad_inq emails.  Adds an
-    email to the mail queue to the feedback email account."""
-    Email.handler.add_to_queue(c.user if c.user_is_loggedin else None,
-                               g.feedback_email, name, email,
-                               kind, body = body, reply_to = reply_to)
 
 def _system_email(email, body, kind, reply_to = "", thing = None):
     """
@@ -56,12 +49,19 @@ def _nerds_email(body, from_name, kind):
     Email.handler.add_to_queue(None, g.nerds_email, from_name, g.nerds_email,
                                kind, body = body)
 
-def _gold_email(body, to_address, from_name, kind):
+def _fraud_email(body, kind):
     """
-    For sending email to reddit gold subscribers
+    For sending email to the fraud mailbox
     """
-    Email.handler.add_to_queue(None, to_address, from_name, g.goldthanks_email,
-                               kind, body = body)
+    Email.handler.add_to_queue(None, g.fraud_email, g.domain, g.fraud_email,
+                               kind, body=body)
+
+def _community_email(body, kind):
+    """
+    For sending email to the community mailbox
+    """
+    Email.handler.add_to_queue(c.user, g.community_email, g.domain, g.community_email,
+                               kind, body=body)
 
 def verify_email(user, dest=None):
     """
@@ -73,7 +73,8 @@ def verify_email(user, dest=None):
     Award.take_away("verified_email", user)
 
     token = EmailVerificationToken._new(user)
-    emaillink = 'http://' + g.domain + '/verification/' + token._id
+    base = g.https_endpoint or g.origin
+    emaillink = base + '/verification/' + token._id
     if dest:
         emaillink += '?dest=%s' % dest
     g.log.debug("Generated email verification link: " + emaillink)
@@ -125,18 +126,9 @@ def email_change_email(user):
                          EmailChangeEmail(user=user).render(style='email'),
                          Email.Kind.EMAIL_CHANGE)
 
-def feedback_email(email, body, name='', reply_to = ''):
-    """Queues a feedback email to the feedback account."""
-    return _feedback_email(email, body,  Email.Kind.FEEDBACK, name = name,
-                           reply_to = reply_to)
+def community_email(body, kind):
+    return _community_email(body, kind)
 
-def ad_inq_email(email, body, name='', reply_to = ''):
-    """Queues a ad_inq email to the feedback account."""
-    return _feedback_email(email, body,  Email.Kind.ADVERTISE, name = name,
-                           reply_to = reply_to)
-
-def gold_email(body, to_address, from_name=g.domain):
-    return _gold_email(body, to_address, from_name, Email.Kind.GOLDMAIL)
 
 def nerds_email(body, from_name=g.domain):
     """Queues a feedback email to the nerds running this site."""
@@ -208,6 +200,8 @@ def send_queued_mail(test = False):
                                       leave = False).render(style = "email")
             # handle unknown types here
             elif not email.body:
+                print ("Rejecting email with an empty body from %r and to %r"
+                       % (email.fr_addr, email.to_addr))
                 email.set_sent(rejected = True)
                 continue
             sendmail(email)
@@ -279,6 +273,18 @@ def refunded_promo(thing):
 def void_payment(thing, campaign, reason):
     return _promo_email(thing, Email.Kind.VOID_PAYMENT, campaign=campaign,
                         reason=reason)
+
+
+def fraud_alert(body):
+    return _fraud_email(body, Email.Kind.FRAUD_ALERT)
+
+def suspicious_payment(user, link):
+    from r2.lib.pages import SuspiciousPaymentEmail
+
+    body = SuspiciousPaymentEmail(user, link).render(style="email")
+    kind = Email.Kind.SUSPICIOUS_PAYMENT
+
+    return _fraud_email(body, kind)
 
 
 def send_html_email(to_addr, from_addr, subject, html, subtype="html"):

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """View models for the traffic statistic pages on reddit."""
@@ -205,14 +205,19 @@ class RedditTraffic(Templated):
         raise NotImplementedError()
 
 
-def make_subreddit_traffic_report(subreddits=None):
+def make_subreddit_traffic_report(subreddits=None, num=None):
     """Return a report of subreddit traffic in the last full month.
 
     If given a list of subreddits, those subreddits will be put in the report
     otherwise the top subreddits by pageviews will be automatically chosen.
 
     """
-    subreddit_summary = traffic.PageviewsBySubreddit.top_last_month(subreddits)
+
+    if subreddits:
+        subreddit_summary = traffic.PageviewsBySubreddit.last_month(subreddits)
+    else:
+        subreddit_summary = traffic.PageviewsBySubreddit.top_last_month(num)
+
     report = []
     for srname, data in subreddit_summary:
         if srname == _DefaultSR.name:
@@ -232,7 +237,7 @@ def make_subreddit_traffic_report(subreddits=None):
 class SitewideTraffic(RedditTraffic):
     """An overview of all traffic to the site."""
     def __init__(self):
-        self.subreddit_summary = make_subreddit_traffic_report()
+        self.subreddit_summary = make_subreddit_traffic_report(num=250)
         RedditTraffic.__init__(self, g.domain)
 
     def get_dow_summary(self):
@@ -542,9 +547,9 @@ class PromotedLinkTraffic(Templated):
         Templated.__init__(self)
 
     @classmethod
-    def make_campaign_table_row(cls, id, start, end, target, budget, spent,
-                                impressions, clicks, is_live, is_active, url,
-                                is_total):
+    def make_campaign_table_row(cls, id, start, end, target, location, budget,
+                                spent, impressions, clicks, is_live, is_active,
+                                url, is_total):
 
         if impressions:
             cpm = format_currency(promote.cost_per_mille(spent, impressions),
@@ -565,6 +570,7 @@ class PromotedLinkTraffic(Templated):
             'start': start,
             'end': end,
             'target': target,
+            'location': location,
             'budget': format_currency(budget, 'USD', locale=c.locale),
             'spent': format_currency(spent, 'USD', locale=c.locale),
             'impressions': format_number(impressions),
@@ -604,15 +610,16 @@ class PromotedLinkTraffic(Templated):
 
             start = to_date(camp.start_date).strftime('%Y-%m-%d')
             end = to_date(camp.end_date).strftime('%Y-%m-%d')
-            target = camp.sr_name or 'frontpage'
+            target = camp.target.pretty_name
+            location = camp.location_str
             spent = promote.get_spent_amount(camp)
             is_active = self.campaign and self.campaign._id36 == camp._id36
             url = '/traffic/%s/%s' % (self.thing._id36, camp._id36)
             is_total = False
             row = self.make_campaign_table_row(camp._id36, start, end, target,
-                                               camp.bid, spent, impressions,
-                                               clicks, is_live, is_active, url,
-                                               is_total)
+                                               location, camp.bid, spent,
+                                               impressions, clicks, is_live,
+                                               is_active, url, is_total)
             self.campaign_table.append(row)
 
             total_budget += camp.bid
@@ -624,12 +631,13 @@ class PromotedLinkTraffic(Templated):
         start = '---'
         end = '---'
         target = '---'
+        location = '---'
         is_live = False
         is_active = not self.campaign
         url = '/traffic/%s' % self.thing._id36
         is_total = True
         row = self.make_campaign_table_row(_('total'), start, end, target,
-                                           total_budget, total_spent,
+                                           location, total_budget, total_spent,
                                            total_impressions, total_clicks,
                                            is_live, is_active, url, is_total)
         self.campaign_table.append(row)

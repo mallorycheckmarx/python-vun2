@@ -16,27 +16,31 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
-<%!
-    from r2.lib.template_helpers import static
-    from r2.lib.filters import safemarkdown
-%>
 
-<div class="gold-accent gold-thanks">
-  <div class="fancy-snoo">
-    <img alt="" src="${static('reddit_gold-70.png')}">
+<%namespace file="utils.html" import="md"/>
+
+<div class="gold-wrap">
+  <h1 class="gold-banner"><a href="/gold">${_('reddit gold')}</a></h1>
+  <div class="fancy">
+    <div class="fancy-inner">
+      <div class="fancy-content">
+        <div class="container">
+          <p class="claim-message">${thing.claim_msg}
+          %if thing.vendor_url:
+            &#32;<a class="vendor-url" href="${thing.vendor_url}">${thing.vendor_url}</a>
+          %endif
+          </p>
+            
+          %if thing.lounge_md:
+            <span class="lounge-msg">
+              ${md(thing.lounge_md, wrap=True)}
+            </span>
+          %endif
+        </div>
+      </div>
+    </div>
   </div>
-  <p class="claim-message">${thing.claim_msg}
-  %if thing.vendor_url:
-    &#32;<a class="vendor-url" href="${thing.vendor_url}">${thing.vendor_url}</a>
-  %endif
-  </p>
-    
-  %if thing.lounge_md:
-    <span class="lounge-msg">
-      ${unsafe(safemarkdown(thing.lounge_md))}
-    </span>
-  %endif
 </div>

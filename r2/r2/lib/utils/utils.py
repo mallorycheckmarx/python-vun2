@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -40,9 +40,8 @@ from decimal import Decimal
 
 from BeautifulSoup import BeautifulSoup, SoupStrainer
 
-from time import sleep
 from datetime import date, datetime, timedelta
-from pylons import c, g
+from pylons import c, g, request
 from pylons.i18n import ungettext, _
 from r2.lib.filters import _force_unicode, _force_utf8
 from mako.filters import url_escape
@@ -173,6 +172,29 @@ def domain(s):
     domain = (res and res[0]) or s
     return domain.lower()
 
+def extract_subdomain(host=None, base_domain=None):
+    """Try to extract a subdomain from the request, as compared to g.domain.
+
+    host and base_domain exist as arguments primarily for the sake of unit
+    tests, although their usage should not be considered restrained to that.
+    """
+    # These would be the argument defaults, but we need them evaluated at
+    # run-time, not definition-time.
+    if host is None:
+        host = request.host
+    if base_domain is None:
+        base_domain = g.domain
+
+    if not host:
+        return ''
+
+    end_index = host.find(base_domain) - 1 # For the conjoining dot.
+    # Is either the requested domain the same as the base domain, or the
+    # base is not a substring?
+    if end_index < 0:
+        return ''
+    return host[:end_index]
+
 r_path_component = re.compile(".*?/(.*)")
 def path_component(s):
     """
@@ -183,8 +205,7 @@ def path_component(s):
     return (res and res[0]) or s
 
 def get_title(url):
-    """Fetches the contents of url and extracts (and utf-8 encodes)
-       the contents of <title>"""
+    """Fetch the contents of url and try to extract the page's title."""
     if not url or not url.startswith(('http://', 'https://')):
         return None
 
@@ -219,30 +240,44 @@ def get_title(url):
         return None
 
 def extract_title(data):
-    """Tries to extract the value of the title element from a string of HTML"""
+    """Try to extract the page title from a string of HTML.
+
+    An og:title meta tag is preferred, but will fall back to using
+    the <title> tag instead if one is not found. If using <title>,
+    also attempts to trim off the site's name from the end.
+    """
     bs = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
     if not bs or not bs.html.head:
         return
+    head_soup = bs.html.head
 
-    title_bs = bs.html.head.title
+    title = None
 
-    if not title_bs or not title_bs.string:
+    # try to find an og:title meta tag to use
+    og_title = (head_soup.find("meta", attrs={"property": "og:title"}) or
+                head_soup.find("meta", attrs={"name": "og:title"}))
+    if og_title:
+        title = og_title.get("content")
+
+    # if that failed, look for a <title> tag to use instead
+    if not title and head_soup.title and head_soup.title.string:
+        title = head_soup.title.string
+
+        # remove end part that's likely to be the site's name
+        # looks for last delimiter char between spaces in strings
+        # delimiters: |, -, emdash, endash,
+        #             left- and right-pointing double angle quotation marks
+        reverse_title = title[::-1]
+        to_trim = re.search(u'\s[\u00ab\u00bb\u2013\u2014|-]\s',
+                            reverse_title,
+                            flags=re.UNICODE)
+
+        # only trim if it won't take off over half the title
+        if to_trim and to_trim.end() < len(title) / 2:
+            title = title[:-(to_trim.end())]
+
+    if not title:
         return
-
-    title = title_bs.string
-
-    # remove end part that's likely to be the site's name
-    # looks for last delimiter char between spaces in strings
-    # delimiters: |, -, emdash, endash,
-    #             left- and right-pointing double angle quotation marks
-    reverse_title = title[::-1]
-    to_trim = re.search(u'\s[\u00ab\u00bb\u2013\u2014|-]\s',
-                        reverse_title,
-                        flags=re.UNICODE)
-
-    # only trim if it won't take off over half the title
-    if to_trim and to_trim.end() < len(title) / 2:
-        title = title[:-(to_trim.end())]
 
     # get rid of extraneous whitespace in the title
     title = re.sub(r'\s+', ' ', title, flags=re.UNICODE)
@@ -250,7 +285,7 @@ def extract_title(data):
     return title.encode('utf-8').strip()
 
 VALID_SCHEMES = ('http', 'https', 'ftp', 'mailto')
-valid_dns = re.compile('\A[-a-zA-Z0-9]+\Z')
+valid_dns = re.compile('\A[-a-zA-Z0-9_]+\Z')
 def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
     """Validates that the url is of the form
 
@@ -304,8 +339,19 @@ def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
         url = urlunparse((u[0], idna_hostname, u[2], u[3], u[4], u[5]))
     return url
 
-def trunc_string(text, length):
-    return text[0:length]+'...' if len(text)>length else text
+def trunc_string(text, max_length, suffix='...'):
+    """Truncate a string, attempting to split on a word-break.
+
+    If the first word is longer than max_length, then truncate within the word.
+
+    Adapted from http://stackoverflow.com/a/250406/120999 .
+    """
+    if len(text) <= max_length:
+        return text
+    else:
+        hard_truncated = text[:(max_length - len(suffix))]
+        word_truncated = hard_truncated.rsplit(' ', 1)[0]
+        return word_truncated + suffix
 
 # Truncate a time to a certain number of minutes
 # e.g, trunc_time(5:52, 30) == 5:30
@@ -510,6 +556,11 @@ class UrlParser(object):
             (subreddit and subreddit.domain and
                 is_subdomain(self.hostname, subreddit.domain))
         )
+        # Handle backslash trickery like /\example.com/ being treated as
+        # equal to //example.com/ by some browsers
+        if not self.hostname and not self.scheme and self.path:
+            if self.path.startswith("/\\"):
+                return False
         if not subdomain or not self.hostname or not g.offsite_subdomains:
             return subdomain
         return not any(
@@ -624,6 +675,18 @@ class UrlParser(object):
 
         return urlunparse((u.scheme.lower(), netloc,
                            u.path, u.params, u.query, fragment))
+
+
+def url_is_embeddable_image(url):
+    """The url is on an oembed-friendly domain and looks like an image."""
+    parsed_url = UrlParser(url)
+
+    if parsed_url.path_extension().lower() in {"jpg", "gif", "png", "jpeg"}:
+        if parsed_url.hostname not in g.known_image_domains:
+            return False
+        return True
+
+    return False
 
 
 def pload(fname, default = None):
@@ -855,18 +918,6 @@ def UniqueIterator(iterator, key = lambda x: x):
 
     return IteratorFilter(iterator, no_dups)
 
-def modhash(user, rand = None, test = False):
-    return user.name
-
-def valid_hash(user, hash):
-    return True
-
-def check_cheating(loc):
-    pass
-
-def vote_hash():
-    return ''
-
 def safe_eval_str(unsafe_str):
     return unsafe_str.replace('\\x3d', '=').replace('\\x26', '&')
 
@@ -1034,53 +1085,6 @@ def in_chunks(it, size=25):
         if chunk:
             yield chunk
 
-def spaceout(items, targetseconds,
-             minsleep = 0, die = False,
-             estimate = None):
-    """Given a list of items and a function to apply to them, space
-       the execution out over the target number of seconds and
-       optionally stop when we're out of time"""
-    targetseconds = float(targetseconds)
-    state = [1.0]
-
-    if estimate is None:
-        try:
-            estimate = len(items)
-        except TypeError:
-            # if we can't come up with an estimate, the best we can do
-            # is just enforce the minimum sleep time (and the max
-            # targetseconds if die==True)
-            pass
-
-    mean = lambda lst: sum(float(x) for x in lst)/float(len(lst))
-    beginning = datetime.now()
-
-    for item in items:
-        start = datetime.now()
-        yield item
-        end = datetime.now()
-
-        took_delta = end - start
-        took = (took_delta.days * 60 * 24
-                + took_delta.seconds
-                + took_delta.microseconds/1000000.0)
-        state.append(took)
-        if len(state) > 10:
-            del state[0]
-
-        if die and end > beginning + timedelta(seconds=targetseconds):
-            # we ran out of time, ignore the rest of the iterator
-            break
-
-        if estimate is None:
-            if minsleep:
-                # we have no idea how many items we're going to get
-                sleep(minsleep)
-        else:
-            sleeptime = max((targetseconds / estimate) - mean(state),
-                            minsleep)
-            if sleeptime > 0:
-                sleep(sleeptime)
 
 def progress(it, verbosity=100, key=repr, estimate=None, persec=True):
     """An iterator that yields everything from `it', but prints progress
@@ -1307,6 +1311,27 @@ def extract_urls_from_markdown(md):
             yield url
 
 
+def extract_user_mentions(text, num=None):
+    from r2.lib.validator import chkuser
+    if num is None:
+        num = g.butler_max_mentions
+
+    cur_num = 0
+    for url in extract_urls_from_markdown(text):
+        if num != -1 and cur_num >= num:
+            break
+
+        if not url.startswith("/u/"):
+            continue
+
+        username = url[len("/u/"):]
+        if not chkuser(username):
+            continue
+
+        cur_num += 1
+        yield username.lower()
+
+
 def summarize_markdown(md):
     """Get the first paragraph of some Markdown text, potentially truncated."""
 
@@ -1490,6 +1515,14 @@ def fuzz_activity(count):
     decay = math.exp(float(-count) / 60)
     jitter = round(5 * decay)
     return count + random.randint(0, jitter)
+
+
+# port of https://docs.python.org/dev/library/itertools.html#itertools-recipes
+def partition(pred, iterable):
+    "Use a predicate to partition entries into false entries and true entries"
+    # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
+    t1, t2 = itertools.tee(iterable)
+    return itertools.ifilterfalse(pred, t1), itertools.ifilter(pred, t2)
 
 # http://docs.python.org/2/library/itertools.html#recipes
 def roundrobin(*iterables):

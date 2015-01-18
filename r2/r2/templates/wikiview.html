@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,6 +25,7 @@
 <%!
     from r2.lib.pages import WrappedUser
     from r2.lib.filters import SC_OFF, SC_ON
+    from r2.lib.template_helpers import _ws
 %>
 
 %if thing.diff:
@@ -46,10 +47,10 @@
 <em>
 %if thing.edit_date:
     %if thing.edit_by:
-         ${unsafe(_("revision by&nbsp;%s") % WrappedUser(thing.edit_by).render())}
+         ${unsafe(_ws("revision by %(user)s").replace(" ", "&#32;") % dict(user=WrappedUser(thing.edit_by).render()))}
          &mdash;&nbsp;
     %endif
-    ${unsafe("%(time)s&nbsp;ago" % dict(time=timestamp(thing.edit_date)))}
+    ${timestamp(thing.edit_date, include_tense=True)}
 %endif
 <a href="#" class="toggle-source">${_("view source")}</a>
 </em>

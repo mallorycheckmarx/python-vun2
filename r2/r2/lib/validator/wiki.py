@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -27,10 +27,9 @@ import re
 
 from pylons.i18n import _
 
-from pylons.controllers.util import redirect_to
 from pylons import c, g, request
 
-from r2.models.wiki import WikiPage, WikiRevision
+from r2.models.wiki import WikiPage, WikiRevision, WikiBadRevision
 from r2.lib.validator import (
     Validator,
     VSrModerator,
@@ -59,8 +58,9 @@ def this_may_view(page):
 
 def may_revise(sr, user, page=None):    
     if sr.is_moderator_with_perms(user, 'wiki'):
-        # Mods may always contribute
-        return True
+        # Mods may always contribute to non-config pages
+        if not page or not page.special:
+            return True
     
     if page and page.restricted and not page.special:
         # People may not contribute to restricted pages
@@ -86,7 +86,11 @@ def may_revise(sr, user, page=None):
     if page and page.has_editor(user._id36):
         # If the user is an editor on the page, they may edit
         return True
-    
+
+    if (page and page.special and
+            sr.is_moderator_with_perms(user, 'config')):
+        return True
+
     if page and page.special:
         # If this is a special page
         # (and the user is not a mod or page editor)
@@ -186,7 +190,13 @@ page_match_regex = re.compile(r'^[\w_\-/]+\Z')
 
 class VWikiModerator(VSrModerator):
     def __init__(self, fatal=False, *a, **kw):
-        VSrModerator.__init__(self, fatal=fatal, *a, **kw)
+        VSrModerator.__init__(self, param='page', fatal=fatal, *a, **kw)
+
+    def run(self, page):
+        self.perms = ['wiki']
+        if page and WikiPage.is_special(page):
+            self.perms += ['config']
+        VSrModerator.run(self)
 
 class VWikiPageName(Validator):
     def __init__(self, param, error_on_name_normalized=False, *a, **kw):
@@ -271,7 +281,7 @@ class VWikiPage(VWikiPageName):
                 self.set_error('HIDDEN_REVISION', code=403)
                 raise AbortWikiError
             return r
-        except (tdb_cassandra.NotFound, ValueError):
+        except (tdb_cassandra.NotFound, WikiBadRevision):
             self.set_error('INVALID_REVISION', code=404)
             raise AbortWikiError
 

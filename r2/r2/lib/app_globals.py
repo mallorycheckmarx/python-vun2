@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -37,7 +37,6 @@ import sys
 
 from sqlalchemy import engine, event
 
-import cssutils
 import pkg_resources
 import pytz
 
@@ -106,6 +105,42 @@ def fetch_secrets(zk_client):
     return _decode_secrets(secrets)
 
 
+PERMISSIONS = {
+    "admin": "admin",
+    "sponsor": "sponsor",
+    "employee": "employee",
+}
+
+
+class PermissionFilteredEmployeeList(object):
+    def __init__(self, config, type):
+        self.config = config
+        self.type = type
+
+    def __iter__(self):
+        return (username
+                for username, permission in self.config["employees"].iteritems()
+                if permission == self.type)
+
+    def __getitem__(self, key):
+        return list(self)[key]
+
+    def __contains__(self, item):
+        # since we do these permission checks off usernames, make it case
+        # insensitive to relax config file editing pains (safe because
+        # Account._by_name is case-insensitive)
+        return any(item.lower() == username.lower() for username in self)
+
+    def __repr__(self):
+        return "<PermissionFilteredEmployeeList %r>" % (list(self),)
+
+
+SHUTDOWN_CALLBACKS = []
+def on_app_shutdown(arbiter, worker):
+    for callback in SHUTDOWN_CALLBACKS:
+        callback()
+
+
 class Globals(object):
     spec = {
 
@@ -121,22 +156,20 @@ class Globals(object):
             'MIN_DOWN_KARMA',
             'MIN_RATE_LIMIT_KARMA',
             'MIN_RATE_LIMIT_COMMENT_KARMA',
-            'VOTE_AGE_LIMIT',
-            'REPLY_AGE_LIMIT',
-            'REPORT_AGE_LIMIT',
             'HOT_PAGE_AGE',
             'QUOTA_THRESHOLD',
             'ADMIN_COOKIE_TTL',
             'ADMIN_COOKIE_MAX_IDLE',
             'OTP_COOKIE_TTL',
+            'hsts_max_age',
             'num_comments',
             'max_comments',
             'max_comments_gold',
-            'num_default_reddits',
             'max_sr_images',
             'num_serendipity',
             'sr_dropdown_threshold',
             'comment_visits_period',
+            'butler_max_mentions',
             'min_membership_create_community',
             'bcrypt_work_factor',
             'cassandra_pool_size',
@@ -147,6 +180,7 @@ class Globals(object):
             'sr_contributor_quota',
             'sr_quota_time',
             'sr_invite_limit',
+            'thumbnail_hidpi_scaling',
             'wiki_keep_recent_days',
             'wiki_max_page_length_bytes',
             'wiki_max_page_name_length',
@@ -155,15 +189,19 @@ class Globals(object):
             'max_promote_future',
             'RL_RESET_MINUTES',
             'RL_OAUTH_RESET_MINUTES',
+            'comment_karma_display_floor',
+            'link_karma_display_floor',
         ],
 
         ConfigValue.float: [
+            'default_promote_bid',
             'min_promote_bid',
             'max_promote_bid',
             'statsd_sample_rate',
             'querycache_prune_chance',
             'RL_AVG_REQ_PER_SEC',
             'RL_OAUTH_AVG_REQ_PER_SEC',
+            'RL_LOGIN_AVG_PER_SEC',
         ],
 
         ConfigValue.bool: [
@@ -184,12 +222,9 @@ class Globals(object):
             'disable_captcha',
             'disable_ads',
             'disable_require_admin_otp',
-            'static_pre_gzipped',
-            'static_secure_pre_gzipped',
             'trust_local_proxies',
             'shard_link_vote_queues',
             'shard_commentstree_queues',
-            'subreddit_stylesheets_static',
             'ENFORCE_RATELIMIT',
             'RL_SITEWIDE_ENABLED',
             'RL_OAUTH_SITEWIDE_ENABLED',
@@ -205,19 +240,23 @@ class Globals(object):
             'pagecaches',
             'memoizecaches',
             'srmembercaches',
+            'relcaches',
             'ratelimitcaches',
             'cassandra_seeds',
-            'admins',
-            'sponsors',
-            'employees',
             'automatic_reddits',
             'hardcache_categories',
             'case_sensitive_domains',
+            'known_image_domains',
             'reserved_subdomains',
             'offsite_subdomains',
             'TRAFFIC_LOG_HOSTS',
             'exempt_login_user_agents',
             'timed_templates',
+            'autoexpand_media_types',
+        ],
+
+        ConfigValue.tuple_of(ConfigValue.int): [
+            'thumbnail_size',
         ],
 
         ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
@@ -229,24 +268,29 @@ class Globals(object):
             'wiki_page_privacy_policy',
             'wiki_page_user_agreement',
             'wiki_page_gold_bottlecaps',
+            'fraud_email',
+            'feedback_email',
+            'share_reply',
+            'nerds_email',
+            'community_email',
+            'smtp_server',
         ],
 
-        ConfigValue.choice: {
-             'cassandra_rcl': {
-                 'ONE': CL_ONE,
-                 'QUORUM': CL_QUORUM
-             },
-             'cassandra_wcl': {
-                 'ONE': CL_ONE,
-                 'QUORUM': CL_QUORUM
-             },
-        },
+        ConfigValue.choice(ONE=CL_ONE, QUORUM=CL_QUORUM): [
+             'cassandra_rcl',
+             'cassandra_wcl',
+        ],
+
+        ConfigValue.timeinterval: [
+            'ARCHIVE_AGE',
+        ],
 
         config_gold_price: [
             'gold_month_price',
             'gold_year_price',
             'cpm_selfserve',
-            'cpm_selfserve_geotarget',
+            'cpm_selfserve_geotarget_metro',
+            'cpm_selfserve_collection',
         ],
     }
 
@@ -254,7 +298,12 @@ class Globals(object):
         ConfigValue.bool: [
             'frontend_logging',
         ],
+        ConfigValue.int: [
+            'cflag_min_votes',
+        ],
         ConfigValue.float: [
+            'cflag_lower_bound',
+            'cflag_upper_bound',
             'spotlight_interest_sub_p',
             'spotlight_interest_nosub_p',
             'gold_revenue_goal',
@@ -263,6 +312,7 @@ class Globals(object):
             'fastlane_links',
             'listing_chooser_sample_multis',
             'discovery_srs',
+            'proxy_gilding_accounts',
         ],
         ConfigValue.str: [
             'listing_chooser_gold_multi',
@@ -278,6 +328,9 @@ class Globals(object):
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.float): [
             'pennies_per_server_second',
+        ],
+        ConfigValue.dict(ConfigValue.str, ConfigValue.choice(**PERMISSIONS)): [
+            'employees',
         ],
     }
 
@@ -421,10 +474,6 @@ class Globals(object):
             pool = "reddit-app"
         self.log = logging.LoggerAdapter(log, {"pool": pool})
 
-        # make cssutils use the real logging system
-        csslog = logging.getLogger("cssutils")
-        cssutils.log.setLog(csslog)
-
         # set locations
         self.locations = {}
 
@@ -433,6 +482,9 @@ class Globals(object):
         if self.media_domain == self.domain:
             print >> sys.stderr, ("Warning: g.media_domain == g.domain. " +
                    "This may give untrusted content access to user cookies")
+        if self.oauth_domain == self.domain:
+            print >> sys.stderr, ("Warning: g.oauth_domain == g.domain. "
+                    "CORS requests to g.domain will be allowed")
 
         for arg in sys.argv:
             tokens = arg.split("=")
@@ -459,6 +511,9 @@ class Globals(object):
         self.RL_OAUTH_MAX_REQS = int(self.config["RL_OAUTH_AVG_REQ_PER_SEC"] *
                                      self.RL_OAUTH_RESET_SECONDS)
 
+        self.RL_LOGIN_MAX_REQS = int(self.config["RL_LOGIN_AVG_PER_SEC"] *
+                                     self.RL_RESET_SECONDS)
+
         self.startup_timer.intermediate("configuration")
 
         ################# ZOOKEEPER
@@ -478,6 +533,9 @@ class Globals(object):
             self.throttles = LiveList(self.zookeeper, "/throttles",
                                       map_fn=ipaddress.ip_network,
                                       reduce_fn=ipaddress.collapse_addresses)
+
+            # close our zk connection when the app shuts down
+            SHUTDOWN_CALLBACKS.append(self.zookeeper.stop)
         else:
             self.zookeeper = None
             parser = ConfigParser.RawConfigParser()
@@ -489,14 +547,23 @@ class Globals(object):
 
         self.startup_timer.intermediate("zookeeper")
 
+        ################# PRIVILEGED USERS
+        self.admins = PermissionFilteredEmployeeList(
+            self.live_config, type="admin")
+        self.sponsors = PermissionFilteredEmployeeList(
+            self.live_config, type="sponsor")
+        self.employees = PermissionFilteredEmployeeList(
+            self.live_config, type="employee")
+
         ################# MEMCACHE
         num_mc_clients = self.num_mc_clients
 
         # the main memcache pool. used for most everything.
-        self.memcache = CMemcache(
+        memcache = CMemcache(
             self.memcaches,
             min_compress_len=50 * 1024,
             num_clients=num_mc_clients,
+            binary=True,
         )
 
         # a pool just used for @memoize results
@@ -504,6 +571,7 @@ class Globals(object):
             self.memoizecaches,
             min_compress_len=50 * 1024,
             num_clients=num_mc_clients,
+            binary=True,
         )
 
         # a pool just for srmember rels
@@ -511,6 +579,15 @@ class Globals(object):
             self.srmembercaches,
             min_compress_len=96,
             num_clients=num_mc_clients,
+            binary=True,
+        )
+
+        # a pool just for rels
+        relcaches = CMemcache(
+            self.relcaches,
+            min_compress_len=96,
+            num_clients=num_mc_clients,
+            binary=True,
         )
 
         ratelimitcaches = CMemcache(
@@ -522,6 +599,7 @@ class Globals(object):
         # a smaller pool of caches used only for distributed locks.
         # TODO: move this to ZooKeeper
         self.lock_cache = CMemcache(self.lockcaches,
+                                    binary=True,
                                     num_clients=num_mc_clients)
         self.make_lock = make_lock_factory(self.lock_cache, self.stats)
 
@@ -539,6 +617,7 @@ class Globals(object):
         # for data that's frequently fetched but doesn't need to be fresh.
         if self.stalecaches:
             stalecaches = CMemcache(self.stalecaches,
+                                    binary=True,
                                     num_clients=num_mc_clients)
         else:
             stalecaches = None
@@ -604,10 +683,10 @@ class Globals(object):
             self.cache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                self.memcache,
+                memcache,
             )
         else:
-            self.cache = MemcacheChain((localcache_cls(), self.memcache))
+            self.cache = MemcacheChain((localcache_cls(), memcache))
         cache_chains.update(cache=self.cache)
 
         if stalecaches:
@@ -631,6 +710,17 @@ class Globals(object):
             self.srmembercache = MemcacheChain(
                 (localcache_cls(), srmembercaches))
         cache_chains.update(srmembercache=self.srmembercache)
+
+        if stalecaches:
+            self.relcache = StaleCacheChain(
+                localcache_cls(),
+                stalecaches,
+                relcaches,
+            )
+        else:
+            self.relcache = MemcacheChain(
+                (localcache_cls(), relcaches))
+        cache_chains.update(relcache=self.relcache)
 
         self.ratelimitcache = MemcacheChain(
                 (localcache_cls(), ratelimitcaches))
@@ -663,7 +753,7 @@ class Globals(object):
         # hardcache is used for various things that tend to expire
         # TODO: replace hardcache w/ cassandra stuff
         self.hardcache = HardcacheChain(
-            (localcache_cls(), self.memcache, HardCache(self)),
+            (localcache_cls(), memcache, HardCache(self)),
             cache_negative_results=True,
         )
         cache_chains.update(hardcache=self.hardcache)

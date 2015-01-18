@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,6 +31,8 @@ from kazoo.security import make_digest_acl
 from kazoo.exceptions import NoNodeException
 from pylons import g
 
+from r2.lib import hooks
+
 
 def connect_to_zookeeper(hostlist, credentials):
     """Create a connection to the ZooKeeper ensemble.
@@ -43,13 +45,13 @@ def connect_to_zookeeper(hostlist, credentials):
 
     client = KazooClient(hostlist,
                          timeout=5,
-                         max_retries=3)
+                         max_retries=3,
+                         auth_data=[("digest", ":".join(credentials))])
 
     # convenient helper function for making credentials
     client.make_acl = functools.partial(make_digest_acl, *credentials)
 
     client.start()
-    client.add_auth("digest", ":".join(credentials))
     return client
 
 
@@ -67,6 +69,7 @@ class LiveConfig(object):
         @client.DataWatch(key)
         def watcher(data, stat):
             self.data = json.loads(data)
+            hooks.get_hook("worker.live_config.update").call()
 
     def __getitem__(self, key):
         return self.data[key]

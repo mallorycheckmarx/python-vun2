@@ -16,14 +16,16 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%! 
+<%!
+   from r2.lib.filters import jssafe
    from r2.lib.template_helpers import add_sr, static
    from r2.lib.strings import strings
    from r2.lib.pages.things import BanButtons
+   from r2.lib.utils import long_datetime
 %>
 
 <%namespace file="utils.html" import="plain_link" />
@@ -32,7 +34,12 @@ ${self.RenderPrintable()}
 
 <%def name="admintagline()">
   %if thing.show_spam:
-      <li><b>[
+      %if thing.banned_at:
+        <li title="${_("removed at %(time)s") % dict(time=long_datetime(thing.banned_at))}">
+      %else:
+        <li>
+      %endif
+      <b>[
         %if c.user_is_admin:
           ${"auto" if thing.autobanned else ""}${strings.banned} 
           ${("by %s" % thing.banner) if thing.banner else ""}
@@ -49,7 +56,7 @@ ${self.RenderPrintable()}
   %if getattr(thing, "approval_checkmark", None):
       <img class="approval-checkmark" title="${thing.approval_checkmark}"
            src="${static('green-check.png')}"
-           onclick="alert('${thing.approval_checkmark}\n\n${_("(no need to click for this info; just hover over the checkmark next time)")}')"
+           onclick="alert('${thing.approval_checkmark}\n\n${jssafe(_("(no need to click for this info; just hover over the checkmark next time)"))}')"
          >
   %endif
 </%def>
@@ -77,14 +84,17 @@ ${self.RenderPrintable()}
 
 <%def name="thing_css_rowclass(what)">
   <%
+    rowstyle = getattr(what, "rowstyle", "")
+
     if what.show_spam:
-      rowclass = what.rowstyle + " spam"
+      rowclass = "spam"
       if what.show_spam == "author":
         rowclass += " banned-user"
     elif what.show_reports:
-      rowclass = what.rowstyle + " reported"
+      rowclass = "reported"
     else:
-      rowclass = what.rowstyle
+      rowclass = ""
+
     if getattr(what, "deleted", False):
       rowclass += " deleted"
     if hasattr(what, "saved") and what.saved:
@@ -97,8 +107,10 @@ ${self.RenderPrintable()}
       rowclass += " user-gilded"
     if getattr(what, "stickied", False):
       rowclass += " stickied"
+    if getattr(what, "is_controversial", False) and c.user.pref_highlight_controversial:
+      rowclass += " controversial"
   %>
-  ${rowclass}
+  ${rowstyle}&#32;${rowclass}
 </%def>
 
 <%def name="thing_data_attributes(what)">
@@ -107,6 +119,10 @@ ${self.RenderPrintable()}
     % endif
     % if hasattr(what, 'campaign'):
       data-cid="${what.campaign}"
+    % endif
+
+    % if hasattr(what, 'imp_pixel'):
+      data-imp-pixel="${what.imp_pixel}"
     % endif
 
     % if hasattr(what, 'adserver_imp_pixel'):
@@ -154,9 +170,9 @@ ${self.RenderPrintable()}
     ${self.entry()}
   </div>
   ${self.Child()}
-  <div class="clearleft"><!--IE6sux--></div>
+  <div class="clearleft"></div>
 </div>
-<div class="clearleft"><!--IE6sux--></div>
+<div class="clearleft"></div>
 </%def>
 
 <%def name="buttons(ban=True)">
@@ -174,7 +190,9 @@ ${self.RenderPrintable()}
 
 <%def name="Child(display=True)">
 <div class="child" ${(not display and "style='display:none'" or "")}>
-  ${thing.childlisting}
+  %if thing.childlisting:
+    ${thing.childlisting}
+  %endif
 </div>
 </%def>
 

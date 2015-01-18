@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,7 +31,6 @@ http://developer.authorize.net/api/cim/
 """
 
 import re
-import socket
 from httplib import HTTPSConnection
 from urlparse import urlparse
 
@@ -261,16 +260,13 @@ class AuthorizeNetRequest(SimpleXMLObject):
 
     def make_request(self):
         u = urlparse(g.authorizenetapi)
-        try:
-            conn = HTTPSConnection(u.hostname, u.port)
-            conn.request("POST", u.path, self.toXML().encode('utf-8'),
-                         {"Content-type": "text/xml"})
-            res = conn.getresponse()
-            res = self.handle_response(res.read())
-            conn.close()
-            return res
-        except socket.error:
-            return False
+        conn = HTTPSConnection(u.hostname, u.port)
+        conn.request("POST", u.path, self.toXML().encode('utf-8'),
+                     {"Content-type": "text/xml"})
+        res = conn.getresponse()
+        res = self.handle_response(res.read())
+        conn.close()
+        return res
 
     def is_error_code(self, res, code):
         return (res.message.code and res.message.code.contents and
@@ -278,7 +274,7 @@ class AuthorizeNetRequest(SimpleXMLObject):
 
 
     def process_error(self, res):
-        msg = "Response %r from request %r" % (res, self.toXML())
+        msg = "Response %r" % res
         raise AuthorizeNetException(msg)
 
     _autoclose_re = re.compile("<([^/]+)/>")
@@ -540,14 +536,6 @@ class DeleteCustomerShippingAddressRequest(GetCustomerShippingAddressRequest):
             ShippingAddress.delete(self._user, self.customerAddressId)
         GetCustomerShippingAddressRequest.process_error(self, res)
 
-
-# TODO
-#class UpdateCustomerProfileRequest(AuthorizeNetRequest):
-#    _keys = (AuthorizeNetRequest._keys + ["profile"])
-#    
-#    def __init__(self, user):
-#        profile = Profile(user, None, None)
-#        AuthorizeNetRequest.__init__(self, profile = profile)
 
 class UpdateCustomerPaymentProfileRequest(CreateCustomerPaymentProfileRequest):
     """

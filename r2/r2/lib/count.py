@@ -16,14 +16,14 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from r2.models import Link, Subreddit
 from r2.lib import utils
 from r2.lib.db.operators import desc
-from pylons import g
+from pylons import g, config
 
 count_period = g.rising_period
 
@@ -45,7 +45,6 @@ def get_sr_counts():
 
     return dict((sr._fullname, sr._ups) for sr in srs)
 
-try:
+
+if config['r2.import_private']:
     from r2admin.lib.count import *
-except ImportError:
-    pass

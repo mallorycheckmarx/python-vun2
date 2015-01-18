@@ -17,18 +17,12 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """
 This is a tiny Flask app used for a couple of self-serve ad tracking
 mechanisms. The URLs it provides are:
-
-/fetch-trackers
-
-    Given a list of Ad IDs, generate tracking hashes specific to the user's
-    IP address. This must run outside the original request because the HTML
-    may be cached by the CDN.
 
 /click
 
@@ -45,7 +39,10 @@ use on Amazon Elastic Beanstalk (and possibly other systems).
 
 import cStringIO
 import hashlib
+import hmac
 import time
+import urllib
+from urlparse import parse_qsl, urlparse, urlunparse
 
 from ConfigParser import RawConfigParser
 from wsgiref.handlers import format_date_time
@@ -54,7 +51,6 @@ from flask import Flask, request, json, make_response, abort, redirect
 
 
 application = Flask(__name__)
-MAX_FULLNAME_LENGTH = 128  # can include srname and codename, leave room
 REQUIRED_PACKAGES = [
     "flask",
 ]
@@ -92,31 +88,6 @@ class ApplicationConfig(object):
 
 config = ApplicationConfig()
 tracking_secret = config.get('DEFAULT', 'tracking_secret')
-adtracker_url = config.get('DEFAULT', 'adtracker_url')
-
-
-def jsonpify(callback_name, data):
-    data = callback_name + '(' + json.dumps(data) + ')'
-    response = make_response(data)
-    response.mimetype = 'text/javascript'
-    return response
-
-
-def get_client_ip():
-    """Figure out the IP address of the remote client.
-
-    If the remote address is on the 10.* network, we'll assume that it is a
-    trusted load balancer and that the last component of X-Forwarded-For is
-    trustworthy.
-
-    """
-
-    if request.remote_addr.startswith("10."):
-        # it's a load balancer, use x-forwarded-for
-        return request.access_route[-1]
-    else:
-        # direct connection to someone outside
-        return request.remote_addr
 
 
 @application.route("/")
@@ -124,36 +95,29 @@ def healthcheck():
     return "I am healthy."
 
 
-@application.route('/fetch-trackers')
-def fetch_trackers():
-    ip = get_client_ip()
-    jsonp_callback = request.args['callback']
-    ids = request.args.getlist('ids[]')
-
-    if len(ids) > 100:
-        abort(400)
-
-    hashed = {}
-    for fullname in ids:
-        if len(fullname) > MAX_FULLNAME_LENGTH:
-            continue
-        text = ''.join((ip, fullname, tracking_secret))
-        hashed[fullname] = hashlib.sha1(text).hexdigest()
-    return jsonpify(jsonp_callback, hashed)
-
-
 @application.route('/click')
 def click_redirect():
-    ip = get_client_ip()
     destination = request.args['url'].encode('utf-8')
-    fullname = request.args['id']
-    observed_hash = request.args['hash']
+    fullname = request.args['id'].encode('utf-8')
+    observed_mac = request.args['hash']
 
-    expected_hash_text = ''.join((ip, fullname, tracking_secret))
-    expected_hash = hashlib.sha1(expected_hash_text).hexdigest()
+    expected_hashable = ''.join((destination, fullname))
+    expected_mac = hmac.new(
+            tracking_secret, expected_hashable, hashlib.sha1).hexdigest()
 
-    if expected_hash != observed_hash:
+    if not constant_time_compare(expected_mac, observed_mac):
         abort(403)
+
+    # fix encoding in the query string of the destination
+    destination = urllib.unquote(destination)
+    u = urlparse(destination)
+    if u.query:
+        query_dict = dict(parse_qsl(u.query))
+
+        # this effectively calls urllib.quote_plus on every query value
+        query = urllib.urlencode(query_dict)
+        destination = urlunparse(
+            (u.scheme, u.netloc, u.path, u.params, query, u.fragment))
 
     now = format_date_time(time.time())
     response = redirect(destination)
@@ -162,6 +126,23 @@ def click_redirect():
     response.headers['Date'] = now
     response.headers['Expires'] = now
     return response
+
+
+# copied from r2.lib.utils
+def constant_time_compare(actual, expected):
+    """
+    Returns True if the two strings are equal, False otherwise
+
+    The time taken is dependent on the number of characters provided
+    instead of the number of characters that match.
+    """
+    actual_len   = len(actual)
+    expected_len = len(expected)
+    result = actual_len ^ expected_len
+    if expected_len > 0:
+        for i in xrange(actual_len):
+            result |= ord(actual[i]) ^ ord(expected[i % expected_len])
+    return result == 0
 
 
 if __name__ == "__main__":

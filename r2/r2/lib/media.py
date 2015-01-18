@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -42,6 +42,7 @@ import requests
 
 from pylons import g
 
+from r2.config import feature
 from r2.lib import amqp, hooks
 from r2.lib.memoize import memoize
 from r2.lib.nymph import optimize_png
@@ -57,9 +58,6 @@ from urllib2 import (
     URLError,
 )
 
-
-MEDIA_FILENAME_LENGTH = 12
-thumbnail_size = 70, 70
 
 # TODO: replace this with data from the embedly service api when available
 _SECURE_SERVICES = [
@@ -116,6 +114,18 @@ def _square_image(img):
 
 def _prepare_image(image):
     image = _square_image(image)
+
+    if feature.is_enabled('hidpi_thumbnails'):
+        hidpi_dims = [int(d * g.thumbnail_hidpi_scaling) for d in g.thumbnail_size]
+
+        # If the image width is smaller than hidpi requires, set to non-hidpi
+        if image.size[0] < hidpi_dims[0]:
+            thumbnail_size = g.thumbnail_size
+        else:
+            thumbnail_size = hidpi_dims
+    else:
+        thumbnail_size = g.thumbnail_size
+
     image.thumbnail(thumbnail_size, Image.ANTIALIAS)
     return image
 
@@ -127,14 +137,15 @@ def _clean_url(url):
     return url
 
 
-def _initialize_request(url, referer):
+def _initialize_request(url, referer, gzip=False):
     url = _clean_url(url)
 
     if not url.startswith(("http://", "https://")):
         return
 
     req = urllib2.Request(url)
-    req.add_header('Accept-Encoding', 'gzip')
+    if gzip:
+        req.add_header('Accept-Encoding', 'gzip')
     if g.useragent:
         req.add_header('User-Agent', g.useragent)
     if referer:
@@ -143,7 +154,7 @@ def _initialize_request(url, referer):
 
 
 def _fetch_url(url, referer=None):
-    request = _initialize_request(url, referer=referer)
+    request = _initialize_request(url, referer=referer, gzip=True)
     if not request:
         return None, None
     response = urllib2.urlopen(request)
@@ -201,8 +212,8 @@ def thumbnail_url(link):
 
 
 def _filename_from_content(contents):
-    sha = hashlib.sha1(contents).digest()
-    return base64.urlsafe_b64encode(sha[0:MEDIA_FILENAME_LENGTH])
+    hash_bytes = hashlib.sha256(contents).digest()
+    return base64.urlsafe_b64encode(hash_bytes).rstrip("=")
 
 
 def upload_media(image, file_type='.jpg'):
@@ -248,7 +259,7 @@ def upload_stylesheet(content):
 
 
 def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
-                  use_cache=False, max_cache_age=None):
+                  save_thumbnail=True, use_cache=False, max_cache_age=None):
     media = None
     autoplay = bool(autoplay)
     maxwidth = int(maxwidth)
@@ -290,7 +301,7 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
             print "%s made a bad secure media obj for url %s" % (scraper, url)
             secure_media_object = None
 
-        if thumbnail_image:
+        if thumbnail_image and save_thumbnail:
             thumbnail_size = thumbnail_image.size
             thumbnail_url = upload_media(thumbnail_image)
 
@@ -298,6 +309,7 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
                       thumbnail_url, thumbnail_size)
 
     # Store the media in the cache (if requested), possibly extending the ttl
+    use_cache = use_cache and save_thumbnail    # don't cache partial scrape
     if use_cache and media is not ERROR_MEDIA:
         MediaByURL.add(url,
                        media,
@@ -326,6 +338,8 @@ def _set_media(link, force=False, **kwargs):
 
         link._commit()
 
+        hooks.get_hook("scraper.set_media").call(link=link)
+
 
 def force_thumbnail(link, image_data, file_type=".jpg"):
     image = str_to_image(image_data)
@@ -337,11 +351,12 @@ def force_thumbnail(link, image_data, file_type=".jpg"):
     link._commit()
 
 
-def upload_icon(file_name, image_data, size):
+def upload_icon(image_data, size):
     image = str_to_image(image_data)
     image.format = 'PNG'
     image.thumbnail(size, Image.ANTIALIAS)
     icon_data = _image_to_str(image)
+    file_name = _filename_from_content(icon_data)
     return g.media_provider.put(file_name + ".png", icon_data)
 
 
@@ -371,16 +386,35 @@ def get_media_embed(media_object):
 
 
 class MediaEmbed(object):
+    """A MediaEmbed holds data relevant for serving media for an object."""
+
     width = None
     height = None
     content = None
     scrolling = False
 
-    def __init__(self, height, width, content, scrolling=False):
+    def __init__(self, height, width, content, scrolling=False,
+                 public_thumbnail_url=None, sandbox=True):
+        """Build a MediaEmbed.
+
+        :param height int - The height of the media embed, in pixels
+        :param width int - The width of the media embed, in pixels
+        :param content string - The content of the media embed - HTML.
+        :param scrolling bool - Whether the media embed should scroll or not.
+        :param public_thumbnail_url string - The URL of the most representative
+            thumbnail for this media. This may be on an uncontrolled domain,
+            and is not necessarily our own thumbs domain (and should not be
+            served to browsers).
+        :param sandbox bool - True if the content should be sandboxed
+            in an iframe on the media domain.
+        """
+
         self.height = int(height)
         self.width = int(width)
         self.content = content
         self.scrolling = scrolling
+        self.public_thumbnail_url = public_thumbnail_url
+        self.sandbox = sandbox
 
 
 def _make_thumbnail_from_url(thumbnail_url, referer):
@@ -551,6 +585,7 @@ class _EmbedlyScraper(Scraper):
         html = oembed.get("html")
         width = oembed.get("width")
         height = oembed.get("height")
+        public_thumbnail_url = oembed.get('thumbnail_url')
         if not (html and width and height):
             return
 
@@ -558,6 +593,7 @@ class _EmbedlyScraper(Scraper):
             width=width,
             height=height,
             content=html,
+            public_thumbnail_url=public_thumbnail_url,
         )
 
 

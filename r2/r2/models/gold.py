@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -39,7 +39,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.sql.expression import select
 from sqlalchemy.sql.functions import sum as sa_sum
 
-from r2.lib.utils import GoldPrice, randstr
+from r2.lib.utils import GoldPrice, randstr, to_date
 import re
 from random import choice
 from time import time
@@ -55,6 +55,9 @@ import stripe
 
 gold_bonus_cutoff = datetime(2010,7,27,0,0,0,0,g.tz)
 gold_static_goal_cutoff = datetime(2013, 11, 7, tzinfo=g.display_tz)
+
+NON_REVENUE_STATUSES = ("declined", "chargeback", "fudge", "invalid",
+                        "refunded", "reversed")
 
 ENGINE_NAME = 'authorize'
 
@@ -276,7 +279,7 @@ def create_claimed_gold (trans_id, payer_email, paying_id,
                                 account_id=account_id,
                                 date=date)
 
-def create_gift_gold (giver_id, recipient_id, days, date, signed):
+def create_gift_gold (giver_id, recipient_id, days, date, signed, note=None):
     trans_id = "X%d%s-%s" % (int(time()), randstr(2), 'S' if signed else 'A')
 
     gold_table.insert().execute(trans_id=trans_id,
@@ -286,7 +289,9 @@ def create_gift_gold (giver_id, recipient_id, days, date, signed):
                                 pennies=0,
                                 days=days,
                                 account_id=recipient_id,
-                                date=date)
+                                date=date,
+                                secret=note,
+    )
 
 
 def create_gold_code(trans_id, payer_email, paying_id, pennies, days, date):
@@ -442,7 +447,6 @@ def append_random_bottlecap_phrase(message):
 
 
 def gold_revenue_multi(dates):
-    NON_REVENUE_STATUSES = ("declined", "chargeback", "fudge")
     date_expr = sa.func.date_trunc('day',
                     sa.func.timezone(TIMEZONE.zone, gold_table.c.date))
     query = (select([date_expr, sa_sum(gold_table.c.pennies)])
@@ -578,3 +582,32 @@ def make_gold_message(thing, user_gilded):
         recipient=author_name,
         months=thing.gildings,
     )
+
+
+def creddits_lock(user):
+    return g.make_lock("gold_creddits", "creddits_%s" % user._id)
+
+
+PENNIES_PER_SERVER_SECOND = {
+    datetime.strptime(datestr, "%Y/%m/%d").date(): v
+    for datestr, v in g.live_config['pennies_per_server_second'].iteritems()
+}
+
+
+def calculate_server_seconds(pennies, date):
+    cutoff_dates = sorted(PENNIES_PER_SERVER_SECOND.keys())
+    date = to_date(date)
+    key = max(filter(lambda cutoff_date: date >= cutoff_date, cutoff_dates))
+    rate = PENNIES_PER_SERVER_SECOND[key]
+
+    # for simplicity all payment processor fees are $0.30 + 2.9%
+    net_pennies = pennies * (1 - 0.029) - 30
+
+    return net_pennies / rate
+
+
+def get_current_value_of_month():
+    price = g.gold_month_price.pennies
+    now = datetime.now(g.display_tz)
+    seconds = calculate_server_seconds(price, now)
+    return seconds

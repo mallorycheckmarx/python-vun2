@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2012 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -44,7 +44,7 @@ from r2.lib.validator import (
     VSubredditName,
     VSRByName,
     VValidatedJSON,
-    VMarkdown,
+    VMarkdownLength,
     VMultiPath,
     VMultiByPath,
 )
@@ -68,7 +68,7 @@ multi_json_spec = VValidatedJSON.Object({
 
 
 multi_description_json_spec = VValidatedJSON.Object({
-    'body_md': VMarkdown('body_md', empty_error=None),
+    'body_md': VMarkdownLength('body_md', max_length=10000, empty_error=None),
 })
 
 
@@ -98,6 +98,7 @@ class MultiApiController(RedditController):
     @api_doc(
         api_section.multis,
         uri="/api/multi/{multipath}",
+        uri_variants=['/api/filter/{filterpath}'],
     )
     def GET_multi(self, multi):
         """Fetch a multi's data and subreddit list by name."""
@@ -225,7 +226,7 @@ class MultiApiController(RedditController):
     @validate(
         VUser(),
         VModhash(),
-        from_multi=VMultiByPath("from", require_view=True),
+        from_multi=VMultiByPath("from", require_view=True, kinds='m'),
         to_path_info=VMultiPath("to",
             docs={"to": "destination multireddit url path"},
         ),
@@ -260,7 +261,7 @@ class MultiApiController(RedditController):
     @validate(
         VUser(),
         VModhash(),
-        from_multi=VMultiByPath("from", require_edit=True),
+        from_multi=VMultiByPath("from", require_edit=True, kinds='m'),
         to_path_info=VMultiPath("to",
             docs={"to": "destination multireddit url path"},
         ),
@@ -289,6 +290,7 @@ class MultiApiController(RedditController):
     @api_doc(
         api_section.multis,
         uri="/api/multi/{multipath}/r/{srname}",
+        uri_variants=['/api/filter/{filterpath}/r/{srname}'],
     )
     def GET_multi_subreddit(self, multi, sr):
         """Get data about a subreddit in a multi."""
@@ -338,7 +340,7 @@ class MultiApiController(RedditController):
     @require_oauth2_scope("read")
     @validate(
         VUser(),
-        multi=VMultiByPath("multipath", require_view=True),
+        multi=VMultiByPath("multipath", require_view=True, kinds='m'),
     )
     @api_doc(
         api_section.multis,
@@ -352,7 +354,7 @@ class MultiApiController(RedditController):
     @validate(
         VUser(),
         VModhash(),
-        multi=VMultiByPath("multipath", require_edit=True),
+        multi=VMultiByPath("multipath", require_edit=True, kinds='m'),
         data=VValidatedJSON('model', multi_description_json_spec),
     )
     @api_doc(api_section.multis, extends=GET_multi_description)

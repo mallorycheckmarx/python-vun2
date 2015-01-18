@@ -31,8 +31,34 @@ r.utils = {
         return list
     },
 
+    structuredMap: function(obj, func) {
+        if (_.isArray(obj)) {
+            return _.map(obj, function(value) {
+                return r.utils.structuredMap(value, func)
+            })
+        } else if (_.isObject(obj)) {
+            var mapped = {}
+            _.each(obj, function(value, key) {
+                mapped[func(key, 'key')] = r.utils.structuredMap(value, func)
+            })
+            return mapped
+        } else {
+            return func(obj, 'value')
+        }
+    },
+
+  unescapeJson: function(json) {
+    return r.utils.structuredMap(json, function(val) {
+      if (_.isString(val)) {
+        return _.unescape(val)
+      } else {
+        return val
+      }
+    })
+  },
+
     querySelectorFromEl: function(targetEl, selector) {
-        return $(targetEl).parents().andSelf()
+        return $(targetEl).parents().addBack()
             .filter(selector || '*')
             .map(function(idx, el) {
                 var parts = [],
@@ -143,7 +169,23 @@ r.utils = {
                 return $.ajax(options).done(_.bind(this.set, this, key))
             }
         }
-    }
+    },
+
+    parseError: function(error) {
+        var name = error[0];
+        var message = error[1];
+        var field = error[2];
+
+        return {
+            name: name,
+            message: message,
+            field: field,
+        }
+    },
+
+    onTrident: function() {
+        return 'ActiveXObject' in window;
+    },
 
 }
 

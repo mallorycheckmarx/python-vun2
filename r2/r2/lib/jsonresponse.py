@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -211,7 +211,7 @@ class JQueryResponse(JsonResponse):
 
     def insert_table_rows(self, rows, index = -1):
         new = self.__getattr__("insert_table_rows")
-        return new([row.render() for row in tup(rows)], index)
+        return new([row.render(style='html') for row in tup(rows)], index)
 
 
     # convenience methods:
@@ -232,7 +232,9 @@ class JQueryResponse(JsonResponse):
 
     def set_inputs(self, **kw):
         for k, v in kw.iteritems():
-            self.get_input(k).set(value = v).end()
+            # Using 'val' instead of setting the 'value' attribute allows this
+            # To work for non-textbox inputs, like textareas
+            self.get_input(k).val(v).end()
         return self
 
     def focus_input(self, name):
@@ -243,6 +245,10 @@ class JQueryResponse(JsonResponse):
             return self.find(selector).show().html(value).end()
         return self.find(selector).hide().html("").end()
 
+    def set_text(self, selector, value):
+        if value:
+            return self.find(selector).show().text(value).end()
+        return self.find(selector).hide().html("").end()
 
     def set(self, **kw):
         obj = self

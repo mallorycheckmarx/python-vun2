@@ -1,6 +1,10 @@
 r.WebSocket = function (url) {
     this._url = url
     this._connectionAttempts = 0
+
+    this.on({
+        'message:refresh': this._onRefresh,
+    }, this)
 }
 _.extend(r.WebSocket.prototype, Backbone.Events, {
     _backoffTime: 2000,
@@ -18,6 +22,7 @@ _.extend(r.WebSocket.prototype, Backbone.Events, {
         r.debug('websocket: connecting')
         this.trigger('connecting')
 
+        this._connectionStart = Date.now()
         this._socket = new WebSocket(this._url)
         this._socket.onopen = _.bind(this._onOpen, this)
         this._socket.onmessage = _.bind(this._onMessage, this)
@@ -26,16 +31,41 @@ _.extend(r.WebSocket.prototype, Backbone.Events, {
         this._connectionAttempts += 1
     },
 
+    _sendStats: function (payload) {
+      if (!r.config.stats_domain) {
+        return
+      }
+
+      $.ajax({
+        type: 'POST',
+        url: r.config.stats_domain,
+        data: JSON.stringify(payload),
+        contentType: 'application/json; charset=utf-8',
+      })
+    },
+
     _onOpen: function (ev) {
         r.debug('websocket: connected')
         this.trigger('connected')
         this._connectionAttempts = 0
+
+        this._sendStats({
+          websocketPerformance: {
+            connectionTiming: Date.now() - this._connectionStart,
+          },
+        })
     },
 
     _onMessage: function (ev) {
         var parsed = JSON.parse(ev.data)
         r.debug('websocket: received "' + parsed.type + '" message')
         this.trigger('message message:' + parsed.type, parsed.payload)
+    },
+
+    _onRefresh: function () {
+        // delay a random amount to reduce thundering herd
+        var delay = Math.random() * 300 * 1000
+        setTimeout(function () { location.reload() }, delay)
     },
 
     _onClose: function (ev) {
@@ -51,5 +81,11 @@ _.extend(r.WebSocket.prototype, Backbone.Events, {
             r.debug('websocket: maximum retries exceeded. bailing out')
             this.trigger('disconnected')
         }
+
+        this._sendStats({
+          websocketError: {
+            error: 1,
+          },
+        })
     }
 })

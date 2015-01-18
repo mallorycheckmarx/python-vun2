@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,10 +31,16 @@ from pylons import g
 from pycassa import ColumnFamily
 from pycassa.pool import MaximumRetryException
 from pycassa.cassandra.ttypes import ConsistencyLevel, NotFoundException
-from pycassa.system_manager import (SystemManager, UTF8_TYPE,
-                                    COUNTER_COLUMN_TYPE, TIME_UUID_TYPE,
-                                    ASCII_TYPE)
+from pycassa.system_manager import (
+    ASCII_TYPE,
+    COUNTER_COLUMN_TYPE,
+    INT_TYPE,
+    SystemManager,
+    TIME_UUID_TYPE,
+    UTF8_TYPE,
+)
 from pycassa.types import DateType, LongType, IntegerType
+from pycassa.util import convert_uuid_to_time
 from r2.lib.utils import tup, Storage
 from r2.lib import cache
 from uuid import uuid1, UUID
@@ -429,7 +435,10 @@ class ThingBase(object):
             items.extend(typ._byID(ids).values())
 
         if is_single:
-            return items[0]
+            try:
+                return items[0]
+            except IndexError:
+                raise NotFound("<%s %r>" % (cls.__name__, ids[0]))
         elif return_dict:
             return dict((x._fullname, x) for x in items)
         else:
@@ -506,7 +515,8 @@ class ThingBase(object):
         elif (attr in cls._date_props or attr == cls._timestamp_prop or
               (cls._value_type and cls._value_type == 'date')):
             # the _timestamp_prop is handled in _commit(), not here
-            if cls._get_column_validator(attr) == 'DateType':
+            validator = cls._get_column_validator(attr)
+            if validator in ("DateType", "TimeUUIDType"):
                 # pycassa will take it from here
                 return val
             else:
@@ -524,6 +534,8 @@ class ThingBase(object):
     def _deserialize_date(cls, val):
         if isinstance(val, datetime):
             date = val
+        elif isinstance(val, UUID):
+            return convert_uuid_to_time(val)
         elif len(val) == 8: # cassandra uses 8-byte integer format for this
             date = date_serializer.unpack(val)
         else: # it's probably the old-style stringified seconds since epoch
@@ -870,6 +882,7 @@ class DenormalizedRelation(object):
     _write_last_modified = True
     _extra_schema_creation_args = dict(key_validation_class=ASCII_TYPE,
                                        default_validation_class=UTF8_TYPE)
+    _ttl = None
 
     @classmethod
     def value_for(cls, thing1, thing2, **kw):
@@ -877,6 +890,7 @@ class DenormalizedRelation(object):
         raise NotImplementedError()
 
     @classmethod
+    @will_write
     def create(cls, thing1, thing2s, **kw):
         """Create a relationship between thing1 and thing2s.
 
@@ -890,7 +904,7 @@ class DenormalizedRelation(object):
         thing2s = tup(thing2s)
         values = {thing2._id36 : cls.value_for(thing1, thing2, **kw)
                   for thing2 in thing2s}
-        cls._cf.insert(thing1._id36, values)
+        cls._cf.insert(thing1._id36, values, ttl=cls._ttl)
 
         for view in cls._views:
             view.create(thing1, thing2s, **kw)
@@ -900,6 +914,7 @@ class DenormalizedRelation(object):
             LastModified.touch(thing1._fullname, cls._last_modified_name)
 
     @classmethod
+    @will_write
     def destroy(cls, thing1, thing2s):
         """Destroy relationships between thing1 and some thing2s."""
         thing2s = tup(thing2s)

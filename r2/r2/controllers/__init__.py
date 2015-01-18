@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -56,6 +56,7 @@ def load_controllers():
 
     from listingcontroller import MyredditsController
 
+    from admin import AdminToolController
     from front import FormsController
     from front import FrontController
     from health import HealthController
@@ -68,8 +69,10 @@ def load_controllers():
     from awards import AwardsController
     from errorlog import ErrorlogController
     from promotecontroller import PromoteController
+    from promotecontroller import SponsorController
     from promotecontroller import PromoteApiController
     from promotecontroller import PromoteListingController
+    from promotecontroller import SponsorListingController
     from mediaembed import MediaembedController
     from mediaembed import AdController
     from policies import PoliciesController
@@ -81,7 +84,8 @@ def load_controllers():
     from api import ApiController
     from api import ApiminimalController
     from api_docs import ApidocsController
-    from apiv1 import APIv1Controller
+    from apiv1.user import APIv1UserController
+    from apiv1.gold import APIv1GoldController
     from multi import MultiApiController
     from oauth2 import OAuth2FrontendController
     from oauth2 import OAuth2AccessController

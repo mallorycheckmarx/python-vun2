@@ -16,387 +16,532 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
+"""Parse and validate a safe subset of CSS.
 
-from __future__ import with_statement
+The goal of this validation is not to ensure functionally correct stylesheets
+but rather that the stylesheet is safe to show to downstream users.  This
+includes:
 
-from r2.models import *
-from r2.models.wiki import ImagesByWikiPage
-from r2.lib.utils import sanitize_url, strip_www, randstr
-from r2.lib.strings import string_dict
-from r2.lib.pages.things import wrap_links
+    * not generating requests to third party hosts (information leak)
+    * xss via strange syntax in buggy browsers
 
-from pylons import g, c
-from pylons.i18n import _
-from mako import filters
+Beyond that, every effort is made to allow the full gamut of modern CSS.
 
-import os
-import tempfile
+"""
 
-from r2.lib.media import upload_media
-
+import itertools
 import re
-from urlparse import urlparse
+import unicodedata
 
-import cssutils
-from cssutils import CSSParser
-from cssutils.css import CSSStyleRule
-from cssutils.css import CSSValue, CSSValueList
-from cssutils.css import CSSPrimitiveValue
-from cssutils.css import cssproperties
-from xml.dom import DOMException
+import tinycss2
 
-msgs = string_dict['css_validator_messages']
+from pylons.i18n import N_
 
-browser_prefixes = ['o','moz','webkit','ms','khtml','apple','xv']
+from r2.lib.contrib import rcssmin
+from r2.lib.utils import tup
 
-custom_macros = {
-    'num': r'[-]?\d+|[-]?\d*\.\d+',
-    'percentage': r'{num}%',
-    'length': r'0|{num}(em|ex|px|in|cm|mm|pt|pc)',
-    'int': r'[-]?\d+',
-    'w': r'\s*',
-    
-    # From: http://www.w3.org/TR/2008/WD-css3-color-20080721/#svg-color
-    'x11color': r'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen',
-    'csscolor': r'(maroon|red|orange|yellow|olive|purple|fuchsia|white|lime|green|navy|blue|aqua|teal|black|silver|gray|ActiveBorder|ActiveCaption|AppWorkspace|Background|ButtonFace|ButtonHighlight|ButtonShadow|ButtonText|CaptionText|GrayText|Highlight|HighlightText|InactiveBorder|InactiveCaption|InactiveCaptionText|InfoBackground|InfoText|Menu|MenuText|Scrollbar|ThreeDDarkShadow|ThreeDFace|ThreeDHighlight|ThreeDLightShadow|ThreeDShadow|Window|WindowFrame|WindowText)|#[0-9a-f]{3}|#[0-9a-f]{6}|rgb\({w}{int}{w},{w}{int}{w},{w}{int}{w}\)|rgb\({w}{num}%{w},{w}{num}%{w},{w}{num}%{w}\)',
-    'color': '{x11color}|{csscolor}',
 
-    'bg-gradient': r'none|{color}|[a-z-]*-gradient\([^;]*\)',
-    'bg-gradients': r'{bg-gradient}(?:,\s*{bg-gradient})*',
+__all__ = ["validate_css"]
 
-    'border-radius': r'(({length}|{percentage}){w}){1,2}',
-    
-    'single-text-shadow': r'({color}\s+)?{length}\s+{length}(\s+{length})?|{length}\s+{length}(\s+{length})?(\s+{color})?',
 
-    'box-shadow-pos': r'{length}\s+{length}(\s+{length})?(\s+{length})?',
+SIMPLE_TOKEN_TYPES = {
+    "dimension",
+    "hash",
+    "ident",
+    "literal",
+    "number",
+    "percentage",
+    "string",
+    "whitespace",
 }
 
-custom_values = {
-    '_height': r'{length}|{percentage}|auto|inherit',
-    '_width': r'{length}|{percentage}|auto|inherit',
-    '_overflow': r'visible|hidden|scroll|auto|inherit',
-    'color': r'{color}',
-    'border-color': r'{color}',
-    'opacity': r'^0?\.?[0-9]*|1\.0*|1|0',
-    'filter': r'alpha\(opacity={num}\)',
-    
-    'background': r'{bg-gradients}',
-    'background-image': r'{bg-gradients}',
-    'background-color': r'{color}',
-    'background-position': r'(({percentage}|{length}){0,3})?\s*(top|center|left)?\s*(left|center|right)?',
-    
-    # http://www.w3.org/TR/css3-background/#border-top-right-radius
-    'border-radius': r'{border-radius}',
-    'border-top-right-radius': r'{border-radius}',
-    'border-bottom-right-radius': r'{border-radius}',
-    'border-bottom-left-radius': r'{border-radius}',
-    'border-top-left-radius': r'{border-radius}',
 
-    # old mozilla style (for compatibility with existing stylesheets)
-    'border-radius-topright': r'{border-radius}',
-    'border-radius-bottomright': r'{border-radius}',
-    'border-radius-bottomleft': r'{border-radius}',
-    'border-radius-topleft': r'{border-radius}',
-    
-    # http://www.w3.org/TR/css3-text/#text-shadow
-    'text-shadow': r'none|({single-text-shadow}{w},{w})*{single-text-shadow}',
-    
-    # http://www.w3.org/TR/css3-background/#the-box-shadow
-    # (This description doesn't support multiple shadows)
-    'box-shadow': 'none|(?:({box-shadow-pos}\s+)?{color}|({color}\s+?){box-shadow-pos})',
+VENDOR_PREFIXES = {
+    "-apple-",
+    "-khtml-",
+    "-moz-",
+    "-ms-",
+    "-o-",
+    "-webkit-",
+}
+assert all(prefix == prefix.lower() for prefix in VENDOR_PREFIXES)
+
+
+SAFE_PROPERTIES = {
+    "align-content",
+    "align-items",
+    "align-self",
+    "animation",
+    "animation-delay",
+    "animation-direction",
+    "animation-duration",
+    "animation-fill-mode",
+    "animation-iteration-count",
+    "animation-name",
+    "animation-play-state",
+    "animation-timing-function",
+    "backface-visibility",
+    "background",
+    "background-attachment",
+    "background-clip",
+    "background-color",
+    "background-image",
+    "background-origin",
+    "background-position",
+    "background-repeat",
+    "background-size",
+    "border",
+    "border-bottom",
+    "border-bottom-color",
+    "border-bottom-left-radius",
+    "border-bottom-right-radius",
+    "border-bottom-style",
+    "border-bottom-width",
+    "border-collapse",
+    "border-color",
+    "border-image",
+    "border-image-outset",
+    "border-image-repeat",
+    "border-image-slice",
+    "border-image-source",
+    "border-image-width",
+    "border-left",
+    "border-left-color",
+    "border-left-style",
+    "border-left-width",
+    "border-radius",
+    "border-radius-bottomleft",
+    "border-radius-bottomright",
+    "border-radius-topleft",
+    "border-radius-topright",
+    "border-right",
+    "border-right-color",
+    "border-right-style",
+    "border-right-width",
+    "border-spacing",
+    "border-style",
+    "border-top",
+    "border-top-color",
+    "border-top-left-radius",
+    "border-top-right-radius",
+    "border-top-style",
+    "border-top-width",
+    "border-width",
+    "bottom",
+    "box-shadow",
+    "box-sizing",
+    "caption-side",
+    "clear",
+    "clip",
+    "color",
+    "content",
+    "counter-increment",
+    "counter-reset",
+    "cue",
+    "cue-after",
+    "cue-before",
+    "cursor",
+    "direction",
+    "display",
+    "elevation",
+    "empty-cells",
+    "flex",
+    "flex-align",
+    "flex-direction",
+    "flex-flow",
+    "flex-item-align",
+    "flex-line-pack",
+    "flex-order",
+    "flex-pack",
+    "flex-wrap",
+    "float",
+    "font",
+    "font-family",
+    "font-size",
+    "font-style",
+    "font-variant",
+    "font-weight",
+    "grid",
+    "grid-area",
+    "grid-auto-columns",
+    "grid-auto-flow",
+    "grid-auto-position",
+    "grid-auto-rows",
+    "grid-column",
+    "grid-column-start",
+    "grid-column-end",
+    "grid-row",
+    "grid-row-start",
+    "grid-row-end",
+    "grid-template",
+    "grid-template-areas",
+    "grid-template-rows",
+    "grid-template-columns",
+    "hanging-punctuation",
+    "height",
+    "hyphens",
+    "image-orientation",
+    "image-rendering",
+    "image-resolution",
+    "left",
+    "letter-spacing",
+    "line-break",
+    "line-height",
+    "list-style",
+    "list-style-image",
+    "list-style-position",
+    "list-style-type",
+    "margin",
+    "margin-bottom",
+    "margin-left",
+    "margin-right",
+    "margin-top",
+    "max-height",
+    "max-width",
+    "min-height",
+    "min-width",
+    "opacity",
+    "order",
+    "orphans",
+    "outline",
+    "outline-color",
+    "outline-offset",
+    "outline-style",
+    "outline-width",
+    "overflow",
+    "overflow-wrap",
+    "overflow-x",
+    "overflow-y",
+    "padding",
+    "padding-bottom",
+    "padding-left",
+    "padding-right",
+    "padding-top",
+    "page-break-after",
+    "page-break-before",
+    "page-break-inside",
+    "pause",
+    "pause-after",
+    "pause-before",
+    "perspective",
+    "perspective-origin",
+    "pitch",
+    "pitch-range",
+    "play-during",
+    "pointer-events",
+    "position",
+    "quotes",
+    "richness",
+    "right",
+    "speak",
+    "speak-header",
+    "speak-numeral",
+    "speak-punctuation",
+    "speech-rate",
+    "stress",
+    "table-layout",
+    "tab-size",
+    "text-align",
+    "text-align-last",
+    "text-decoration",
+    "text-decoration-color",
+    "text-decoration-line",
+    "text-decoration-skip",
+    "text-decoration-style",
+    "text-indent",
+    "text-justify",
+    "text-overflow",
+    "text-shadow",
+    "text-space-collapse",
+    "text-transform",
+    "text-underline-position",
+    "text-wrap",
+    "top",
+    "transform",
+    "transform-origin",
+    "transform-style",
+    "transition",
+    "transition-delay",
+    "transition-duration",
+    "transition-property",
+    "transition-timing-function",
+    "unicode-bidi",
+    "vertical-align",
+    "visibility",
+    "voice-family",
+    "volume",
+    "white-space",
+    "widows",
+    "width",
+    "will-change",
+    "word-break",
+    "word-spacing",
+    "z-index",
+}
+assert all(property == property.lower() for property in SAFE_PROPERTIES)
+
+
+SAFE_FUNCTIONS = {
+    "attr",
+    "calc",
+    "counter",
+    "counters",
+    "cubic-bezier",
+    "hsl",
+    "hsla",
+    "lang",
+    "linear-gradient",
+    "matrix",
+    "matrix3d",
+    "not",
+    "nth-child",
+    "nth-last-child",
+    "nth-last-of-type",
+    "nth-of-type",
+    "perspective",
+    "radial-gradient",
+    "rect",
+    "repeating-linear-gradient",
+    "repeating-radial-gradient",
+    "rgb",
+    "rgba",
+    "rotate",
+    "rotate3d",
+    "rotatex",
+    "rotatey",
+    "rotatez",
+    "scale",
+    "scale3d",
+    "scalex",
+    "scaley",
+    "scalez",
+    "skewx",
+    "skewy",
+    "steps",
+    "translate",
+    "translate3d",
+    "translatex",
+    "translatey",
+    "translatez",
+}
+assert all(function == function.lower() for function in SAFE_FUNCTIONS)
+
+
+ERROR_MESSAGES = {
+    "IMAGE_NOT_FOUND": N_('no image found with name "%(name)s"'),
+    "NON_PLACEHOLDER_URL": N_("only uploaded images are allowed; reference "
+                              "them with the %%%%imagename%%%% system"),
+    "SYNTAX_ERROR": N_("syntax error: %(message)s"),
+    "UNKNOWN_AT_RULE": N_("@%(keyword)s is not allowed"),
+    "UNKNOWN_PROPERTY": N_('unknown property "%(name)s"'),
+    "UNKNOWN_FUNCTION": N_('unknown function "%(function)s"'),
+    "UNEXPECTED_TOKEN": N_('unexpected token "%(token)s"'),
+    "BACKSLASH": N_("backslashes are not allowed"),
+    "CONTROL_CHARACTER": N_("control characters are not allowed"),
+    "TOO_BIG": N_("the stylesheet is too big. maximum size: %(size)d KiB"),
 }
 
-def _build_regex_prefix(prefixes):
-    return re.compile("|".join("^-"+p+"-" for p in prefixes))
 
-prefix_regex = _build_regex_prefix(browser_prefixes)
+MAX_SIZE_KIB = 100
+SUBREDDIT_IMAGE_URL_PLACEHOLDER = re.compile(r"\A%%([a-zA-Z0-9\-]+)%%\Z")
 
-def _expand_macros(tokdict,macrodict):
-    """ Expand macros in token dictionary """
-    def macro_value(m):
-        return '(?:%s)' % macrodict[m.groupdict()['macro']]
-    for key, value in tokdict.items():
-        while re.search(r'{[a-z][a-z0-9-]*}', value):
-            value = re.sub(r'{(?P<macro>[a-z][a-z0-9-]*)}',
-                           macro_value, value)
-        tokdict[key] = value
-    return tokdict
-def _compile_regexes(tokdict):
-    """ Compile all regular expressions into callable objects """
-    for key, value in tokdict.items():
-        tokdict[key] = re.compile('\A(?:%s)\Z' % value, re.I).match
-    return tokdict
-_compile_regexes(_expand_macros(custom_values,custom_macros))
 
-class ValidationReport(object):
-    def __init__(self, original_text=''):
-        self.errors        = []
-        self.original_text = original_text.split('\n') if original_text else ''
+def strip_vendor_prefix(identifier):
+    for prefix in VENDOR_PREFIXES:
+        if identifier.startswith(prefix):
+            return identifier[len(prefix):]
+    return identifier
 
-    def __str__(self):
-        "only for debugging"
-        return "Report:\n" + '\n'.join(['\t' + str(x) for x in self.errors])
 
-    def append(self,error):
-        if hasattr(error,'line'):
-            error.offending_line = self.original_text[error.line-1]
-        self.errors.append(error)
+class ValidationError(object):
+    def __init__(self, line_number, error_code, message_params=None):
+        self.line = line_number
+        self.error_code = error_code
+        self.message_params = message_params or {}
+        # note: _source_lines is added to these objects by the parser
 
-class ValidationError(Exception):
-    def __init__(self, message, obj = None, line = None):
-        self.message  = message
-        if obj is not None:
-            self.obj  = obj
-        # self.offending_line is the text of the actual line that
-        #  caused the problem; it's set by the ValidationReport that
-        #  owns this ValidationError
+    @property
+    def offending_line(self):
+        return self._source_lines[self.line - 1]
 
-        if obj is not None and line is None and hasattr(self.obj,'_linetoken'):
-            (_type1,_type2,self.line,_char) = obj._linetoken
-        elif line is not None:
-            self.line = line
+    @property
+    def message_key(self):
+        return ERROR_MESSAGES[self.error_code]
 
-    def __cmp__(self, other):
-        if hasattr(self,'line') and not hasattr(other,'line'):
-            return -1
-        elif hasattr(other,'line') and not hasattr(self,'line'):
-            return 1
+
+class StylesheetValidator(object):
+    def __init__(self, images):
+        self.images = images
+
+    def validate_url(self, url_node):
+        m = SUBREDDIT_IMAGE_URL_PLACEHOLDER.match(url_node.value)
+        if not m:
+            return ValidationError(url_node.source_line, "NON_PLACEHOLDER_URL")
+
+        image_name = m.group(1)
+        if image_name not in self.images:
+            return ValidationError(url_node.source_line, "IMAGE_NOT_FOUND",
+                                   {"name": image_name})
+
+        # rewrite the url value to the actual url of the image
+        url_node.value = self.images[image_name]
+
+    def validate_function(self, function_node):
+        function_name = strip_vendor_prefix(function_node.lower_name)
+
+        if function_name not in SAFE_FUNCTIONS:
+            return ValidationError(function_node.source_line,
+                                   "UNKNOWN_FUNCTION",
+                                   {"function": function_node.name})
+        # property: attr(something url)
+        # https://developer.mozilla.org/en-US/docs/Web/CSS/attr
+        elif function_name == "attr":
+            for argument in function_node.arguments:
+                if argument.type == "ident" and argument.lower_value == "url":
+                    return ValidationError(argument.source_line,
+                                           "NON_PLACEHOLDER_URL")
+
+        return self.validate_component_values(function_node.arguments)
+
+    def validate_block(self, block):
+        return self.validate_component_values(block.content)
+
+    def validate_component_values(self, component_values):
+        return self.validate_list(component_values, {
+            # {} blocks are technically part of component values but i don't
+            # know of any actual valid uses for them in selectors etc. and they
+            # can cause issues with e.g.
+            # Safari 5: p[foo=bar{}*{background:green}]{background:red}
+            "[] block": self.validate_block,
+            "() block": self.validate_block,
+            "url": self.validate_url,
+            "function": self.validate_function,
+        }, ignored_types=SIMPLE_TOKEN_TYPES)
+
+    def validate_declaration(self, declaration):
+        if strip_vendor_prefix(declaration.lower_name) not in SAFE_PROPERTIES:
+            return ValidationError(declaration.source_line, "UNKNOWN_PROPERTY",
+                                   {"name": declaration.name})
+        return self.validate_component_values(declaration.value)
+
+    def validate_declaration_list(self, declarations):
+        return self.validate_list(declarations, {
+            "at-rule": self.validate_at_rule,
+            "declaration": self.validate_declaration,
+        })
+
+    def validate_qualified_rule(self, rule):
+        prelude_errors = self.validate_component_values(rule.prelude)
+        declarations = tinycss2.parse_declaration_list(rule.content)
+        declaration_errors = self.validate_declaration_list(declarations)
+        return itertools.chain(prelude_errors, declaration_errors)
+
+    def validate_at_rule(self, rule):
+        prelude_errors = self.validate_component_values(rule.prelude)
+
+        keyword = strip_vendor_prefix(rule.lower_at_keyword)
+
+        if keyword in ("media", "keyframes"):
+            rules = tinycss2.parse_rule_list(rule.content)
+            rule_errors = self.validate_rule_list(rules)
+        elif keyword == "page":
+            rule_errors = self.validate_qualified_rule(rule)
         else:
-            return cmp(self.line,other.line)
+            return ValidationError(rule.source_line, "UNKNOWN_AT_RULE",
+                                   {"keyword": rule.at_keyword})
+
+        return itertools.chain(prelude_errors, rule_errors)
+
+    def validate_rule_list(self, rules):
+        return self.validate_list(rules, {
+            "qualified-rule": self.validate_qualified_rule,
+            "at-rule": self.validate_at_rule,
+        })
+
+    def validate_list(self, nodes, validators_by_type, ignored_types=None):
+        for node in nodes:
+            if node.type == "error":
+                yield ValidationError(node.source_line, "SYNTAX_ERROR",
+                                      {"message": node.message})
+                continue
+            elif node.type == "literal":
+                if node.value == ";":
+                    # if we're seeing a semicolon as a literal, it's in a place
+                    # that doesn't fit naturally in the syntax.
+                    # Safari 5 will treat this as two color properties:
+                    # color: calc(;color:red;);
+                    message = "semicolons are not allowed in this context"
+                    yield ValidationError(node.source_line, "SYNTAX_ERROR",
+                                          {"message": message})
+                    continue
+
+            validator = validators_by_type.get(node.type)
+
+            if validator:
+                for error in tup(validator(node)):
+                    if error:
+                        yield error
+            else:
+                if not ignored_types or node.type not in ignored_types:
+                    yield ValidationError(node.source_line,
+                                          "UNEXPECTED_TOKEN",
+                                          {"token": node.type})
+
+    def check_for_evil_codepoints(self, source_lines):
+        for line_number, line_text in enumerate(source_lines, start=1):
+            for codepoint in line_text:
+                # IE<8: *{color: expression\28 alert\28 1 \29 \29 }
+                if codepoint == "\\":
+                    yield ValidationError(line_number, "BACKSLASH")
+                    break
+                # accept these characters that get classified as control
+                elif codepoint in ("\t", "\n", "\r"):
+                    continue
+                # Safari: *{font-family:'foobar\x03;background:url(evil);';}
+                elif unicodedata.category(codepoint).startswith("C"):
+                    yield ValidationError(line_number, "CONTROL_CHARACTER")
+                    break
+
+    def parse_and_validate(self, stylesheet_source):
+        if len(stylesheet_source) > (MAX_SIZE_KIB * 1024):
+            return "", [ValidationError(0, "TOO_BIG", {"size": MAX_SIZE_KIB})]
+
+        nodes = tinycss2.parse_stylesheet(stylesheet_source)
+
+        source_lines = stylesheet_source.splitlines()
+
+        backslash_errors = self.check_for_evil_codepoints(source_lines)
+        validation_errors = self.validate_rule_list(nodes)
+
+        errors = []
+        for error in itertools.chain(backslash_errors, validation_errors):
+            error._source_lines = source_lines
+            errors.append(error)
+        errors.sort(key=lambda e: e.line)
+
+        if not errors:
+            serialized = rcssmin.cssmin(tinycss2.serialize(nodes))
+        else:
+            serialized = ""
+
+        return serialized.encode("utf-8"), errors
 
 
-    def __str__(self):
-        "only for debugging"
-        line = (("(%d)" % self.line)
-                if hasattr(self,'line') else '')
-        obj = str(self.obj) if hasattr(self,'obj') else ''
-        return "ValidationError%s: %s (%s)" % (line, self.message, obj)
+def validate_css(stylesheet, images):
+    """Validate and re-serialize the user submitted stylesheet.
 
+    images is a mapping of subreddit image names to their URLs.  The
+    re-serialized stylesheet will have %%name%% tokens replaced with their
+    appropriate URLs.
 
-# substitutable urls will be css-valid labels surrounded by "%%"
-custom_img_urls = re.compile(r'%%([a-zA-Z0-9\-]+)%%')
-def valid_url(prop, value, report, generate_https_urls):
-    """Validate a URL in the stylesheet.
-
-    The only valid URLs for use in a stylesheet are the custom image format
-    (%%example%%) which this function will translate to actual URLs.
+    The return value is a two-tuple of the re-serialized (and minified)
+    stylesheet and a list of errors.  If the list is empty, the stylesheet is
+    valid.
 
     """
-    try:
-        url = value.getStringValue()
-    except IndexError:
-        g.log.error("Problem validating [%r]" % value)
-        raise
-
-    m = custom_img_urls.match(url)
-    if m:
-        name = m.group(1)
-
-        # this relies on localcache to not be doing a lot of lookups
-        images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
-
-        if name in images:
-            if not generate_https_urls:
-                url = images[name]
-            else:
-                url = g.media_provider.convert_to_https(images[name])
-            value._setCssText("url(%s)"%url)
-        else:
-            # unknown image label -> error
-            report.append(ValidationError(msgs['broken_url']
-                                          % dict(brokenurl = value.cssText),
-                                          value))
-    else:
-        report.append(ValidationError(msgs["custom_images_only"], value))
-
-
-def strip_browser_prefix(prop):
-    t = prefix_regex.split(prop, maxsplit=1)
-    return t[len(t) - 1]
-
-def valid_value(prop, value, report, generate_https_urls):
-    prop_name = strip_browser_prefix(prop.name) # Remove browser-specific prefixes eg: -moz-border-radius becomes border-radius
-    if not (value.valid and value.wellformed):
-        if (value.wellformed
-            and prop_name in cssproperties.cssvalues
-            and cssproperties.cssvalues[prop_name](prop.value)):
-            # it's actually valid. cssutils bug.
-            pass
-        elif (not value.valid
-              and value.wellformed
-              and prop_name in custom_values
-              and custom_values[prop_name](prop.value)):
-            # we're allowing it via our own custom validator
-            value.valid = True
-
-            # see if this suddenly validates the entire property
-            prop.valid = True
-            prop.cssValue.valid = True
-            if prop.cssValue.cssValueType == CSSValue.CSS_VALUE_LIST:
-                for i in range(prop.cssValue.length):
-                    if not prop.cssValue.item(i).valid:
-                        prop.cssValue.valid = False
-                        prop.valid = False
-                        break
-        elif not (prop_name in cssproperties.cssvalues or prop_name in custom_values):
-            error = (msgs['invalid_property']
-                     % dict(cssprop = prop.name))
-            report.append(ValidationError(error,value))
-        else:
-            error = (msgs['invalid_val_for_prop']
-                     % dict(cssvalue = value.cssText,
-                            cssprop  = prop.name))
-            report.append(ValidationError(error,value))
-
-    if value.primitiveType == CSSPrimitiveValue.CSS_URI:
-        valid_url(
-            prop,
-            value,
-            report,
-            generate_https_urls,
-        )
-
-error_message_extract_re = re.compile('.*\\[([0-9]+):[0-9]*:.*\\]\Z')
-only_whitespace          = re.compile('\A\s*\Z')
-def validate_css(string, generate_https_urls):
-    p = CSSParser(raiseExceptions = True)
-
-    if not string or only_whitespace.match(string):
-        return ('',ValidationReport())
-
-    report = ValidationReport(string)
-
-    # avoid a very expensive parse
-    max_size_kb = 100;
-    if len(string) > max_size_kb * 1024:
-        report.append(ValidationError((msgs['too_big']
-                                       % dict (max_size = max_size_kb))))
-        return ('', report)
-
-    if '\\' in string:
-        report.append(ValidationError(_("if you need backslashes, you're doing it wrong")))
-
-    try:
-        parsed = p.parseString(string)
-    except DOMException,e:
-        # yuck; xml.dom.DOMException can't give us line-information
-        # directly, so we have to parse its error message string to
-        # get it
-        line = None
-        line_match = error_message_extract_re.match(e.message)
-        if line_match:
-            line = line_match.group(1)
-            if line:
-                line = int(line)
-        error_message=  (msgs['syntax_error']
-                         % dict(syntaxerror = e.message))
-        report.append(ValidationError(error_message,e,line))
-        return (None,report)
-
-    for rule in parsed.cssRules:
-        if rule.type == CSSStyleRule.IMPORT_RULE:
-            report.append(ValidationError(msgs['no_imports'],rule))
-        elif rule.type == CSSStyleRule.COMMENT:
-            pass
-        elif rule.type == CSSStyleRule.STYLE_RULE:
-            style = rule.style
-            for prop in style.getProperties():
-
-                if prop.cssValue.cssValueType == CSSValue.CSS_VALUE_LIST:
-                    for i in range(prop.cssValue.length):
-                        valid_value(
-                            prop,
-                            prop.cssValue.item(i),
-                            report,
-                            generate_https_urls,
-                        )
-                    if not (prop.cssValue.valid and prop.cssValue.wellformed):
-                        report.append(ValidationError(msgs['invalid_property_list']
-                                                      % dict(proplist = prop.cssText),
-                                                      prop.cssValue))
-                elif prop.cssValue.cssValueType == CSSValue.CSS_PRIMITIVE_VALUE:
-                    valid_value(
-                        prop,
-                        prop.cssValue,
-                        report,
-                        generate_https_urls,
-                    )
-
-                # cssutils bug: because valid values might be marked
-                # as invalid, we can't trust cssutils to properly
-                # label valid properties, so we're going to rely on
-                # the value validation (which will fail if the
-                # property is invalid anyway). If this bug is fixed,
-                # we should uncomment this 'if'
-
-                # a property is not valid if any of its values are
-                # invalid, or if it is itself invalid. To get the
-                # best-quality error messages, we only report on
-                # whether the property is valid after we've checked
-                # the values
-                #if not (prop.valid and prop.wellformed):
-                #    report.append(ValidationError(_('invalid property'),prop))
-            
-        else:
-            report.append(ValidationError(msgs['unknown_rule_type']
-                                          % dict(ruletype = rule.cssText),
-                                          rule))
-
-    return parsed.cssText if parsed else "", report
-
-def find_preview_comments(sr):
-    from r2.lib.db.queries import get_sr_comments, get_all_comments
-
-    comments = get_sr_comments(sr)
-    comments = list(comments)
-    if not comments:
-        comments = get_all_comments()
-        comments = list(comments)
-
-    return Thing._by_fullname(comments[:25], data=True, return_dict=False)
-
-def find_preview_links(sr):
-    from r2.lib.normalized_hot import normalized_hot
-
-    # try to find a link to use, otherwise give up and return
-    links = normalized_hot([sr._id])
-    if not links:
-        links = normalized_hot(Subreddit.default_subreddits())
-
-    if links:
-        links = links[:25]
-        links = Link._by_fullname(links, data=True, return_dict=False)
-
-    return links
-
-def rendered_link(links, media, compress, stickied=False):
-    with c.user.safe_set_attr:
-        c.user.pref_compress = compress
-        c.user.pref_media    = media
-    links = wrap_links(links, show_nums = True, num = 1)
-    for wrapped in links:
-        wrapped.stickied = stickied
-    delattr(c.user, 'pref_compress')
-    delattr(c.user, 'pref_media') 
-    return links.render(style = "html")
-
-def rendered_comment(comments, gilded=False):
-    wrapped = wrap_links(comments, num=1)
-    if gilded:
-        for w in wrapped:
-            w.gilded_message = "this comment was fake-gilded"
-    return wrapped.render(style="html")
-
-class BadImage(Exception):
-    def __init__(self, error = None):
-        self.error = error
-
-def save_sr_image(sr, data, suffix = '.png'):
-    try:
-        return upload_media(data, file_type = suffix)
-    except Exception as e:
-        raise BadImage(e)
-
+    assert isinstance(stylesheet, unicode)
+    validator = StylesheetValidator(images)
+    return validator.parse_and_validate(stylesheet)

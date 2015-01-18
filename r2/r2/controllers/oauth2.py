@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -24,11 +24,12 @@ from urllib import urlencode
 import base64
 import simplejson
 
-from pylons import c, g, request
+from pylons import c, g, request, response
 from pylons.i18n import _
 from r2.config.extensions import set_extension
 from r2.lib.base import abort
 from reddit_base import RedditController, MinimalController, require_https
+from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import NotFound
 from r2.models import Account
 from r2.models.token import (
@@ -49,12 +50,17 @@ from r2.lib.validator import (
     VOAuth2ClientID,
     VOAuth2Scope,
     VOAuth2RefreshToken,
+    VRatelimit,
+    VLength,
 )
 
 
-def _update_redirect_uri(base_redirect_uri, params):
+def _update_redirect_uri(base_redirect_uri, params, as_fragment=False):
     parsed = UrlParser(base_redirect_uri)
-    parsed.update_query(**params)
+    if as_fragment:
+        parsed.fragment = urlencode(params)
+    else:
+        parsed.update_query(**params)
     return parsed.unparse()
 
 
@@ -70,7 +76,7 @@ class OAuth2FrontendController(RedditController):
         if not redirect_uri or not client or redirect_uri != client.redirect_uri:
             abort(ForbiddenError(errors.OAUTH2_INVALID_REDIRECT_URI))
 
-    def _error_response(self, state, redirect_uri):
+    def _error_response(self, state, redirect_uri, as_fragment=False):
         """Return an error redirect, but only if client_id and redirect_uri are valid."""
 
         resp = {"state": state}
@@ -88,11 +94,11 @@ class OAuth2FrontendController(RedditController):
         else:
             resp["error"] = "invalid_request"
 
-        final_redirect = _update_redirect_uri(redirect_uri, resp)
+        final_redirect = _update_redirect_uri(redirect_uri, resp, as_fragment)
         return self.redirect(final_redirect, code=302)
 
     @validate(VUser(),
-              response_type = VOneOf("response_type", ("code",)),
+              response_type = VOneOf("response_type", ("code", "token")),
               client = VOAuth2ClientID(),
               redirect_uri = VRequired("redirect_uri", errors.OAUTH2_INVALID_REDIRECT_URI),
               scope = VOAuth2Scope(),
@@ -122,13 +128,23 @@ class OAuth2FrontendController(RedditController):
         indicating why the request failed.
         """
 
+        # Check redirect URI first; it will ensure client exists
         self._check_redirect_uri(client, redirect_uri)
+
+        if response_type == "token" and client.is_confidential():
+            # Prevent "confidential" clients from distributing tokens
+            # in a non-confidential manner
+            c.errors.add((errors.OAUTH2_INVALID_CLIENT, "client_id"))
+        if response_type == "token" and duration != "temporary":
+            # implicit grant -> No refresh tokens allowed
+            c.errors.add((errors.INVALID_OPTION, "duration"))
 
         if not c.errors:
             return OAuth2AuthorizationPage(client, redirect_uri, scope, state,
-                                           duration).render()
+                                           duration, response_type).render()
         else:
-            return self._error_response(state, redirect_uri)
+            return self._error_response(state, redirect_uri,
+                                        as_fragment=(response_type == "token"))
 
     @validate(VUser(),
               VModhash(fatal=False),
@@ -138,24 +154,43 @@ class OAuth2FrontendController(RedditController):
               state = VRequired("state", errors.NO_TEXT),
               duration = VOneOf("duration", ("temporary", "permanent"),
                                 default="temporary"),
-              authorize = VRequired("authorize", errors.OAUTH2_ACCESS_DENIED))
+              authorize = VRequired("authorize", errors.OAUTH2_ACCESS_DENIED),
+              response_type = VOneOf("response_type", ("code", "token"),
+                                     default="code"))
     def POST_authorize(self, authorize, client, redirect_uri, scope, state,
-                       duration):
+                       duration, response_type):
         """Endpoint for OAuth2 authorization."""
 
+        if response_type == "token" and client.is_confidential():
+            # Prevent "confidential" clients from distributing tokens
+            # in a non-confidential manner
+            c.errors.add((errors.OAUTH2_INVALID_CLIENT, "client_id"))
+        if response_type == "token" and duration != "temporary":
+            # implicit grant -> No refresh tokens allowed
+            c.errors.add((errors.INVALID_OPTION, "duration"))
         self._check_redirect_uri(client, redirect_uri)
 
-        if not c.errors:
+        if c.errors:
+            return self._error_response(state, redirect_uri,
+                                        as_fragment=(response_type == "token"))
+
+        if response_type == "code":
             code = OAuth2AuthorizationCode._new(client._id, redirect_uri,
-                                                c.user._id36, scope,
-                                                duration == "permanent")
+                                            c.user._id36, scope,
+                                            duration == "permanent")
             resp = {"code": code._id, "state": state}
             final_redirect = _update_redirect_uri(redirect_uri, resp)
-            return self.redirect(final_redirect, code=302)
-        else:
-            return self._error_response(state, redirect_uri)
+        elif response_type == "token":
+            token = OAuth2AccessToken._new(client._id, c.user._id36, scope)
+            token_data = OAuth2AccessController._make_token_dict(token)
+            token_data["state"] = state
+            final_redirect = _update_redirect_uri(redirect_uri, token_data, as_fragment=True)
+
+        return self.redirect(final_redirect, code=302)
 
 class OAuth2AccessController(MinimalController):
+    handles_csrf = True
+
     def pre(self):
         set_extension(request.environ, "json")
         MinimalController.pre(self)
@@ -166,17 +201,27 @@ class OAuth2AccessController(MinimalController):
         auth = request.headers.get("Authorization")
         try:
             client_id, client_secret = parse_http_basic(auth)
+            require(client_id)
             client = OAuth2Client.get_token(client_id)
             require(client)
-            require(constant_time_compare(client.secret, client_secret))
+            if client.is_confidential():
+                require(client_secret)
+                require(constant_time_compare(client.secret, client_secret))
             return client
         except RequirementException:
             abort(401, headers=[("WWW-Authenticate", 'Basic realm="reddit"')])
 
-    @validate(grant_type=VOneOf("grant_type",
-                                ("authorization_code",
-                                 "refresh_token",
-                                 "password")))
+    @validate(
+        grant_type=VOneOf("grant_type",
+            (
+                 "authorization_code",
+                 "refresh_token",
+                 "password",
+                 "client_credentials",
+                 "https://oauth.reddit.com/grants/installed_client",
+            )
+        ),
+    )
     def POST_access_token(self, grant_type):
         """
         Exchange an [OAuth 2.0](http://oauth.net/2/) authorization code
@@ -194,20 +239,32 @@ class OAuth2AccessController(MinimalController):
         username and client secret as the password.  (The client id and secret
         are visible on the [app preferences page](/prefs/apps).)
 
-        Per the OAuth specification, **grant_type** must
-        be ``authorization_code`` for the initial access token or
-        ``refresh_token`` for renewing the access token.
+        Per the OAuth specification, **grant_type** must be one of:
+
+        * ``authorization_code`` for the initial access token ("standard" OAuth2 flow)
+        * ``refresh_token`` for renewing the access token.
+        * ``password`` for script-type apps using password auth
+        * ``client_credentials`` for application-only (signed out) access - confidential clients
+        * ``https://oauth.reddit.com/grants/installed_client`` extension grant for application-only (signed out)
+                access - non-confidential (installed) clients
 
         **redirect_uri** must exactly match the value that was used in the call
         to [/api/v1/authorize](#api_method_authorize) that created this grant.
-        """
 
+        See reddit's [OAuth2 wiki](https://github.com/reddit/reddit/wiki/OAuth2) for
+        more information.
+
+        """
         if grant_type == "authorization_code":
             return self._access_token_code()
         elif grant_type == "refresh_token":
             return self._access_token_refresh()
         elif grant_type == "password":
             return self._access_token_password()
+        elif grant_type == "client_credentials":
+            return self._access_token_client_credentials()
+        elif grant_type == "https://oauth.reddit.com/grants/installed_client":
+            return self._access_token_extension_client_credentials()
         else:
             resp = {"error": "unsupported_grant_type"}
             return self.api_wrapper(resp)
@@ -220,7 +277,8 @@ class OAuth2AccessController(MinimalController):
             resp["error"] = "invalid_request"
         return resp
 
-    def _make_token_dict(self, access_token, refresh_token=None):
+    @classmethod
+    def _make_token_dict(cls, access_token, refresh_token=None):
         if not access_token:
             return {"error": "invalid_grant"}
         expires_in = int(access_token._ttl) if access_token._ttl else None
@@ -256,7 +314,7 @@ class OAuth2AccessController(MinimalController):
             access_token = OAuth2AccessToken._new(
                 auth_token.client_id, auth_token.user_id,
                 auth_token.scope,
-                refresh_token._id if refresh_token else None)
+                refresh_token._id if refresh_token else "")
 
         resp = self._make_token_dict(access_token, refresh_token)
 
@@ -264,18 +322,21 @@ class OAuth2AccessController(MinimalController):
 
     @validate(refresh_token=VOAuth2RefreshToken("refresh_token"))
     def _access_token_refresh(self, refresh_token):
-        resp = {}
         access_token = None
         if refresh_token:
-            access_token = OAuth2AccessToken._new(
-                refresh_token.client_id, refresh_token.user_id,
-                refresh_token.scope,
-                refresh_token=refresh_token._id)
+            if refresh_token.client_id == c.oauth2_client._id:
+                access_token = OAuth2AccessToken._new(
+                    refresh_token.client_id, refresh_token.user_id,
+                    refresh_token.scope,
+                    refresh_token=refresh_token._id)
+            else:
+                c.errors.add(errors.OAUTH2_INVALID_REFRESH_TOKEN)
         else:
             c.errors.add("NO_TEXT", field="refresh_token")
 
         if c.errors:
             resp = self._check_for_errors()
+            response.status = 400
         else:
             resp = self._make_token_dict(access_token)
         return self.api_wrapper(resp)
@@ -310,6 +371,112 @@ class OAuth2AccessController(MinimalController):
         )
         resp = self._make_token_dict(access_token)
         return self.api_wrapper(resp)
+
+    @validate(
+        scope=nop("scope"),
+    )
+    def _access_token_client_credentials(self, scope):
+        client = c.oauth2_client
+        if not client.is_confidential():
+            return self.api_wrapper({"error": "unauthorized_client",
+                "error_description": "Only confidential clients may use client_credentials auth"})
+        if scope:
+            scope = OAuth2Scope(scope)
+            if not scope.is_valid():
+                c.errors.add(errors.INVALID_OPTION, "scope")
+                return self.api_wrapper({"error": "invalid_scope"})
+        else:
+            scope = OAuth2Scope(OAuth2Scope.FULL_ACCESS)
+
+        access_token = OAuth2AccessToken._new(
+            client._id,
+            "",
+            scope,
+        )
+        resp = self._make_token_dict(access_token)
+        return self.api_wrapper(resp)
+
+    @validate(
+        scope=nop("scope"),
+        device_id=VLength("device_id", 50, min_length=20),
+    )
+    def _access_token_extension_client_credentials(self, scope, device_id):
+        if ((errors.NO_TEXT, "device_id") in c.errors or
+                (errors.TOO_SHORT, "device_id") in c.errors or
+                (errors.TOO_LONG, "device_id") in c.errors):
+            return self.api_wrapper({
+                "error": "invalid_request",
+                "error_description": "bad device_id",
+            })
+
+        client = c.oauth2_client
+        if scope:
+            scope = OAuth2Scope(scope)
+            if not scope.is_valid():
+                c.errors.add(errors.INVALID_OPTION, "scope")
+                return self.api_wrapper({"error": "invalid_scope"})
+        else:
+            scope = OAuth2Scope(OAuth2Scope.FULL_ACCESS)
+
+        access_token = OAuth2AccessToken._new(
+            client._id,
+            "",
+            scope,
+            device_id=device_id,
+        )
+        resp = self._make_token_dict(access_token)
+        return self.api_wrapper(resp)
+
+    @validate(
+        VRatelimit(rate_user=False, rate_ip=True, prefix="rate_revoke_token_"),
+        token_id=nop("token"),
+        token_hint=VOneOf("token_type_hint", ("access_token", "refresh_token")),
+    )
+    def POST_revoke_token(self, token_id, token_hint):
+        '''Revoke an OAuth2 access or refresh token.
+
+        token_type_hint is optional, and hints to the server
+        whether the passed token is a refresh or access token.
+
+        A call to this endpoint is considered a success if
+        the passed `token_id` is no longer valid. Thus, if an invalid
+        `token_id` was passed in, a successful 204 response will be returned.
+
+        See [RFC7009](http://tools.ietf.org/html/rfc7009)
+
+        '''
+        # In success cases, this endpoint returns no data.
+        response.status = 204
+
+        if not token_id:
+            return
+
+        types = (OAuth2AccessToken, OAuth2RefreshToken)
+        if token_hint == "refresh_token":
+            types = reversed(types)
+
+        for token_type in types:
+            try:
+                token = token_type._byID(token_id)
+            except tdb_cassandra.NotFound:
+                continue
+            else:
+                break
+        else:
+            # No Token found. The given token ID is already gone
+            # or never existed. Either way, from the client's perspective,
+            # the passed in token is no longer valid.
+            return
+
+        if constant_time_compare(token.client_id, c.oauth2_client._id):
+            token.revoke()
+        else:
+            # RFC 7009 is not clear on how to handle this case.
+            # Given that a malicious client could do much worse things
+            # with a valid token then revoke it, returning an error
+            # here is best as it may help certain clients debug issues
+            response.status = 400
+            return self.api_wrapper({"error": "unauthorized_client"})
 
 
 def require_oauth2_scope(*scopes):

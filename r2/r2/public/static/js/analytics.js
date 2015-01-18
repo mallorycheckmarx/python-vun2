@@ -1,14 +1,11 @@
 r.analytics = {
-    trackers: {},
-    _pendingTrackers: {},
-
     init: function() {
         // these guys are relying on the custom 'onshow' from jquery.reddit.js
         $(document).delegate(
-            '.organic-listing .promotedlink.promoted, .comments-page .promotedlink.promoted, .linklisting .promotedlink.promoted',
+            '.organic-listing .promotedlink.promoted',
             'onshow',
             _.bind(function(ev) {
-                this.fetchTrackersOrFirePixel(ev.target)
+                this.fireTrackingPixel(ev.target)
             }, this)
         )
 
@@ -16,116 +13,36 @@ r.analytics = {
         $('form.gold-checkout').one('submit', this.fireGoldCheckout)
     },
 
-    fetchTrackingHash: function(el) {
-        /*------------------------------------------* 
-           Generates a trackingName like:
-           t3_ab-t8_99-pics if targeted with campaign
-           t3_ab-t8_99      not targeted with campaign
-           t3_ab--pics      targeted with no campaign
-           t3_ab-           not targeted, no campaign 
-         *------------------------------------------*/
+    fireGAEvent: function(category, action, opt_label, opt_value, opt_noninteraction) {
+      opt_label = opt_label || '';
+      opt_value = opt_value || 0;
+      opt_noninteraction = !!opt_noninteraction;
 
+      if (window._gaq) {
+        _gaq.push(['_trackEvent', category, action, opt_label, opt_value, opt_noninteraction]);
+      }
+    },
+
+    fireTrackingPixel: function(el) {
         var $el = $(el),
-            fullname = $el.data('fullname'),
-            campaign = $el.data('cid'),
-            trackingName = fullname
-
-        // append a hyphen even if there's no campaign
-        trackingName += '-' + (campaign || '')
-
-        if (!r.config.is_fake)
-            trackingName += '-' + r.config.post_site
-
-        // if we don't have a hash or a deferred fetch, queue a fetch
-        if (!(trackingName in this.trackers)) {
-            this._pendingTrackers[trackingName] = this.trackers[trackingName] = new $.Deferred
-            this.fetchTrackingHashes()
-        }
-
-        return this.trackers[trackingName]
-    },
-
-    fetchTrackingHashes: _.debounce(function() {
-        var toFetch = this._pendingTrackers
-        $.ajax({
-            url: r.config.fetch_trackers_url,
-            type: 'get',
-            dataType: 'jsonp',
-            data: {'ids': _.keys(toFetch)},
-            success: function(data) {
-                _.each(data, function(hash, trackingName) {
-                    toFetch[trackingName].resolve(trackingName, hash)
-                })
-            }
-        })
-        this._pendingTrackers = {}
-    }, 0),
-
-    fetchTrackersOrFirePixel: function(el) {
-        this.fetchTrackingHash(el).done(_.bind(function(trackingName, hash) {
-            this.fireTrackingPixel(el, trackingName, hash)
-        }, this))
-    },
-
-    fireTrackingPixel: function(el, trackingName, hash) {
-        var $el = $(el)
-        if ($el.data('trackerFired'))
-            return
-
-        // fire the impression pixel only if this is an organic listing or
-        // comments page
-        var inOrganicListing = $el.parent().hasClass('organic-listing'),
             onCommentsPage = $('body').hasClass('comments-page')
 
-        if (inOrganicListing || onCommentsPage) {
-            var pixel = new Image()
-            pixel.src = r.config.adtracker_url + '?' + $.param({
-                'id': trackingName,
-                'hash': hash,
-                'r': Math.round(Math.random() * 2147483647) // cachebuster
-            })
+        if ($el.data('trackerFired') || onCommentsPage)
+            return
 
-            var adServerPixel = new Image(),
-                adServerImpPixel = $el.data('adserverImpPixel'),
-                adServerClickUrl = $el.data('adserverClickUrl')
+        var pixel = new Image(),
+            impPixel = $el.data('impPixel')
 
-            if (adServerImpPixel) {
-                adServerPixel.src = adServerImpPixel
-            }
+        if (impPixel) {
+            pixel.src = impPixel
         }
 
-        // If IE7/8 thinks the text of a link looks like an email address
-        // (e.g. it has an @ in it), then setting the href replaces the
-        // text as well. We'll store the original text and replace it to
-        // hack around this. Distilled reproduction in: http://jsfiddle.net/JU2Vj/1/
-        var link = $el.find('a.title'),
-            old_html = link.html(),
-            dest = link.attr('href'),
-            click_params = {
-                'id': trackingName,
-                'hash': hash,
-                'url': dest
-            },
-            click_url
+        var adServerPixel = new Image(),
+            adServerImpPixel = $el.data('adserverImpPixel'),
+            adServerClickUrl = $el.data('adserverClickUrl')
 
-        click_url = r.config.clicktracker_url + '?' + $.param(click_params)
-
-        save_href(link)
-        link.attr('href', click_url)
-
-        if (link.html() != old_html)
-            link.html(old_html)
-
-        // also do the thumbnail
-        var thumb = $el.find('a.thumbnail')
-        save_href(thumb)
-        thumb.attr('href', click_url)
-
-        // also do the "comments" link for selftext promos
-        if ($el.hasClass('self')) {
-            var comments = $el.find('a.comments')
-            save_href(comments)
-            comments.attr('href', click_url)
+        if (adServerImpPixel) {
+            adServerPixel.src = adServerImpPixel
         }
 
         $el.data('trackerFired', true)
@@ -150,6 +67,12 @@ r.analytics = {
         var form = $(this),
             vendor = form.data('vendor')
         form.parent().addClass('working')
+
+        // If we don't have _gaq, just return and let the event bubble and
+        // call its own submit.
+        if (!window._gaq) {
+            return;
+        }
         
         // Track a virtual pageview indicating user went off-site to "vendor."
         // If GA is loaded, have GA process form submission after firing
@@ -164,7 +87,8 @@ r.analytics = {
 
         if (_gat && _gat._getTracker){
           // GA is loaded; form will submit via the _gaq.push'ed function
-          event.preventDefault()
+          event.preventDefault();
+          event.stopPropagation();
         }
     }
 }

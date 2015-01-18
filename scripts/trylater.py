@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,17 +29,8 @@ from r2.models.trylater import TryLater
 PREFIX = "trylater."
 
 
-def register_core_hooks():
-    # any trylater hooks implemented in r2 should be registered in this
-    # function to ensure that they are available when trylater runs.
-    from r2.models.account import trylater_hooks
-    trylater_hooks.register_all()
-
-
 ## Entry point
 def run_trylater():
-    register_core_hooks()
-
     our_hooks = (key[len(PREFIX):] for key in all_hooks().keys()
                  if key.startswith(PREFIX))
     with TryLater.multi_handle(our_hooks) as handleable:

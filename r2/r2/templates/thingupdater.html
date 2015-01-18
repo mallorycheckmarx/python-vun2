@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -36,11 +36,14 @@
           });
     $.map(friends, show_friend);
 
-    var gildings = ${unsafe(simplejson.dumps(thing.gildings))};
-    for (var gilded_thing in gildings) {
-      var gilding_data = gildings[gilded_thing];
-      r.gold.gildThing(gilded_thing, gilding_data[0], gilding_data[1]);
-    }
+    /* Delay until dom ready because this may be called before r.gold is defined otherwise. */
+    $(function() {
+      var gildings = ${unsafe(simplejson.dumps(thing.gildings))};
+      for (var gilded_thing in gildings) {
+        var gilding_data = gildings[gilded_thing];
+        r.gold.gildThing(gilded_thing, gilding_data[0], gilding_data[1]);
+      }
+    });
 
     var saves = ${unsafe(simplejson.dumps(list(thing.saves)))};
     $.map(saves, r.ui.setSavedFullname);

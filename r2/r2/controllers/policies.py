@@ -16,18 +16,18 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import g
+from pylons import g, c
 from pylons.i18n import _
 from BeautifulSoup import BeautifulSoup, Tag
 
 from r2.lib.base import abort
 from r2.controllers.reddit_base import RedditController
 from r2.models.subreddit import Frontpage
-from r2.models.wiki import WikiPage, WikiRevision
+from r2.models.wiki import WikiPage, WikiRevision, WikiBadRevision
 from r2.lib.db import tdb_cassandra
 from r2.lib.filters import unsafe, wikimarkdown, generate_table_of_contents
 from r2.lib.validator import validate, nop
@@ -37,6 +37,8 @@ from r2.lib.pages import PolicyPage, PolicyView
 class PoliciesController(RedditController):
     @validate(requested_rev=nop('v'))
     def GET_policy_page(self, page, requested_rev):
+        if c.render_style == 'compact':
+            self.redirect('/wiki/' + page)
         if page == 'privacypolicy':
             wiki_name = g.wiki_page_privacy_policy
             pagename = _('privacy policy')
@@ -70,7 +72,7 @@ class PoliciesController(RedditController):
         if requested_rev:
             try:
                 display_rev = WikiRevision.get(requested_rev, wp._id)
-            except (tdb_cassandra.NotFound, ValueError):
+            except (tdb_cassandra.NotFound, WikiBadRevision):
                 abort(404)
         else:
             display_rev = revs[0]

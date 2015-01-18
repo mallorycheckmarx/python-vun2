@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,14 +25,16 @@ from collections import defaultdict, OrderedDict
 from datetime import datetime, timedelta
 import re
 
-from pylons import g
+from itertools import chain
 from sqlalchemy import func
 
+from r2.lib.inventory_optimization import get_maximized_pageviews
 from r2.lib.memoize import memoize
 from r2.lib.utils import to_date, tup
 from r2.models import (
     Bid,
     FakeSubreddit,
+    LocalizedDefaultSubreddits,
     Location,
     NO_TRANSACTION,
     PromoCampaign,
@@ -49,25 +51,20 @@ PAGEVIEWS_REGEXP = re.compile('(.*)-GET_listing')
 INVENTORY_FACTOR = 1.00
 DEFAULT_INVENTORY_FACTOR = 5.00
 
-def get_predicted_by_date(sr_name, start, stop=None):
-    """Return dict mapping datetime objects to predicted pageviews."""
-    if not sr_name:
-        sr_name = DefaultSR.name.lower()
-    # lowest pageviews any day the last 2 weeks
-    min_daily = PromoMetrics.get(MIN_DAILY_CASS_KEY, sr_name).get(sr_name, 0)
-    # expand out to the requested range of dates
-    ndays = (stop - start).days if stop else 1  # default is one day
-    predicted = OrderedDict()
-    for i in range(ndays):
-        date = start + timedelta(i)
-        predicted[date] = min_daily
-    return predicted
-
 
 def update_prediction_data():
     """Fetch prediction data and write it to cassandra."""
     min_daily_by_sr = _min_daily_pageviews_by_sr(NDAYS_TO_QUERY)
-    PromoMetrics.set(MIN_DAILY_CASS_KEY, min_daily_by_sr)
+
+    # combine front page values (sometimes frontpage gets '' for its name)
+    if '' in min_daily_by_sr:
+        fp = DefaultSR.name.lower()
+        min_daily_by_sr[fp] = min_daily_by_sr.get(fp, 0) + min_daily_by_sr['']
+        del min_daily_by_sr['']
+
+    filtered = {sr_name: num for sr_name, num in min_daily_by_sr.iteritems()
+                if num > 100}
+    PromoMetrics.set(MIN_DAILY_CASS_KEY, filtered)
 
 
 def _min_daily_pageviews_by_sr(ndays=NDAYS_TO_QUERY, end_date=None):
@@ -101,18 +98,18 @@ def get_date_range(start, end):
 
 
 def get_campaigns_by_date(srs, start, end, ignore=None):
-    srs, is_single = tup(srs, ret_is_single=True)
-    sr_names = ['' if isinstance(sr, DefaultSR) else sr.name for sr in srs]
-    dates = set(get_date_range(start, end))
-    q = (PromotionWeights.query()
-                .filter(PromotionWeights.sr_name.in_(sr_names))
-                .filter(PromotionWeights.date.in_(dates)))
-
+    srs = tup(srs)
+    sr_names = [sr.name for sr in srs]
+    campaign_ids = PromotionWeights.get_campaign_ids(
+        start, end=end, sr_names=sr_names)
     if ignore:
-        q = q.filter(PromotionWeights.promo_idx != ignore._id)
-
-    campaign_ids = {pw.promo_idx for pw in q}
+        campaign_ids.discard(ignore._id)
     campaigns = PromoCampaign._byID(campaign_ids, data=True, return_dict=False)
+
+    # filter out deleted campaigns that didn't have their PromotionWeights
+    # deleted
+    campaigns = filter(lambda camp: not camp._deleted, campaigns)
+
     transaction_ids = {camp.trans_id for camp in campaigns
                                      if camp.trans_id != NO_TRANSACTION}
 
@@ -122,11 +119,8 @@ def get_campaigns_by_date(srs, start, end, ignore=None):
     else:
         transaction_by_id = {}
 
-    ret = {sr.name: dict.fromkeys(dates) for sr in srs}
-    for srname, date_dict in ret.iteritems():
-        for date in date_dict:
-            ret[srname][date] = []
-
+    dates = set(get_date_range(start, end))
+    ret = {date: set() for date in dates}
     for camp in campaigns:
         if camp.trans_id == NO_TRANSACTION:
             continue
@@ -139,67 +133,16 @@ def get_campaigns_by_date(srs, start, end, ignore=None):
         if not (transaction.is_auth() or transaction.is_charged()):
             continue
 
-        sr_name = camp.sr_name or DefaultSR.name
         camp_dates = set(get_date_range(camp.start_date, camp.end_date))
         for date in camp_dates.intersection(dates):
-            ret[sr_name][date].append(camp)
-
-    if is_single:
-        return ret[srs[0].name]
-    else:
-        return ret
+            ret[date].add(camp)
+    return ret
 
 
-def get_sold_pageviews(srs, start, end, ignore=None):
-    srs, is_single = tup(srs, ret_is_single=True)
-    campaigns_by_sr_by_date = get_campaigns_by_date(srs, start, end, ignore)
-
-    ret = {}
-    for sr_name, campaigns_by_date in campaigns_by_sr_by_date.iteritems():
-        ret[sr_name] = defaultdict(int)
-        for date, campaigns in campaigns_by_date.iteritems():
-            for camp in campaigns:
-                daily_impressions = camp.impressions / camp.ndays
-                ret[sr_name][date] += daily_impressions
-
-    if is_single:
-        return ret[srs[0].name]
-    else:
-        return ret
-
-
-def get_predicted_pageviews(srs, start, end):
-    srs, is_single = tup(srs, ret_is_single=True)
-    sr_names = [sr.name for sr in srs]
-
-    # default subreddits require a different inventory factor
-    content_langs = [g.site_lang]
-    default_srids = Subreddit.top_lang_srs(content_langs,
-                                           limit=g.num_default_reddits,
-                                           filter_allow_top=True, over18=False,
-                                           ids=True)
-
-    # prediction does not vary by date
-    daily_inventory = PromoMetrics.get(MIN_DAILY_CASS_KEY, sr_names=sr_names)
-    dates = get_date_range(start, end)
-    ret = {}
-    for sr in srs:
-        if not isinstance(sr, FakeSubreddit) and sr._id in default_srids:
-            factor = DEFAULT_INVENTORY_FACTOR
-        else:
-            factor = INVENTORY_FACTOR
-        sr_daily_inventory = daily_inventory.get(sr.name, 0) * factor
-        sr_daily_inventory = int(sr_daily_inventory)
-        ret[sr.name] = dict.fromkeys(dates, sr_daily_inventory)
-
-    if is_single:
-        return ret[srs[0].name]
-    else:
-        return ret
-
-
-def get_predicted_geotargeted(sr, location, start, end):
+def get_predicted_pageviews(srs, location=None):
     """
+    Return predicted number of pageviews for sponsored headlines.
+
     Predicted geotargeted impressions are estimated as:
 
     geotargeted impressions = (predicted untargeted impressions) *
@@ -207,29 +150,75 @@ def get_predicted_geotargeted(sr, location, start, end):
 
     """
 
-    sr_inventory_by_date = get_predicted_pageviews(sr, start, end)
+    srs, is_single = tup(srs, ret_is_single=True)
+    sr_names = [sr.name for sr in srs]
 
-    no_location = Location(None)
-    r = LocationPromoMetrics.get(DefaultSR, [no_location, location])
-    ratio = r[(DefaultSR, location)] / float(r[(DefaultSR, no_location)])
+    # default subreddits require a different inventory factor
+    default_srids = LocalizedDefaultSubreddits.get_global_defaults()
 
+    if location:
+        no_location = Location(None)
+        r = LocationPromoMetrics.get(DefaultSR, [no_location, location])
+        location_pageviews = r[(DefaultSR, location)]
+        all_pageviews = r[(DefaultSR, no_location)]
+        location_factor = float(location_pageviews) / float(all_pageviews)
+    else:
+        location_factor = 1.0
+
+    # prediction does not vary by date
+    daily_inventory = PromoMetrics.get(MIN_DAILY_CASS_KEY, sr_names=sr_names)
     ret = {}
-    for date, sr_inventory in sr_inventory_by_date.iteritems():
-        ret[date] = int(sr_inventory * ratio)
-    return ret
+    for sr in srs:
+        if not isinstance(sr, FakeSubreddit) and sr._id in default_srids:
+            default_factor = DEFAULT_INVENTORY_FACTOR
+        else:
+            default_factor = INVENTORY_FACTOR
+        base_pageviews = daily_inventory.get(sr.name, 0)
+        ret[sr.name] = int(base_pageviews * default_factor * location_factor)
+
+    if is_single:
+        return ret[srs[0].name]
+    else:
+        return ret
 
 
-def get_available_pageviews_geotargeted(sr, location, start, end, datestr=False, 
-                                        ignore=None):
+def make_target_name(target):
+    name = ("collection: %s" % target.collection.name if target.is_collection
+                                           else target.subreddit_name)
+    return name
+
+
+def find_campaigns(srs, start, end, ignore):
+    """Get all campaigns in srs and pull in campaigns in other targeted srs."""
+    all_sr_names = set()
+    all_campaigns = set()
+    srs = set(srs)
+
+    while srs:
+        all_sr_names |= {sr.name for sr in srs}
+        new_campaigns_by_date = get_campaigns_by_date(srs, start, end, ignore)
+        new_campaigns = set(chain.from_iterable(
+            new_campaigns_by_date.itervalues()))
+        all_campaigns.update(new_campaigns)
+        new_sr_names = set(chain.from_iterable(
+            campaign.target.subreddit_names for campaign in new_campaigns
+        ))
+        new_sr_names -= all_sr_names
+        srs = set(Subreddit._by_name(new_sr_names).values())
+    return all_campaigns
+
+
+def get_available_pageviews(targets, start, end, location=None, datestr=False,
+                            ignore=None):
     """
-    Return the available pageviews by date for the subreddit and location.
+    Return the available pageviews by date for the targets and location.
 
-    Available pageviews depends on all equal and higher level targets:
-    A target is: subreddit > country > metro
+    Available pageviews depends on all equal and higher level locations:
+    A location is: subreddit > country > metro
 
     e.g. if a campaign is targeting /r/funny in USA/Boston we need to check that
     there's enough inventory in:
-    * /r/funny (all campaigns targeting /r/funny regardless of geotargeting)
+    * /r/funny (all campaigns targeting /r/funny regardless of location)
     * /r/funny + USA (all campaigns targeting /r/funny and USA with or without
       metro level targeting)
     * /r/funny + USA + Boston (all campaigns targeting /r/funny and USA and
@@ -238,73 +227,80 @@ def get_available_pageviews_geotargeted(sr, location, start, end, datestr=False,
 
     """
 
-    predicted_by_location = {
-        None: get_predicted_pageviews(sr, start, end),
-        location: get_predicted_geotargeted(sr, location, start, end),
-    }
+    # assemble levels of location targeting, None means untargeted
+    locations = [None]
+    if location:
+        locations.append(location)
 
-    if location.metro:
-        country_location = Location(country=location.country)
-        country_prediction = get_predicted_geotargeted(sr, country_location,
-                                                       start, end)
-        predicted_by_location[country_location] = country_prediction
+        if location.metro:
+            locations.append(Location(country=location.country))
 
+    # get all the campaigns directly and indirectly involved in our target
+    targets, is_single = tup(targets, ret_is_single=True)
+    target_srs = list(chain.from_iterable(
+        target.subreddits_slow for target in targets))
+    all_campaigns = find_campaigns(target_srs, start, end, ignore)
+
+    # get predicted pageviews for each subreddit and location
+    all_sr_names = set(sr.name for sr in target_srs)
+    all_sr_names |= set(chain.from_iterable(
+        campaign.target.subreddit_names for campaign in all_campaigns
+    ))
+    all_srs = Subreddit._by_name(all_sr_names).values()
+    pageviews_dict = {location: get_predicted_pageviews(all_srs, location)
+                          for location in locations}
+
+    # determine booked impressions by target and location for each day
+    dates = set(get_date_range(start, end))
+    booked_dict = {}
+    for date in dates:
+        booked_dict[date] = {}
+        for location in locations:
+            booked_dict[date][location] = defaultdict(int)
+
+    for campaign in all_campaigns:
+        camp_dates = set(get_date_range(campaign.start_date, campaign.end_date))
+        sr_names = tuple(sorted(campaign.target.subreddit_names))
+        daily_impressions = campaign.impressions / campaign.ndays
+
+        for location in locations:
+            if location and not location.contains(campaign.location):
+                # campaign's location is less specific than location
+                continue
+
+            for date in camp_dates.intersection(dates):
+                booked_dict[date][location][sr_names] += daily_impressions
+
+    # calculate inventory for each target and location on each date
     datekey = lambda dt: dt.strftime('%m/%d/%Y') if datestr else dt
 
     ret = {}
-    campaigns_by_date = get_campaigns_by_date(sr, start, end, ignore)
-    for date, campaigns in campaigns_by_date.iteritems():
-
-        # calculate sold impressions for each location
-        sold_by_location = dict.fromkeys(predicted_by_location.keys(), 0)
-        for camp in campaigns:
-            daily_impressions = camp.impressions / camp.ndays
-            for location in predicted_by_location:
-                if not location or location.contains(camp.location):
-                    sold_by_location[location] += daily_impressions
-
-        # calculate available impressions for each location
-        available_by_location = dict.fromkeys(predicted_by_location.keys(), 0)
-        for location, predictions_by_date in predicted_by_location.iteritems():
-            predicted = predictions_by_date[date]
-            sold = sold_by_location[location]
-            available_by_location[location] = predicted - sold
-
-        ret[datekey(date)] = max(0, min(available_by_location.values()))
-    return ret
-
-
-def get_available_pageviews(srs, start, end, datestr=False, ignore=None):
-    srs, is_single = tup(srs, ret_is_single=True)
-    pageviews_by_sr_by_date = get_predicted_pageviews(srs, start, end)
-    sold_by_sr_by_date = get_sold_pageviews(srs, start, end, ignore)
-
-    datekey = lambda dt: dt.strftime('%m/%d/%Y') if datestr else dt
-
-    ret = {}
-    dates = get_date_range(start, end)
-    for sr in srs:
-        sold_by_date = sold_by_sr_by_date[sr.name]
-        pageviews_by_date = pageviews_by_sr_by_date[sr.name]
-        ret[sr.name] = {}
+    for target in targets:
+        name = make_target_name(target)
+        subreddit_names = target.subreddit_names
+        ret[name] = {}
         for date in dates:
-            sold = sold_by_date[date]
-            pageviews = pageviews_by_date[date]
-            ret[sr.name][datekey(date)] = max(0, pageviews - sold)
+            pageviews_by_location = {}
+            for location in locations:
+                # calculate available impressions for each location
+                booked_by_target = booked_dict[date][location]
+                pageviews_by_sr_name = pageviews_dict[location]
+                pageviews_by_location[location] = get_maximized_pageviews(
+                    subreddit_names, booked_by_target, pageviews_by_sr_name)
+            # available pageviews is the minimum from all locations
+            min_pageviews = min(pageviews_by_location.values())
+            ret[name][datekey(date)] = max(0, min_pageviews)
 
     if is_single:
-        return ret[srs[0].name]
+        name = make_target_name(targets[0])
+        return ret[name]
     else:
         return ret
 
 
-def get_oversold(sr, start, end, daily_request, ignore=None, location=None):
-    if location:
-        available_by_date = get_available_pageviews_geotargeted(sr, location,
-                                start, end, datestr=True, ignore=ignore)
-    else:
-        available_by_date = get_available_pageviews(sr, start, end,
-                                                    datestr=True, ignore=ignore)
+def get_oversold(target, start, end, daily_request, ignore=None, location=None):
+    available_by_date = get_available_pageviews(target, start, end, location,
+                                                datestr=True, ignore=ignore)
     oversold = {}
     for datestr, available in available_by_date.iteritems():
         if available < daily_request:

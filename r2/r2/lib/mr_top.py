@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -45,9 +45,19 @@ def join_things():
     mr_tools.join_things(('url', 'sr_id', 'author_id'))
 
 
+def _get_cutoffs(intervals):
+    cutoffs = {}
+    for interval in intervals:
+        if interval == "all":
+            cutoffs["all"] = 0.0
+        else:
+            cutoffs[interval] = epoch_seconds(timeago("1 %s" % interval))
+
+    return cutoffs
+
+
 def time_listings(intervals):
-    cutoff_by_interval = {interval: epoch_seconds(timeago("1 %s" % interval))
-                          for interval in intervals}
+    cutoff_by_interval = _get_cutoffs(intervals)
 
     @mr_tools.dataspec_m_thing(
         ("url", str),
@@ -82,7 +92,12 @@ def time_listings(intervals):
                        thing_controversy, thing.timestamp, fname)
 
                 if thing.url:
-                    for domain in UrlParser(thing.url).domain_permutations():
+                    try:
+                        parsed = UrlParser(thing.url)
+                    except ValueError:
+                        continue
+
+                    for domain in parsed.domain_permutations():
                         yield ("domain/link/top/%s/%s" % (interval, domain),
                                thing_score, thing.timestamp, fname)
                         yield ("domain/link/controversial/%s/%s" % (interval, domain),

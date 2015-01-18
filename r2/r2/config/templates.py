@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -49,6 +49,11 @@ api('userlisting',   UserListingJsonTemplate)
 api('usertableitem', UserTableItemJsonTemplate)
 api('account',       AccountJsonTemplate)
 
+api('reltableitem', RelTableItemJsonTemplate)
+api('bannedtableitem', BannedTableItemJsonTemplate)
+api('invitedmodtableitem', InvitedModTableItemJsonTemplate)
+api('friendtableitem', FriendTableItemJsonTemplate)
+
 api('organiclisting',       OrganicListingJsonTemplate)
 api('subreddittraffic', TrafficJsonTemplate)
 api('takedownpane', TakedownJsonTemplate)
@@ -70,9 +75,8 @@ api('flairselector', FlairSelectorJsonTemplate)
 api('subredditstylesheet', StylesheetTemplate)
 api('subredditstylesheetsource', StylesheetTemplate)
 api('createsubreddit', SubredditSettingsTemplate)
+api('uploadedimage', UploadedImageJsonTemplate)
 
 api('modaction', ModActionTemplate)
 
 api('trophy', TrophyJsonTemplate)
-
-tpm.add_handler('usertableitem', 'api-html', UserItemHTMLJsonTemplate())

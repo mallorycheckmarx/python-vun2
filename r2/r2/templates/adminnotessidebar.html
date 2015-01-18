@@ -16,12 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%namespace file="utils.html" import="error_field"/>
 <%namespace file="utils.html" import="md" />
+<%namespace file="utils.html" import="timestamp" />
 
 <div class="raisedbox spacer">
     ${_(thing.SYSTEMS[thing.system])}: ${thing.subject}
@@ -30,9 +31,9 @@
         <input type="hidden" name="system" value="${thing.system}">
         <input type="hidden" name="subject" value="${thing.subject}">
         <input type="hidden" name="author" value="${thing.author}">
-        <textarea name="note" rows=4 cols=20></textarea>
+        <textarea name="note" rows=4></textarea>
         ${error_field("TOO_LONG", "notes", "span")}
-        <input type="submit" class="notes=button" value="Add a new Note">
+        <input type="submit" class="notes-button" value="Add a new Note">
     </form>
     %if thing.notes:
         ${_("Past notes")}:
@@ -43,10 +44,10 @@
                 ${md(note["note"])}
                 </div>
                 <div class="adminnote-info tagline">
-                ${_("by %(author)s, %(when)s ago") % dict(
+                ${_("by %(author)s") % dict(
                     author=note["author"],
-                    when=note["timesince"],
-                )}
+                )}&nbsp;
+                ${timestamp(note["when"], include_tense=True)}
                 </div>
             </li>
             %endfor

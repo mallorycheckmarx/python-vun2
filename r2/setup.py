@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -70,7 +70,6 @@ setup(
         "cython>=0.14",
         "SQLAlchemy==0.7.4",
         "BeautifulSoup",
-        "cssutils==0.9.5.1",
         "chardet",
         "psycopg2",
         "pycassa>=1.7.0",
@@ -84,7 +83,8 @@ setup(
         "lxml",
         "kazoo",
         "stripe",
-        "requests",
+        "requests<1.0.0",
+        "tinycss2",
     ],
     dependency_links=[
         "https://github.com/reddit/snudown/archive/v1.1.3.tar.gz#egg=snudown-1.1.3",

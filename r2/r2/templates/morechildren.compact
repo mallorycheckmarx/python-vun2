@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2013
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -30,7 +30,7 @@
 <div class="morechildren thing id-${thing._fullname}">
   <a style="font-size: smaller; font-weight: bold" class="newbutton"
      id="more_${thing._fullname}" href="javascript:void()" 
-     onclick="return morechildren(this, '${thing.link_name}', '${",".join(cids)}', ${thing.depth})">
+     onclick="return morechildren(this, '${thing.link_name}', '${thing.sort}', '${",".join(cids)}', ${thing.depth})">
     ${_("load more comments")}
     <span class="gray">&nbsp;(${thing.count} ${ungettext("reply", "replies", thing.count)})</span>
   </a>

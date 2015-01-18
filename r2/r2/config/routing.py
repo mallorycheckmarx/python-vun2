@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -54,6 +54,7 @@ def make_map():
     mc('/admin/', controller='awards')
 
     mc('/robots.txt', controller='robots', action='robots')
+    mc('/crossdomain', controller='robots', action='crossdomain')
 
     mc('/login', controller='forms', action='login')
     mc('/register', controller='forms', action='register')
@@ -81,6 +82,8 @@ def make_map():
     mc('/subreddits/login', controller='forms', action='login')
     mc('/subreddits/:where', controller='reddits', action='listing',
        where='popular', requirements=dict(where="popular|new|banned"))
+    # If no subreddit is specified, might as well show a list of 'em.
+    mc('/r', controller='redirect', action='redirect', dest='/subreddits')
 
     mc('/subreddits/mine/:where', controller='myreddits', action='listing',
        where='subscriber',
@@ -118,13 +121,19 @@ def make_map():
     mc('/feedback', controller='redirect', action='redirect',
        dest='/contact')
     mc('/contact', controller='front', action='contact_us')
-    mc('/ad_inq', controller='front', action='ad_inq')
 
     mc('/admin/awards', controller='awards')
     mc('/admin/awards/:awardcn/:action', controller='awards',
        requirements=dict(action="give|winners"))
 
+    mc('/admin/creddits', controller='admintool', action='creddits')
+    mc('/admin/gold', controller='admintool', action='gold')
+
     mc('/admin/errors', controller='errorlog')
+
+    # Username-relative userpage redirects
+    mc('/user/me', controller='user', action='rel_user_redirect')
+    mc('/user/me/*rest', controller='user', action='rel_user_redirect')
 
     mc('/user/:username/about', controller='user', action='about',
        where='overview')
@@ -136,6 +145,7 @@ def make_map():
     multi_prefixes = (
        partial_connect(mc, path_prefix='/user/:username/m/:multipath'),
        partial_connect(mc, path_prefix='/me/m/:multipath', my_multi=True),
+       partial_connect(mc, path_prefix='/me/f/:filtername'),
     )
 
     for connect in multi_prefixes:
@@ -161,12 +171,12 @@ def make_map():
        connect('/about/log', controller='front', action='moderationlog')
        connect('/about/:location', controller='front',
           action='spamlisting',
-          requirements=dict(location='reports|spam|modqueue|unmoderated'))
+          requirements=dict(location='reports|spam|modqueue|unmoderated|edited'))
        connect('/about/:where', controller='userlistlisting',
           requirements=dict(where='contributors|banned|wikibanned|wikicontributors|moderators'),
           action='listing')
        connect('/about/:location', controller='front', action='editreddit',
-          location='about')
+          requirements=dict(location='edit|stylesheet|traffic|about'))
        connect('/comments', controller='comments', action='listing')
        connect('/comments/gilded', action='listing', controller='gilded')
        connect('/gilded', action='listing', controller='gilded')
@@ -180,8 +190,9 @@ def make_map():
     mc('/t/:timereddit/*rest', controller='redirect',
        action='timereddit_redirect')
 
+    # /prefs/friends is also aliased to /api/v1/me/friends
     mc('/prefs/:where', controller='userlistlisting',
-        action='listing', requirements=dict(where='blocked|friends'))
+        action='user_prefs', requirements=dict(where='blocked|friends'))
     mc('/prefs/:location', controller='forms', action='prefs',
        location='options')
 
@@ -210,26 +221,37 @@ def make_map():
     mc('/framebuster/:what/:blah',
        controller='front', action='framebuster')
 
-    mc('/promoted/report', controller='promote', action='report')
-    mc('/promoted/live_promos/:sr', controller='promotelisting',
-       sort='live_promos', action='listing')
-    mc('/promoted/:sort', controller='promotelisting', action="listing",
+    # sponsor endpoints
+    mc('/sponsor/report', controller='sponsor', action='report')
+    mc('/sponsor/inventory', controller='sponsor', action='promote_inventory')
+    mc('/sponsor/roadblock', controller='sponsor', action="roadblock")
+    mc('/sponsor/lookup_user', controller='sponsor', action="lookup_user")
+
+    # sponsor listings
+    mc('/sponsor/promoted/:sort', controller='sponsorlisting', action='listing',
        requirements=dict(sort="future_promos|pending_promos|unpaid_promos|"
                               "rejected_promos|live_promos|underdelivered|"
-                              "reported|house|all"))
-    mc('/promoted/', controller='promotelisting', action="listing")
+                              "reported|house|fraud|all"))
+    mc('/sponsor', controller='sponsorlisting', action="listing",
+       sort="all")
+    mc('/sponsor/promoted/', controller='sponsorlisting', action="listing",
+       sort="all")
+    mc('/sponsor/promoted/live_promos/:sr', controller='sponsorlisting',
+       sort='live_promos', action='listing')
 
-    mc('/promoted/edit_promo/:link',
-       controller='promote', action='edit_promo')
-    mc('/promoted/edit_promo/pc/:campaign', controller='promote',  # admin only
-       action='edit_promo_campaign')
-    mc('/promoted/pay/:link/:campaign',
-       controller='promote', action='pay')
+
+    # listings of user's promos
+    mc('/promoted/:sort', controller='promotelisting', action="listing",
+       requirements=dict(sort="future_promos|pending_promos|unpaid_promos|"
+                              "rejected_promos|live_promos|all"))
+    mc('/promoted/', controller='promotelisting', action="listing", sort="all")
+
+    # editing endpoints
+    mc('/promoted/new_promo', controller='promote', action='new_promo')
+    mc('/promoted/edit_promo/:link', controller='promote', action='edit_promo')
+    mc('/promoted/pay/:link/:campaign', controller='promote', action='pay')
     mc('/promoted/refund/:link/:campaign', controller='promote',
        action='refund')
-    mc('/promoted/inventory', controller='promote', action='promote_inventory')
-    mc('/promoted/:action', controller='promote',
-       requirements=dict(action="edit_promo|new_promo|roadblock"))
 
     mc('/health', controller='health', action='health')
     mc('/health/ads', controller='health', action='promohealth')
@@ -256,10 +278,14 @@ def make_map():
     mc('/thanks', controller='forms', action="claim", secret='')
     mc('/thanks/:secret', controller='forms', action="claim")
 
-    mc('/gold', controller='forms', action="gold")
+    mc('/gold', controller='forms', action="gold", is_payment=False)
+    mc('/gold/payment', controller='forms', action="gold", is_payment=True)
     mc('/gold/creditgild/:passthrough', controller='forms', action='creditgild')
     mc('/gold/thanks', controller='front', action='goldthanks')
     mc('/gold/subscription', controller='forms', action='subscription')
+    mc('/gilding', controller='front', action='gilding')
+    mc('/creddits', controller='redirect', action='redirect', 
+       dest='/gold?goldtype=creddits')
 
     mc('/password', controller='forms', action="password")
     mc('/:action', controller='front',
@@ -315,6 +341,8 @@ def make_map():
     mc('/resetpassword', controller='forms',
        action='resetpassword')
 
+    mc('/modify_hsts_grant', controller='front', action='modify_hsts_grant')
+
     mc('/post/:action/:url_user', controller='post',
        requirements=dict(action="login|reg"))
     mc('/post/:action', controller='post',
@@ -347,7 +375,8 @@ def make_map():
                                  "freebie|promote_note|update_pay|"
                                  "edit_campaign|delete_campaign|"
                                  "add_roadblock|rm_roadblock|check_inventory|"
-                                 "refund_campaign|terminate_campaign")))
+                                 "refund_campaign|terminate_campaign|"
+                                 "review_fraud")))
     mc('/api/:action', controller='apiminimal',
        requirements=dict(action="new_captcha"))
     mc('/api/:type', controller='api',
@@ -367,22 +396,31 @@ def make_map():
     mc("/api/multi/*multipath/r/:srname", controller="multiapi", action="multi_subreddit")
     mc("/api/multi/*multipath/description", controller="multiapi", action="multi_description")
     mc("/api/multi/*multipath", controller="multiapi", action="multi")
+    mc("/api/filter/*multipath/r/:srname", controller="multiapi", action="multi_subreddit")
+    mc("/api/filter/*multipath", controller="multiapi", action="multi")
 
     mc("/api/v1/:action", controller="oauth2frontend",
        requirements=dict(action="authorize"))
     mc("/api/v1/:action", controller="oauth2access",
-       requirements=dict(action="access_token"))
+       requirements=dict(action="access_token|revoke_token"))
     mc("/api/v1/user/:username/trophies",
-       controller="apiv1", action="usertrophies")
-    mc("/api/v1/:action", controller="apiv1")
-    mc("/api/v1/me/:action", controller="apiv1")
+       controller="apiv1user", action="usertrophies")
+    mc("/api/v1/:action", controller="apiv1user")
+    # Same controller/action as /prefs/friends
+    mc("/api/v1/me/:where", controller="userlistlisting",
+        action="user_prefs", requirements=dict(where="friends"))
+    mc("/api/v1/me/:action", controller="apiv1user")
+    mc("/api/v1/me/:action/:username", controller="apiv1user")
+
+    mc("/api/v1/gold/gild/:fullname", controller="apiv1gold", action="gild")
+    mc("/api/v1/gold/give/:username", controller="apiv1gold", action="give")
 
     mc('/dev', controller='redirect', action='redirect', dest='/dev/api')
     mc('/dev/api', controller='apidocs', action='docs')
     mc('/dev/api/:mode', controller='apidocs', action='docs',
        requirements=dict(mode="oauth"))
 
-    mc("/button_info", controller="api", action="info", limit=1)
+    mc("/button_info", controller="api", action="url_info", limit=1)
 
     mc('/captcha/:iden', controller='captcha', action='captchaimg')
 
@@ -405,11 +443,10 @@ def make_map():
 
     mc("/try", controller="forms", action="try_compact")
 
+    mc("/web/timings", controller="weblog", action="timings")
+
     mc("/web/log/:level", controller="weblog", action="message",
        requirements=dict(level="error"))
-
-    # Obsolete content redirects
-    mc("/selfserviceoatmeal", controller="redirect", dest="/ad_inq")
 
     # This route handles displaying the error page and
     # graphics used in the 404/500

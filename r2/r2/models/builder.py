@@ -16,12 +16,13 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from collections import defaultdict
 from copy import deepcopy
+from itertools import izip
 import datetime
 import heapq
 from random import shuffle
@@ -60,6 +61,7 @@ from r2.models import (
     wiki,
 )
 from r2.models.admintools import compute_votes, ip_span
+from r2.models.flair import Flair
 from r2.models.listing import Listing
 
 
@@ -96,16 +98,11 @@ class Builder(object):
 
         subreddits = Subreddit.load_subreddits(items, stale=self.stale)
         can_ban_set = set()
-        can_flair_set = set()
-        can_own_flair_set = set()
+
         if user:
             for sr_id, sr in subreddits.iteritems():
                 if sr.can_ban(user):
                     can_ban_set.add(sr_id)
-                if sr.is_moderator_with_perms(user, 'flair'):
-                    can_flair_set.add(sr_id)
-                if sr.link_flair_self_assign_enabled:
-                    can_own_flair_set.add(sr_id)
 
         #get likes/dislikes
         try:
@@ -231,7 +228,6 @@ class Builder(object):
             w.show_reports = False
             w.show_spam    = False
             w.can_ban      = False
-            w.can_flair    = False
             w.use_big_modbuttons = self.spam_listing
 
             if (c.user_is_admin
@@ -249,6 +245,7 @@ class Builder(object):
                     w.moderator_banned = ban_info.get('moderator_banned', False)
                     w.autobanned = ban_info.get('auto', False)
                     w.banner = ban_info.get('banner')
+                    w.banned_at = ban_info.get("banned_at", None)
                     if ban_info.get('note', None) and w.banner:
                         w.banner += ' (%s)' % ban_info['note']
                     w.use_big_modbuttons = True
@@ -266,12 +263,10 @@ class Builder(object):
                     w.show_reports = True
                     w.use_big_modbuttons = True
 
-            if (c.user_is_admin
-                or (user and hasattr(item, 'sr_id')
-                    and (item.sr_id in can_flair_set
-                         or (w.author and w.author._id == user._id
-                             and item.sr_id in can_own_flair_set)))):
-                w.can_flair = True
+                    # report_count isn't used in any template, but add it to
+                    # the Wrapped so it's pulled into the render cache key in
+                    # instances when reported will be used in the template
+                    w.report_count = item.reported
 
             w.approval_checkmark = None
             if w.can_ban:
@@ -304,6 +299,28 @@ class Builder(object):
 
     def get_items(self):
         raise NotImplementedError
+
+    def convert_items(self, items):
+        """Convert a list of items to the desired output format"""
+        if self.wrap:
+            items = self.wrap_items(items)
+        else:
+            # make a copy of items so the converted items can be mutated without
+            # changing the original items
+            items = items[:]
+
+        return items
+
+    def valid_after(self, after):
+        """
+        Return whether `after` could ever be shown to the user.
+
+        Necessary because an attacker could use info about the presence
+        and position of `after` within a listing to leak info about `after`s
+        that the attacker could not normally access.
+        """
+        w = self.convert_items((after,))[0]
+        return not self.must_skip(w)
 
     def item_iter(self, a):
         """Iterates over the items returned by get_items"""
@@ -350,6 +367,11 @@ class QueryBuilder(Builder):
         for i in a[0]:
             yield i
 
+    def convert_items(self, items):
+        if self.prewrap_fn:
+            items = [self.prewrap_fn(i) for i in items]
+        return Builder.convert_items(self, items)
+
     def init_query(self):
         q = self.query
 
@@ -376,7 +398,7 @@ class QueryBuilder(Builder):
                     q._rules = deepcopy(self.orig_rules)
                     q._after(last_item)
                     last_item = None
-                q._limit = max(int(num_need * EXTRA_FACTOR), 1)
+                q._limit = max(int(num_need * EXTRA_FACTOR), self.num // 2, 1)
         else:
             done = True
         new_items = list(q)
@@ -389,45 +411,34 @@ class QueryBuilder(Builder):
         num_have = 0
         done = False
         items = []
+        orig_items = {}
         count = self.start_count
-        first_item = None
-        last_item = None
-        have_next = True
+        fetch_after = None
         loopcount = 0
+        stopped_early = False
 
         while not done:
-            done, new_items = self.fetch_more(last_item, num_have)
+            done, fetched_items = self.fetch_more(fetch_after, num_have)
 
             #log loop
             loopcount += 1
             if loopcount == 20:
                 done = True
+                stopped_early = True
 
             #no results, we're done
-            if not new_items:
+            if not fetched_items:
                 break
 
             #if fewer results than we wanted, we're done
-            elif self.num and len(new_items) < self.num - num_have:
+            elif self.num and len(fetched_items) < self.num - num_have:
                 done = True
-                have_next = False
 
-            if not first_item and self.start_count > 0:
-                first_item = new_items[0]
+            # Wrap the fetched items if necessary
+            new_items = self.convert_items(fetched_items)
 
-            if self.prewrap_fn:
-                orig_items = {}
-                new_items2 = []
-                for i in new_items:
-                    new = self.prewrap_fn(i)
-                    orig_items[new._id] = i
-                    new_items2.append(new)
-                new_items = new_items2
-            else:
-                orig_items = dict((i._id, i) for i in new_items)
-
-            if self.wrap:
-                new_items = self.wrap_items(new_items)
+            # For wrapped -> unwrapped lookups
+            orig_items.update((a._id, b) for a, b in izip(new_items, fetched_items))
 
             #skip and count
             while new_items and (not self.num or num_have < self.num):
@@ -440,11 +451,24 @@ class QueryBuilder(Builder):
                     count = count - 1 if self.reverse else count + 1
                     if self.wrap:
                         i.num = count
-                last_item = i
-        
-            # get original version of last item
-            if last_item and (self.prewrap_fn or self.wrap):
-                last_item = orig_items[last_item._id]
+
+            fetch_after = fetched_items[-1]
+
+        # Is there a next page or not?
+        have_next = True
+        if self.num and num_have < self.num and not stopped_early:
+            have_next = False
+
+        # Make sure first_item and last_item refer to things in items
+        # NOTE: could retrieve incorrect item if there were items with
+        # duplicate _id
+        first_item = None
+        last_item = None
+        if items:
+            if self.start_count > 0:
+                # Make sure the item is the unwrapped version
+                first_item = orig_items[items[0]._id]
+            last_item = orig_items[items[-1]._id]
 
         if self.reverse:
             items.reverse()
@@ -504,7 +528,7 @@ class IDBuilder(QueryBuilder):
             else:
                 if last_item:
                     last_item = None
-                slice_size = max(int(num_need * EXTRA_FACTOR), 1)
+                slice_size = max(int(num_need * EXTRA_FACTOR), self.num // 2, 1)
         else:
             slice_size = len(names)
             done = True
@@ -574,6 +598,34 @@ class CampaignBuilder(IDBuilder):
 
         return ret
 
+    def valid_after(self, after):
+        # CampaignBuilder's wrapping logic only applies to Campaigns, so it
+        # needs its own version of valid_after to just use the base class'
+        # wrapping logic for security checks.
+        if self.prewrap_fn:
+            after = self.prewrap_fn(after)
+        if self.wrap:
+            after = Builder.wrap_items(self, (after,))[0]
+
+        return not self.must_skip(after)
+
+
+class ModActionBuilder(QueryBuilder):
+    def wrap_items(self, items):
+        wrapped = []
+        by_render_class = defaultdict(list)
+
+        for item in items:
+            w = self.wrap(item)
+            wrapped.append(w)
+            w.fullname = item._fullname
+            by_render_class[w.render_class].append(w)
+
+        for render_class, _items in by_render_class.iteritems():
+            render_class.add_props(c.user, _items)
+
+        return wrapped
+
 
 class SimpleBuilder(IDBuilder):
     def thing_lookup(self, names):
@@ -641,17 +693,22 @@ class SearchBuilder(IDBuilder):
 class WikiRevisionBuilder(QueryBuilder):
     show_extended = True
     
-    def __init__(self, *k, **kw):
+    def __init__(self, revisions, page=None, **kw):
         self.user = kw.pop('user', None)
         self.sr = kw.pop('sr', None)
-        QueryBuilder.__init__(self, *k, **kw)
+        self.page = page
+        QueryBuilder.__init__(self, revisions, **kw)
     
     def wrap_items(self, items):
+        from r2.lib.validator.wiki import this_may_revise
         types = {}
         wrapped = []
+        extended = self.show_extended and c.is_wiki_mod
+        extended = extended and this_may_revise(self.page)
         for item in items:
             w = self.wrap(item)
-            w.show_extended = self.show_extended
+            w.show_extended = extended
+            w.show_compare = self.show_extended
             types.setdefault(w.render_class, []).append(w)
             wrapped.append(w)
         
@@ -679,17 +736,13 @@ class WikiRecentRevisionBuilder(WikiRevisionBuilder):
         return item_age.days >= wiki.WIKI_RECENT_DAYS
 
 
-def empty_listing(*things):
-    parent_name = None
-    for t in things:
-        try:
-            parent_name = t.parent_name
-            break
-        except AttributeError:
-            continue
-    l = Listing(None, None, parent_name = parent_name)
+def add_child_listing(parent, *things):
+    l = Listing(None, nextprev=None)
     l.things = list(things)
-    return Wrapped(l)
+    parent.child = Wrapped(l)
+    parent_name = parent._fullname if not parent.deleted else "deleted"
+    parent.child.parent_name = parent_name
+
 
 def make_wrapper(parent_wrapper = Wrapped, **params):
     def wrapper_fn(thing):
@@ -741,8 +794,7 @@ class CommentBuilder(Builder):
 
         if self.children:
             # requested specific child comments
-            children = [child._id for child in self.children
-                                  if child._id in cids]
+            children = [cid for cid in self.children if cid in cids]
             self.update_candidates(candidates, sorter, children)
             dont_collapse.extend(comment for sort_val, comment in candidates)
 
@@ -844,10 +896,9 @@ class CommentBuilder(Builder):
             parent = wrapped_by_id.get(comment.parent_id)
             if parent:
                 if not hasattr(parent, 'child'):
-                    parent.child = empty_listing()
-                if not parent.deleted:
-                    parent.child.parent_name = parent._fullname
-                parent.child.things.append(comment)
+                    add_child_listing(parent, comment)
+                else:
+                    parent.child.things.append(comment)
             else:
                 final.append(comment)
 
@@ -856,9 +907,7 @@ class CommentBuilder(Builder):
                 continue
 
             parent = wrapped_by_id[parent_id]
-            parent.child = empty_listing(more_recursion)
-            if not parent.deleted:
-                parent.child.parent_name = parent._fullname
+            add_child_listing(parent, more_recursion)
 
         timer.intermediate("build_comments")
 
@@ -885,7 +934,7 @@ class CommentBuilder(Builder):
                 missing_depth = depth.get(visible_id, 0) + 1 - offset_depth
 
                 if missing_depth < self.max_depth:
-                    mc = MoreChildren(self.link, depth=missing_depth,
+                    mc = MoreChildren(self.link, self.sort, depth=missing_depth,
                                       parent_id=visible_id)
                     mc.children.extend(missing_children)
                     w = Wrapped(mc)
@@ -900,13 +949,11 @@ class CommentBuilder(Builder):
                 if hasattr(parent, 'child'):
                     parent.child.things.append(w)
                 else:
-                    parent.child = empty_listing(w)
-                    if not parent.deleted:
-                        parent.child.parent_name = parent._fullname
+                    add_child_listing(parent, w)
 
         # build MoreChildren for missing root level comments
         if top_level_candidates:
-            mc = MoreChildren(self.link, depth=0, parent_id=None)
+            mc = MoreChildren(self.link, self.sort, depth=0, parent_id=None)
             mc.children.extend(top_level_candidates)
             w = Wrapped(mc)
             w.count = sum(1 + num_children[comment]
@@ -944,6 +991,10 @@ class MessageBuilder(Builder):
 
     def get_tree(self):
         raise NotImplementedError, "get_tree"
+
+    def valid_after(self, after):
+        w = self.convert_items((after,))[0]
+        return self._viewable_message(w)
 
     def _tree_filter_reverse(self, x):
         return tree_sort_fn(x) >= self.after._id
@@ -999,13 +1050,7 @@ class MessageBuilder(Builder):
             message_ids.append(prev_item)
 
         messages = Message._byID(message_ids, data = True, return_dict = False)
-        wrapped = {}
-        for m in self.wrap_items(messages):
-            if not self._viewable_message(m):
-                g.log.warning("%r is not viewable by %s; path is %s" %
-                                 (m, c.user.name, request.fullpath))
-                continue
-            wrapped[m._id] = m
+        wrapped = {m._id: m for m in self.wrap_items(messages)}
 
         if prev_item:
             prev_item = wrapped[prev_item]
@@ -1016,13 +1061,18 @@ class MessageBuilder(Builder):
         for parent, children in tree:
             if parent not in wrapped:
                 continue
+
             parent = wrapped[parent]
+
+            if not self._viewable_message(parent):
+                continue
+
             if children:
                 # if no parent is specified, check if any of the messages are
                 # uncollapsed, and truncate the thread
                 children = [wrapped[child] for child in children
                                            if child in wrapped]
-                parent.child = empty_listing()
+                add_child_listing(parent)
                 # if the parent is new, uncollapsed, or focal we don't
                 # want it to become a moremessages wrapper.
                 if (self.skip and 
@@ -1034,7 +1084,7 @@ class MessageBuilder(Builder):
                             break
                     else:
                         i = -1
-                    parent = Wrapped(MoreMessages(parent, empty_listing()))
+                    parent = Wrapped(MoreMessages(parent, parent.child))
                     children = children[i:]
 
                 parent.child.parent_name = parent._fullname
@@ -1076,19 +1126,21 @@ class ModeratorMessageBuilder(MessageBuilder):
 
     def get_tree(self):
         if self.parent:
-            return conversation(self.user, self.parent)
+            sr = Subreddit._byID(self.parent.sr_id)
+            return sr_conversation(sr, self.parent)
         sr_ids = Subreddit.reverse_moderator_ids(self.user)
         return moderator_messages(sr_ids)
 
 class MultiredditMessageBuilder(MessageBuilder):
-    def __init__(self, user, **kw):
-        self.user = user
+    def __init__(self, sr, **kw):
+        self.sr = sr
         MessageBuilder.__init__(self, **kw)
 
     def get_tree(self):
         if self.parent:
-            return conversation(self.user, self.parent)
-        return moderator_messages(c.site.sr_ids)
+            sr = Subreddit._byID(self.parent.sr_id)
+            return sr_conversation(sr, self.parent)
+        return moderator_messages(self.sr.sr_ids)
 
 class TopCommentBuilder(CommentBuilder):
     """A comment builder to fetch only the top-level, non-spam,
@@ -1118,10 +1170,22 @@ class UserMessageBuilder(MessageBuilder):
         self.user = user
         MessageBuilder.__init__(self, **kw)
 
+    def _viewable_message(self, message):
+        is_author = message.author_id == c.user._id
+        if not c.user_is_admin and not is_author and message._spam:
+            return False
+
+        return super(UserMessageBuilder, self)._viewable_message(message)
+
     def get_tree(self):
         if self.parent:
             return conversation(self.user, self.parent)
         return user_messages(self.user)
+
+    def valid_after(self, after):
+        # Messages that have been spammed are still valid afters
+        w = self.convert_items((after,))[0]
+        return MessageBuilder._viewable_message(self, w)
 
 class UserListBuilder(QueryBuilder):
     def thing_lookup(self, rels):
@@ -1132,6 +1196,10 @@ class UserListBuilder(QueryBuilder):
 
     def must_skip(self, item):
         return item.user._deleted
+
+    def valid_after(self, after):
+        # Users that have been deleted are still valid afters
+        return True
 
     def wrap_items(self, rels):
         return [self.wrap(rel) for rel in rels]
@@ -1147,3 +1215,20 @@ class SavedBuilder(IDBuilder):
             category = categories.get(w._id, '')
             w.savedcategory = category
         return wrapped
+
+
+class FlairListBuilder(UserListBuilder):
+    def init_query(self):
+        q = self.query
+
+        if self.reverse:
+            q._reverse()
+
+        q._data = True
+        self.orig_rules = deepcopy(q._rules)
+        # FlairLists use Accounts for afters
+        if self.after:
+            if self.reverse:
+                q._filter(Flair.c._thing2_id < self.after._id)
+            else:
+                q._filter(Flair.c._thing2_id > self.after._id)

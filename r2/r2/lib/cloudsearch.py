@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2013 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -240,8 +240,8 @@ class LinkFields(FieldsBase):
         if self.link.is_self:
             return g.domain
         else:
-            url = r2utils.UrlParser(self.link.url)
             try:
+                url = r2utils.UrlParser(self.link.url)
                 return list(url.domain_permutations())
             except ValueError:
                 return None
