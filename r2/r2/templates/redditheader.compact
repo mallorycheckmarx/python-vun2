@@ -111,7 +111,7 @@
     <div class="menuitem">
       ${plain_link("search", "/search")}
     </div>
-    %if not isinstance(c.site, DefaultSR) and not c.cname:
+    %if isinstance(c.site, FakeSubreddit):
     <div class="menuitem">
       ${plain_link("sidebar", "/about/sidebar")}
     </div>
