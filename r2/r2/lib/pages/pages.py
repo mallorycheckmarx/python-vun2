@@ -1617,6 +1617,9 @@ class LinkInfoPage(Reddit):
                     step_str = "%dh" % (step.total_seconds() / (60 * 60))
                 classes.add("post-under-%s-old" % step_str)
 
+        if not getattr(self.link, "votable", True):
+            classes.add("archived")
+
         return classes
 
 class LinkCommentSep(Templated):
