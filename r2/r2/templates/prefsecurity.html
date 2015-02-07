@@ -63,7 +63,7 @@ wrap=True)}
 </form>
 
 
-% if c.user_is_loggedin and c.user.name in g.admins:
+% if c.user_is_loggedin and c.user.https_forced:
 <h1>${_("two-factor authentication")}</h1>
 
     % if c.user.otp_secret:
