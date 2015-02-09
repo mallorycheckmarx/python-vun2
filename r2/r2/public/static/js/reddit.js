@@ -1215,12 +1215,12 @@ $(function() {
             $("#searchexpando").slideDown();
         });
 
-        // Default to true for the 'restrict search' checkbox.
-        $('#searchexpando input[name="restrict_sr"').
-            prop("checked", !(store.get('searchexpando.input.checked') === false));
-        $('#searchexpando input[name="restrict_sr"').change(function() {
-            store.set('searchexpando.input.checked', this.checked)
-        });
+        // Store the user's choice for restrict_sr
+        $('#search input[name="restrict_sr"]')
+          .change(function() {
+            store.set('search.restricted_sr.checked', this.checked)
+          })
+          .prop("checked", !!store.get('search.restricted_sr.checked'));
 
         $("#search_showmore").click(function(event) {
             $("#search_showmore").parent().hide();
