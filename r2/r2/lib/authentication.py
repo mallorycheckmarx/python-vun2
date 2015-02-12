@@ -96,6 +96,9 @@ def _http_basic(create_account=False):
             account = register(username, password, request.environ.get('REMOTE_ADDR', '127.0.0.1'))
         else:    
             return None
+    if create_account:
+        # credentials are managed elsewhere, don't try to match password
+        return account
 
     # not all systems support bcrypt in the standard crypt
     if account.password.startswith("$2a$"):
