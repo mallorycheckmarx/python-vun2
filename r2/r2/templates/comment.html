@@ -62,7 +62,7 @@ ${parent.midcol(cls = cls)}
     ${thing.link_author}
     ${_("in")}
     &#32;
-    ${plain_link(thing.subreddit.name, thing.subreddit_path, sr_path = False,
+    ${plain_link('/r/'+thing.subreddit.name, thing.subreddit_path, sr_path = False,
                  cname = False, _class = "subreddit hover")}
   %endif
 </%def>

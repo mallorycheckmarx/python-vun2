@@ -44,6 +44,17 @@
 
     ##things here may depend on globals, or included js, so we run them last
     <script type="text/javascript">
+      // Redirect script
+      if ( (screen.width < 1024) && (screen.height < 768) )
+      {
+          window.location.href=
+                 window.location.protocol
+                 +"://i."
+                 +window.location.host
+                 +"/"
+                 +window.location.pathname;
+      }
+
       ${self.javascript_run()}
     </script>
     <style type="text/css">
