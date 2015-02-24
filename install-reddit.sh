@@ -104,6 +104,9 @@ export DEBIAN_FRONTEND=noninteractive
 # dependencies are found
 apt-get update
 
+# ensure that we have curl on this system
+apt-get install $APTITUDE_OPTIONS curl
+
 # add the reddit ppa for some custom packages
 apt-get install $APTITUDE_OPTIONS python-software-properties
 apt-add-repository -y ppa:reddit/ppa
@@ -330,7 +333,7 @@ media_fs_base_url_http = http://%(domain)s/media/
 [server:main]
 port = 8001
 DEVELOPMENT
-    chown $REDDIT_USER development.update
+    sudo chown $REDDIT_USER development.update
 else
     sed -i "s/^plugins = .*$/plugins = $plugin_str/" $REDDIT_HOME/src/reddit/r2/development.update
     sed -i "s/^domain = .*$/domain = $REDDIT_DOMAIN/" $REDDIT_HOME/src/reddit/r2/development.update
