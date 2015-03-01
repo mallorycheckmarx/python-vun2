@@ -79,7 +79,7 @@
     %else:
       <span class="user">
          ${plain_link(c.user.name, "/user/%s/" % c.user.name, _sr_path=False)}
-         &nbsp;(<span class="userkarma" title="${_("link karma")}">${display_link_karma(c.user.link_karma)}</span>)
+         &nbsp;<bdi>(<span class="userkarma" title="${_("link karma")}">${display_link_karma(c.user.link_karma)}</span>)</bdi>
       </span>
 
       ${separator("|")}

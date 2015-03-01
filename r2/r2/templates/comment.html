@@ -84,7 +84,7 @@ ${parent.midcol(cls = cls)}
      %if thing.deleted:
        <em>${_("deleted comment from")}</em>&#32;
      %endif
-     ${WrappedUser(thing.author, thing.attribs, thing)}
+     <bdi>${WrappedUser(thing.author, thing.attribs, thing)}</bdi>
      &#32;
   %else:
      <em>${_("[deleted]")}</em>&#32;
