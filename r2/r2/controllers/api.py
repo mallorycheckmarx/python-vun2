@@ -71,6 +71,10 @@ from r2.lib.pages import (
     WikiMayContributeTableItem,
 )
 
+from r2.lib.jsontemplates import (
+    EditStylesheetTemplate
+)
+
 from r2.lib.pages.things import (
     default_thing_wrapper,
     hot_links_by_url_listing,
@@ -1971,7 +1975,7 @@ class ApiController(RedditController):
                              "the new stylesheet content"}),
                    reason=VPrintable('reason', 256, empty_error=None),
                    op = VOneOf('op',['save','preview']))
-    @api_doc(api_section.subreddits, uses_site=True)
+    @api_doc(api_section.subreddits, uses_site=True, uri_variants=['/api/subreddit_stylesheet.json'])
     def POST_subreddit_stylesheet(self, form, jquery,
                                   stylesheet_contents = '', prevstyle='',
                                   op='save', reason=None):
@@ -1986,63 +1990,97 @@ class ApiController(RedditController):
         if g.css_killswitch:
             return abort(403, 'forbidden')
 
-        if css_errors:
-            error_items = [CssError(x).render(style='html') for x in css_errors]
-            form.set_text(".status", _('validation errors'))
-            form.set_html(".errors ul", ''.join(error_items))
-            form.find('.errors').show()
-            c.errors.add(errors.BAD_CSS, field="stylesheet_contents")
-            form.has_errors("stylesheet_contents", errors.BAD_CSS)
-            return
+        if c.render_style in ('api', 'api-json'):
+            error_items = []
+            
+            if css_errors:
+                for error in css_errors:
+                    error_items.append({
+                        "message": CssError(error).message,
+                        "line": error.line,
+                        "error_code": error.error_code,
+                        "offending_line": error.offending_line,
+                    })
+
+                status = 'failed'
+            elif op == 'save':
+                wr = c.site.change_css(stylesheet_contents, parsed, reason=reason)
+                if wr:
+                    description = wiki.modactions.get('config/stylesheet')
+                    ModAction.create(c.site, c.user, 'wikirevise', description)
+
+                status = 'saved'
+            elif op == 'preview':
+                status = 'previewed'
+
+            json_response = EditStylesheetTemplate().render({
+                "modhash": c.modhash if c.modhash else '',
+                "op": op,
+                "status": status,
+                "errors": error_items,
+                "stylesheet_parsed": parsed,
+                "stylesheet_url": c.site.stylesheet_url if op == 'save' and not css_errors else ''
+            })
+
+            return self.api_wrapper(json_response.finalize())
         else:
-            form.find('.errors').hide()
-            form.set_html(".errors ul", '')
+            if css_errors:
+                error_items = [CssError(x).render(style='html') for x in css_errors]
+                form.set_text(".status", _('validation errors'))
+                form.set_html(".errors ul", ''.join(error_items))
+                form.find('.errors').show()
+                c.errors.add(errors.BAD_CSS, field="stylesheet_contents")
+                form.has_errors("stylesheet_contents", errors.BAD_CSS)
+                return
+            else:
+                form.find('.errors').hide()
+                form.set_html(".errors ul", '')
 
-        if op == 'save':
-            wr = c.site.change_css(stylesheet_contents, parsed, reason=reason)
-            form.find('.errors').hide()
-            form.set_text(".status", _('saved'))
-            form.set_html(".errors ul", "")
-            if wr:
-                description = wiki.modactions.get('config/stylesheet')
-                ModAction.create(c.site, c.user, 'wikirevise', description)
+            if op == 'save':
+                wr = c.site.change_css(stylesheet_contents, parsed, reason=reason)
+                form.find('.errors').hide()
+                form.set_text(".status", _('saved'))
+                form.set_html(".errors ul", "")
+                if wr:
+                    description = wiki.modactions.get('config/stylesheet')
+                    ModAction.create(c.site, c.user, 'wikirevise', description)
 
-        jquery.apply_stylesheet(parsed)
+            jquery.apply_stylesheet(parsed)
 
-        if op == 'preview':
-            # try to find a link to use, otherwise give up and
-            # return
-            links = SubredditStylesheet.find_preview_links(c.site)
-            if links:
+            if op == 'preview':
+                # try to find a link to use, otherwise give up and
+                # return
+                links = SubredditStylesheet.find_preview_links(c.site)
+                if links:
 
-                jquery('#preview-table').show()
-    
-                # do a regular link
-                jquery('#preview_link_normal').html(
-                    SubredditStylesheet.rendered_link(
-                        links, media='off', compress=False))
-                # now do one with media
-                jquery('#preview_link_media').html(
-                    SubredditStylesheet.rendered_link(
-                        links, media='on', compress=False))
-                # do a compressed link
-                jquery('#preview_link_compressed').html(
-                    SubredditStylesheet.rendered_link(
-                        links, media='off', compress=True))
-                # do a stickied link
-                jquery('#preview_link_stickied').html(
-                    SubredditStylesheet.rendered_link(
-                        links, media='off', compress=False, stickied=True))
-    
-            # and do a comment
-            comments = SubredditStylesheet.find_preview_comments(c.site)
-            if comments:
-                jquery('#preview_comment').html(
-                    SubredditStylesheet.rendered_comment(comments))
+                    jquery('#preview-table').show()
+        
+                    # do a regular link
+                    jquery('#preview_link_normal').html(
+                        SubredditStylesheet.rendered_link(
+                            links, media='off', compress=False))
+                    # now do one with media
+                    jquery('#preview_link_media').html(
+                        SubredditStylesheet.rendered_link(
+                            links, media='on', compress=False))
+                    # do a compressed link
+                    jquery('#preview_link_compressed').html(
+                        SubredditStylesheet.rendered_link(
+                            links, media='off', compress=True))
+                    # do a stickied link
+                    jquery('#preview_link_stickied').html(
+                        SubredditStylesheet.rendered_link(
+                            links, media='off', compress=False, stickied=True))
+        
+                # and do a comment
+                comments = SubredditStylesheet.find_preview_comments(c.site)
+                if comments:
+                    jquery('#preview_comment').html(
+                        SubredditStylesheet.rendered_comment(comments))
 
-                jquery('#preview_comment_gilded').html(
-                    SubredditStylesheet.rendered_comment(
-                        comments, gilded=True))
+                    jquery('#preview_comment_gilded').html(
+                        SubredditStylesheet.rendered_comment(
+                            comments, gilded=True))
 
     @require_oauth2_scope("modconfig")
     @validatedForm(VSrModerator(perms='config'),
@@ -2171,7 +2209,7 @@ class ApiController(RedditController):
               upload_type = VOneOf('upload_type',
                                    ('img', 'header', 'icon', 'banner')),
               header = VInt('header', max=1, min=0))
-    @api_doc(api_section.subreddits, uses_site=True)
+    @api_doc(api_section.subreddits, uses_site=True, uri_variants=['/api/upload_sr_img.json'])
     def POST_upload_sr_img(self, file, header, name, form_id, img_type,
                            upload_type=None):
         """Add or replace a subreddit image, custom header logo, custom mobile

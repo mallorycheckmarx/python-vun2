@@ -1066,6 +1066,7 @@ class StylesheetTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         images='_images',
         stylesheet='stylesheet_contents',
+        url='_url',
         subreddit_id='_fullname',
     )
 
@@ -1086,7 +1087,13 @@ class StylesheetTemplate(ThingJsonTemplate):
             return self.images()
         elif attr == '_fullname':
             return c.site._fullname
+        elif attr == '_url':
+            return c.site.stylesheet_url
         return ThingJsonTemplate.thing_attr(self, thing, attr)
+
+class EditStylesheetTemplate(ThingJsonTemplate):
+    def render(self, thing, *a, **kw):
+        return ObjectTemplate(thing)
 
 class SubredditSettingsTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
@@ -1145,6 +1152,8 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
 class UploadedImageJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
         return ObjectTemplate({
+            "modhash": c.modhash if c.modhash else '',
+            "status": thing.status,
             "errors": list(k for (k, v) in thing.errors if v),
             "img_src": thing.img_src,
         })
