@@ -936,19 +936,19 @@ rx_underscore = re.compile('_+', re.UNICODE)
 def title_to_url(title, max_length = 50):
     """Takes a string and makes it suitable for use in URLs"""
     title = _force_unicode(title)           #make sure the title is unicode
-    title = rx_whitespace.sub('_', title)   #remove whitespace
+    title = rx_whitespace.sub('-', title)   #remove whitespace
     title = rx_notsafe.sub('', title)       #remove non-printables
-    title = rx_underscore.sub('_', title)   #remove double underscores
-    title = title.strip('_')                #remove trailing underscores
+    title = rx_underscore.sub('-', title)   #remove double underscores
+    title = title.strip('-')                #remove trailing underscores
     title = title.lower()                   #lowercase the title
 
     if len(title) > max_length:
         #truncate to nearest word
         title = title[:max_length]
-        last_word = title.rfind('_')
+        last_word = title.rfind('-')
         if (last_word > 0):
             title = title[:last_word]
-    return title or "_"
+    return title or "-"
 
 
 def unicode_title_to_ascii(title, max_length=50):
