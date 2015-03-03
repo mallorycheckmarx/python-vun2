@@ -23,7 +23,8 @@
 <%!
    from r2.lib.filters import websafe
    from r2.lib.strings import Score
-   from r2.lib.template_helpers import format_number, format_percent, html_datetime
+   from r2.lib.template_helpers import (
+       format_number, format_percent, format_date, html_datetime)
  %>
 
 
@@ -39,7 +40,7 @@
       &#32;
     </span>
     <time datetime="${html_datetime(thing.a._date)}">
-      ${thing.a._date.strftime(_('%d %b %Y'))}
+      ${format_date(thing.a._date)}
     </time>
   </div>
 
