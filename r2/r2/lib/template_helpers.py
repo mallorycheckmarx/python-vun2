@@ -609,7 +609,7 @@ def simplified_timesince(date, include_tense=True):
 
     since = timesince(date)
     if include_tense:
-        return _("%s ago") % since
+        return _("%(time)s ago") % dict(time=since)
     else:
         return since
 
