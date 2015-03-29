@@ -255,6 +255,7 @@ SAFE_PROPERTIES = {
     "text-decoration-line",
     "text-decoration-skip",
     "text-decoration-style",
+    "text-fill-color",
     "text-indent",
     "text-justify",
     "text-overflow",
