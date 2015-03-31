@@ -43,13 +43,12 @@ import time
 from pylons import g, c, request
 from pylons.i18n import _, ungettext
 
-
 static_text_extensions = {
     '.js': 'js',
     '.css': 'css',
     '.less': 'css'
 }
-def static(path):
+def static(path, absolute=False, mangle_name=True):
     """
     Simple static file maintainer which automatically paths and
     versions files being served out of static.
@@ -64,7 +63,11 @@ def static(path):
     should_cache_bust = False
 
     path_components = []
-    actual_filename = None
+    actual_filename = None if mangle_name else filename
+
+    # If building an absolute url, default to https because we like it and the
+    # static server should support it.
+    scheme = 'https' if absolute else None
 
     if g.static_domain:
         domain = g.static_domain
@@ -79,7 +82,7 @@ def static(path):
             should_cache_bust = True
             actual_filename = filename
 
-        domain = None
+        domain = g.domain if absolute else None
 
     path_components.append(dirname)
     if not actual_filename:
@@ -94,7 +97,7 @@ def static(path):
         query = 'v=' + str(file_id)
 
     return urlparse.urlunsplit((
-        None,
+        scheme,
         domain,
         actual_path,
         query,
@@ -127,6 +130,7 @@ def header_url(url):
 
 def js_config(extra_config=None):
     logged = c.user_is_loggedin and c.user.name
+    user_id = c.user_is_loggedin and c.user._id
     gold = bool(logged and c.user.gold)
 
     controller_name = request.environ['pylons.routes_dict']['controller']
@@ -137,6 +141,8 @@ def js_config(extra_config=None):
     config = {
         # is the user logged in?
         "logged": logged,
+        # logged in user's id
+        "user_id": user_id,
         # the subreddit's name (for posts)
         "post_site": c.site.name if not c.default_sr else "",
         # the user's voting hash
@@ -171,12 +177,16 @@ def js_config(extra_config=None):
         "adtracker_url": g.adtracker_url,
         "clicktracker_url": g.clicktracker_url,
         "uitracker_url": g.uitracker_url,
+        "eventtracker_url": g.eventtracker_url,
+        "anon_eventtracker_url": g.anon_eventtracker_url,
+        "comment_embed_scripts": js.src("comment-embed", absolute=True, mangle_name=False),
         "static_root": static(''),
         "over_18": bool(c.over18),
         "new_window": bool(c.user.pref_newwindow),
         "vote_hash": c.vote_hash,
         "gold": gold,
         "has_subscribed": logged and c.user.has_subscribed,
+        "is_sponsor": logged and c.user_is_sponsor,
         "pageInfo": {
           "verification": verification,
           "actionName": controller_name + '.' + action_name,
@@ -445,11 +455,8 @@ def add_sr(
         u.path_add_subreddit(c.site)
 
     if not u.hostname or force_hostname:
-        if c.secure:
-            u.hostname = request.host
-        else:
-            u.hostname = get_domain(cname = (c.cname and not nocname),
-                                    subreddit = False)
+        u.hostname = get_domain(cname = (c.cname and not nocname),
+                                subreddit = False)
 
     if (c.secure and u.is_reddit_url()) or force_https:
         u.scheme = "https"

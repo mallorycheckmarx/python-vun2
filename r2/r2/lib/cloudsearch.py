@@ -43,6 +43,7 @@ from r2.models import (Account, Link, Subreddit, Thing, All, DefaultSR,
                        FakeSubreddit, NotFound)
 
 
+_TIMEOUT = 5 # seconds for http requests to cloudsearch
 _CHUNK_SIZE = 4000000 # Approx. 4 MB, to stay under the 5MB limit
 _VERSION_OFFSET = 13257906857
 ILLEGAL_XML = re.compile(u'[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]')
@@ -225,11 +226,11 @@ class LinkFields(FieldsBase):
 
     @field
     def author_fullname(self):
-        return self.author._fullname
+        return None if self.author._deleted else self.author._fullname
 
     @field(name="author")
     def author_field(self):
-        return '[deleted]' if self.author._deleted else self.author.name
+        return None if self.author._deleted else self.author.name
 
     @field(cloudsearch_type=int)
     def type_id(self):
@@ -295,7 +296,7 @@ class SubredditFields(FieldsBase):
 
     @field
     def header_title(self):
-        return self.sr.header_title
+        return None if self.sr.type == 'private' else self.sr.header_title
 
     @field
     def description(self):
@@ -303,7 +304,7 @@ class SubredditFields(FieldsBase):
 
     @field
     def sidebar(self):
-        return self.sr.description
+        return None if self.sr.type == 'private' else self.sr.description
 
     @field(cloudsearch_type=int)
     def over18(self):
@@ -482,7 +483,8 @@ class CloudSearchUploader(object):
         Raises CloudSearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
-        connection = httplib.HTTPConnection(self.doc_api, 80)
+        connection = httplib.HTTPConnection(
+            self.doc_api, port=80, timeout=_TIMEOUT)
         chunker = chunk_xml(docs)
         try:
             for data in chunker:
@@ -748,7 +750,7 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
     if record_stats:
         timer = g.stats.get_timer("cloudsearch_timer")
         timer.start()
-    connection = httplib.HTTPConnection(search_api, 80)
+    connection = httplib.HTTPConnection(search_api, port=80, timeout=_TIMEOUT)
     try:
         connection.request('GET', path)
         resp = connection.getresponse()

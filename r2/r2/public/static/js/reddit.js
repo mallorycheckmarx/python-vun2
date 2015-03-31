@@ -9,6 +9,11 @@ function open_menu(menu) {
         .addClass("active inuse");
 };
 
+function close_menu(item) {
+    $(item).closest('.drop-choices')
+        .removeClass('active inuse');
+}
+
 function close_menus(event) {
     $(".drop-choices.inuse").not(".active")
         .removeClass("inuse");
@@ -147,12 +152,14 @@ function emptyInput(elem, msg) {
 
 
 function showlang() {
-    $(".lang-popup:first").show();
-    return false;
-};
+    var content = $('#lang-popup').prop('innerHTML');
+    var popup = new r.ui.Popup({
+        className: 'lang-modal',
+        content: content,
+    });
 
-function hidecover(where) {
-    $(where).parents(".cover-overlay").hide();
+    popup.show();
+
     return false;
 };
 
@@ -381,8 +388,14 @@ function cancel_reject_promo(elem) {
 }
 
 function complete_reject_promo(elem) {
-    $(elem).thing().removeClass("accepted").addClass("rejected")
+    var $el = $(elem);
+
+    $el.thing().removeClass("accepted").addClass("rejected")
         .find(".reject_promo").remove();
+
+    if ($el.data('hide-after-seen')) {
+        hide_thing(elem);
+    }
 }
 
 /* Comment generation */
@@ -952,6 +965,18 @@ function set_distinguish(elem, value) {
   $(elem).children().toggle();
 }
 
+function toggle_clear_suggested_sort(elem) {
+  var form = $(elem).parents("form")[0];
+  $(form).children().toggle();
+}
+
+function set_suggested_sort(elem, value) {
+  $(elem).parents('form').first().find('input[name="sort"]').val(value);
+  change_state(elem, "set_suggested_sort");
+  $(elem).children().toggle();
+}
+
+
 function populate_click_gadget() {
     /* if we can find the click-gadget, populate it */
     if($('.click-gadget').length) {
@@ -1205,6 +1230,13 @@ $(function() {
         $('#search input[name="q"]').focus(function () {
             $("#searchexpando").slideDown();
         });
+
+        // Store the user's choice for restrict_sr
+        $('#search input[name="restrict_sr"]')
+          .change(function() {
+            store.set('search.restrict_sr.checked', this.checked)
+          })
+          .prop("checked", !!store.get('search.restrict_sr.checked'));
 
         $("#search_showmore").click(function(event) {
             $("#search_showmore").parent().hide();

@@ -23,11 +23,12 @@
 from pylons import c, request
 from pylons.i18n import _, N_
 
+from r2.config import feature
 from r2.lib.db import operators
 from r2.lib.filters import _force_unicode
 from r2.lib.search import sorts as search_sorts
 from r2.lib.strings import StringHandler, plurals
-from r2.lib.utils import  query_string, timeago
+from r2.lib.utils import  class_property, query_string, timeago
 from r2.lib.wrapped import Styled
 
 
@@ -56,6 +57,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      gilded       = _('gilded'),
                      confidence   = _('best'),
                      random       = _('random'),
+                     qa           = _('q&a'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
                      rising       = _('rising'), 
@@ -81,18 +83,20 @@ menu =   MenuHandler(hot          = _('hot'),
                      logout       = _("logout"),
                      
                      #reddit footer strings
+                     faq          = _("FAQ"),
+                     reddiquette  = _("reddiquette"),
                      contact      = _("contact us"),
                      buttons      = _("buttons"),
                      widget       = _("widget"), 
-                     code         = _("source code"),
                      mobile       = _("mobile"), 
-                     store        = _("store"),  
                      advertising  = _("advertise"),
                      gold         = _('reddit gold'),
                      reddits      = _('subreddits'),
                      team         = _('team'),
-                     rules        = _('rules'),
+                     rules        = _('site rules'),
                      jobs         = _('jobs'),
+                     transparency = _("transparency"),
+                     source_code  = _("source code"),
 
                      #preferences
                      options      = _('options'),
@@ -133,6 +137,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      modqueue     = _("moderation queue"),
                      unmoderated  = _("unmoderated links"),
                      edited       = _("edited"),
+                     employee     = _("employee"),
                      
                      wikibanned        = _("ban wiki contributors"),
                      wikicontributors  = _("add wiki contributors"),
@@ -269,7 +274,7 @@ class NavButton(Styled):
     _style = "plain"
 
     def __init__(self, title, dest, sr_path=True, nocname=False, aliases=None,
-                 target="", use_params=False, css_class=''):
+                 target="", use_params=False, css_class='', data=None):
         aliases = aliases or []
         aliases = set(_force_unicode(a.rstrip('/')) for a in aliases)
         if dest:
@@ -284,6 +289,7 @@ class NavButton(Styled):
         self.aliases = aliases
         self.target = target
         self.use_params = use_params
+        self.data = data
 
         Styled.__init__(self, self._style, css_class=css_class)
 
@@ -328,16 +334,17 @@ class NavButton(Styled):
             ('target', self.target), 
             ('css_class', self.css_class),
             ('_id', self._id),
+            ('data', self.data),
         ]
 
 
 class QueryButton(NavButton):
     def __init__(self, title, dest, query_param, sr_path=True, aliases=None,
-                 target="", css_class=''):
+                 target="", css_class='', data=None):
         self.query_param = query_param
         NavButton.__init__(self, title, dest, sr_path=sr_path, nocname=True,
                            aliases=aliases, target=target, use_params=False,
-                           css_class=css_class)
+                           css_class=css_class, data=data)
 
     def build(self, base_path=''):
         params = dict(request.GET)
@@ -360,11 +367,11 @@ class PostButton(NavButton):
     _style = "post"
 
     def __init__(self, title, dest, input_name, sr_path=True, aliases=None,
-                 target="", css_class=''):
+                 target="", css_class='', data=None):
         self.input_name = input_name
         NavButton.__init__(self, title, dest, sr_path=sr_path, nocname=True,
                            aliases=aliases, target=target, use_params=False,
-                           css_class=css_class)
+                           css_class=css_class, data=data)
 
     def build(self, base_path=''):
         self.base_path = base_path
@@ -380,6 +387,7 @@ class PostButton(NavButton):
             ('target', self.target),
             ('css_class', self.css_class),
             ('_id', self._id),
+            ('data', self.data),
         ]
 
     def is_selected(self):
@@ -418,13 +426,13 @@ class SubredditButton(NavButton):
     # TRANSLATORS: Gold feature, "myrandom", a random subreddit from your subscriptions
                       RandomSubscription: N_("myrandom")}
 
-    def __init__(self, sr, css_class=''):
+    def __init__(self, sr, css_class='', data=None):
         self.path = sr.path
         name = self.name_overrides.get(sr)
         name = _(name) if name else sr.name
         self.isselected = (c.site == sr)
         NavButton.__init__(self, name, sr.path, sr_path=False, nocname=True,
-                           css_class=css_class)
+                           css_class=css_class, data=data)
 
     def build(self, base_path=''):
         self.bare_path = ""
@@ -438,6 +446,7 @@ class SubredditButton(NavButton):
             ('title', self.title),
             ('isselected', self.isselected),
             ('css_class', self.css_class),
+            ('data', self.data),
         ]
 
 
@@ -448,13 +457,15 @@ class NamedButton(NavButton):
     separately)."""
 
     def __init__(self, name, sr_path=True, nocname=False, aliases=None,
-                 dest=None, fmt_args={}, use_params=False, css_class=''):
+                 dest=None, fmt_args={}, use_params=False, css_class='',
+                 data=None):
         self.name = name.strip('/')
         menutext = menu[self.name] % fmt_args
         dest = dest if dest is not None else name
         NavButton.__init__(self, menutext, dest, sr_path=sr_path,
                            nocname=nocname, aliases=aliases,
-                           use_params=use_params, css_class=css_class)
+                           use_params=use_params, css_class=css_class,
+                           data=data)
 
 
 class JsButton(NavButton):
@@ -463,12 +474,13 @@ class JsButton(NavButton):
 
     _style = "js"
 
-    def __init__(self, title, tab_name=None, onclick='', css_class=''):
+    def __init__(self, title, tab_name=None, onclick='', css_class='',
+                 data=None):
         self.tab_name = tab_name
         self.onclick = onclick
         dest = '#'
         NavButton.__init__(self, title, dest, sr_path=False, nocname=True,
-                           css_class=css_class)
+                           css_class=css_class, data=data)
 
     def build(self, base_path=''):
         if self.tab_name:
@@ -488,6 +500,7 @@ class JsButton(NavButton):
             ('_id', self._id),
             ('tab_name', self.tab_name),
             ('onclick', self.onclick),
+            ('data', self.data),
         ]
 
 
@@ -514,7 +527,8 @@ class SortMenu(NavMenu):
         options = self.make_buttons()
         default = default or self._default
         base_path = base_path or request.path
-        NavMenu.__init__(self, options, default=default, title=_(self._title),
+        title = title or _(self._title)
+        NavMenu.__init__(self, options, default=default, title=title,
                          type=self._type, base_path=base_path,
                          separator=separator, _id=_id, css_class=css_class)
 
@@ -538,6 +552,7 @@ class SortMenu(NavMenu):
         "controversial": operators.desc('_controversy'),
         "confidence": operators.desc('_confidence'),
         "random": operators.shuffled('_confidence'),
+        "qa": operators.desc('_qa'),
     }
     _reverse_mapping = {v: k for k, v in _mapping.iteritems()}
 
@@ -559,9 +574,36 @@ class CommentSortMenu(SortMenu):
     """Sort menu for comments pages"""
     _default = 'confidence'
     _options = ('confidence', 'top', 'new', 'hot', 'controversial', 'old',
-                 'random')
-    hidden_options = ('random',)
+                 'random', 'qa',)
     button_cls = PostButton
+
+    # Links may have a suggested sort of 'blank', which is an explicit None -
+    # that is, do not check the subreddit for a suggested sort, either.
+    suggested_sort_options = _options + ('blank',)
+
+    def __init__(self, *args, **kwargs):
+        self.suggested_sort = kwargs.pop('suggested_sort', None)
+        super(CommentSortMenu, self).__init__(*args, **kwargs)
+
+    @classmethod
+    def visible_options(cls):
+        return set(cls._options) - set(cls.hidden_options)
+
+    @class_property
+    def hidden_options(cls):
+        sorts = ['random']
+        if not feature.is_enabled('qa_sort'):
+            sorts.append('qa')
+        if feature.is_enabled('remove_hot_comments'):
+            sorts.append('hot')
+        return sorts
+
+    def make_title(self, attr):
+        title = super(CommentSortMenu, self).make_title(attr)
+        if attr == self.suggested_sort:
+            return title + ' ' + _('(suggested)')
+        else:
+            return title
 
 
 class SearchSortMenu(SortMenu):

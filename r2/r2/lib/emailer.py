@@ -26,19 +26,25 @@ import datetime
 import traceback, sys, smtplib
 
 from pylons import c, g
+import simplejson as json
 
+from r2.config import feature
+from r2.lib import hooks
 from r2.lib.utils import timeago
-from r2.models import Email, DefaultSR, Account, Award
+from r2.models import Comment, Email, DefaultSR, Account, Award
 from r2.models.token import EmailVerificationToken, PasswordResetToken
 
 
-def _system_email(email, body, kind, reply_to = "", thing = None):
+trylater_hooks = hooks.HookRegistrar()
+
+def _system_email(email, body, kind, reply_to = "", thing = None,
+                  from_address = g.feedback_email):
     """
     For sending email from the system to a user (reply address will be
     feedback and the name will be reddit.com)
     """
     Email.handler.add_to_queue(c.user if c.user_is_loggedin else None,
-                               email, g.domain, g.feedback_email,
+                               email, g.domain, from_address,
                                kind, body = body, reply_to = reply_to,
                                thing = thing)
 
@@ -109,6 +115,77 @@ def password_email(user):
                                 passlink=passlink).render(style='email'),
                   Email.Kind.RESET_PASSWORD)
     return True
+
+@trylater_hooks.on('trylater.message_notification_email')
+def message_notification_email(data):
+    """Queues a system email for a new message notification."""
+    from r2.lib.pages import MessageNotificationEmail
+
+    MAX_EMAILS_PER_DAY = 1000
+    MESSAGE_THROTTLE_KEY = 'message_notification_emails'
+
+    # If our counter's expired, initialize it again.
+    g.cache.add(MESSAGE_THROTTLE_KEY, 0, time=24*60*60)
+
+    for datum in data.itervalues():
+        datum = json.loads(datum)
+        user = Account._byID36(datum['to'], data=True)
+        comment = Comment._by_fullname(datum['comment'], data=True)
+
+        # In case a user has enabled the preference while it was enabled for
+        # them, but we've since turned it off.  We need to explicitly state the
+        # user because we're not in the context of an HTTP request from them.
+        if not feature.is_enabled_for('orangereds_as_emails', user):
+            continue
+
+        if g.cache.get(MESSAGE_THROTTLE_KEY) > MAX_EMAILS_PER_DAY:
+            raise Exception(
+                    'Message notification emails: safety limit exceeded!')
+
+        mac = generate_notification_email_unsubscribe_token(
+                datum['to'], user_email=user.email,
+                user_password_hash=user.password)
+        base = g.https_endpoint or g.origin
+        unsubscribe_link = base + '/mail/unsubscribe/%s/%s' % (datum['to'], mac)
+
+        templateData = {
+            'sender_username': datum.get('from', ''),
+            'comment': comment,
+            'permalink': datum['permalink'],
+            'unsubscribe_link': unsubscribe_link,
+        }
+        _system_email(user.email,
+                      MessageNotificationEmail(**templateData).render(style='email'),
+                      Email.Kind.MESSAGE_NOTIFICATION,
+                      from_address=g.notification_email)
+
+        g.stats.simple_event('email.message_notification.queued')
+        g.cache.incr(MESSAGE_THROTTLE_KEY)
+
+def generate_notification_email_unsubscribe_token(user_id36, user_email=None,
+                                                  user_password_hash=None):
+    """Generate a token used for one-click unsubscribe links for notification
+    emails.
+
+    user_id36: A base36-encoded user id.
+    user_email: The user's email.  Looked up if not provided.
+    user_password_hash: The hash of the user's password.  Looked up if not
+                        provided.
+    """
+    import hashlib
+    import hmac
+
+    if (not user_email) or (not user_password_hash):
+        user = Account._byID36(user_id36, data=True)
+        if not user_email:
+            user_email = user.email
+        if not user_password_hash:
+            user_password_hash = user.password
+
+    return hmac.new(
+        g.secrets['email_notifications'],
+        user_id36 + user_email + user_password_hash,
+        hashlib.sha256).hexdigest()
 
 def password_change_email(user):
     """Queues a system email for a password change notification."""
@@ -297,3 +374,5 @@ def send_html_email(to_addr, from_addr, subject, html, subtype="html"):
     session = smtplib.SMTP(g.smtp_server)
     session.sendmail(from_addr, to_addr, msg.as_string())
     session.quit()
+
+trylater_hooks.register_all()

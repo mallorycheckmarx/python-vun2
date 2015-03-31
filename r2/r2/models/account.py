@@ -30,10 +30,10 @@ from r2.lib.admin_utils  import modhash, valid_hash
 from r2.lib.utils        import randstr, timefromnow
 from r2.lib.utils        import UrlParser
 from r2.lib.utils        import constant_time_compare, canonicalize_email
-from r2.lib.cache        import sgm
-from r2.lib import filters, hooks
+from r2.lib import amqp, filters, hooks
 from r2.lib.log import log_text
 from r2.models.last_modified import LastModified
+from r2.models.modaction import ModAction
 from r2.models.trylater import TryLater
 
 from pylons import c, g, request
@@ -96,6 +96,7 @@ class Account(Thing):
                      pref_mark_messages_read = True,
                      pref_threaded_messages = True,
                      pref_collapse_read_messages = False,
+                     pref_email_messages = False,
                      pref_private_feeds = True,
                      pref_force_https = False,
                      pref_show_adbox = True,
@@ -294,7 +295,38 @@ class Account(Thing):
         return ",".join((timestamp, signature))
 
     def needs_captcha(self):
-        return not g.disable_captcha and self.link_karma < 1
+        if g.disable_captcha:
+            return False
+
+        hook = hooks.get_hook("account.is_captcha_exempt")
+        captcha_exempt = hook.call_until_return(account=self)
+        if captcha_exempt:
+            return False
+
+        if self.link_karma >= g.live_config["captcha_exempt_link_karma"]:
+            return False
+
+        if self.comment_karma >= g.live_config["captcha_exempt_comment_karma"]:
+            return False
+
+        return True
+
+    @property
+    def can_create_subreddit(self):
+        hook = hooks.get_hook("account.can_create_subreddit")
+        can_create = hook.call_until_return(account=self)
+        if can_create is not None:
+            return can_create
+
+        min_age = timedelta(days=g.live_config["create_sr_account_age_days"])
+        if self._age < min_age:
+            return False
+
+        if (self.link_karma < g.live_config["create_sr_link_karma"] and
+                self.comment_karma < g.live_config["create_sr_comment_karma"]):
+            return False
+
+        return True
 
     def modhash(self, rand=None, test=False):
         if c.oauth_user:
@@ -425,7 +457,10 @@ class Account(Thing):
             Account._by_name(self.name, _update = True)
         except NotFound:
             pass
-        
+
+        # Mark this account for scrubbing
+        amqp.add_item('account_deleted', self._fullname)
+
         #remove from friends lists
         q = Friend._query(Friend.c._thing2_id == self._id,
                           Friend.c._name == 'friend',
@@ -624,6 +659,31 @@ class Account(Thing):
 
     def flair_css_class(self, sr_id):
         return getattr(self, 'flair_%s_css_class' % sr_id, None)
+
+    def can_flair_in_sr(self, user, sr):
+        """Return whether a user can set this one's flair in a subreddit."""
+        can_assign_own = self._id == user._id and sr.flair_self_assign_enabled
+
+        return can_assign_own or sr.is_moderator_with_perms(user, "flair")
+
+    def set_flair(self, subreddit, text=None, css_class=None, set_by=None,
+            log_details="edit"):
+        log_details = "flair_%s" % log_details
+        if not text and not css_class:
+            # set to None instead of potentially empty strings
+            text = css_class = None
+            subreddit.remove_flair(self)
+            log_details = "flair_delete"
+        elif not subreddit.is_flair(self):
+            subreddit.add_flair(self)
+
+        setattr(self, 'flair_%s_text' % subreddit._id, text)
+        setattr(self, 'flair_%s_css_class' % subreddit._id, css_class)
+        self._commit()
+
+        if set_by and set_by != self:
+            ModAction.create(subreddit, set_by, action='editflair',
+                target=self, details=log_details)
 
     def update_sr_activity(self, sr):
         if not self._spam:
@@ -935,8 +995,8 @@ class BlockedSubredditsByAccount(tdb_cassandra.DenormalizedRelation):
 
 
 @trylater_hooks.on("trylater.account_deletion")
-def on_account_deletion(mature_items):
-    for account_id36 in mature_items.itervalues():
+def on_account_deletion(data):
+    for account_id36 in data.itervalues():
         account = Account._byID36(account_id36, data=True)
 
         if not account._deleted:

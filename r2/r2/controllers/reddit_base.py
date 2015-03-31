@@ -25,6 +25,7 @@ import json
 import re
 import simplejson
 import socket
+import itertools
 
 from Cookie import CookieError
 from copy import copy
@@ -45,7 +46,6 @@ from pylons.i18n.translation import LanguageError
 from r2.config import feature
 from r2.config.extensions import is_api, set_extension
 from r2.lib import filters, pages, utils, hooks, ratelimit
-from r2.lib.authentication import authenticate_user
 from r2.lib.base import BaseController, abort
 from r2.lib.cache import make_key, MemcachedError
 from r2.lib.errors import (
@@ -74,7 +74,6 @@ from r2.lib.utils import (
 )
 from r2.lib.validator import (
     build_arg_list,
-    chksrname,
     fullname_regex,
     valid_jsonp_callback,
     validate,
@@ -366,8 +365,9 @@ def set_subreddit():
         #reddits
         c.site = Sub
     elif '+' in sr_name:
-        sr_names = filter(lambda name: chksrname(name, allow_language_srs=True,
-            allow_special_srs=True), sr_name.split('+'))
+        name_filter = lambda name: Subreddit.is_valid_name(name,
+            allow_language_srs=True)
+        sr_names = filter(name_filter, sr_name.split('+'))
         srs = Subreddit._by_name(sr_names, stale=can_stale).values()
         if All in srs:
             c.site = All
@@ -410,8 +410,7 @@ def set_subreddit():
         try:
             c.site = Subreddit._by_name(sr_name, stale=can_stale)
         except NotFound:
-            sr_name = chksrname(sr_name)
-            if sr_name:
+            if Subreddit.is_valid_name(sr_name):
                 path = "/subreddits/search?q=%s" % sr_name
                 abort(302, location=BaseController.format_output_url(path))
             elif not c.error_page and not request.path.startswith("/api/login/") :
@@ -438,31 +437,69 @@ def set_subreddit():
 _FILTER_SRS = {"mod": ModFiltered, "all": AllFiltered}
 def set_multireddit():
     routes_dict = request.environ["pylons.routes_dict"]
-    if "multipath" in routes_dict:
-        multipath = routes_dict["multipath"].lower()
-        multi_id = None
+    if "multipath" in routes_dict or ("m" in request.GET and is_api()):
+        fullpath = routes_dict.get("multipath", "").lower()
+        multipaths = fullpath.split("+")
+        multi_ids = None
+        logged_in_username = c.user.name.lower() if c.user_is_loggedin else None
+        multiurl = None
 
         if c.user_is_loggedin and routes_dict.get("my_multi"):
-            multi_id = "/user/%s/m/%s" % (c.user.name.lower(), multipath)
+            multi_ids = ["/user/%s/m/%s" % (logged_in_username, multipath)
+                         for multipath in multipaths]
+            multiurl = "/me/m/" + fullpath
         elif "username" in routes_dict:
             username = routes_dict["username"].lower()
 
             if c.user_is_loggedin:
                 # redirect /user/foo/m/... to /me/m/... for user foo.
-                if username == c.user.name.lower():
+                if username == logged_in_username and not is_api():
                     # trim off multi id
                     url_parts = request.path_qs.split("/")[5:]
-                    url_parts.insert(0, "/me/m/%s" % multipath)
+                    url_parts.insert(0, "/me/m/%s" % fullpath)
                     path = "/".join(url_parts)
                     abort(302, location=BaseController.format_output_url(path))
 
-            multi_id = "/user/%s/m/%s" % (username, multipath)
-
-        if multi_id:
-            try:
-                c.site = LabeledMulti._byID(multi_id)
-            except tdb_cassandra.NotFound:
+            multiurl = "/user/" + username + "/m/" + fullpath
+            multi_ids = ["/user/%s/m/%s" % (username, multipath)
+                        for multipath in multipaths]
+        elif 'sr_multi' in routes_dict:
+            if isinstance(c.site, FakeSubreddit):
                 abort(404)
+            if (not is_api() and
+                     not feature.is_enabled('multireddit_customizations')):
+                abort(404)
+
+            multiurl = "/r/" + c.site.name.lower() + "/m/" + fullpath
+            multi_ids = ["/r/%s/m/%s" % (c.site.name.lower(), multipath)
+                        for multipath in multipaths]
+        elif "m" in request.GET and is_api():
+            # Only supported via API as we don't have a valid non-query
+            # parameter equivalent for cross-user multis, which means
+            # we can't generate proper links to /new, /top, etc in HTML
+            multi_ids = [m.lower() for m in request.GET.getall("m")]
+            multiurl = ""
+
+        if multi_ids is not None:
+            multis = LabeledMulti._byID(multi_ids, return_dict=False) or []
+            multis = [m for m in multis if m.can_view(c.user)]
+            if not multis:
+                abort(404)
+            elif len(multis) == 1:
+                c.site = multis[0]
+            else:
+                sr_ids = Subreddit.random_reddits(
+                    logged_in_username,
+                    list(set(itertools.chain.from_iterable(
+                        multi.sr_ids for multi in multis
+                    ))),
+                    LabeledMulti.MAX_SR_COUNT,
+                )
+                srs = Subreddit._byID(sr_ids, data=True, return_dict=False)
+                c.site = MultiReddit(multiurl, srs)
+                if any(m.weighting_scheme == "fresh" for m in multis):
+                    c.site.weighting_scheme = "fresh"
+
     elif "filtername" in routes_dict:
         if not c.user_is_loggedin:
             abort(404)
@@ -568,8 +605,10 @@ def set_iface_lang():
         c.locale = babel.core.Locale.parse(g.lang, sep='-')
 
 def set_cnameframe():
+    hostname = request.host.split(":")[0]
     if (bool(request.params.get(utils.UrlParser.cname_get))
-        or not request.host.split(":")[0].endswith(g.domain)):
+        or not (utils.is_subdomain(hostname, g.domain) or
+                utils.is_subdomain(hostname, g.media_domain))):
         c.cname = True
         request.environ['REDDIT_CNAME'] = 1
     c.frameless_cname = request.environ.get('frameless_cname', False)
@@ -1153,10 +1192,6 @@ class MinimalController(BaseController):
             wrapped_content = c.response_wrapper(content)
             response.content = wrapped_content
 
-        if c.user_is_loggedin:
-            response.headers['Cache-Control'] = 'no-cache'
-            response.headers['Pragma'] = 'no-cache'
-
         # pagecache stores headers. we need to not add X-Frame-Options to
         # cached requests (such as media embeds) that intend to allow framing.
         if not c.allow_framing and not c.used_cache:
@@ -1169,6 +1204,10 @@ class MinimalController(BaseController):
         # Don't poison the cache with uncacheable cookies
         dirty_cookies = (k for k, v in c.cookies.iteritems() if v.dirty)
         would_poison = any((k not in CACHEABLE_COOKIES) for k in dirty_cookies)
+
+        if c.user_is_loggedin or would_poison:
+            response.headers['Cache-Control'] = 'no-cache'
+            response.headers['Pragma'] = 'no-cache'
 
         # save the result of this page to the pagecache if possible.  we
         # mustn't cache things that rely on state not tracked by request_key
@@ -1479,7 +1518,14 @@ class RedditController(OAuth2ResourceController):
         # no logins for RSS feed unless valid_feed has already been called
         if not c.user:
             if c.extension != "rss":
-                authenticate_user()
+                if not g.read_only_mode:
+                    c.user = g.auth_provider.get_authenticated_account()
+
+                    if c.user and c.user._deleted:
+                        c.user = None
+                else:
+                    c.user = None
+                c.user_is_loggedin = bool(c.user)
 
                 admin_cookie = c.cookies.get(g.admin_cookie)
                 if c.user_is_loggedin and admin_cookie:
@@ -1575,6 +1621,16 @@ class RedditController(OAuth2ResourceController):
                 if isinstance(c.site, LabeledMulti):
                     # do not leak the existence of multis via 403.
                     self.abort404()
+                elif c.site.type == 'gold_only' and not (c.user.gold or c.user.gold_charter):
+                    public_description = c.site.public_description
+                    errpage = pages.RedditError(
+                        strings.gold_only_subreddit_title,
+                        strings.gold_only_subreddit_message,
+                        image="subreddit-gold-only.png",
+                        sr_description=public_description,
+                    )
+                    request.environ['usable_error_content'] = errpage.render()
+                    self.abort403()
                 else:
                     public_description = c.site.public_description
                     errpage = pages.RedditError(
@@ -1614,7 +1670,8 @@ class RedditController(OAuth2ResourceController):
 
     def post(self):
         MinimalController.post(self)
-        self._embed_html_timing_data()
+        if response.content_type == "text/html":
+            self._embed_html_timing_data()
 
         # allow logged-out JSON requests to be read cross-domain
         if (not c.cors_checked and request.method.upper() == "GET" and
@@ -1626,7 +1683,7 @@ class RedditController(OAuth2ResourceController):
                 g.stats.simple_event('cors.api_request')
                 g.stats.count_string('origins', request_origin)
 
-        if request.method.upper() == "GET" and is_api():
+        if g.tracker_url and request.method.upper() == "GET" and is_api():
             tracking_url = make_url_https(get_pageview_pixel_url())
             response.headers["X-Reddit-Tracking"] = tracking_url
 
@@ -1647,6 +1704,7 @@ class RedditController(OAuth2ResourceController):
         body_parts = list(content.rpartition("</body>"))
         if body_parts[1]:
             script = ('<script type="text/javascript">'
+                      'window.r = window.r || {};'
                       'r.timings = %s'
                       '</script>') % simplejson.dumps(timings)
             body_parts.insert(1, script)

@@ -43,8 +43,6 @@ import pytz
 from r2.config import queues
 from r2.lib.cache import (
     CacheChain,
-    CassandraCache,
-    CassandraCacheChain,
     CL_ONE,
     CL_QUORUM,
     CMemcache,
@@ -52,6 +50,7 @@ from r2.lib.cache import (
     HardcacheChain,
     LocalCache,
     MemcacheChain,
+    Permacache,
     SelfEmptyingCache,
     StaleCacheChain,
 )
@@ -61,7 +60,12 @@ from r2.lib.lock import make_lock_factory
 from r2.lib.manager import db_manager
 from r2.lib.plugin import PluginLoader
 from r2.lib.providers import select_provider
-from r2.lib.stats import Stats, CacheStats, StatsCollectingConnectionPool
+from r2.lib.stats import (
+    CacheStats,
+    StaleCacheStats,
+    Stats,
+    StatsCollectingConnectionPool,
+)
 from r2.lib.translation import get_active_langs, I18N_PATH
 from r2.lib.utils import config_gold_price, thread_dump
 
@@ -165,6 +169,7 @@ class Globals(object):
             'num_comments',
             'max_comments',
             'max_comments_gold',
+            'max_comment_parent_walk',
             'max_sr_images',
             'num_serendipity',
             'sr_dropdown_threshold',
@@ -185,8 +190,6 @@ class Globals(object):
             'wiki_max_page_length_bytes',
             'wiki_max_page_name_length',
             'wiki_max_page_separators',
-            'min_promote_future',
-            'max_promote_future',
             'RL_RESET_MINUTES',
             'RL_OAUTH_RESET_MINUTES',
             'comment_karma_display_floor',
@@ -253,6 +256,8 @@ class Globals(object):
             'exempt_login_user_agents',
             'timed_templates',
             'autoexpand_media_types',
+            'multi_icons',
+            'hide_subscribers_srs',
         ],
 
         ConfigValue.tuple_of(ConfigValue.int): [
@@ -283,6 +288,7 @@ class Globals(object):
 
         ConfigValue.timeinterval: [
             'ARCHIVE_AGE',
+            "vote_queue_grace_period",
         ],
 
         config_gold_price: [
@@ -299,6 +305,11 @@ class Globals(object):
             'frontend_logging',
         ],
         ConfigValue.int: [
+            'captcha_exempt_comment_karma',
+            'captcha_exempt_link_karma',
+            'create_sr_account_age_days',
+            'create_sr_comment_karma',
+            'create_sr_link_karma',
             'cflag_min_votes',
         ],
         ConfigValue.float: [
@@ -307,6 +318,7 @@ class Globals(object):
             'spotlight_interest_sub_p',
             'spotlight_interest_nosub_p',
             'gold_revenue_goal',
+            'invalid_key_sample_rate',
         ],
         ConfigValue.tuple: [
             'fastlane_links',
@@ -411,12 +423,33 @@ class Globals(object):
     def setup(self):
         self.queues = queues.declare_queues(self)
 
+        self.extension_subdomains = dict(
+            m="mobile",
+            i="compact",
+            api="api",
+            rss="rss",
+            xml="xml",
+            json="json",
+        )
+
         ################# PROVIDERS
+        self.auth_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.auth",
+            self.authentication_provider,
+        )
         self.media_provider = select_provider(
             self.config,
             self.pkg_resources_working_set,
             "r2.provider.media",
             self.media_provider,
+        )
+        self.cdn_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.cdn",
+            self.cdn_provider,
         )
         self.startup_timer.intermediate("providers")
 
@@ -475,7 +508,9 @@ class Globals(object):
         self.log = logging.LoggerAdapter(log, {"pool": pool})
 
         # set locations
-        self.locations = {}
+        locations = pkg_resources.resource_stream(__name__,
+                                                  "../data/locations.json")
+        self.locations = json.loads(locations.read())
 
         if not self.media_domain:
             self.media_domain = self.domain
@@ -561,7 +596,7 @@ class Globals(object):
         # the main memcache pool. used for most everything.
         memcache = CMemcache(
             self.memcaches,
-            min_compress_len=50 * 1024,
+            min_compress_len=1400,
             num_clients=num_mc_clients,
             binary=True,
         )
@@ -606,12 +641,9 @@ class Globals(object):
         # memcaches used in front of the permacache CF in cassandra.
         # XXX: this is a legacy thing; permacache was made when C* didn't have
         # a row cache.
-        if self.permacache_memcaches:
-            permacache_memcaches = CMemcache(self.permacache_memcaches,
-                                             min_compress_len=50 * 1024,
-                                             num_clients=num_mc_clients)
-        else:
-            permacache_memcaches = None
+        permacache_memcaches = CMemcache(self.permacache_memcaches,
+                                         min_compress_len=1400,
+                                         num_clients=num_mc_clients)
 
         # the stalecache is a memcached local to the current app server used
         # for data that's frequently fetched but doesn't need to be fresh.
@@ -658,11 +690,9 @@ class Globals(object):
                 ),
         }
 
-        permacache_cf = CassandraCache(
+        permacache_cf = Permacache._setup_column_family(
             'permacache',
             self.cassandra_pools[self.cassandra_default_pool],
-            read_consistency_level=self.cassandra_rcl,
-            write_consistency_level=self.cassandra_wcl
         )
 
         self.startup_timer.intermediate("cassandra")
@@ -739,16 +769,28 @@ class Globals(object):
         cache_chains.update(pagecache=self.pagecache)
 
         # the thing_cache is used in tdb_cassandra.
-        self.thing_cache = CacheChain((localcache_cls(),))
+        self.thing_cache = CacheChain((localcache_cls(),), check_keys=False)
         cache_chains.update(thing_cache=self.thing_cache)
 
-        self.permacache = CassandraCacheChain(
-            localcache_cls(),
+        if stalecaches:
+            permacache_cache = StaleCacheChain(
+                localcache_cls(),
+                stalecaches,
+                permacache_memcaches,
+                check_keys=False,
+            )
+        else:
+            permacache_cache = CacheChain(
+                (localcache_cls(), permacache_memcaches),
+                check_keys=False,
+            )
+        cache_chains.update(permacache=permacache_cache)
+
+        self.permacache = Permacache(
+            permacache_cache,
             permacache_cf,
-            memcache=permacache_memcaches,
             lock_factory=self.make_lock,
         )
-        cache_chains.update(permacache=self.permacache)
 
         # hardcache is used for various things that tend to expire
         # TODO: replace hardcache w/ cassandra stuff
@@ -765,7 +807,10 @@ class Globals(object):
         def reset_caches():
             for name, chain in cache_chains.iteritems():
                 chain.reset()
-                chain.stats = CacheStats(self.stats, name)
+                if isinstance(chain, StaleCacheChain):
+                    chain.stats = StaleCacheStats(self.stats, name)
+                else:
+                    chain.stats = CacheStats(self.stats, name)
         self.cache_chains = cache_chains
 
         self.reset_caches = reset_caches

@@ -20,7 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, request, response
+from pylons import c, g, request, response
 from pylons.i18n import _
 
 from r2.config.extensions import set_extension
@@ -34,41 +34,54 @@ from r2.models.subreddit import (
     LabeledMulti,
     TooManySubredditsError,
 )
-from r2.lib.db import tdb_cassandra, thing
-from r2.lib.wrapped import Wrapped
+from r2.lib.db import tdb_cassandra
 from r2.lib.validator import (
     validate,
-    VUser,
+    VAccountByName,
+    VBoolean,
+    VColor,
+    VLength,
+    VMarkdownLength,
     VModhash,
+    VMultiPath,
+    VMultiByPath,
     VOneOf,
     VSubredditName,
     VSRByName,
+    VUser,
     VValidatedJSON,
-    VMarkdownLength,
-    VMultiPath,
-    VMultiByPath,
 )
 from r2.lib.pages.things import wrap_things
 from r2.lib.jsontemplates import (
     LabeledMultiJsonTemplate,
     LabeledMultiDescriptionJsonTemplate,
 )
-from r2.lib.errors import errors, RedditError
+from r2.lib.errors import RedditError
 
 
 multi_sr_data_json_spec = VValidatedJSON.Object({
     'name': VSubredditName('name', allow_language_srs=True),
 })
 
+MAX_DESC = 10000
+MAX_DISP_NAME = 50
+WRITABLE_MULTI_FIELDS = ('visibility', 'description_md', 'display_name',
+                         'key_color', 'weighting_scheme')
 
-multi_json_spec = VValidatedJSON.Object({
-    'visibility': VOneOf('visibility', ('private', 'public')),
+multi_json_spec = VValidatedJSON.PartialObject({
+    'description_md': VMarkdownLength('description_md', max_length=MAX_DESC,
+                                      empty_error=None),
+    'display_name': VLength('display_name', max_length=MAX_DISP_NAME),
+    'icon_name': VOneOf('icon_name', g.multi_icons + ("", None)),
+    'key_color': VColor('key_color'),
+    'visibility': VOneOf('visibility', ('private', 'public', 'hidden')),
+    'weighting_scheme': VOneOf('weighting_scheme', ('classic', 'fresh')),
     'subreddits': VValidatedJSON.ArrayOf(multi_sr_data_json_spec),
 })
 
 
 multi_description_json_spec = VValidatedJSON.Object({
-    'body_md': VMarkdownLength('body_md', max_length=10000, empty_error=None),
+    'body_md': VMarkdownLength('body_md', max_length=MAX_DESC, empty_error=None),
 })
 
 
@@ -79,35 +92,83 @@ class MultiApiController(RedditController):
         set_extension(request.environ, "json")
         RedditController.pre(self)
 
+    def _format_multi_list(self, multis, viewer, expand_srs):
+        templ = LabeledMultiJsonTemplate(expand_srs)
+        resp = [templ.render(multi).finalize() for multi in multis
+                if multi.can_view(viewer)]
+        return self.api_wrapper(resp)
+
     @require_oauth2_scope("read")
-    @validate(VUser())
+    @validate(
+        user=VAccountByName("username"),
+        expand_srs=VBoolean("expand_srs"),
+    )
+    @api_doc(api_section.multis, uri="/api/multi/user/{username}")
+    def GET_list_multis(self, user, expand_srs):
+        """Fetch a list of public multis belonging to `username`"""
+        multis = LabeledMulti.by_owner(user)
+        return self._format_multi_list(multis, c.user, expand_srs)
+
+    @require_oauth2_scope("read")
+    @validate(
+        sr=VSRByName('srname'),
+        expand_srs=VBoolean("expand_srs"),
+    )
+    def GET_list_sr_multis(self, sr, expand_srs):
+        """Fetch a list of public multis belonging to subreddit `srname`"""
+        multis = LabeledMulti.by_owner(sr)
+        return self._format_multi_list(multis, c.user, expand_srs)
+
+    @require_oauth2_scope("read")
+    @validate(VUser(), expand_srs=VBoolean("expand_srs"))
     @api_doc(api_section.multis, uri="/api/multi/mine")
-    def GET_my_multis(self):
+    def GET_my_multis(self, expand_srs):
         """Fetch a list of multis belonging to the current user."""
         multis = LabeledMulti.by_owner(c.user)
-        wrapped = wrap_things(*multis)
-        resp = [w.render() for w in wrapped]
-        return self.api_wrapper(resp)
+        return self._format_multi_list(multis, c.user, expand_srs)
 
-    def _format_multi(self, multi):
-        resp = wrap_things(multi)[0].render()
-        return self.api_wrapper(resp)
+    def _format_multi(self, multi, expand_sr_info=False):
+        multi_info = LabeledMultiJsonTemplate(expand_sr_info).render(multi)
+        return self.api_wrapper(multi_info.finalize())
 
     @require_oauth2_scope("read")
-    @validate(multi=VMultiByPath("multipath", require_view=True))
+    @validate(
+        multi=VMultiByPath("multipath", require_view=True),
+        expand_srs=VBoolean("expand_srs"),
+    )
     @api_doc(
         api_section.multis,
         uri="/api/multi/{multipath}",
         uri_variants=['/api/filter/{filterpath}'],
     )
-    def GET_multi(self, multi):
+    def GET_multi(self, multi, expand_srs):
         """Fetch a multi's data and subreddit list by name."""
-        return self._format_multi(multi)
+        return self._format_multi(multi, expand_srs)
 
     def _check_new_multi_path(self, path_info):
-        if path_info['username'].lower() != c.user.name.lower():
+        if path_info['prefix'] == 'r':
+            return self._check_sr_multi_path(path_info)
+
+        return self._check_user_multi_path(path_info)
+
+    def _check_user_multi_path(self, path_info):
+        if path_info['owner'].lower() != c.user.name.lower():
             raise RedditError('MULTI_CANNOT_EDIT', code=403,
                               fields='multipath')
+        return c.user
+
+    def _check_sr_multi_path(self, path_info):
+        try:
+            sr = Subreddit._by_name(path_info['owner'])
+        except NotFound:
+            raise RedditError('SUBREDDIT_NOEXIST', code=404)
+
+        if (not sr.is_moderator_with_perms(c.user, 'config') and not
+                c.user_is_admin):
+            raise RedditError('MULTI_CANNOT_EDIT', code=403,
+                              fields='multipath')
+
+        return sr
 
     def _add_multi_srs(self, multi, sr_datas):
         srs = Subreddit._by_name(sr_data['name'] for sr_data in sr_datas)
@@ -138,14 +199,25 @@ class MultiApiController(RedditController):
         return sr_props
 
     def _write_multi_data(self, multi, data):
-        multi.visibility = data['visibility']
+        srs = data.pop('subreddits', None)
+        if srs is not None:
+            multi.clear_srs()
+            try:
+                self._add_multi_srs(multi, srs)
+            except:
+                multi._revert()
+                raise
 
-        multi.clear_srs()
-        try:
-            self._add_multi_srs(multi, data['subreddits'])
-        except:
-            multi._revert()
-            raise
+        if 'icon_name' in data:
+            try:
+                multi.set_icon_by_name(data.pop('icon_name'))
+            except:
+                multi._revert()
+                raise
+
+        for key, val in data.iteritems():
+            if key in WRITABLE_MULTI_FIELDS:
+                setattr(multi, key, val)
 
         multi._commit()
         return multi
@@ -154,19 +226,29 @@ class MultiApiController(RedditController):
     @validate(
         VUser(),
         VModhash(),
-        path_info=VMultiPath("multipath"),
+        path_info=VMultiPath("multipath", required=False),
         data=VValidatedJSON("model", multi_json_spec),
     )
     @api_doc(api_section.multis, extends=GET_multi)
     def POST_multi(self, path_info, data):
         """Create a multi. Responds with 409 Conflict if it already exists."""
 
-        self._check_new_multi_path(path_info)
+        if not path_info and "path" in data:
+            path_info = VMultiPath("").run(data["path"])
+        elif 'display_name' in data:
+            # if path not provided, create multi for user
+            path = LabeledMulti.slugify(c.user, data['display_name'])
+            path_info = VMultiPath("").run(path)
+
+        if not path_info:
+            raise RedditError('BAD_MULTI_PATH', code=400)
+
+        owner = self._check_new_multi_path(path_info)
 
         try:
             LabeledMulti._byID(path_info['path'])
         except tdb_cassandra.NotFound:
-            multi = LabeledMulti.create(path_info['path'], c.user)
+            multi = LabeledMulti.create(path_info['path'], owner)
             response.status = 201
         else:
             raise RedditError('MULTI_EXISTS', code=409, fields='multipath')
@@ -185,12 +267,12 @@ class MultiApiController(RedditController):
     def PUT_multi(self, path_info, data):
         """Create or update a multi."""
 
-        self._check_new_multi_path(path_info)
+        owner = self._check_new_multi_path(path_info)
 
         try:
             multi = LabeledMulti._byID(path_info['path'])
         except tdb_cassandra.NotFound:
-            multi = LabeledMulti.create(path_info['path'], c.user)
+            multi = LabeledMulti.create(path_info['path'], owner)
             response.status = 201
 
         self._write_multi_data(multi, data)
@@ -207,10 +289,14 @@ class MultiApiController(RedditController):
         """Delete a multi."""
         multi.delete()
 
-    def _copy_multi(self, from_multi, to_path_info):
-        self._check_new_multi_path(to_path_info)
+    def _copy_multi(self, from_multi, to_path_info, rename=False):
+        """Copy a multi to a user account."""
 
-        to_owner = Account._by_name(to_path_info['username'])
+        to_owner = self._check_new_multi_path(to_path_info)
+
+        # rename requires same owner
+        if rename and from_multi.owner != to_owner:
+            raise RedditError('MULTI_CANNOT_EDIT', code=400)
 
         try:
             LabeledMulti._byID(to_path_info['path'])
@@ -227,15 +313,17 @@ class MultiApiController(RedditController):
         VUser(),
         VModhash(),
         from_multi=VMultiByPath("from", require_view=True, kinds='m'),
-        to_path_info=VMultiPath("to",
+        to_path_info=VMultiPath("to", required=False,
             docs={"to": "destination multireddit url path"},
         ),
+        display_name=VLength("display_name", max_length=MAX_DISP_NAME,
+                             empty_error=None),
     )
     @api_doc(
         api_section.multis,
-        uri="/api/multi/{multipath}/copy",
+        uri="/api/multi/copy",
     )
-    def POST_multi_copy(self, from_multi, to_path_info):
+    def POST_multi_copy(self, from_multi, to_path_info, display_name):
         """Copy a multi.
 
         Responds with 409 Conflict if the target already exists.
@@ -244,7 +332,16 @@ class MultiApiController(RedditController):
         description.
 
         """
+        if not to_path_info:
+            if display_name:
+                # if path not provided, copy multi to same owner
+                path = LabeledMulti.slugify(from_multi.owner, display_name)
+                to_path_info = VMultiPath("").run(path)
+            else:
+                raise RedditError('BAD_MULTI_PATH', code=400)
+
         to_multi = self._copy_multi(from_multi, to_path_info)
+
         from_path = from_multi.path
         to_multi.copied_from = from_path
         if to_multi.description_md:
@@ -254,7 +351,10 @@ class MultiApiController(RedditController):
             'source': '[%s](%s)' % (from_path, from_path)
         }
         to_multi.visibility = 'private'
+        if display_name:
+            to_multi.display_name = display_name
         to_multi._commit()
+
         return self._format_multi(to_multi)
 
     @require_oauth2_scope("subscribe")
@@ -262,19 +362,32 @@ class MultiApiController(RedditController):
         VUser(),
         VModhash(),
         from_multi=VMultiByPath("from", require_edit=True, kinds='m'),
-        to_path_info=VMultiPath("to",
+        to_path_info=VMultiPath("to", required=False,
             docs={"to": "destination multireddit url path"},
         ),
+        display_name=VLength("display_name", max_length=MAX_DISP_NAME,
+                             empty_error=None),
     )
     @api_doc(
         api_section.multis,
-        uri="/api/multi/{multipath}/rename",
+        uri="/api/multi/rename",
     )
-    def POST_multi_rename(self, from_multi, to_path_info):
+    def POST_multi_rename(self, from_multi, to_path_info, display_name):
         """Rename a multi."""
+        if not to_path_info:
+            if display_name:
+                path = LabeledMulti.slugify(from_multi.owner, display_name)
+                to_path_info = VMultiPath("").run(path)
+            else:
+                raise RedditError('BAD_MULTI_PATH', code=400)
 
-        to_multi = self._copy_multi(from_multi, to_path_info)
+        to_multi = self._copy_multi(from_multi, to_path_info, rename=True)
+
+        if display_name:
+            to_multi.display_name = display_name
+            to_multi._commit()
         from_multi.delete()
+
         return self._format_multi(to_multi)
 
     def _get_multi_subreddit(self, multi, sr):

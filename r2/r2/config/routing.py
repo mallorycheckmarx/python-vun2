@@ -81,7 +81,7 @@ def make_map():
     mc('/subreddits/search', controller='front', action='search_reddits')
     mc('/subreddits/login', controller='forms', action='login')
     mc('/subreddits/:where', controller='reddits', action='listing',
-       where='popular', requirements=dict(where="popular|new|banned"))
+       where='popular', requirements=dict(where="popular|new|banned|employee|gold"))
     # If no subreddit is specified, might as well show a list of 'em.
     mc('/r', controller='redirect', action='redirect', dest='/subreddits')
 
@@ -148,6 +148,7 @@ def make_map():
        partial_connect(mc, path_prefix='/user/:username/m/:multipath'),
        partial_connect(mc, path_prefix='/me/m/:multipath', my_multi=True),
        partial_connect(mc, path_prefix='/me/f/:filtername'),
+       partial_connect(mc, path_prefix='/m/:multipath', sr_multi=True),
     )
 
     for connect in multi_prefixes:
@@ -217,6 +218,8 @@ def make_map():
 
     mc('/mail/optout', controller='forms', action='optout')
     mc('/mail/optin', controller='forms', action='optin')
+    mc('/mail/unsubscribe/:user/:key', controller='forms',
+       action='unsubscribe_emails')
     mc('/stylesheet', controller='front', action='stylesheet')
     mc('/frame', controller='front', action='frame')
     mc('/framebuster/:blah', controller='front', action='framebuster')
@@ -382,6 +385,11 @@ def make_map():
     mc('/api/:type', controller='api',
        requirements=dict(type='wikibannednote|bannednote'),
        action='relnote')
+
+    # Route /api/multi here to prioritize it over the /api/:action rule
+    mc("/api/multi", controller="multiapi", action="multi",
+       conditions={"method": ["POST"]})
+
     mc('/api/:action', controller='api')
     
     mc('/api/recommend/sr/:srnames', controller='api',
@@ -391,6 +399,8 @@ def make_map():
        action='server_seconds_visibility')
 
     mc("/api/multi/mine", controller="multiapi", action="my_multis")
+    mc("/api/multi/user/:username", controller="multiapi", action="list_multis")
+    mc("/api/multi/r/:srname", controller="multiapi", action="list_sr_multis")
     mc("/api/multi/copy", controller="multiapi", action="multi_copy")
     mc("/api/multi/rename", controller="multiapi", action="multi_rename")
     mc("/api/multi/*multipath/r/:srname", controller="multiapi", action="multi_subreddit")

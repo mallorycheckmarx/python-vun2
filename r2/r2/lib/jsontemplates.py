@@ -25,6 +25,7 @@ import calendar
 from utils import to36, tup, iters
 from wrapped import Wrapped, StringTemplate, CacheStub, CachedVariable, Templated
 from mako.template import Template
+from r2.config import feature
 from r2.config.extensions import get_api_subtype
 from r2.lib.filters import spaceCompress, safemarkdown
 from r2.models import Account, Report
@@ -202,18 +203,26 @@ class ThingJsonTemplate(JsonTemplate):
 class SubredditJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
         accounts_active="accounts_active",
+        banner_img="banner_img",
+        banner_size="banner_size",
         collapse_deleted_comments="collapse_deleted_comments",
         comment_score_hide_mins="comment_score_hide_mins",
+        # community_rules="community_rules",
         description="description",
         description_html="description_html",
         display_name="name",
         header_img="header",
         header_size="header_size",
         header_title="header_title",
+        icon_img="icon_img",
+        icon_size="icon_size",
+        # key_color="key_color",
         over18="over_18",
         public_description="public_description",
         public_description_html="public_description_html",
         public_traffic="public_traffic",
+        # related_subreddits="related_subreddits",
+        hide_ads="hide_ads",
         submission_type="link_type",
         submit_link_label="submit_link_label",
         submit_text_label="submit_text_label",
@@ -253,10 +262,17 @@ class SubredditJsonTemplate(ThingJsonTemplate):
 
     def raw_data(self, thing):
         data = ThingJsonTemplate.raw_data(self, thing)
+
+        # XXX remove this when feature is enabled and use _data_attrs instead
+        if feature.is_enabled('mobile_settings'):
+            for attr in ('community_rules', 'key_color', 'related_subreddits'):
+                data[attr] = self.thing_attr(thing, attr)
+
         permissions = getattr(thing, 'mod_permissions', None)
         if permissions:
             permissions = [perm for perm, has in permissions.iteritems() if has]
             data['mod_permissions'] = permissions
+
         return data
 
     def thing_attr(self, thing, attr):
@@ -280,34 +296,13 @@ class SubredditJsonTemplate(ThingJsonTemplate):
             return None
         elif attr == 'submit_text_html':
             return safemarkdown(thing.submit_text)
+        elif attr == 'community_rules':
+            if thing.community_rules:
+                return thing.community_rules.split('\n')
+            return []
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
-class LabeledMultiJsonTemplate(ThingJsonTemplate):
-    _data_attrs_ = ThingJsonTemplate.data_attrs(
-        can_edit="can_edit",
-        name="name",
-        path="path",
-        subreddits="srs",
-        visibility="visibility",
-    )
-    del _data_attrs_["id"]
-
-    def kind(self, wrapped):
-        return "LabeledMulti"
-
-    @classmethod
-    def sr_props(cls, thing, srs):
-        sr_props = thing.sr_props
-        return [dict(sr_props[sr._id], name=sr.name) for sr in srs]
-
-    def thing_attr(self, thing, attr):
-        if attr == "srs":
-            return self.sr_props(thing, thing.srs)
-        elif attr == "can_edit":
-            return c.user_is_loggedin and thing.can_edit(c.user)
-        else:
-            return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 class LabeledMultiDescriptionJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
@@ -326,6 +321,72 @@ class LabeledMultiDescriptionJsonTemplate(ThingJsonTemplate):
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
+
+class LabeledMultiJsonTemplate(LabeledMultiDescriptionJsonTemplate):
+    _data_attrs_ = ThingJsonTemplate.data_attrs(
+        can_edit="can_edit",
+        copied_from="copied_from",
+        description_html="description_html",
+        description_md="description_md",
+        display_name="display_name",
+        key_color="key_color",
+        icon_name="icon_id",
+        icon_url="icon_url",
+        name="name",
+        path="path",
+        subreddits="srs",
+        visibility="visibility",
+        weighting_scheme="weighting_scheme",
+    )
+    del _data_attrs_["id"]
+
+    def __init__(self, expand_srs=False):
+        super(LabeledMultiJsonTemplate, self).__init__()
+        self.expand_srs = expand_srs
+
+    def kind(self, wrapped):
+        return "LabeledMulti"
+
+    @classmethod
+    def sr_props(cls, thing, srs, expand=False):
+        sr_props = dict(thing.sr_props)
+        if expand:
+            for sr in srs:
+                sr_props[sr._id]["data"] = TrimmedSubredditJsonTemplate().data(sr)
+        return [dict(sr_props[sr._id], name=sr.name) for sr in srs]
+
+    def thing_attr(self, thing, attr):
+        if attr == "srs":
+            return self.sr_props(thing, thing.srs, expand=self.expand_srs)
+        elif attr == "can_edit":
+            return c.user_is_loggedin and thing.can_edit(c.user)
+        elif attr == "copied_from":
+            if thing.can_edit(c.user):
+                return thing.copied_from
+            else:
+                return None
+        elif attr == "display_name":
+            return thing.display_name or thing.name
+        else:
+            super_ = super(LabeledMultiJsonTemplate, self)
+            return super_.thing_attr(thing, attr)
+
+
+class TrimmedSubredditJsonTemplate(SubredditJsonTemplate):
+    _data_attrs_ = dict(
+        name="_fullname",
+        display_name="name",
+        header_img="header",
+        header_size="header_size",
+        icon_img="icon_img",
+        icon_size="icon_size",
+        key_color="key_color",
+        user_is_banned="is_banned",
+        user_is_contributor="is_contributor",
+        user_is_moderator="is_moderator",
+    )
+
+
 class IdentityJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
         comment_karma="comment_karma",
@@ -337,6 +398,7 @@ class IdentityJsonTemplate(ThingJsonTemplate):
         hide_from_robots="pref_hide_from_robots",
     )
     _private_data_attrs = dict(
+        inbox_count="inbox_count",
         over_18="pref_over_18",
         gold_creddits="gold_creddits",
         gold_expiration="gold_expiration",
@@ -463,6 +525,11 @@ class LinkJsonTemplate(ThingJsonTemplate):
         url="url",
     )
 
+    def __init__(self):
+        super(LinkJsonTemplate, self).__init__()
+        if feature.is_enabled('default_sort'):
+            self._data_attrs_['default_sort'] = 'default_sort'
+
     def thing_attr(self, thing, attr):
         from r2.lib.media import get_media_embed
         if attr in ("media_embed", "secure_media_embed"):
@@ -507,6 +574,9 @@ class LinkJsonTemplate(ThingJsonTemplate):
         if c.permalink_page:
             d["upvote_ratio"] = thing.upvote_ratio
 
+        if feature.is_enabled('default_sort'):
+            d['suggested_sort'] = thing.sort_if_suggested()
+
         return d
 
     def rendered_data(self, thing):
@@ -518,8 +588,13 @@ class LinkJsonTemplate(ThingJsonTemplate):
 class PromotedLinkJsonTemplate(LinkJsonTemplate):
     _data_attrs_ = LinkJsonTemplate.data_attrs(
         promoted="promoted",
+        imp_pixel="imp_pixel",
+        adserver_imp_pixel="adserver_imp_pixel",
+        adserver_click_url="adserver_click_url",
     )
-    del _data_attrs_['author']
+    del _data_attrs_['subreddit']
+    del _data_attrs_['subreddit_id']
+
 
 class CommentJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
@@ -1026,6 +1101,7 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         collapse_deleted_comments='site.collapse_deleted_comments',
         comment_score_hide_mins='site.comment_score_hide_mins',
+        # community_rules='site.community_rules',
         content_options='site.link_type',
         default_set='site.allow_top',
         description='site.description',
@@ -1034,10 +1110,13 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
         domain_sidebar='site.show_cname_sidebar',
         exclude_banned_modqueue='site.exclude_banned_modqueue',
         header_hover_text='site.header_title',
+        # key_color='site.key_color',
         language='site.lang',
         over_18='site.over_18',
         public_description='site.public_description',
         public_traffic='site.public_traffic',
+        # related_subreddits='site.related_subreddits',
+        hide_ads="site.hide_ads",
         show_media='site.show_media',
         submit_link_label='site.submit_link_label',
         submit_text_label='site.submit_text_label',
@@ -1059,7 +1138,20 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
     def thing_attr(self, thing, attr):
         if attr.startswith('site.') and thing.site:
             return getattr(thing.site, attr[5:])
+        if attr == 'related_subreddits':
+            # string used for form input
+            return '\n'.join(thing.related_subreddits)
         return ThingJsonTemplate.thing_attr(self, thing, attr)
+
+    def raw_data(self, thing):
+        data = ThingJsonTemplate.raw_data(self, thing)
+
+        # XXX remove this when feature is enabled and use _data_attrs instead
+        if feature.is_enabled('mobile_settings'):
+            for attr in ('community_rules', 'key_color', 'related_subreddits'):
+                data[attr] = self.thing_attr(thing.site, attr)
+
+        return data
 
 
 class UploadedImageJsonTemplate(JsonTemplate):

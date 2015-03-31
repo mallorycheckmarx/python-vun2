@@ -18,6 +18,11 @@
     }
 
     .input-placeholder();
+
+    textarea& {
+        height: auto;
+        resize: vertical;
+    }
 }
 
 .c-form-group {
@@ -30,28 +35,39 @@
     position: relative;
     display: block;
     font-size: 12px;
-    min-height: @input-height-base;
     margin-top: 10px;
     margin-bottom: 10px;
 
     label {
-        padding-left: 20px;
-        margin-bottom: 0;
         font-weight: normal;
         cursor: pointer;
+    }
+
+    &.c-input-height {
+        min-height: @input-height-base;
     }
 }
 
 .c-radio input[type="radio"],
 .c-checkbox input[type="checkbox"] {
+    margin-right: .5em;
     line-height: normal;
-    position: absolute;
-    margin-left: -21px;
-    margin-top: 4px \9;
 
     &:focus {
         outline: thin dotted;
         outline: 5px auto -webkit-focus-ring-color;
         outline-offset: -2px;
+    }
+}
+
+.c-help-block {
+    display: block;
+
+    .c-checkbox & {
+        margin-top: 5px;
+    }
+
+    &.c-help-block-toggle {
+        display: none;
     }
 }

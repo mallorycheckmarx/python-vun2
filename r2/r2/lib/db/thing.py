@@ -20,20 +20,25 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import cPickle as pickle
 import hashlib
 import new
 import sys
 import itertools
 
 from copy import copy, deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pylons import g
 
-from r2.lib import hooks
+from r2.lib import amqp, hooks
 from r2.lib.cache import sgm
 from r2.lib.db import tdb_sql as tdb, sorts, operators
 from r2.lib.utils import Results, tup, to36
+
+
+THING_CACHE_TTL = int(timedelta(days=1).total_seconds())
+QUERY_CACHE_TTL = int(timedelta(days=1).total_seconds())
 
 
 class NotFound(Exception): pass
@@ -183,7 +188,7 @@ class DataThing(object):
 
     def _cache_myself(self):
         ck = self._cache_key()
-        self._cache.set(ck, self)
+        self._cache.set(ck, self, time=THING_CACHE_TTL)
 
     def _sync_latest(self):
         """Load myself from the cache to and re-apply the .dirties
@@ -299,7 +304,7 @@ class DataThing(object):
         prefix = thing_prefix(cls.__name__)
 
         #write the data to the cache
-        cls._cache.set_multi(to_save, prefix=prefix)
+        cls._cache.set_multi(to_save, prefix=prefix, time=THING_CACHE_TTL)
 
     def _load(self):
         self._load_multi(self)
@@ -384,8 +389,9 @@ class DataThing(object):
 
             return items
 
-        bases = sgm(cls._cache, ids, items_db, prefix, stale=stale,
-                    found_fn=count_found)
+        bases = sgm(cls._cache, ids, items_db, prefix, time=THING_CACHE_TTL,
+                    stale=stale, found_fn=count_found,
+                    stat_subname=cls.__name__)
 
         # Check to see if we found everything we asked for
         missing = []
@@ -641,6 +647,15 @@ class Thing(DataThing):
 
         return Things(cls, *rules, **kw)
 
+    def update_search_index(self, boost_only=False):
+        msg = {'fullname': self._fullname}
+        if boost_only:
+            msg['boost_only'] = True
+
+        amqp.add_item('search_changes', pickle.dumps(msg),
+                      message_id=self._fullname,
+                      delivery_mode=amqp.DELIVERY_TRANSIENT)
+
 
 class RelationMeta(type):
     def __init__(cls, name, bases, dct):
@@ -686,7 +701,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
         # immediately. It calls _byID(xxx, data=thing_data).
         @classmethod
         def _byID_rel(cls, ids, data=False, return_dict=True, extra_props=None,
-                      eager_load=False, thing_data=False):
+                      eager_load=False, thing_data=False, thing_stale=False):
 
             ids, single = tup(ids, True)
 
@@ -698,7 +713,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             if values and eager_load:
                 for base in bases.values():
                     base._eagerly_loaded_data = True
-                load_things(values, thing_data)
+                load_things(values, load_data=thing_data, stale=thing_stale)
 
             if single:
                 return bases[ids[0]]
@@ -801,7 +816,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
 
         @classmethod
         def _fast_query(cls, thing1s, thing2s, name, data=True, eager_load=True,
-                        thing_data=False):
+                        thing_data=False, thing_stale=False):
             """looks up all the relationships between thing1_ids and
                thing2_ids and caches them"""
 
@@ -873,7 +888,8 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                 rel_ids,
                 data=data,
                 eager_load=eager_load,
-                thing_data=thing_data)
+                thing_data=thing_data,
+                thing_stale=thing_stale)
 
             # Takes aggregated results from cache and db (res) and transforms
             # the values from ids to Relations.
@@ -902,16 +918,19 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
 Relation._type_prefix = 'r'
 
 class Query(object):
+    _cache = g.cache
+
     def __init__(self, kind, *rules, **kw):
         self._rules = []
         self._kind = kind
 
         self._read_cache = kw.get('read_cache')
         self._write_cache = kw.get('write_cache')
-        self._cache_time = kw.get('cache_time', 0)
+        self._cache_time = kw.get('cache_time', QUERY_CACHE_TTL)
         self._limit = kw.get('limit')
         self._offset = kw.get('offset')
         self._data = kw.get('data')
+        self._stale = kw.get('stale', False)
         self._sort = kw.get('sort', ())
         self._filter_primary_sort_only = kw.get('filter_primary_sort_only', False)
 
@@ -1023,7 +1042,7 @@ class Query(object):
 
         names = lst = []
 
-        names = g.cache.get(self._iden()) if self._read_cache else None
+        names = self._cache.get(self._iden()) if self._read_cache else None
         if names is None and not self._write_cache:
             # it wasn't in the cache, and we're not going to
             # replace it, so just hit the db
@@ -1035,18 +1054,21 @@ class Query(object):
             with g.make_lock("thing_query", "lock_%s" % self._iden()):
                 # see if it was set while we were waiting for our
                 # lock
-                names = g.cache.get(self._iden(), allow_local = False) \
-                                  if self._read_cache else None
+                if self._read_cache:
+                    names = self._cache.get(self._iden(), allow_local=False)
+                else:
+                    names = None
+
                 if names is None:
                     lst = _retrieve()
-                    g.cache.set(self._iden(),
-                              [ x._fullname for x in lst ],
-                              self._cache_time)
+                    _names = [x._fullname for x in lst]
+                    self._cache.set(self._iden(), _names, self._cache_time)
 
         if names and not lst:
             # we got our list of names from the cache, so we need to
             # turn them back into Things
-            lst = Thing._by_fullname(names, data = self._data, return_dict = False)
+            lst = Thing._by_fullname(names, data=self._data, return_dict=False,
+                                     stale=self._stale)
 
         for item in lst:
             yield item
@@ -1095,11 +1117,12 @@ class Things(Query):
             else:
                 _ids = rows
                 extra_props = {}
-            return self._kind._byID(_ids, self._data, False, extra_props)
+            return self._kind._byID(_ids, data=self._data, return_dict=False,
+                                    stale=self._stale, extra_props=extra_props)
 
         return Results(c, row_fn, True)
 
-def load_things(rels, load_data=False):
+def load_things(rels, load_data=False, stale=False):
     rels = tup(rels)
     kind = rels[0].__class__
 
@@ -1108,15 +1131,16 @@ def load_things(rels, load_data=False):
     for rel in rels:
         t1_ids.add(rel._thing1_id)
         t2_ids.add(rel._thing2_id)
-    kind._type1._byID(t1_ids, data=load_data)
+    kind._type1._byID(t1_ids, data=load_data, stale=stale)
     if not kind._gay():
-        t2_items = kind._type2._byID(t2_ids, data=load_data)
+        t2_items = kind._type2._byID(t2_ids, data=load_data, stale=stale)
 
 class Relations(Query):
     #params are thing1, thing2, name, date
     def __init__(self, kind, *rules, **kw):
         self._eager_load = kw.get('eager_load')
         self._thing_data = kw.get('thing_data')
+        self._thing_stale = kw.get('thing_stale')
         Query.__init__(self, kind, *rules, **kw)
 
     def _filter(self, *rules):
@@ -1135,7 +1159,8 @@ class Relations(Query):
         if rels and self._eager_load:
             for rel in rels:
                 rel._eagerly_loaded_data = True
-            load_things(rels, self._thing_data)
+            load_things(rels, load_data=self._thing_data,
+                        stale=self._thing_stale)
         return rels
 
     def _cursor(self):

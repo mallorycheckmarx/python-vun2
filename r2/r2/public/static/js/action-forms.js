@@ -24,7 +24,11 @@ r.actionForm = {
     e.preventDefault();
 
     if ($thingForm.length > 0) {
-      $thingForm.toggle();
+      if ($el.parents('.drop-choices').length) {
+        $thingForm.show();
+      } else {
+        $thingForm.toggle();
+      }
     } else {
       var $form = $(formSelector);
       var $clonedForm = $form.clone();
@@ -91,7 +95,7 @@ r.fraud = {
     var $reason = $form.find('.fraud-reason');
     var reason = $el.attr('title');
 
-    $reason.text('"' + reason + '"');
+    $reason.text(reason);
   },
 
 };

@@ -100,8 +100,10 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
         if environ.get('REDDIT_TAKEDOWN'):
             d['takedown'] = environ.get('REDDIT_TAKEDOWN')
 
-        #preserve x-sup-id when 304ing
+        #preserve x-sup-id and x-frame-options when 304ing
         if code == 304:
+            d['allow_framing'] = 1 if c.allow_framing else 0
+
             try:
                 # make sure that we're in a context where we can use SOP
                 # objects (error page statics appear to not be in this context)
@@ -174,28 +176,20 @@ class DomainMiddleware(object):
         # we start looking at subdomains
         ignored_suffix_len = len(g.domain)
 
-        # OAuth is a bit of a special case. `foo.oauth.domain.com` should be
-        # treated like `foo.domain.com` when generating links
-        if g.oauth_domain and is_subdomain(domain, g.oauth_domain):
-            ignored_suffix_len = len(g.oauth_domain)
-
         # figure out what subdomain we're on, if any
         subdomains = domain[:-ignored_suffix_len - 1].split('.')
-        extension_subdomains = dict(m="mobile",
-                                    i="compact",
-                                    api="api",
-                                    rss="rss",
-                                    xml="xml",
-                                    json="json")
 
         sr_redirect = None
         prefix_parts = []
         for subdomain in subdomains[:]:
-            extension = extension_subdomains.get(subdomain)
-            # These subdomains have special meanings, don't treat them as SR
+            extension = g.extension_subdomains.get(subdomain)
+            # These subdomains are reserved, don't treat them as SR
             # or language subdomains.
             if subdomain in g.reserved_subdomains:
-                if subdomain == g.domain_prefix:
+                # Some subdomains are reserved, but also can't be mixed into
+                # the domain prefix for various reasons (permalinks will be
+                # broken, etc.)
+                if subdomain in g.ignored_subdomains:
                     continue
                 prefix_parts.append(subdomain)
             elif extension:

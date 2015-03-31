@@ -20,8 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import calendar
 from collections import namedtuple
-from datetime import datetime, timedelta
+import datetime
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
 import hashlib
 import hmac
@@ -34,6 +35,7 @@ import urlparse
 
 from pylons import g, c
 from pylons.i18n import ungettext
+from pytz import timezone
 
 from r2.lib import (
     authorize,
@@ -43,6 +45,7 @@ from r2.lib import (
 from r2.lib.db.operators import not_
 from r2.lib.db import queries
 from r2.lib.cache import sgm
+from r2.lib.geoip import location_by_ips
 from r2.lib.memoize import memoize
 from r2.lib.strings import strings
 from r2.lib.utils import to_date, weighted_lottery
@@ -444,19 +447,65 @@ def auth_campaign(link, campaign, user, pay_id):
 # midnight eastern-US.
 # TODO: make this a config parameter
 timezone_offset = -5 # hours
-timezone_offset = timedelta(0, timezone_offset * 3600)
+timezone_offset = datetime.timedelta(0, timezone_offset * 3600)
 def promo_datetime_now(offset=None):
-    now = datetime.now(g.tz) + timezone_offset
+    now = datetime.datetime.now(g.tz) + timezone_offset
     if offset is not None:
-        now += timedelta(offset)
+        now += datetime.timedelta(offset)
     return now
 
 
-def get_max_startdate():
-    # authorization hold happens now but expires after 30 days. charge
-    # happens 1 day before the campaign launches. the latest a campaign
-    # can start is 30 days from now (it will get charged in 29 days).
-    return promo_datetime_now() + timedelta(days=30)
+# campaigns can launch the following day if they're created before 17:00 PDT
+DAILY_CUTOFF = datetime.time(17, tzinfo=timezone("US/Pacific"))
+
+def get_date_limits(link, is_sponsor=False):
+    promo_today = promo_datetime_now().date()
+
+    if is_sponsor:
+        min_start = promo_today
+    elif is_accepted(link):
+        # link is already accepted--let user create a campaign starting
+        # tomorrow because it doesn't need to be re-reviewed
+        min_start = promo_today + datetime.timedelta(days=1)
+    else:
+        # campaign and link will need to be reviewed before they can launch.
+        # review can happen until DAILY_CUTOFF PDT Monday through Friday and
+        # Sunday. Any campaign created after DAILY_CUTOFF is treated as if it
+        # were created the following day.
+        now = datetime.datetime.now(tz=timezone("US/Pacific"))
+        now_today = now.date()
+        too_late_for_review = now.time() > DAILY_CUTOFF
+
+        if too_late_for_review and now_today.weekday() == calendar.FRIDAY:
+            # no review late on Friday--earliest review is Sunday to launch
+            # on Monday
+            min_start = now_today + datetime.timedelta(days=3)
+        elif now_today.weekday() == calendar.SATURDAY:
+            # no review any time on Saturday--earliest review is Sunday to
+            # launch on Monday
+            min_start = now_today + datetime.timedelta(days=2)
+        elif too_late_for_review:
+            # no review late in the day--earliest review is tomorrow to
+            # launch the following day
+            min_start = now_today + datetime.timedelta(days=2)
+        else:
+            # review will happen today so can launch tomorrow
+            min_start = now_today + datetime.timedelta(days=1)
+
+    if is_sponsor:
+        max_end = promo_today + datetime.timedelta(days=366)
+    else:
+        max_end = promo_today + datetime.timedelta(days=93)
+
+    if is_sponsor:
+        max_start = max_end - datetime.timedelta(days=1)
+    else:
+        # authorization hold happens now but expires after 30 days. charge
+        # happens 1 day before the campaign launches. the latest a campaign
+        # can start is 30 days from now (it will get charged in 29 days).
+        max_start = promo_today + datetime.timedelta(days=30)
+
+    return min_start, max_start, max_end
 
 
 def accept_promotion(link):
@@ -484,11 +533,15 @@ def accept_promotion(link):
 
 
 def flag_payment(link, reason):
-    # already determined to be fraud.
-    if link.payment_flagged_reason and link.fraud:
+    # already determined to be fraud or already flagged for that reason.
+    if link.fraud or reason in link.payment_flagged_reason:
         return
 
-    link.payment_flagged_reason = reason
+    if link.payment_flagged_reason:
+        link.payment_flagged_reason += (", %s" % reason)
+    else:
+        link.payment_flagged_reason = reason
+
     link._commit()
     PromotionLog.add(link, "payment flagged: %s" % reason)
     queries.set_payment_flagged_link(link)
@@ -688,8 +741,8 @@ def make_daily_promotions():
 
 def finalize_completed_campaigns(daysago=1):
     # PromoCampaign.end_date is utc datetime with year, month, day only
-    now = datetime.now(g.tz)
-    date = now - timedelta(days=daysago)
+    now = datetime.datetime.now(g.tz)
+    date = now - datetime.timedelta(days=daysago)
     date = date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     q = PromoCampaign._query(PromoCampaign.c.end_date == date,
@@ -807,9 +860,15 @@ def srnames_with_live_promos(user, site):
     return promo_srnames.intersection(site_srnames)
 
 
-def _get_live_promotions(sr_names):
+# special handling for memcache ascii protocol
+SPECIAL_NAMES = {" reddit.com": "_reddit.com"}
+REVERSED_NAMES = {v: k for k, v in SPECIAL_NAMES.iteritems()}
+
+
+def _get_live_promotions(sanitized_names):
     now = promo_datetime_now()
-    ret = {sr_name: [] for sr_name in sr_names}
+    sr_names = [REVERSED_NAMES.get(name, name) for name in sanitized_names]
+    ret = {sr_name: [] for sr_name in sanitized_names}
     for camp, link in get_promos(now, sr_names=sr_names):
         if is_live_promo(link, camp):
             weight = (camp.bid / camp.ndays)
@@ -817,13 +876,20 @@ def _get_live_promotions(sr_names):
                             campaign=camp._fullname)
             for sr_name in camp.target.subreddit_names:
                 if sr_name in sr_names:
-                    ret[sr_name].append(pt)
+                    sanitized_name = SPECIAL_NAMES.get(sr_name, sr_name)
+                    ret[sanitized_name].append(pt)
     return ret
 
 
 def get_live_promotions(sr_names):
-    promos_by_srname = sgm(g.cache, sr_names, miss_fn=_get_live_promotions,
-                           prefix='live_promotions', time=60)
+    sanitized_names = [SPECIAL_NAMES.get(name, name) for name in sr_names]
+    promos_by_sanitized_name = sgm(
+        g.cache, sanitized_names, miss_fn=_get_live_promotions,
+        prefix='live_promotions', time=60, stale=True)
+    promos_by_srname = {
+        REVERSED_NAMES.get(name, name): val
+        for name, val in promos_by_sanitized_name.iteritems()
+    }
     return itertools.chain.from_iterable(promos_by_srname.itervalues())
 
 
@@ -869,8 +935,8 @@ def get_total_run(thing):
 
     # a manually launched promo (e.g., sr discovery) might not have campaigns.
     if not earliest or not latest:
-        latest = datetime.utcnow()
-        earliest = latest - timedelta(days=30)  # last month
+        latest = datetime.datetime.utcnow()
+        earliest = latest - datetime.timedelta(days=30)  # last month
 
     # ugh this stuff is a mess. they're stored as "UTC" but actually mean UTC-5.
     earliest = earliest.replace(tzinfo=g.tz) - timezone_offset
@@ -881,7 +947,7 @@ def get_total_run(thing):
 
 def get_traffic_dates(thing):
     """Retrieve the start and end of a Promoted Link or PromoCampaign."""
-    now = datetime.now(g.tz).replace(minute=0, second=0, microsecond=0)
+    now = datetime.datetime.now(g.tz).replace(minute=0, second=0, microsecond=0)
     start, end = get_total_run(thing)
     end = min(now, end)
     return start, end
@@ -889,7 +955,7 @@ def get_traffic_dates(thing):
 
 def get_billable_impressions(campaign):
     start, end = get_traffic_dates(campaign)
-    if start > datetime.now(g.tz):
+    if start > datetime.datetime.now(g.tz):
         return 0
 
     traffic_lookup = traffic.TargetedImpressionsByCodename.promotion_history
@@ -925,6 +991,25 @@ def get_spent_amount(campaign):
     return spent
 
 
+def successful_payment(link, campaign, ip, address):
+    if not address:
+        return
+
+    campaign.trans_ip = ip
+    campaign.trans_billing_country = address.country
+
+    location = location_by_ips(ip)
+
+    if location:
+        campaign.trans_ip_country = location.get("country_name")
+
+        countries_match = (campaign.trans_billing_country.lower() ==
+            campaign.trans_ip_country.lower())
+        campaign.trans_country_match = countries_match
+
+    campaign._commit()
+
+
 def new_payment_method(user, ip, address, link):
     user._incr('num_payment_methods')
     hooks.get_hook('promote.new_payment_method').call(user=user, ip=ip, address=address, link=link)
@@ -942,9 +1027,9 @@ def Run(verbose=True):
     """
 
     if verbose:
-        print "%s promote.py:Run() - make_daily_promotions()" % datetime.now(g.tz)
+        print "%s promote.py:Run() - make_daily_promotions()" % datetime.datetime.now(g.tz)
 
     make_daily_promotions()
 
     if verbose:
-        print "%s promote.py:Run() - finished" % datetime.now(g.tz)
+        print "%s promote.py:Run() - finished" % datetime.datetime.now(g.tz)

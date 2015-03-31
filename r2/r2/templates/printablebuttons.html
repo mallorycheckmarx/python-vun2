@@ -272,13 +272,16 @@
        <li>
          <form action="/post/reject" class="rejection-form"
                style="display:none"
+               %if getattr(thing, "hide_after_seen", False):
+                 data-hide-after-seen="true"
+               %endif
                method="post" onsubmit="reject post_form(this, 'unpromote')">
            <br/>
            <input type="hidden" name="executed" value="rejected" />
            <label>Reason:</label><br/>
            <textarea name="reason" value="" ></textarea>
            <br/>
-           <a href="#" 
+           <a href="#"
               onclick="change_state(this, 'unpromote', complete_reject_promo)">
              submit
            </a>/
@@ -289,7 +292,9 @@
        </li>
       %if thing.promote_status in (PROMOTE_STATUS.unpaid, PROMOTE_STATUS.unseen, PROMOTE_STATUS.rejected):
         <li>
-          ${ynbutton(_("accept"), _("accepted"), "promote")}
+          ${ynbutton(_("accept"), \
+                     _("accepted"), "promote", \
+                     callback="hide_thing" if getattr(thing, "hide_after_seen", False) else "null")}
         </li>
       %endif
       %if thing.is_awaiting_fraud_review:
@@ -328,16 +333,21 @@
     <li class="first">
       ${self.bylink_button(_("permalink"), thing.permalink)}
     </li>
+    %if thing.embed_button:
+      <li>
+        ${thing.embed_button.render()}
+      </li>
+    %endif
     %if thing.can_save:
-        %if thing.saved:
-          <li class="comment-unsave-button save-button">
-            <a href="javascript:void(0)">${_("unsave")}</a>
-          </li>
-        %else:
-          <li class="comment-save-button save-button">
-            <a href="javascript:void(0)">${_("save")}</a>
-          </li>
-        %endif
+      %if thing.saved:
+        <li class="comment-unsave-button save-button">
+          <a href="javascript:void(0)">${_("unsave")}</a>
+        </li>
+      %else:
+        <li class="comment-save-button save-button">
+          <a href="javascript:void(0)">${_("save")}</a>
+        </li>
+      %endif
     %endif
 
     %if c.profilepage:

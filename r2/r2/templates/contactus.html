@@ -52,8 +52,7 @@ from r2.lib.template_helpers import static
     <li id="press-enquiry">
       <h2 class="button">make a press enquiry</h2>
       <ul class="details">
-        <li>You can email us at&#32;<a href="mailto:press@reddit.com">press@reddit.com</a>&#32;or give us a call at&#32;<a href="tel:424-234-9948">424-234-9948</a>.</li>
-        <li>Are you a journalist outside the United States? You can email us at&#32;<a href="mailto:international@reddit.com">international@reddit.com</a>.</li>
+        <li>You can email us at&#32;<a href="mailto:press@reddit.com">press@reddit.com</a>&#32;or call us at&#32;<a href="tel:+1-424-234-9948">+1 424-234-9948</a>.</li>
       </ul>
     </li>
     <li id="advertise">
@@ -70,7 +69,7 @@ from r2.lib.template_helpers import static
       <ul class="details">
         <li>Maybe you want to&#32;<a href="/r/askreddit">/r/askreddit</a>?  Or for help try making a post at&#32;<a href="/r/help">/r/help</a>.</li>
         <li>Need help with a&#32;<a href="http://redditgifts.com/exchanges">redditgifts exchange</a>? Email&#32;<a href="mailto:support@redditgifts.com">support@redditgifts.com</a>.</li>
-        <li>Got a question about&#32;<a href="/gold/about">reddit gold</a>? Please email&#32;<a href="mailto:912@reddit.com">912@reddit.com</a>.</li>
+        <li>Got a question about&#32;<a href="/gold/about">reddit gold</a>? Please email&#32;<a href="mailto:${g.goldsupport_email}">${g.goldsupport_email}</a>.</li>
         <li>Anything we didn't cover? Email us at&#32;<a href="mailto:contact@reddit.com">contact@reddit.com</a>&#32;and include your reddit username if you have one.</li>
       </ul>
     </li>
@@ -78,6 +77,7 @@ from r2.lib.template_helpers import static
       <h2 class="button">message the admins</h2>
       <ul class="details">
         <li>Need to contact the admins? You can message them&#32;<a href="/message/compose?to=%2Fr%2Freddit.com">here</a>.</li>
+        <li>Need to file a&#32;<a href="/help/useragreement#section_dmca">DMCA</a>&#32;takedown request? Please email&#32;<a href="mailto:dmca@reddit.com">dmca@reddit.com</a>&#32;with a link to the content on reddit and all pertinent information.</li>
       </ul>
     </li>
   </ol>

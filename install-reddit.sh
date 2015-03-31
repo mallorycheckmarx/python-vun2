@@ -116,6 +116,10 @@ Pin: release o=LP-PPA-reddit
 Pin-Priority: 600
 HERE
 
+# add the datastax cassandra repos
+echo deb http://debian.datastax.com/community stable main > /etc/apt/sources.list.d/cassandra.sources.list
+wget -qO- -L https://debian.datastax.com/debian/repo_key | sudo apt-key add -
+
 # grab the new ppas' package listings
 apt-get update
 
@@ -150,6 +154,9 @@ python-zope.interface
 python-kazoo
 python-stripe
 python-tinycss2
+python-unidecode
+python-mock
+python-yaml
 
 python-flask
 geoip-bin
@@ -168,7 +175,7 @@ memcached
 postgresql
 postgresql-client
 rabbitmq-server
-cassandra
+cassandra=1.2.19
 haproxy
 nginx
 stunnel
@@ -176,9 +183,6 @@ gunicorn
 sutro
 libpcre3-dev
 PACKAGES
-
-# paper over stack size issues with cassandra
-sed -i s/-Xss128k/-Xss228k/ /etc/cassandra/cassandra-env.sh
 
 ###############################################################################
 # Wait for all the services to be up
@@ -232,14 +236,20 @@ done
 ###############################################################################
 # Configure Cassandra
 ###############################################################################
-if ! echo | cassandra-cli -h localhost -k reddit &> /dev/null; then
-    echo "create keyspace reddit;" | cassandra-cli -h localhost -B
-fi
+python <<END
+import pycassa
+sys = pycassa.SystemManager("localhost:9160")
 
-cat <<CASS | cassandra-cli -B -h localhost -k reddit || true
-create column family permacache with column_type = 'Standard' and
-                                     comparator = 'BytesType';
-CASS
+if "reddit" not in sys.list_keyspaces():
+    print "creating keyspace 'reddit'"
+    sys.create_keyspace("reddit", "SimpleStrategy", {"replication_factor": "1"})
+    print "done"
+
+if "permacache" not in sys.get_keyspace_column_families("reddit"):
+    print "creating column family 'permacache'"
+    sys.create_column_family("reddit", "permacache")
+    print "done"
+END
 
 ###############################################################################
 # Configure PostgreSQL
@@ -313,6 +323,7 @@ disable_require_admin_otp = true
 page_cache_time = 0
 
 domain = $REDDIT_DOMAIN
+oauth_domain = $REDDIT_DOMAIN
 
 plugins = $plugin_str
 
@@ -327,6 +338,7 @@ DEVELOPMENT
 else
     sed -i "s/^plugins = .*$/plugins = $plugin_str/" $REDDIT_HOME/src/reddit/r2/development.update
     sed -i "s/^domain = .*$/domain = $REDDIT_DOMAIN/" $REDDIT_HOME/src/reddit/r2/development.update
+    sed -i "s/^oauth_domain = .*$/oauth_domain = $REDDIT_DOMAIN/" $REDDIT_HOME/src/reddit/r2/development.update
 fi
 
 sudo -u $REDDIT_USER make ini
@@ -723,12 +735,14 @@ function set_consumer_count {
 
 set_consumer_count log_q 0
 set_consumer_count cloudsearch_q 0
+set_consumer_count del_account_q 1
 set_consumer_count scraper_q 1
 set_consumer_count markread_q 1
 set_consumer_count commentstree_q 1
 set_consumer_count newcomments_q 1
 set_consumer_count vote_link_q 1
 set_consumer_count vote_comment_q 1
+set_consumer_count automoderator_q 0
 
 chown -R $REDDIT_USER:$REDDIT_GROUP $CONSUMER_CONFIG_ROOT/
 
@@ -807,8 +821,8 @@ steps:
 
 * To populate the database with test data, run:
 
-    cd $REDDIT_HOME/src/reddit/r2
-    reddit-run r2/models/populatedb.py -c 'populate()'
+    cd $REDDIT_HOME/src/reddit
+    reddit-run scripts/inject_test_data.py -c 'inject_test_data()'
 
 * Manually run reddit-job-update_reddits immediately after populating the db
   or adding your own subreddits.

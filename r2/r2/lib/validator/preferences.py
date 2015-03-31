@@ -61,6 +61,7 @@ PREFS_VALIDATORS = dict(
     pref_mark_messages_read=VBoolean("mark_messages_read"),
     pref_threaded_messages=VBoolean("threaded_messages"),
     pref_collapse_read_messages=VBoolean("collapse_read_messages"),
+    pref_email_messages=VBoolean("email_messages"),
     pref_private_feeds=VBoolean("private_feeds"),
     pref_store_visits=VBoolean('store_visits'),
     pref_show_adbox=VBoolean("show_adbox"),
@@ -104,7 +105,8 @@ def filter_prefs(prefs, user):
         for pref in ('pref_show_adbox',
                      'pref_show_sponsors',
                      'pref_show_sponsorships',
-                     'pref_highlight_new_comments',
-                     'pref_creddit_autorenew',
                     ):
             prefs[pref] = True
+
+    if not (user.gold or user.is_moderator_somewhere):
+        prefs['pref_highlight_new_comments'] = True

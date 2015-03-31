@@ -44,6 +44,7 @@ from r2.lib.validator import (
     textresponse,
     validatedForm,
     VByName,
+    VDecimal,
     VFloat,
     VInt,
     VLength,
@@ -426,7 +427,7 @@ class IpnController(RedditController):
                 except MessageError:
                     msg = _("there was an error creating a gift code. "
                             "please try again later, or contact %(email)s "
-                            "for assistance.") % {'email': g.goldthanks_email}
+                            "for assistance.") % {'email': g.goldsupport_email}
                     form.set_text(".status", msg)
                     return
                 form.set_text(".status",
@@ -459,7 +460,7 @@ class IpnController(RedditController):
                   paying_id = VPrintable('payer_id', 50),
                   payer_email = VPrintable('payer_email', 250),
                   mc_currency = VPrintable('mc_currency', 20),
-                  mc_gross = VFloat('mc_gross'),
+                  mc_gross = VDecimal('mc_gross'),
                   custom = VPrintable('custom', 50))
     def POST_ipn(self, paypal_secret, payment_status, txn_id, paying_id,
                  payer_email, mc_currency, mc_gross, custom):
@@ -739,7 +740,7 @@ class GoldPaymentController(RedditController):
             subject = _('reddit gold payment cancelled')
             msg = _('Your reddit gold payment has been cancelled, contact '
                     '%(gold_email)s for details') % {'gold_email':
-                                                     g.goldthanks_email}
+                                                     g.goldsupport_email}
             if existing:
                 # note that we don't check status on existing, probably
                 # should update gold_table when a cancellation happens
@@ -755,7 +756,7 @@ class GoldPaymentController(RedditController):
             subject = _('reddit gold payment failed')
             msg = _('Your reddit gold payment has failed, contact '
                     '%(gold_email)s for details') % {'gold_email':
-                                                     g.goldthanks_email}
+                                                     g.goldsupport_email}
         elif event_type == 'deleted_subscription':
             # the subscription may have been deleted directly by the user using
             # POST_delete_subscription, in which case gold_subscr_id is already
@@ -765,7 +766,7 @@ class GoldPaymentController(RedditController):
                 msg = _('Your reddit gold subscription has been cancelled '
                         'because your credit card could not be charged. '
                         'Contact %(gold_email)s for details')
-                msg %= {'gold_email': g.goldthanks_email}
+                msg %= {'gold_email': g.goldsupport_email}
                 webhook.buyer.gold_subscr_id = None
                 webhook.buyer._commit()
         elif event_type == 'refunded':
@@ -775,7 +776,7 @@ class GoldPaymentController(RedditController):
             subject = _('reddit gold refund')
             msg = _('Your reddit gold payment has been refunded, contact '
                    '%(gold_email)s for details') % {'gold_email':
-                                                    g.goldthanks_email}
+                                                    g.goldsupport_email}
             reverse_gold_purchase(webhook.transaction_id)
 
         if msg:
@@ -953,7 +954,7 @@ class StripeController(GoldPaymentController):
                 # to cancel the charge
                 g.log.error('no account for stripe invoice: %s', invoice)
                 try:
-                    cancel_stripe_subscription(account)
+                    cancel_stripe_subscription(customer_id)
                 except stripe.InvalidRequestError:
                     pass
         elif status == 'customer.subscription.deleted':
@@ -1074,13 +1075,13 @@ class StripeController(GoldPaymentController):
         if not user.has_stripe_subscription:
             return
 
-        cancel_stripe_subscription(user)
+        customer = cancel_stripe_subscription(user.gold_subscr_id)
 
         user.gold_subscr_id = None
         user._commit()
         subject = _('your gold subscription has been cancelled')
         message = _('if you have any questions please email %(email)s')
-        message %= {'email': g.goldthanks_email}
+        message %= {'email': g.goldsupport_email}
         send_system_message(user, subject, message)
         return customer
 
@@ -1389,6 +1390,9 @@ def reverse_gold_purchase(transaction_id):
     update_gold_transaction(transaction_id, 'reversed')
 
 
-def cancel_stripe_subscription(user):
-    customer = stripe.Customer.retrieve(user.gold_subscr_id)
+def cancel_stripe_subscription(customer_id):
+    customer = stripe.Customer.retrieve(customer_id)
+    if hasattr(customer, 'deleted'):
+        return customer
     customer.delete()
+    return customer
