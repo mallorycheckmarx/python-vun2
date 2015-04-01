@@ -20,19 +20,18 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from pylons import g
+if g.SEARCH_TYPE == 'solr':
+    import r2.lib.solrsearch as search
+    
+else:
+    import r2.lib.cloudsearch as search
 
-class SearchProvider(object):
-    """Provider for search.
-    """
 
-    def query(self):
-        return NotImplementedError
+InvalidQuery = (search.InvalidQuery,)
+SearchException = (search.CloudSearchHTTPError,)
 
-    def subreddit_query(self):
-        return NotImplementedError
+SearchQuery = search.LinkSearchQuery
+SubredditSearchQuery = search.SubredditSearchQuery
 
-    def sorts(self):
-        return NotImplementedError
-
-    def run_changed(self):
-        return NotImplementedError
+sorts = search.LinkSearchQuery.sorts_menu_mapping

@@ -21,28 +21,20 @@
 ###############################################################################
 
 from datetime import datetime, timedelta
-import cPickle as pickle
 import functools
 import httplib
-import urllib
 import json
-import time
-import re
-
 
 from lxml import etree
 from r2.lib import amqp, filters
-from r2.lib.db.operators import desc
 from r2.lib.db.sorts import epoch_seconds
 import r2.lib.utils as r2utils
-from r2.models import (Account, Link, Subreddit, All, DefaultSR,
+from r2.models import (Account, Subreddit, All, DefaultSR,
                        MultiReddit, DomainSR, Friends, ModContribSR,
-                       FakeSubreddit, NotFound)
+                       FakeSubreddit)
 from pylons import g, c
 
-from r2.lib.cloudsearch import InvalidQuery, SearchHTTPError, Results, \
-        CloudSearchUploader, LinkUploader, SubredditFields, LinkFields
-    
+from r2.lib.cloudsearch import *
 
 _CHUNK_SIZE = 4000000 # Approx. 4 MB, to stay under the 5MB limit
 _VERSION_OFFSET = 13257906857
@@ -57,10 +49,6 @@ DEFAULT_FACETS = {"reddit": {"count":20}}
 
 WARNING_XPATH = ".//lst[@name='error']/str[@name='warning']"
 STATUS_XPATH = ".//lst/int[@name='status']"
-DOC_API = 'http://%s:%s' % (g.SOLR_DOC_HOST, g.SOLR_PORT)
-
-SORTS_DICT = {'-text_relevance': 'score desc',
-              'relevance': 'score desc'}
 
 
 def basic_query(query=None, bq=None, faceting=None, size=1000,
@@ -134,8 +122,6 @@ class SolrSearchQuery(object):
                  faceting=None, recent=None):
         if syntax is None:
             syntax = self.default_syntax
-        elif(syntax == 'cloudsearch'):
-            syntax = 'solr'
         elif syntax not in self.known_syntaxes:
             raise ValueError("Unknown search syntax: %s" % syntax)
         self.query = filters._force_unicode(query or u'')
@@ -144,11 +130,9 @@ class SolrSearchQuery(object):
         self.sr = sr
         self._sort = sort
         if raw_sort:
-            self.sort = translate_raw_sort(raw_sort)
-        elif sort:
-            self.sort = self.sorts.get(sort)
+            self.sort = raw_sort
         else:
-            self.sort = 'score'
+            self.sort = self.sorts[sort]
         self._recent = recent
         self.recent = self.recents[recent]
         self.faceting = faceting
@@ -171,7 +155,6 @@ class SolrSearchQuery(object):
         q = self.query.encode('utf-8')
         if g.sqlprinting:
             g.log.info("%s", self)
-        q = self.customize_query(self.query)
         return self._run_cached(q, self.bq.encode('utf-8'), self.sort,
                                 self.faceting, start=start, num=num,
                                 _update=_update)
@@ -263,7 +246,7 @@ class LinkSearchQuery(SolrSearchQuery):
     def create_boolean_query(cls, queries):
         '''Return an AND clause combining all queries'''
         if len(queries) > 1:
-            bq = ' AND  '.join(['(%s)' %q for q in queries]) 
+            bq = '(and ' + ' '.join(queries) + ')'
         else:
             bq = queries[0]
         return bq
@@ -284,13 +267,16 @@ class LinkSearchQuery(SolrSearchQuery):
         if (not sr) or sr == All or isinstance(sr, DefaultSR):
             return None
         elif isinstance(sr, MultiReddit):
+            bq = ["(or"]
             for sr_id in sr.sr_ids:
                 bq.append("sr_id:%s" % sr_id)
+            bq.append(")")
         elif isinstance(sr, DomainSR):
             bq = ["site:'%s'" % sr.domain]
         elif sr == Friends:
             if not c.user_is_loggedin or not c.user.friends:
                 return None
+            bq = ["(or"]
             # The query limit is roughly 8k bytes. Limit to 200 friends to
             # avoid getting too close to that limit
             friend_ids = c.user.friends[:200]
@@ -298,12 +284,16 @@ class LinkSearchQuery(SolrSearchQuery):
                        Account._fullname_from_id36(r2utils.to36(id_))
                        for id_ in friend_ids]
             bq.extend(friends)
+            bq.append(")")
         elif isinstance(sr, ModContribSR):
+            bq = ["(or"]
             for sr_id in sr.sr_ids:
                 bq.append("sr_id:%s" % sr_id)
+            bq.append(")")
         elif not isinstance(sr, FakeSubreddit):
             bq = ["sr_id:%s" % sr._id]
-        return ' OR '.join(bq)
+
+        return ' '.join(bq)
 
 
 class SubredditSearchQuery(SolrSearchQuery):
@@ -329,10 +319,9 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
     params["start"] = start
     if rank == 'activity':
         params['sort'] = 'activity desc'
+        pass
     elif rank: 
-        params['sort'] = rank.strip().lower()
-        if not params['sort'].split()[-1] in ['asc', 'desc']:
-            params['sort'] = '%s desc' % params['sort']
+        params['sort'] = '%s desc' % rank
     facet_limit = []
     facet_sort = []
     if faceting:
@@ -341,10 +330,9 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
         for facet, options in faceting.iteritems():
             facet_limit.append(options.get("count", 20))
             if "sort" in options:
-                facet_sort.append('%s desc' % options["sort"])
+                facet_sort.append(options["sort"])
         params["facet.limit"] = ",".join([str(l) for l in facet_limit])
         params["facet.sort"] = ",".join(facet_sort)
-        params["facet.sort"] = params["facet.sort"] or 'score desc' 
     if return_fields:
         params["qf"] = ",".join(return_fields)
     encoded_query = urllib.urlencode(params)
@@ -354,12 +342,6 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
 
 
 class SolrSearchUploader(CloudSearchUploader):
-    
-    def __init__(self, solr_host=None, solr_port=None, fullnames=None, version_offset=_VERSION_OFFSET):
-        self.solr_host = solr_host or g.SOLR_DOC_HOST
-        self.solr_port = solr_port or g.SOLR_PORT
-        self._version_offset = version_offset
-        self.fullnames = fullnames    
 
     def add_xml(self, thing):
         from r2.lib.cloudsearch import _safe_xml_str
@@ -380,7 +362,7 @@ class SolrSearchUploader(CloudSearchUploader):
         "delete this from the index"
         
         '''
-        delete = etree.fromstring('<id>%s</id>' % thing._id)
+        delete = etree.fromstring('<delete><id>%s</id></delete>' % id_)
         return delete
 
     def delete_ids(self, ids):
@@ -388,7 +370,7 @@ class SolrSearchUploader(CloudSearchUploader):
         'ids' should be a list of fullnames
         
         '''
-        deletes = [etree.fromstring('<id>%s</id>' % id_) \
+        deletes = [etree.fromstring('<id>%s</id>>' % id_) \
                 for id_ in ids]
 
 
@@ -477,9 +459,11 @@ class SolrSearchUploader(CloudSearchUploader):
         
         Raises CloudSearchHTTPError if the endpoint indicates a failure
         '''
+        host = getattr(self, 'doc_api', g.SOLR_DOC_HOST)
+        port = getattr(self, 'port', g.SOLR_PORT)
         core = getattr(g, 'SOLR_CORE', 'collection1') 
         responses = []
-        connection = httplib.HTTPConnection(self.solr_host, self.solr_port)
+        connection = httplib.HTTPConnection(host, port)
         chunker = chunk_xml(docs)
         headers = {}
         headers['Content-Type'] = 'application/xml'
@@ -565,48 +549,8 @@ def run_changed(drain=False, min_size=int(getattr(g, 'SOLR_MIN_BATCH', 500)), li
                       verbose=verbose)
 
 
-class SolrLinkUploader(SolrSearchUploader):
-    types = (Link,)
-
-    def __init__(self, solr_host=None, solr_port=None, fullnames=None, version_offset=_VERSION_OFFSET):
-        super(SolrLinkUploader, self).__init__(fullnames=fullnames, version_offset=version_offset)
-        self.accounts = {}
-        self.srs = {}
-
-    def fields(self, thing):
-        '''Return fields relevant to a Link search index'''
-        account = self.accounts[thing.author_id]
-        sr = self.srs[thing.sr_id]
-        return LinkFields(thing, account, sr).fields()
-
-    def batch_lookups(self):
-        super(SolrLinkUploader, self).batch_lookups()
-        author_ids = [thing.author_id for thing in self.things
-                      if hasattr(thing, 'author_id')]
-        try:
-            self.accounts = Account._byID(author_ids, data=True,
-                                          return_dict=True)
-        except NotFound:
-            if self.use_safe_get:
-                self.accounts = safe_get(Account._byID, author_ids, data=True,
-                                         return_dict=True)
-            else:
-                raise
-
-        sr_ids = [thing.sr_id for thing in self.things
-                  if hasattr(thing, 'sr_id')]
-        try:
-            self.srs = Subreddit._byID(sr_ids, data=True, return_dict=True)
-        except NotFound:
-            if self.use_safe_get:
-                self.srs = safe_get(Subreddit._byID, sr_ids, data=True,
-                                    return_dict=True)
-            else:
-                raise
-
-    def should_index(self, thing):
-        return (thing.promoted is None and getattr(thing, "sr_id", None) != -1)
-    
+class SolrLinkUploader(SolrSearchUploader, LinkUploader):
+    pass
 
 class SolrSubredditUploader(SolrSearchUploader):
     types = (Subreddit,)
@@ -616,82 +560,5 @@ class SolrSubredditUploader(SolrSearchUploader):
 
     def should_index(self, thing):
         return getattr(thing, 'author_id', None) != -1
-
- 
-def _progress_key(item):
-    return "%s/%s" % (item._id, item._date)
-
-
-_REBUILD_INDEX_CACHE_KEY = "cloudsearch_cursor_%s"
-
-
-def rebuild_link_index(start_at=None, sleeptime=1, cls=Link,
-                       uploader=SolrLinkUploader, estimate=50000000, 
-                       chunk_size=1000):
-    cache_key = _REBUILD_INDEX_CACHE_KEY % uploader.__name__.lower()
-    uploader = uploader()
-
-    if start_at is _REBUILD_INDEX_CACHE_KEY:
-        start_at = g.cache.get(cache_key)
-        if not start_at:
-            raise ValueError("Told me to use '%s' key, but it's not set" %
-                             cache_key)
-
-    q = cls._query(cls.c._deleted == (True, False),
-                   sort=desc('_date'), data=True)
-    if start_at:
-        after = cls._by_fullname(start_at)
-        assert isinstance(after, cls)
-        q._after(after)
-    q = r2utils.fetch_things2(q, chunk_size=chunk_size)
-    q = r2utils.progress(q, verbosity=1000, estimate=estimate, persec=True,
-                         key=_progress_key)
-    for chunk in r2utils.in_chunks(q, size=chunk_size):
-        uploader.things = chunk
-        uploader.fullnames = [c._fullname for c in chunk] 
-        for x in range(5):
-            try:
-                uploader.inject()
-            except httplib.HTTPException as err:
-                print "Got %s, sleeping %s secs" % (err, x)
-                time.sleep(x)
-                continue
-            else:
-                break
-        else:
-            raise err
-        last_update = chunk[-1]
-        g.cache.set(cache_key, last_update._fullname)
-        time.sleep(sleeptime)
-
-
-rebuild_subreddit_index = functools.partial(rebuild_link_index,
-                                            cls=Subreddit,
-                                            uploader=SolrSubredditUploader,
-                                            estimate=200000,
-                                            chunk_size=1000)
-
-
-def test_run_link(start_link, count=1000):
-    '''Inject `count` number of links, starting with `start_link`'''
-    if isinstance(start_link, basestring):
-        start_link = int(start_link, 36)
-    links = Link._byID(range(start_link - count, start_link), data=True,
-                       return_dict=False)
-    uploader = SolrLinkUploader(things=links)
-    return uploader.inject()
-
-
-def test_run_srs(*sr_names):
-    '''Inject Subreddits by name into the index'''
-    srs = Subreddit._by_name(sr_names).values()
-    uploader = SolrSubredditUploader(things=srs)
-    return uploader.inject()
-
-
-def translate_raw_sort(sort):
-    return SORTS_DICT.get(sort, 'score desc') 
-
-class SolrSearchProvider(SearchProvider):
 
 

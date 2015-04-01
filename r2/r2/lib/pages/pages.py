@@ -513,7 +513,7 @@ class Reddit(Templated):
 
         if isinstance(c.site, (MultiReddit, ModSR)):
             srs = Subreddit._byID(c.site.sr_ids, data=True,
-                                  return_dict=False)
+                                  return_dict=False, stale=True)
 
             if (srs and c.user_is_loggedin and
                     (c.user_is_admin or c.site.is_moderator(c.user))):
@@ -637,6 +637,12 @@ class Reddit(Templated):
                            '/subreddits/create', 'create',
                            subtitles = rand_strings.get("create_reddit", 2),
                            show_cover = True, nocname=True))
+
+        if c.default_sr:
+            hook = hooks.get_hook('home.add_sidebox')
+            extra_sidebox = hook.call_until_return()
+            if extra_sidebox:
+                ps.append(extra_sidebox)
 
         if not isinstance(c.site, FakeSubreddit) and not c.cname:
             moderators = self.sr_moderators()
@@ -1505,7 +1511,10 @@ class LinkInfoPage(Reddit):
             # thumbnails.
             return self.link.thumbnail
 
-        return static('icon.png')
+        # Default to the reddit icon if we've got nothing else.  Force it to be
+        # absolute because not all scrapers handle relative protocols or paths
+        # well.
+        return static('icon.png', absolute=True)
 
     def _build_og_description(self, meta_description):
         if self.link.selftext:
@@ -1962,7 +1971,7 @@ class ProfilePage(Reddit):
 
         rb.push(scb)
 
-        multis = LabeledMulti.by_owner(self.user)
+        multis = LabeledMulti.by_owner(self.user, load_subreddits=False)
 
         public_multis = [m for m in multis if m.is_public()]
         if public_multis:
@@ -1990,7 +1999,7 @@ class ProfilePage(Reddit):
 
         mod_sr_ids = Subreddit.reverse_moderator_ids(self.user)
         all_mod_srs = Subreddit._byID(mod_sr_ids, data=True,
-                                      return_dict=False)
+                                      return_dict=False, stale=True)
         mod_srs = [sr for sr in all_mod_srs if sr.can_view(c.user)]
         if mod_srs:
             rb.push(SideContentBox(title=_("moderator of"),
@@ -2249,9 +2258,7 @@ class SubredditTopBar(CachedTemplate):
     @property
     def my_reddits(self):
         if self._my_reddits is None:
-            self._my_reddits = Subreddit.user_subreddits(c.user,
-                                                         ids=False,
-                                                         stale=True)
+            self._my_reddits = Subreddit.user_subreddits(c.user, ids=False)
         return self._my_reddits
 
     @property
@@ -2431,7 +2438,8 @@ class AllInfoBar(Templated):
         else:
             self.description = strings.r_all_description
             sr_ids = Subreddit.user_subreddits(user)
-            srs = Subreddit._byID(sr_ids, data=True, return_dict=False)
+            srs = Subreddit._byID(
+                sr_ids, data=True, return_dict=False, stale=True)
             if srs:
                 self.allminus_url = '/r/all-' + '-'.join([sr.name for sr in srs])
 
@@ -2518,6 +2526,11 @@ class SubredditStylesheetSource(Templated):
     """A view of the unminified source of a subreddit's stylesheet."""
     def __init__(self, stylesheet_contents):
         Templated.__init__(self, stylesheet_contents=stylesheet_contents)
+
+class AutoModeratorConfig(Templated):
+    """A view of a subreddit's AutoModerator configuration."""
+    def __init__(self, automoderator_config):
+        Templated.__init__(self, automoderator_config=automoderator_config)
 
 class CssError(Templated):
     """Rendered error returned to the stylesheet editing page via ajax"""
@@ -3448,7 +3461,7 @@ class ModTableItem(InvitedModTableItem):
 class FlairPane(Templated):
     def __init__(self, num, after, reverse, name, user):
         # Make sure c.site isn't stale before rendering.
-        c.site = Subreddit._byID(c.site._id)
+        c.site = Subreddit._byID(c.site._id, data=True, stale=False)
 
         tabs = [
             ('grant', _('grant flair'), FlairList(num, after, reverse, name,
@@ -4789,7 +4802,7 @@ class ListingChooser(Templated):
 
         self.show_samples = False
         if c.user_is_loggedin:
-            multis = LabeledMulti.by_owner(c.user)
+            multis = LabeledMulti.by_owner(c.user, load_subreddits=False)
             multis.sort(key=lambda multi: multi.name.lower())
             for multi in multis:
                 if not multi.is_hidden():
@@ -4797,8 +4810,8 @@ class ListingChooser(Templated):
 
             explore_sr = g.live_config["listing_chooser_explore_sr"]
             if explore_sr:
-                self.add_item("multi", name=_("explore multis"),
-                              site=Subreddit._by_name(explore_sr))
+                sr = Subreddit._by_name(explore_sr, stale=True)
+                self.add_item("multi", name=_("explore multis"), site=sr)
 
             self.show_samples = not multis
 
@@ -4925,7 +4938,10 @@ class ListingSuggestions(Templated):
                 self.suggestion_type = "explore"
                 return
 
-            multis = c.user_is_loggedin and LabeledMulti.by_owner(c.user)
+            if c.user_is_loggedin:
+                multis = LabeledMulti.by_owner(c.user, load_subreddits=False)
+            else:
+                multis = []
 
             if multis and c.site in multis:
                 multis.remove(c.site)

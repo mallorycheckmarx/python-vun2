@@ -255,13 +255,13 @@ class FrontController(RedditController):
         # Determine if we should show the embed link for comments
         c.can_embed = feature.is_enabled("comment_embeds") and bool(comment)
 
-        embed_key = embeds.prepare_embed_request(sr)
+        is_embed = embeds.prepare_embed_request(sr)
 
         # check for 304
         self.check_modified(article, 'comments')
 
-        if embed_key:
-            embeds.set_up_embed(embed_key, sr, comment, showedits=showedits)
+        if is_embed:
+            embeds.set_up_embed(sr, comment, showedits=showedits)
 
         # Temporary hook until IAMA app "OP filter" is moved from partners
         # Not to be open-sourced
@@ -380,12 +380,16 @@ class FrontController(RedditController):
         suggested_sort = article.sort_if_suggested() if feature.is_enabled('default_sort') else None
         if article.contest_mode:
             if c.user_is_loggedin and sr.is_moderator(c.user):
-                sort = "top"
+                # Default to top for contest mode to make determining winners
+                # easier, but allow them to override it for moderation
+                # purposes.
+                if 'sort' not in request.params:
+                    sort = "top"
             else:
                 sort = "random"
         elif suggested_sort and 'sort' not in request.params:
-                sort = suggested_sort
-                suggested_sort_active = True
+            sort = suggested_sort
+            suggested_sort_active = True
 
         # finally add the comment listing
         displayPane.append(CommentPane(article, CommentSortMenu.operator(sort),
@@ -568,6 +572,16 @@ class FrontController(RedditController):
             mod = mods[mod_id]
             mod_buttons.append(QueryButton(mod.name, mod.name,
                                            query_param='mod'))
+        # add a choice for the automoderator account if it's not a mod
+        if (g.automoderator_account and
+                all(mod.name != g.automoderator_account
+                    for mod in mods.values())):
+            automod_button = QueryButton(
+                g.automoderator_account,
+                g.automoderator_account,
+                query_param="mod",
+            )
+            mod_buttons.append(automod_button)
         mod_buttons.append(QueryButton(_('admins*'), 'a', query_param='mod'))
         base_path = request.path
         menus = [NavMenu(action_buttons, base_path=base_path,
