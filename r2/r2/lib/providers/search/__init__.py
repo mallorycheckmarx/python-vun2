@@ -25,10 +25,16 @@ class SearchProvider(object):
     """Provider for search.
     """
 
-    def query(self):
+    def InvalidQuery(self):
         return NotImplementedError
 
-    def subreddit_query(self):
+    def SearchException(self):
+        return NotImplementedError
+
+    def Query(self):
+        return NotImplementedError
+
+    def SubredditSearchQuery(self):
         return NotImplementedError
 
     def sorts(self):

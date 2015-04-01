@@ -20,36 +20,27 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import collections
-import cPickle as pickle
-from datetime import datetime, timedelta
-import functools
-import httplib
-import json
-from lxml import etree
+from datetime import datetime
 from pylons import g, c
-import re
+import collections
+import httplib
 import time
-import urllib
+import re
 
-import l2cs
 
-from r2.lib import amqp, filters
-from r2.lib.db.operators import desc
-from r2.lib.db.sorts import epoch_seconds
 import r2.lib.utils as r2utils
-from r2.models import (Account, Link, Subreddit, Thing, All, DefaultSR,
-                       MultiReddit, DomainSR, Friends, ModContribSR,
-                       FakeSubreddit, NotFound)
+from r2.models import (Link, NotFound, Subreddit)
+ 
+class InvalidQuery(Exception): pass
+class SearchHTTPError(httplib.HTTPException): pass
 
-
-ILLEGAL_XML = re.compile(u'[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]')
-
-def _safe_xml_str(s, use_encoding="utf-8"):
+def safe_xml_str(s, use_encoding="utf-8"):
     '''Replace invalid-in-XML unicode control characters with '\uFFFD'.
     Also, coerces result to unicode
     
     '''
+    illegal_xml = re.compile(u'[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]')
+
     if not isinstance(s, unicode):
         if isinstance(s, str):
             s = unicode(s, use_encoding, errors="replace")
@@ -57,7 +48,7 @@ def _safe_xml_str(s, use_encoding="utf-8"):
             # ints will raise TypeError if the "errors" kwarg
             # is passed, but since it's not a str no problem
             s = unicode(s)
-    s = ILLEGAL_XML.sub(u"\uFFFD", s)
+    s = illegal_xml.sub(u"\uFFFD", s)
     return s
 
 
@@ -76,14 +67,13 @@ def safe_get(get_fn, ids, return_dict=True, **kw):
         return items.values()
 
 
-class SearchHTTPError(httplib.HTTPException): pass
-class InvalidQuery(Exception): pass
 
-
-Field = collections.namedtuple("Field", "name cloudsearch_type "
-                               "lucene_type function")
+SAME_AS_CLOUDSEARCH = object()
+FIELD_TYPES = (int, str, datetime, SAME_AS_CLOUDSEARCH, "yesno")
 
 def field(name=None, cloudsearch_type=str, lucene_type=SAME_AS_CLOUDSEARCH):
+    Field = collections.namedtuple("Field", "name cloudsearch_type "
+                                   "lucene_type function")
     if lucene_type is SAME_AS_CLOUDSEARCH:
         lucene_type = cloudsearch_type
     if cloudsearch_type not in FIELD_TYPES + (None,):
@@ -321,3 +311,35 @@ class SubredditFields(FieldsBase):
         return self.sr._type_id
 
 
+class Results(object):
+    def __init__(self, docs, hits, facets):
+        self.docs = docs
+        self.hits = hits
+        self._facets = facets
+        self._subreddits = []
+
+    def __repr__(self):
+        return '%s(%r, %r, %r)' % (self.__class__.__name__,
+                                   self.docs,
+                                   self.hits,
+                                   self._facets)
+
+    @property
+    def subreddit_facets(self):
+        '''Filter out subreddits that the user isn't allowed to see'''
+        if not self._subreddits and 'reddit' in self._facets:
+            sr_facets = [(sr['value'], sr['count']) for sr in
+                         self._facets['reddit']]
+
+            # look up subreddits
+            srs_by_name = Subreddit._by_name([name for name, count
+                                              in sr_facets])
+
+            sr_facets = [(srs_by_name[name], count) for name, count
+                         in sr_facets if name in srs_by_name]
+
+            # filter by can_view
+            self._subreddits = [(sr, count) for sr, count in sr_facets
+                                if sr.can_view(c.user)]
+
+        return self._subreddits

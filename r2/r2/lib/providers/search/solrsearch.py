@@ -34,15 +34,17 @@ from lxml import etree
 from r2.lib import amqp, filters
 from r2.lib.db.operators import desc
 from r2.lib.db.sorts import epoch_seconds
+from r2.lib.configparse import ConfigValue
 import r2.lib.utils as r2utils
 from r2.models import (Account, Link, Subreddit, All, DefaultSR,
                        MultiReddit, DomainSR, Friends, ModContribSR,
                        FakeSubreddit, NotFound)
 from pylons import g, c
 
-from r2.lib.cloudsearch import InvalidQuery, SearchHTTPError, Results, \
-        CloudSearchUploader, LinkUploader, SubredditFields, LinkFields
-    
+from r2.lib.providers.search.base import safe_get, InvalidQuery, SearchHTTPError, \
+        LinkFields, SubredditFields, Results
+from r2.lib.providers.search import SearchProvider
+
 
 _CHUNK_SIZE = 4000000 # Approx. 4 MB, to stay under the 5MB limit
 _VERSION_OFFSET = 13257906857
@@ -57,17 +59,16 @@ DEFAULT_FACETS = {"reddit": {"count":20}}
 
 WARNING_XPATH = ".//lst[@name='error']/str[@name='warning']"
 STATUS_XPATH = ".//lst/int[@name='status']"
-DOC_API = 'http://%s:%s' % (g.SOLR_DOC_HOST, g.SOLR_PORT)
+DOC_API = 'http://%s:%s' % (g.solr_doc_host, g.solr_port)
 
 SORTS_DICT = {'-text_relevance': 'score desc',
               'relevance': 'score desc'}
-
 
 def basic_query(query=None, bq=None, faceting=None, size=1000,
                 start=0, rank="", return_fields=None, record_stats=False,
                 search_api=None):
     if search_api is None:
-        search_api = g.SOLR_SEARCH_HOST
+        search_api = g.solr_search_host
     if faceting is None:
         faceting = DEFAULT_FACETS
     path = _encode_query(query, faceting, size, start, rank, return_fields)
@@ -75,7 +76,7 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
     if record_stats:
         timer = g.stats.get_timer("cloudsearch_timer")
         timer.start()
-    connection = httplib.HTTPConnection(search_api, g.SOLR_PORT)
+    connection = httplib.HTTPConnection(search_api, g.solr_port)
     try:
         connection.request('GET', path)
         resp = connection.getresponse()
@@ -93,7 +94,7 @@ def basic_query(query=None, bq=None, faceting=None, size=1000,
                     if message['code'] in INVALID_QUERY_CODES:
                         raise InvalidQuery(resp.status, resp.reason, message,
                                            path, reasons)
-            raise CloudSearchHTTPError(resp.status, resp.reason, path,
+            raise SearchHTTPError(resp.status, resp.reason, path,
                                        response)
     finally:
         connection.close()
@@ -108,7 +109,7 @@ basic_link = functools.partial(basic_query, size=10, start=0,
                                return_fields=['title', 'reddit',
                                               'author_fullname'],
                                record_stats=False,
-                               search_api=g.SOLR_SEARCH_HOST)
+                               search_api=g.solr_search_host)
 
 
 basic_subreddit = functools.partial(basic_query,
@@ -118,7 +119,7 @@ basic_subreddit = functools.partial(basic_query,
                                     return_fields=['title', 'reddit',
                                                    'author_fullname'],
                                     record_stats=False,
-                                    search_api=g.SOLR_SUBREDDIT_SEARCH_HOST)
+                                    search_api=g.solr_subreddit_search_host)
 
 
 class SolrSearchQuery(object):
@@ -224,7 +225,7 @@ class SolrSearchQuery(object):
 
 
 class LinkSearchQuery(SolrSearchQuery):
-    search_api = g.SOLR_SEARCH_HOST
+    search_api = g.solr_search_host
     sorts = {'relevance': 'score',
              'hot': 'hot2',
              'top': 'top',
@@ -306,8 +307,8 @@ class LinkSearchQuery(SolrSearchQuery):
         return ' OR '.join(bq)
 
 
-class SubredditSearchQuery(SolrSearchQuery):
-    search_api = g.SOLR_SUBREDDIT_SEARCH_HOST
+class SolrSubredditSearchQuery(SolrSearchQuery):
+    search_api = g.solr_subreddit_search_host
     sorts = {'relevance': 'activity',
              None: 'activity',
              }
@@ -349,20 +350,20 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
         params["qf"] = ",".join(return_fields)
     encoded_query = urllib.urlencode(params)
     path = '/solr/%s/select?%s' % \
-        (getattr(g, 'SOLR_CORE', 'collection1'), encoded_query)
+        (getattr(g, 'solr_core', 'collection1'), encoded_query)
     return path    
 
 
-class SolrSearchUploader(CloudSearchUploader):
+class SolrSearchUploader(object):
     
     def __init__(self, solr_host=None, solr_port=None, fullnames=None, version_offset=_VERSION_OFFSET):
-        self.solr_host = solr_host or g.SOLR_DOC_HOST
-        self.solr_port = solr_port or g.SOLR_PORT
+        self.solr_host = solr_host or g.solr_doc_host
+        self.solr_port = solr_port or g.solr_port
         self._version_offset = version_offset
         self.fullnames = fullnames    
 
     def add_xml(self, thing):
-        from r2.lib.cloudsearch import _safe_xml_str
+        from r2.lib.providers.search.base import safe_xml_str
 
         #add = etree.Element("add", id=thing._fullname)
         doc = etree.Element("doc")
@@ -371,7 +372,7 @@ class SolrSearchUploader(CloudSearchUploader):
 
         for field_name, value in self.fields(thing).iteritems():
             field = etree.SubElement(doc, "field", name=field_name)
-            field.text = _safe_xml_str(value)
+            field.text = safe_xml_str(value)
 
         return doc
 
@@ -475,9 +476,9 @@ class SolrSearchUploader(CloudSearchUploader):
         for indexing. Multiple requests are sent if a large number of documents
         are being sent (see chunk_xml())
         
-        Raises CloudSearchHTTPError if the endpoint indicates a failure
+        Raises SearchHTTPError if the endpoint indicates a failure
         '''
-        core = getattr(g, 'SOLR_CORE', 'collection1') 
+        core = getattr(g, 'solr_coreE', 'collection1') 
         responses = []
         connection = httplib.HTTPConnection(self.solr_host, self.solr_port)
         chunker = chunk_xml(docs)
@@ -492,7 +493,7 @@ class SolrSearchUploader(CloudSearchUploader):
                 if 200 <= response.status < 300:
                     responses.append(response.read())
                 else:
-                    raise CloudSearchHTTPError(response.status,
+                    raise SearchHTTPError(response.status,
                                                response.reason,
                                                response.read())
         finally:
@@ -538,8 +539,8 @@ def _run_changed(msgs, chan):
     link_fns = SolrLinkUploader.desired_fullnames(changed)
     sr_fns = SolrSubredditUploader.desired_fullnames(changed)
 
-    link_uploader = SolrLinkUploader(g.SOLR_DOC_HOST, fullnames=link_fns)
-    subreddit_uploader = SolrSubredditUploader(g.SOLR_SUBREDDIT_DOC_HOST,
+    link_uploader = SolrLinkUploader(g.solr_doc_host, fullnames=link_fns)
+    subreddit_uploader = SolrSubredditUploader(g.solr_subreddit_doc_host,
                                            fullnames=sr_fns)
 
     link_time = link_uploader.inject()
@@ -553,16 +554,6 @@ def _run_changed(msgs, chan):
            (start, len(changed), totaltime, cloudsearch_time,
             len(changed) - len(link_fns | sr_fns),
             msgs[-1].delivery_info.get('message_count', 'unknown')))
-
-def run_changed(drain=False, min_size=int(getattr(g, 'SOLR_MIN_BATCH', 500)), limit=1000, sleep_time=10, 
-        use_safe_get=False, verbose=False):
-    '''Run by `cron` (through `paster run`) on a schedule to send Things to Solr
-    '''
-    if use_safe_get:
-        SolrSearchUploader.use_safe_get = True
-    amqp.handle_items('cloudsearch_changes', _run_changed, min_size=min_size,
-                      limit=limit, drain=drain, sleep_time=sleep_time,
-                      verbose=verbose)
 
 
 class SolrLinkUploader(SolrSearchUploader):
@@ -692,6 +683,60 @@ def test_run_srs(*sr_names):
 def translate_raw_sort(sort):
     return SORTS_DICT.get(sort, 'score desc') 
 
-class SolrSearchProvider(SearchProvider):
 
+class SolrSearchProvider(SearchProvider):
+    '''Provider implementation: wrap it all up as a SearchProvider
+    
+    example config:
+
+    # endpoint for link search e.g. http://localhost:8983
+    solr_search_host = is-forums-sf-04v
+    # endpoint for link upload
+    solr_doc_host = is-forums-sf-04v
+    # endpoint for subreddit search
+    solr_subreddit_search_host = is-forums-sf-04v
+    # endpoint for subreddit upload
+    solr_subreddit_doc_host = is-forums-sf-04v
+    # solr port
+    solr_port = 8983
+    # solr core name
+    solr_core = reddit1
+    # default batch size is 500
+    # limit is hard-coded to 1000
+    solr_min_batch = 1
+    
+    '''
+  
+    config = {
+        ConfigValue.int: [
+            "solr_port",
+            "solr_min_batch",
+        ],
+        ConfigValue.str: [
+            "solr_search_host",
+            "solr_doc_host",
+            "solr_subreddit_search_host",
+            "solr_subreddit_doc_host",
+            "solr_core",
+        ],
+    }    
+
+    InvalidQuery = (InvalidQuery,)
+    SearchException = (SearchHTTPError,)
+
+    SearchQuery = LinkSearchQuery
+
+    SubredditSearchQuery = SolrSubredditSearchQuery
+    
+    sorts = LinkSearchQuery.sorts_menu_mapping
+
+    def run_changed(drain=False, min_size=int(getattr(g, 'solr_min_batch', 500)), limit=1000, sleep_time=10, 
+            use_safe_get=False, verbose=False):
+        '''Run by `cron` (through `paster run`) on a schedule to send Things to Solr
+        '''
+        if use_safe_get:
+            SolrSearchUploader.use_safe_get = True
+        amqp.handle_items('cloudsearch_changes', _run_changed, min_size=min_size,
+                          limit=limit, drain=drain, sleep_time=sleep_time,
+                          verbose=verbose)
 
