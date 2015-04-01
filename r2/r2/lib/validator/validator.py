@@ -906,28 +906,12 @@ class VCaptcha(Validator):
 
 
 class VUser(Validator):
-    def run(self):
+    def run(self, password = None):
         if not c.user_is_loggedin:
             raise UserRequiredException
 
-
-class VVerifyPassword(Validator):
-    def __init__(self, param, fatal=True, *a, **kw):
-        Validator.__init__(self, param, *a, **kw)
-        self.fatal = fatal
-
-    def run(self, password):
-        VUser().run()
-        if not valid_password(c.user, password):
-            if self.fatal:
-                abort(403)
+        if (password is not None) and not valid_password(c.user, password):
             self.set_error(errors.WRONG_PASSWORD)
-
-    def param_docs(self):
-        return {
-            self.param: "the current user's password",
-        }
-
 
 class VModhash(Validator):
     handles_csrf = True

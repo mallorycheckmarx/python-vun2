@@ -8,7 +8,6 @@
   Validator.DEFAULTS = {
     delay: 600,
     loadingTimeout: 250,
-    https: false,
   };
 
   _.extend(Validator.prototype, {
@@ -68,14 +67,6 @@
       var url = $el.data('validate-url');
       var validateWith = ($el.data('validate-with') || '').split(/,s*/);
       var data = {};
-
-      if (this.options.https) {
-        var parser = document.createElement('a');
-
-        parser.href = url;
-        parser.protocol = 'https:';
-        url = parser.href;
-      }
 
       data[$el.attr('name')] = value;
 

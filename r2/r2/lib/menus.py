@@ -57,7 +57,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      gilded       = _('gilded'),
                      confidence   = _('best'),
                      random       = _('random'),
-                     qa           = _('q&a'),
+                     qa           = _('q & a'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
                      rising       = _('rising'), 
@@ -591,12 +591,10 @@ class CommentSortMenu(SortMenu):
 
     @class_property
     def hidden_options(cls):
-        sorts = ['random']
-        if not feature.is_enabled('qa_sort'):
-            sorts.append('qa')
-        if feature.is_enabled('remove_hot_comments'):
-            sorts.append('hot')
-        return sorts
+        if feature.is_enabled('qa_sort'):
+            return ('random',)
+        else:
+            return ('random', 'qa',)
 
     def make_title(self, attr):
         title = super(CommentSortMenu, self).make_title(attr)

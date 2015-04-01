@@ -65,10 +65,6 @@ def static(path, absolute=False, mangle_name=True):
     path_components = []
     actual_filename = None if mangle_name else filename
 
-    # If building an absolute url, default to https because we like it and the
-    # static server should support it.
-    scheme = 'https' if absolute else None
-
     if g.static_domain:
         domain = g.static_domain
     else:
@@ -97,7 +93,7 @@ def static(path, absolute=False, mangle_name=True):
         query = 'v=' + str(file_id)
 
     return urlparse.urlunsplit((
-        scheme,
+        None,
         domain,
         actual_path,
         query,

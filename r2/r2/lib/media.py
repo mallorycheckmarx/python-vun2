@@ -40,7 +40,7 @@ import Image
 import ImageFile
 import requests
 
-from pylons import g
+from pylons import g, config
 
 from r2.config import feature
 from r2.lib import amqp, hooks
@@ -74,6 +74,7 @@ _SECURE_SERVICES = [
     "slideshare",
 ]
 
+EMBEDLY_API_URL = "https://api.embed.ly/1/oembed"
 
 def _image_to_str(image):
     s = cStringIO.StringIO()
@@ -266,6 +267,7 @@ def upload_stylesheet(content):
 
 def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
                   save_thumbnail=True, use_cache=False, max_cache_age=None):
+    g.log.warning("scrape_media")
     media = None
     autoplay = bool(autoplay)
     maxwidth = int(maxwidth)
@@ -280,7 +282,10 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
             media = mediaByURL.media
 
     # Otherwise, scrape it
-    if not media:
+    import pdb
+    pdb.set_trace()
+    if not media or not media.media_object or not media.thumbnail_url:
+        g.log.warning("not_media==True")
         media_object = secure_media_object = None
         thumbnail_image = thumbnail_url = thumbnail_size = None
 
@@ -326,6 +331,7 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
 
 
 def _set_media(link, force=False, **kwargs):
+    g.log.warning("set_media")
     if link.is_self:
         return
     if not force and link.promoted:
@@ -345,7 +351,6 @@ def _set_media(link, force=False, **kwargs):
         link._commit()
 
         hooks.get_hook("scraper.set_media").call(link=link)
-        amqp.add_item("new_media_embed", link._fullname)
 
 
 def force_thumbnail(link, image_data, file_type=".jpg"):
@@ -389,7 +394,7 @@ def get_media_embed(media_object):
         return _make_custom_media_embed(media_object)
 
     if "oembed" in media_object:
-        return _EmbedlyScraper.media_embed(media_object)
+        return _OembedScraper.media_embed(media_object)
 
 
 class MediaEmbed(object):
@@ -437,18 +442,29 @@ def _make_thumbnail_from_url(thumbnail_url, referer):
 class Scraper(object):
     @classmethod
     def for_url(cls, url, autoplay=False, maxwidth=600):
+        g.log.warning("for_url")
         scraper = hooks.get_hook("scraper.factory").call_until_return(url=url)
         if scraper:
             return scraper
-
+         
+        content_type, content = _fetch_url(url)
         embedly_services = _fetch_embedly_services()
         for service_re, service_secure in embedly_services:
             if service_re.match(url):
-                return _EmbedlyScraper(url,
-                                       service_secure,
-                                       autoplay=autoplay,
-                                       maxwidth=maxwidth)
-
+                g.log.warning("Trying Embedly scraper for %s" % url)
+                return _OembedScraper(url,
+                                      service_secure,
+                                      autoplay=autoplay,
+                                      maxwidth=maxwidth,
+                                      oembed_url=EMBEDLY_API_URL)
+        
+        if urlparse.urlparse(url).hostname in g.known_image_domains and \
+            content_type and "text" in content_type and content:
+            return _OembedScraper(url,
+                                  True,
+                                  autoplay=autoplay,
+                                  maxwidth=maxwidth,
+                                  oembed_url=url)
         return _ThumbnailOnlyScraper(url)
 
     def scrape(self):
@@ -542,11 +558,11 @@ class _ThumbnailOnlyScraper(Scraper):
         return max_url
 
 
-class _EmbedlyScraper(Scraper):
-    EMBEDLY_API_URL = "https://api.embed.ly/1/oembed"
+class _OembedScraper(Scraper):
 
-    def __init__(self, url, can_embed_securely, autoplay=False, maxwidth=600):
+    def __init__(self, url, can_embed_securely, autoplay=False, maxwidth=600, oembed_url=None):
         self.url = url
+        self.oembed_url = oembed_url
         self.can_embed_securely = can_embed_securely
         self.maxwidth = int(maxwidth)
         self.embedly_params = {}
@@ -554,22 +570,34 @@ class _EmbedlyScraper(Scraper):
         if autoplay:
             self.embedly_params["autoplay"] = "true"
 
-    def _fetch_from_embedly(self, secure):
+    def _fetch_from_oembed_provider(self, secure):
         param_dict = {
             "url": self.url,
             "format": "json",
             "maxwidth": self.maxwidth,
             "key": g.embedly_api_key,
             "secure": "true" if secure else "false",
+            "oembed": "true",
         }
 
         param_dict.update(self.embedly_params)
         params = urllib.urlencode(param_dict)
-        content = requests.get(self.EMBEDLY_API_URL + "?" + params).content
-        return json.loads(content)
+        home_domain = config.get('domain', None)
+        join_char = '?' in self.oembed_url and '&' or '?'
+        if urlparse.urlparse(self.oembed_url).hostname.endswith(home_domain):
+            # trust sites within our domain
+            content = requests.get(self.oembed_url + join_char + params, verify=False).content
+        else:
+            content = requests.get(self.oembed_url + join_char + params).content
+        try:
+            return json.loads(content)
+        except ValueError, e:
+            # asdf 
+            return None
+            #soup = BeautifulSoup.BeautifulSoup(content)
 
     def _make_media_object(self, oembed):
-        if oembed.get("type") in ("video", "rich"):
+        if oembed.get("type") in ("video", "rich", "photo", "html"):
             return {
                 "type": domain(self.url),
                 "oembed": oembed,
@@ -577,7 +605,7 @@ class _EmbedlyScraper(Scraper):
         return None
 
     def scrape(self):
-        oembed = self._fetch_from_embedly(secure=False)
+        oembed = self._fetch_from_oembed_provider(secure=False)
         if not oembed:
             return None, None, None
 
@@ -589,7 +617,7 @@ class _EmbedlyScraper(Scraper):
 
         secure_oembed = {}
         if self.can_embed_securely:
-            secure_oembed = self._fetch_from_embedly(secure=True)
+            secure_oembed = self._fetch_from_oembed_provider(secure=True)
 
         return (
             thumbnail,
@@ -644,11 +672,13 @@ def _fetch_embedly_services():
 def run():
     @g.stats.amqp_processor('scraper_q')
     def process_link(msg):
+        g.log.warning("process_link")
         fname = msg.body
         link = Link._by_fullname(msg.body, data=True)
 
         try:
-            TimeoutFunction(_set_media, 30)(link, use_cache=True)
+            #XXX set timeout back to 30 seconds!
+            TimeoutFunction(_set_media, 3600)(link, use_cache=True)
         except TimeoutFunctionException:
             print "Timed out on %s" % fname
         except KeyboardInterrupt:

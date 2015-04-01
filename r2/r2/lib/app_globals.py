@@ -418,6 +418,8 @@ class Globals(object):
         if not name.startswith('_') and name in self.config:
             return self.config[name]
         else:
+            import pdb
+            pdb.set_trace()
             raise AttributeError
 
     def setup(self):
@@ -450,6 +452,12 @@ class Globals(object):
             self.pkg_resources_working_set,
             "r2.provider.cdn",
             self.cdn_provider,
+        )
+        self.search_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.search",
+            self.search_provider,
         )
         self.startup_timer.intermediate("providers")
 

@@ -1527,8 +1527,6 @@ def new_report(thing, report_rel):
         elif isinstance(thing, Message):
             m.insert(get_user_reported_messages(reporter_id), [report_rel])
 
-    amqp.add_item("new_report", thing._fullname)
-
 
 def clear_reports(things, rels):
     query_cache_deletes = []

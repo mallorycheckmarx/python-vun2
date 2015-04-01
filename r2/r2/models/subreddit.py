@@ -72,8 +72,11 @@ def get_links_sr_ids(sr_ids, sort, time):
 
     if not sr_ids:
         return []
+    else:
+        srs = Subreddit._byID(sr_ids, data=True, return_dict = False)
 
-    results = [queries._get_links(sr_id, sort, time) for sr_id in sr_ids]
+    results = [queries.get_links(sr, sort, time)
+               for sr in srs]
     return queries.merge_results(*results)
 
 
@@ -903,12 +906,18 @@ class Subreddit(Thing, Printable, BaseSite):
         return s
 
     @classmethod
-    def default_subreddits(cls, ids=True):
+    def default_subreddits(cls, ids=True, stale=True):
         """Return the subreddits a user with no subscriptions would see."""
+        if g.automatic_reddits:
+            auto_srs = cls._by_name(g.automatic_reddits, stale=stale).values()
+        else:
+            auto_srs = set()
+
         location = get_request_location()
         srids = LocalizedDefaultSubreddits.get_defaults(location)
 
-        srs = Subreddit._byID(srids, data=True, return_dict=False, stale=True)
+        srs = Subreddit._byID(srids, data=True, return_dict=False, stale=stale)
+        srs = list(set(srs) | set(auto_srs))
         srs = filter(lambda sr: sr.allow_top, srs)
 
         if ids:
@@ -937,8 +946,7 @@ class Subreddit(Thing, Printable, BaseSite):
         # if the user is subscribed to them, the automatic subreddits should
         # always be in the front page set and not count towards the limit
         if g.automatic_reddits:
-            automatics = Subreddit._by_name(
-                g.automatic_reddits, stale=True).values()
+            automatics = Subreddit._by_name(g.automatic_reddits).values()
             automatic_ids = [sr._id for sr in automatics if sr._id in sr_ids]
             for sr_id in automatic_ids:
                 sr_ids.remove(sr_id)
@@ -995,7 +1003,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 if srs else Subreddit._by_name(g.default_sr))
 
     @classmethod
-    def user_subreddits(cls, user, ids=True, limit=DEFAULT_LIMIT):
+    def user_subreddits(cls, user, ids=True, limit=DEFAULT_LIMIT, stale=False):
         """
         subreddits that appear in a user's listings. If the user has
         subscribed, returns the stored set of subscriptions.
@@ -1025,9 +1033,9 @@ class Subreddit(Thing, Printable, BaseSite):
             return sr_ids if ids else Subreddit._byID(sr_ids,
                                                       data=True,
                                                       return_dict=False,
-                                                      stale=True)
+                                                      stale=stale)
         else:
-            return cls.default_subreddits(ids=ids)
+            return cls.default_subreddits(ids=ids, stale=stale)
 
 
     # Used to pull all of the SRs a given user moderates or is a contributor
@@ -1468,9 +1476,9 @@ class DefaultSR(_DefaultSR):
         return self._base.stylesheet_url_https if self._base else ""
 
     def get_all_comments(self):
-        from r2.lib.db.queries import _get_sr_comments, merge_results
-        sr_ids = Subreddit.user_subreddits(c.user)
-        results = [_get_sr_comments(sr_id) for sr_id in sr_ids]
+        from r2.lib.db.queries import get_sr_comments, merge_results
+        srs = Subreddit.user_subreddits(c.user, ids=False)
+        results = [get_sr_comments(sr) for sr in srs]
         return merge_results(*results)
 
     def get_gilded(self):
@@ -1566,8 +1574,9 @@ class MultiReddit(FakeSubreddit):
         return get_links_sr_ids(self.kept_sr_ids, sort, time)
 
     def get_all_comments(self):
-        from r2.lib.db.queries import _get_sr_comments, merge_results
-        results = [_get_sr_comments(sr_id) for sr_id in self.kept_sr_ids]
+        from r2.lib.db.queries import get_sr_comments, merge_results
+        srs = Subreddit._byID(self.kept_sr_ids, return_dict=False)
+        results = [get_sr_comments(sr) for sr in srs]
         return merge_results(*results)
 
     def get_gilded(self):
@@ -1711,13 +1720,12 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
         self._owner = None
 
     @classmethod
-    def _byID(cls, ids, return_dict=True, properties=None, load_subreddits=True):
+    def _byID(cls, ids, return_dict=True, properties=None):
         ret = super(cls, cls)._byID(ids, return_dict=False,
                                     properties=properties)
         if not ret:
             return
-
-        ret = cls._load(ret, load_subreddits=load_subreddits)
+        ret = cls._load(ret)
         if isinstance(ret, cls):
             return ret
         elif return_dict:
@@ -1726,34 +1734,23 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
             return ret
 
     @classmethod
-    def _load(cls, things, load_subreddits=True):
+    def _load_no_lookup(cls, things, srs_dict, owners_dict):
         things, single = tup(things, ret_is_single=True)
-
-        # some objects are being loaded for the first time and need basic setup
-        never_loaded = [t for t in things if not t._owner]
-        if never_loaded:
-            owner_fullnames = set(t.owner_fullname for t in never_loaded)
-            owners = Thing._by_fullname(
-                owner_fullnames, data=True, return_dict=True)
-            for t in things:
-                if t in never_loaded:
-                    t._owner = owners[t.owner_fullname]
-                    t._srs_loaded = False
-
-        # some objects may have been retrieved from cache and need srs
-        if load_subreddits:
-            needs_srs = [t for t in things if not t._srs_loaded]
-            if needs_srs:
-                sr_ids = set(
-                    itertools.chain.from_iterable(t.sr_ids for t in needs_srs))
-                srs = Subreddit._byID(
-                    sr_ids, data=True, return_dict=True, stale=True)
-                for t in things:
-                    if t in needs_srs:
-                        t._srs = [srs[sr_id] for sr_id in t.sr_ids]
-                        t._srs_loaded = True
-
+        for thing in things:
+            thing._srs = [srs_dict[sr_id] for sr_id in thing.sr_ids]
+            thing._owner = owners_dict[thing.owner_fullname]
         return things[0] if single else things
+
+    @classmethod
+    def _load(cls, things):
+        things, single = tup(things, ret_is_single=True)
+        sr_ids = set(itertools.chain(*[thing.sr_ids for thing in things]))
+        owner_fullnames = set((thing.owner_fullname for thing in things))
+
+        srs = Subreddit._byID(sr_ids, data=True, return_dict=True)
+        owners = Thing._by_fullname(owner_fullnames, data=True, return_dict=True)
+        ret = cls._load_no_lookup(things, srs, owners)
+        return ret[0] if single else things
 
     @property
     def sr_ids(self):
@@ -1761,10 +1758,6 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
 
     @property
     def srs(self):
-        if not self._srs_loaded:
-            g.log.error("%s: accessed subreddits without loading", self)
-            self._srs = Subreddit._byID(
-                self.sr_ids, data=True, return_dict=False)
         return self._srs
 
     @property
@@ -1900,15 +1893,9 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
             raise ValueError("invalid multi icon name")
 
     @classmethod
-    def by_owner(cls, owner, kinds=None, load_subreddits=True):
-        try:
-            multi_ids = LabeledMultiByOwner._byID(owner._fullname)._t.keys()
-        except tdb_cassandra.NotFound:
-            return []
-
+    def by_owner(cls, owner, kinds=None):
         kinds = ('m',) if not kinds else kinds
-        multis = cls._byID(
-            multi_ids, return_dict=False, load_subreddits=load_subreddits)
+        multis = LabeledMultiByOwner.query([owner._fullname])
         return [multi for multi in multis if multi.kind in kinds]
 
     @classmethod
@@ -1916,7 +1903,6 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
         obj = cls(_id=path, owner_fullname=owner._fullname)
         obj._commit()
         obj._owner = owner
-        obj._srs_loaded = False
         return obj
 
     @classmethod
@@ -1926,7 +1912,6 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
         obj._commit()
         obj._owner = owner
         obj._srs = multi._srs
-        obj._srs_loaded = multi._srs_loaded
         return obj
 
     @classmethod
@@ -1980,8 +1965,7 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
             raise TooManySubredditsError
 
         new_sr_ids = set(sr_ids) - set(self.sr_ids)
-        new_srs = Subreddit._byID(
-            new_sr_ids, data=True, return_dict=False, stale=True)
+        new_srs = Subreddit._byID(new_sr_ids, data=True, return_dict=False)
         self._srs.extend(new_srs)
 
         for attr, val in sr_columns.iteritems():
