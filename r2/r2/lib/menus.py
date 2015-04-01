@@ -20,13 +20,12 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, request
+from pylons import g, c, request
 from pylons.i18n import _, N_
 
 from r2.config import feature
 from r2.lib.db import operators
 from r2.lib.filters import _force_unicode
-from r2.lib.search import sorts as search_sorts
 from r2.lib.strings import StringHandler, plurals
 from r2.lib.utils import  class_property, query_string, timeago
 from r2.lib.wrapped import Styled
@@ -57,7 +56,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      gilded       = _('gilded'),
                      confidence   = _('best'),
                      random       = _('random'),
-                     qa           = _('q&a'),
+                     qa           = _('q & a'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
                      rising       = _('rising'), 
@@ -591,12 +590,10 @@ class CommentSortMenu(SortMenu):
 
     @class_property
     def hidden_options(cls):
-        sorts = ['random']
-        if not feature.is_enabled('qa_sort'):
-            sorts.append('qa')
-        if feature.is_enabled('remove_hot_comments'):
-            sorts.append('hot')
-        return sorts
+        if feature.is_enabled('qa_sort'):
+            return ('random',)
+        else:
+            return ('random', 'qa',)
 
     def make_title(self, attr):
         title = super(CommentSortMenu, self).make_title(attr)
@@ -609,7 +606,7 @@ class CommentSortMenu(SortMenu):
 class SearchSortMenu(SortMenu):
     """Sort menu for search pages."""
     _default = 'relevance'
-    mapping = search_sorts
+    mapping = g.search.sorts
     _options = mapping.keys()
 
     @classmethod
