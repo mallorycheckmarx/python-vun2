@@ -40,7 +40,6 @@ from r2.lib.normalized_hot import normalized_hot
 from r2.lib.db.thing import Query, Merge, Relations
 from r2.lib.db import queries
 from r2.lib.strings import Score
-import r2.lib.search as search
 from r2.lib.template_helpers import add_sr
 from r2.lib.admin_utils import check_cheating
 from r2.lib.csrf import csrf_exempt
@@ -59,6 +58,7 @@ import socket
 from api_docs import api_doc, api_section
 
 from pylons.i18n import _
+from pylons import g
 
 from datetime import timedelta
 import random
@@ -66,6 +66,7 @@ from functools import partial
 
 class ListingController(RedditController):
     """Generalized controller for pages with lists of links."""
+
 
     # toggle skipping of links based on the users' save/hide/vote preferences
     skip = True
@@ -163,7 +164,7 @@ class ListingController(RedditController):
             builder_cls = self.builder_cls
         elif isinstance(self.query_obj, Query):
             builder_cls = QueryBuilder
-        elif isinstance(self.query_obj, search.SearchQuery):
+        elif isinstance(self.query_obj, g.search.SearchQuery):
             builder_cls = SearchBuilder
         elif isinstance(self.query_obj, iters):
             builder_cls = IDBuilder
@@ -457,31 +458,17 @@ class HotController(ListingWithPromos):
 
     def content(self):
         content = super(HotController, self).content()
-
-        if c.render_style == "html":
-            stack = None
-            if isinstance(c.site, DefaultSR) and not self.listing_obj.prev:
-                trending_info = self.trending_info()
-                if trending_info:
-                    stack = [
-                        self.spotlight,
-                        TrendingSubredditsBar(**trending_info),
-                        self.listing_obj,
-                    ]
-            else:
-                hot_hook = hooks.get_hook("hot.get_content")
-                hot_pane = hot_hook.call_until_return(controller=self)
-                if hot_pane:
-                    stack = [
-                        self.spotlight,
-                        hot_pane,
-                        self.listing_obj
-                    ]
-
-            if stack:
-                return PaneStack(filter(None, stack), css_class='spacer')
-
+        if (c.render_style == "html" and isinstance(c.site, DefaultSR) and
+                not self.listing_obj.prev):
+            trending_info = self.trending_info()
+            if trending_info:
+                return PaneStack(filter(None, [
+                    self.spotlight,
+                    TrendingSubredditsBar(**trending_info),
+                    self.listing_obj,
+                ]), css_class='spacer')
         return content
+
 
     def title(self):
         return c.site.title

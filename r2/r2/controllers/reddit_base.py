@@ -477,7 +477,7 @@ def set_multireddit():
             # Only supported via API as we don't have a valid non-query
             # parameter equivalent for cross-user multis, which means
             # we can't generate proper links to /new, /top, etc in HTML
-            multi_ids = [m.lower() for m in request.GET.getall("m")]
+            multi_ids = request.GET.getall("m")
             multiurl = ""
 
         if multi_ids is not None:
@@ -488,14 +488,13 @@ def set_multireddit():
             elif len(multis) == 1:
                 c.site = multis[0]
             else:
-                sr_ids = Subreddit.random_reddits(
+                srs = Subreddit.random_reddits(
                     logged_in_username,
                     list(set(itertools.chain.from_iterable(
-                        multi.sr_ids for multi in multis
+                        multi.srs for multi in multis
                     ))),
-                    LabeledMulti.MAX_SR_COUNT,
+                    LabeledMulti.MAX_SR_COUNT
                 )
-                srs = Subreddit._byID(sr_ids, data=True, return_dict=False)
                 c.site = MultiReddit(multiurl, srs)
                 if any(m.weighting_scheme == "fresh" for m in multis):
                     c.site.weighting_scheme = "fresh"
@@ -1743,8 +1742,7 @@ class RedditController(OAuth2ResourceController):
             abort(304, 'not modified')
 
     def search_fail(self, exception):
-        from r2.lib.search import SearchException
-        if isinstance(exception, SearchException + (socket.error,)):
+        if isinstance(exception, g.search.SearchException + (socket.error,)):
             g.log.error("Search Error: %s" % repr(exception))
 
         errpage = pages.RedditError(_("search failed"),

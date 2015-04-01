@@ -53,8 +53,6 @@ from r2.lib.db.operators import desc
 from r2.lib.db import queries
 from r2.lib.db.tdb_cassandra import MultiColumnQuery
 from r2.lib.strings import strings
-from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
-                           InvalidQuery)
 from r2.lib.validator import *
 from r2.lib import jsontemplates
 from r2.lib import sup
@@ -255,13 +253,13 @@ class FrontController(RedditController):
         # Determine if we should show the embed link for comments
         c.can_embed = feature.is_enabled("comment_embeds") and bool(comment)
 
-        is_embed = embeds.prepare_embed_request(sr)
+        embed_key = embeds.prepare_embed_request(sr)
 
         # check for 304
         self.check_modified(article, 'comments')
 
-        if is_embed:
-            embeds.set_up_embed(sr, comment, showedits=showedits)
+        if embed_key:
+            embeds.set_up_embed(embed_key, sr, comment, showedits=showedits)
 
         # Temporary hook until IAMA app "OP filter" is moved from partners
         # Not to be open-sourced
@@ -380,16 +378,12 @@ class FrontController(RedditController):
         suggested_sort = article.sort_if_suggested() if feature.is_enabled('default_sort') else None
         if article.contest_mode:
             if c.user_is_loggedin and sr.is_moderator(c.user):
-                # Default to top for contest mode to make determining winners
-                # easier, but allow them to override it for moderation
-                # purposes.
-                if 'sort' not in request.params:
-                    sort = "top"
+                sort = "top"
             else:
                 sort = "random"
         elif suggested_sort and 'sort' not in request.params:
-            sort = suggested_sort
-            suggested_sort_active = True
+                sort = suggested_sort
+                suggested_sort_active = True
 
         # finally add the comment listing
         displayPane.append(CommentPane(article, CommentSortMenu.operator(sort),
@@ -572,16 +566,6 @@ class FrontController(RedditController):
             mod = mods[mod_id]
             mod_buttons.append(QueryButton(mod.name, mod.name,
                                            query_param='mod'))
-        # add a choice for the automoderator account if it's not a mod
-        if (g.automoderator_account and
-                all(mod.name != g.automoderator_account
-                    for mod in mods.values())):
-            automod_button = QueryButton(
-                g.automoderator_account,
-                g.automoderator_account,
-                query_param="mod",
-            )
-            mod_buttons.append(automod_button)
         mod_buttons.append(QueryButton(_('admins*'), 'a', query_param='mod'))
         base_path = request.path
         menus = [NavMenu(action_buttons, base_path=base_path,
@@ -866,7 +850,7 @@ class FrontController(RedditController):
         end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
         nsfw = u"nsfw:0" if not (article.over_18 or article._nsfw.findall(article.title)) else u""
         query = u"(and %s timestamp:%s..%s %s)" % (query, start, end, nsfw)
-        q = SearchQuery(query, raw_sort="-text_relevance",
+        q = g.search.SearchQuery(query, raw_sort="-text_relevance",
                         syntax="cloudsearch")
         pane = self._search(q, num=num, after=after, reverse=reverse,
                             count=count)[2]
@@ -912,7 +896,7 @@ class FrontController(RedditController):
     @api_doc(api_section.subreddits, uri='/subreddits/search', supports_rss=True)
     def GET_search_reddits(self, query, reverse, after, count, num):
         """Search subreddits by title and description."""
-        q = SubredditSearchQuery(query)
+        q = g.search.SubredditSearchQuery(query)
 
         results, etime, spane = self._search(q, num=num, reverse=reverse,
                                              after=after, count=count,
@@ -935,7 +919,7 @@ class FrontController(RedditController):
               sort=VMenu('sort', SearchSortMenu, remember=False),
               recent=VMenu('t', TimeMenu, remember=False),
               restrict_sr=VBoolean('restrict_sr', default=False),
-              syntax=VOneOf('syntax', options=SearchQuery.known_syntaxes))
+              syntax=VOneOf('syntax', options=g.search.SearchQuery.known_syntaxes))
     @api_doc(api_section.search, supports_rss=True, uses_site=True)
     def GET_search(self, query, num, reverse, after, count, sort, recent,
                    restrict_sr, syntax):
@@ -951,17 +935,17 @@ class FrontController(RedditController):
             site = c.site
 
         if not syntax:
-            syntax = SearchQuery.default_syntax
+            syntax = g.search.SearchQuery.default_syntax
 
         try:
             cleanup_message = None
             try:
-                q = SearchQuery(query, site, sort,
+                q = g.search.SearchQuery(query, site, sort,
                                 recent=recent, syntax=syntax)
                 results, etime, spane = self._search(q, num=num, after=after,
                                                      reverse=reverse,
                                                      count=count)
-            except InvalidQuery:
+            except g.search.InvalidQuery:
                 # Clean the search of characters that might be causing the
                 # InvalidQuery exception. If the cleaned search boils down
                 # to an empty string, the search code is expected to bail
@@ -969,7 +953,7 @@ class FrontController(RedditController):
                 cleaned = re.sub("[^\w\s]+", " ", query)
                 cleaned = cleaned.lower().strip()
 
-                q = SearchQuery(cleaned, site, sort, recent=recent)
+                q = g.search.SearchQuery(cleaned, site, sort, recent=recent)
                 results, etime, spane = self._search(q, num=num,
                                                      after=after,
                                                      reverse=reverse,
@@ -1002,7 +986,7 @@ class FrontController(RedditController):
                              ).render()
 
             return res
-        except SearchException + (socket.error,) as e:
+        except g.search.SearchException + (socket.error,) as e:
             return self.search_fail(e)
 
     def _search(self, query_obj, num, after, reverse, count=0,
@@ -1025,7 +1009,7 @@ class FrontController(RedditController):
         # computed after fetch_more
         try:
             res = listing.listing()
-        except SearchException + (socket.error,) as e:
+        except g.search.SearchException + (socket.error,) as e:
             return self.search_fail(e)
         timing = time_module.time() - builder.start_time
 
