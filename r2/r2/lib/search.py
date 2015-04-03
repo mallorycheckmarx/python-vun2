@@ -20,13 +20,18 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import r2.lib.cloudsearch as cloudsearch
+from pylons import g
+if g.SEARCH_TYPE == 'solr':
+    import r2.lib.solrsearch as search
+    
+else:
+    import r2.lib.cloudsearch as search
 
 
-InvalidQuery = (cloudsearch.InvalidQuery,)
-SearchException = (cloudsearch.CloudSearchHTTPError,)
+InvalidQuery = (search.InvalidQuery,)
+SearchException = (search.CloudSearchHTTPError,)
 
-SearchQuery = cloudsearch.LinkSearchQuery
-SubredditSearchQuery = cloudsearch.SubredditSearchQuery
+SearchQuery = search.LinkSearchQuery
+SubredditSearchQuery = search.SubredditSearchQuery
 
-sorts = cloudsearch.LinkSearchQuery.sorts_menu_mapping
+sorts = search.LinkSearchQuery.sorts_menu_mapping
