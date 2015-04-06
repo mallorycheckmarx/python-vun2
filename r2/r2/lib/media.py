@@ -35,6 +35,8 @@ import urllib2
 import urlparse
 import gzip
 
+from xml.etree import ElementTree
+
 import BeautifulSoup
 import Image
 import ImageFile
@@ -74,6 +76,221 @@ _SECURE_SERVICES = [
     "slideshare",
 ]
 
+_SAFE_SVG_ELEMENTS = [
+    "circle",
+    "defs",
+    "ellipse",
+    "feBlend",
+    "feColorMatrix",
+    "feComponentTransfer",
+    "feComposite",
+    "feConvolveMatrix",
+    "feDiffuseLighting",
+    "feDisplacementMap",
+    "feDistantLight",
+    "feFlood",
+    "feGaussianBlur",
+    "feImage",
+    "feMerge",
+    "feMergeNode",
+    "feMorphology",
+    "feOffset",
+    "fePointLight",
+    "feSpecularLighting",
+    "feSpotLight",
+    "feTile",
+    "feTurbulence",
+    "filter",
+    "g",
+    "line",
+    "linearGradient",
+    "marker",
+    "mask",
+    "path",
+    "pattern",
+    "polygon",
+    "polyline",
+    "radialGradient",
+    "rect",
+    "stop",
+    "svg",
+    "symbol",
+    "text",
+    "textPath",
+    "tref",
+    "tspan",
+    "use"
+]
+
+_SAFE_SVG_ATTRIBUTES = [
+    "alignment-baseline",
+    "azimuth",
+    "baseFrequency",
+    "baseline-shift",
+    "bias",
+    "clip",
+    "clip-path",
+    "clip-rule",
+    "clipPathUnits",
+    "color",
+    "color-interpolation",
+    "color-interpolation-filters",
+    "color-rendering",
+    "cx",
+    "cy",
+    "d",
+    "diffuseConstant",
+    "direction",
+    "display",
+    "divisor",
+    "dominant-baseline",
+    "dx",
+    "dy",
+    "edgeMode",
+    "elevation",
+    "enable-background",
+    "exponent",
+    "fill",
+    "fill-opacity",
+    "fill-rule",
+    "filter",
+    "filterRes",
+    "filterUnits",
+    "flood-color",
+    "flood-opacity",
+    "font",
+    "font-family",
+    "font-size",
+    "font-size-adjust",
+    "font-stretch",
+    "font-style",
+    "font-variant",
+    "font-weight",
+    "fx",
+    "fy",
+    "gradientTransform",
+    "gradientUnits",
+    "height",
+    "id",
+    "in",
+    "in2",
+    "intercept",
+    "k1",
+    "k2",
+    "k3",
+    "k4",
+    "kernelMatrix",
+    "kernelUnitLength",
+    "kerning",
+    "lengthAdjust",
+    "letter-spacing",
+    "lighting-color",
+    "limitingConeAngle",
+    "local",
+    "marker",
+    "marker-end",
+    "marker-mid",
+    "marker-start",
+    "markerHeight",
+    "markerUnits",
+    "markerWidth",
+    "mask",
+    "maskContentUnits",
+    "maskUnits",
+    "method",
+    "mode",
+    "name",
+    "numOctaves",
+    "offset",
+    "opacity",
+    "operator",
+    "order",
+    "orient",
+    "overflow",
+    "pathLength",
+    "patternContentUnits",
+    "patternTransform",
+    "patternUnits",
+    "pointer-events",
+    "points",
+    "pointsAtX",
+    "pointsAtY",
+    "pointsAtZ",
+    "preserveAlpha",
+    "preserveAspectRatio",
+    "primitiveUnits",
+    "r",
+    "radius",
+    "refX",
+    "refY",
+    "rendering-indent",
+    "requiredExtensions",
+    "requiredFeatures",
+    "result",
+    "rotate",
+    "rx",
+    "ry",
+    "scale",
+    "seed",
+    "shape-rendering",
+    "slope",
+    "spacing",
+    "specularConstant",
+    "specularExponent",
+    "spreadMethod",
+    "standalone",
+    "startOffset",
+    "stdDeviation",
+    "stitchTiles",
+    "stop-color",
+    "stop-opacity",
+    "stroke",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "stroke-miterlimit",
+    "stroke-opacity",
+    "stroke-width",
+    "style",
+    "surfaceScale",
+    "tableValues",
+    "targetX",
+    "targetY",
+    "text-anchor",
+    "text-decoration",
+    "text-rendering",
+    "textLength",
+    "transform",
+    "type",
+    "unicode-bidi",
+    "values",
+    "version",
+    "view",
+    "viewBox",
+    "visibility",
+    "width",
+    "word-spacing",
+    "writing-mode",
+    "x",
+    "x1",
+    "x2",
+    "xChannelSelector",
+    "xlink:arcrole",
+    "xlink:href",
+    "xlink:role",
+    "xlink:show",
+    "xlink:title",
+    "xlink:type",
+    "xmlns",
+    "xmlns:xlink",
+    "y",
+    "y1",
+    "y2",
+    "yChannelSelector",
+    "z",
+    "zoomAndPan"
+]
 
 def _image_to_str(image):
     s = cStringIO.StringIO()
@@ -86,6 +303,36 @@ def str_to_image(s):
     image = Image.open(s)
     return image
 
+def svg_size(image):
+    """calculate the size of an SVG image"""
+    image = BeautifulSoup.BeautifulSoup(cStringIO.StringIO(image))
+    try:
+        dimensions = [image.svg['width'], image.svg['height']]
+
+        # Borrowed and edited from github.com/Zverik/svg-resize
+        for i in (0,1):
+            parts = re.match(r'^\s*(-?\d+(?:\.\d+)?)\s*(px|in|cm|mm|pt|pc|%)?', dimensions[i])
+            num = float(parts.group(1))
+            units = parts.group(2)
+            
+            if units == 'pt':
+                dimensions[i] = num * 1.25
+            elif units == 'pc':
+                dimensions[i] = num * 15.0
+            elif units == 'in':
+                dimensions[i] = num * 90.0
+            elif units == 'mm':
+                dimensions[i] = num * 3.543307
+            elif units == 'cm':
+                dimensions[i] = num * 35.43307
+            elif units == '%':
+                dimensions[i] = -num / 100.0
+            else:
+                dimensions[i] = num
+    except KeyError:
+        dimensions = [500, 500]
+
+    return dimensions
 
 def _image_entropy(img):
     """calculate the entropy of an image"""
@@ -205,6 +452,83 @@ def optimize_jpeg(filename):
     with open(os.path.devnull, 'w') as devnull:
         subprocess.check_call(("/usr/bin/jpegoptim", filename), stdout=devnull)
 
+class _SVGSoup(BeautifulSoup.BeautifulStoneSoup):
+    # Fixes unexpected conversion from `<g><g></g></g>` into `<g></g><g></g>`
+    nests = ('defs', 'g', 'marker', 'mask', 'pattern', 'svg', 'symbol', 'use')
+    NESTABLE_TAGS = BeautifulSoup.buildTagMap([], nests)
+
+def _sanitize_svg(image):
+    elements = [x.lower() for x in _SAFE_SVG_ELEMENTS]
+    attributes = [x.lower() for x in _SAFE_SVG_ATTRIBUTES]
+
+    # BS3 gets confused with some self-closing tags. We can safely 
+    # convert them with regex and afterward, we strip out unwanted <!> 
+    # and <?> tags.
+    #
+    # Keep in mind that `[^>]` goes in place of `.`, because it matches
+    # newline chars as well. One could also flag re.DOTALL, but we need
+    # to also not match `>`s.
+    image = re.sub(r'<([^>\s]+)\s*([^>]*)/>', r'<\1 \2></\1>',
+                   re.sub(r'<![^>]*>|<\?(?!xml)[^>]*>', r'', image))
+    soup = _SVGSoup(image, 
+                    convertEntities=BeautifulSoup.BeautifulStoneSoup.XML_ENTITIES)
+
+    inspect_element = soup.findAll(True)
+
+    for elem in inspect_element:
+        if elem.name not in elements: # Whitelist elements for security
+            if elem.contents and elem.parent:
+                parent = elem.parent
+                index = parent.contents.index(elem)
+
+                # Put all children in place of disallowed element
+                for child in elem.findAll(True, recursive=False):
+                    parent.insert(index + 1, child)
+                    inspect_element.append(child)
+                    index += 1
+            
+            elem.decompose()
+            continue
+
+        if elem.attrs:
+            to_del = set()
+            to_save = dict()
+
+            for attribute_set in elem.attrs:
+                attr = attribute_set[0]
+                value = attribute_set[1]
+                to_del.update({attr})
+
+                # When safe:
+                # Expression 1 == True
+                # Expression 2 == None
+                # Expression 3 == False
+
+                if (attr in attributes and
+                    re.search(r'url\((?!#)', elem[attr]) == None and
+                        (attr == "xlink:href" and not 
+                         elem[attr].startswith('#')) == False):
+
+                    # BS3 lowercases attribute names - this can be bad
+                    # Using the two arrays we made, we can revert this
+                    # (This is also why we delete every attribute first)
+                    new_attr = _SAFE_SVG_ATTRIBUTES[attributes.index(attr)]
+                    to_save[new_attr] = elem[attr]
+
+            for key in to_del:
+                del elem[key]
+
+            for key in to_save:
+                elem[key] = to_save[key]
+
+        elem.name = _SAFE_SVG_ELEMENTS[elements.index(elem.name)]
+
+    # Remove repeated <?xml?> tags, then minify
+    xml = re.sub(r'(<\?xml.*>)\1+', r'\1',
+                 re.sub(r'[\t\r\n] *', '', soup.prettify("utf-8")))
+
+    ElementTree.fromstring(xml) # Will raise error if XML is broken
+    return xml
 
 def thumbnail_url(link):
     """Given a link, returns the url for its thumbnail based on its fullname"""
@@ -227,30 +551,36 @@ def upload_media(image, file_type='.jpg'):
     f = tempfile.NamedTemporaryFile(suffix=file_type, delete=False)
     try:
         img = image
-        do_convert = True
-        if isinstance(img, basestring):
-            img = str_to_image(img)
-            if img.format == "PNG" and file_type == ".png":
-                img.verify()
-                f.write(image)
-                f.close()
-                do_convert = False
+        if file_type == ".png" or file_type == ".jpg":
+            do_convert = True
+            if isinstance(img, basestring):
+                img = str_to_image(img)
+                if img.format == "PNG" and file_type == ".png":
+                    img.verify()
+                    f.write(image)
+                    f.close()
+                    do_convert = False
 
-        if do_convert:
-            img = img.convert('RGBA')
-            if file_type == ".jpg":
-                # PIL does not play nice when converting alpha channels to jpg
-                background = Image.new('RGBA', img.size, (255, 255, 255))
-                background.paste(img, img)
-                img = background.convert('RGB')
-                img.save(f, quality=85) # Bug in the JPG encoder with the optimize flag, even if set to false
-            else:
-                img.save(f, optimize=True)
+            if do_convert:
+                img = img.convert('RGBA')
+                if file_type == ".jpg":
+                    # PIL does not play nice when converting alpha channels to jpg
+                    background = Image.new('RGBA', img.size, (255, 255, 255))
+                    background.paste(img, img)
+                    img = background.convert('RGB')
+                    img.save(f, quality=85) # Bug in the JPG encoder with the optimize flag, even if set to false
+                else:
+                    img.save(f, optimize=True)
 
-        if file_type == ".png":
-            optimize_png(f.name)
-        elif file_type == ".jpg":
-            optimize_jpeg(f.name)
+            if file_type == ".png":
+                optimize_png(f.name)
+            elif file_type == ".jpg":
+                optimize_jpeg(f.name)
+        elif file_type == ".svg":
+            img = _sanitize_svg(img)
+            f.write(img)
+            f.close()
+
         contents = open(f.name).read()
         file_name = _filename_from_content(contents) + file_type
         return g.media_provider.put(file_name, contents)
