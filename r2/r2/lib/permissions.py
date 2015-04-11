@@ -78,7 +78,7 @@ class ModeratorPermissionSet(PermissionSet):
         ),
         config=dict(
             title=N_('config'),
-            description=N_('edit settings, sidebar, css, images, and AutoModerator'),
+            description=N_('edit settings, sidebar, css, images, and automoderator'),
         ),
         flair=dict(
             title=N_('flair'),
