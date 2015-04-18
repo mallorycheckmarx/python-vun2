@@ -28,7 +28,7 @@ will be ignored.
 4. Please adhere to our [coding
 standards](https://github.com/reddit/reddit/wiki#change-reddit).
 
-After you submit your issue or request, we'll take a look and it and get back
+After you submit your issue or request, we'll take a look at it and get back
 to you in a few days. If you have any questions, feel free to ask us! We're
 readily available:
 
