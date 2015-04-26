@@ -40,22 +40,13 @@ COUNTRY_DB_PATH = '/usr/share/GeoIP/GeoIP.dat'
 CITY_DB_PATH = '/usr/share/GeoIP/GeoIPCity.dat'
 ORG_DB_PATH = '/usr/share/GeoIP/GeoIPOrg.dat'
 
+def try_geo_ip_open(path):
+    try:
+        return GeoIP.open(path, GeoIP.GEOIP_MEMORY_CACHE)
+    except:
+        return None
 
-try:
-    gc = GeoIP.open(COUNTRY_DB_PATH, GeoIP.GEOIP_MEMORY_CACHE)
-except:
-    gc = None
-
-try:
-    gi = GeoIP.open(CITY_DB_PATH, GeoIP.GEOIP_MEMORY_CACHE)
-except:
-    gi = None
-
-try:
-    go = GeoIP.open(ORG_DB_PATH, GeoIP.GEOIP_MEMORY_CACHE)
-except:
-    go = None
-
+gc, gi, go = map(try_geo_ip_open, (COUNTRY_DB_PATH, CITY_DB_PATH, ORG_DB_PATH))
 
 def json_response(result):
     json_output = json.dumps(result, ensure_ascii=False, encoding='iso-8859-1')
