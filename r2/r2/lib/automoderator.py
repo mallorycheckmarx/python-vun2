@@ -249,8 +249,7 @@ class Ruleset(object):
 
     def __iter__(self):
         """Iterate over the rules in the collection."""
-        for rule in self.rules:
-            yield rule
+        return (rule for rule in self.rules)
 
     def __len__(self):
         return len(self.rules)
@@ -258,16 +257,12 @@ class Ruleset(object):
     @property
     def removal_rules(self):
         """Iterate over the rules that could cause removal of their target."""
-        for rule in self:
-            if rule.is_removal_rule:
-                yield rule
+        return (rule for rule in self if rule.is_removal_rule)
 
     @property
     def nonremoval_rules(self):
         """Iterate over the rules that won't cause removal of their target."""
-        for rule in self:
-            if not rule.is_removal_rule:
-                yield rule
+        return (rule for rule in self if not rule.is_removal_rule)
 
     def apply_to_item(self, item):
         # fetch supplemental data to use throughout
