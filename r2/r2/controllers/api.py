@@ -1803,6 +1803,21 @@ class ApiController(RedditController):
         VUser(),
         VModhash(),
         VRatelimit(rate_user=True, rate_ip=True, prefix="rate_comment_"),
+        text=VMarkdown('text'),
+    )
+    @api_doc(api_section.links_and_comments)
+    def GET_markdown_preview(self, commentform, jquery, text):
+        """Get formatted markdown for preview.
+
+        `text` should be the raw markdown body of the comment or message.
+        """
+        return safemarkdown(text)
+
+    @require_oauth2_scope("submit")
+    @validatedForm(
+        VUser(),
+        VModhash(),
+        VRatelimit(rate_user=True, rate_ip=True, prefix="rate_comment_"),
         parent=VSubmitParent(['thing_id', 'parent']),
         comment=VMarkdownLength(['text', 'comment'], max_length=10000),
     )

@@ -4351,6 +4351,7 @@ class UserText(CachedTemplate):
                  expunged=False,
                  include_errors=True,
                  show_embed_help=False,
+                 show_embed_preview=False,
                 ):
 
         css_class = "usertext"
@@ -4385,6 +4386,7 @@ class UserText(CachedTemplate):
                                 expunged=expunged,
                                 include_errors=include_errors,
                                 show_embed_help=show_embed_help,
+                                show_embed_preview=show_embed_preview,
                                )
 
 class MediaEmbedBody(CachedTemplate):

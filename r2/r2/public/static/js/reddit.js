@@ -406,6 +406,25 @@ function helpoff(elem) {
     $(elem).parents(".usertext-edit:first").children(".markhelp:first").hide();
 };
 
+function previewon(elem) {
+    var form = $(elem).parents("form")[0];
+    var preview = $(elem).parents(".usertext-edit:first").children(".markpreview:first");
+    var success = function(r) {
+      if (get_form_fields(form, {}).text.length) {
+        preview.html(r).show();
+      } else {
+        preview.html("").show();
+      }
+    };
+
+    $.request("markdown_preview", get_form_fields(form, {}), success, undefined,
+              "text", true, form_error(form));
+};
+
+function previewoff(elem) {
+    $(elem).parents(".usertext-edit:first").children(".markpreview:first").html("").hide();
+};
+
 function show_all_messages(elem) {
     var $rootMessage = $(elem).parents(".message");
     var $childMessages = $rootMessage.find(".message");
