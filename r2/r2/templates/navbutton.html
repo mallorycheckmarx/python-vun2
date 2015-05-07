@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -26,19 +26,22 @@
   ${plain_link(thing.selected_title() if thing.selected else thing.title, 
                thing.path, _sr_path = thing.sr_path, nocname = thing.nocname,
                target = thing.target, 
-               _class = thing.css_class, _id = thing._id)}
+               _class = thing.css_class, _id = thing._id,
+               data=thing.data)}
 </%def>
 
 <%def name="js()">
   ${plain_link(thing.selected_title() if thing.selected else thing.title, 
                thing.path, _sr_path = False, nocname = True, 
                _class = thing.css_class, _id = thing._id, 
-               onclick = thing.onclick)}
+               onclick = thing.onclick,
+               data=thing.data)}
 </%def>
 
 <%def name="post()">
   ${post_link(thing.selected_title() if thing.selected else thing.title,
               thing.base_path, thing.base_path, thing.action_params,
               _sr_path=thing.sr_path, nocname=thing.nocname,
-              target=thing.target, _class=thing.css_class, _id=thing._id)}
+              target=thing.target, _class=thing.css_class, _id=thing._id,
+              data=thing.data)}
 </%def>

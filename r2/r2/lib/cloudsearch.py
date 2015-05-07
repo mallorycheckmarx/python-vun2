@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -38,11 +38,12 @@ from r2.lib import amqp, filters
 from r2.lib.db.operators import desc
 from r2.lib.db.sorts import epoch_seconds
 import r2.lib.utils as r2utils
-from r2.models import (Account, Link, Subreddit, Thing, All, DefaultSR,
-                       MultiReddit, DomainSR, Friends, ModContribSR,
+from r2.models import (Account, Link, Subreddit, Thing,
+                       MultiReddit, DomainSR, FriendsSR,
                        FakeSubreddit, NotFound)
 
 
+_TIMEOUT = 5 # seconds for http requests to cloudsearch
 _CHUNK_SIZE = 4000000 # Approx. 4 MB, to stay under the 5MB limit
 _VERSION_OFFSET = 13257906857
 ILLEGAL_XML = re.compile(u'[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]')
@@ -207,8 +208,7 @@ class LinkFields(FieldsBase):
 
     @field(cloudsearch_type=int, lucene_type="yesno")
     def over18(self):
-        nsfw = (self.sr.over_18 or self.link.over_18 or
-                Link._nsfw.findall(self.link.title))
+        nsfw = self.sr.over_18 or self.link.is_nsfw
         return (1 if nsfw else 0)
 
     @field(cloudsearch_type=None, lucene_type="yesno")
@@ -225,11 +225,11 @@ class LinkFields(FieldsBase):
 
     @field
     def author_fullname(self):
-        return self.author._fullname
+        return None if self.author._deleted else self.author._fullname
 
     @field(name="author")
     def author_field(self):
-        return '[deleted]' if self.author._deleted else self.author.name
+        return None if self.author._deleted else self.author.name
 
     @field(cloudsearch_type=int)
     def type_id(self):
@@ -240,8 +240,8 @@ class LinkFields(FieldsBase):
         if self.link.is_self:
             return g.domain
         else:
-            url = r2utils.UrlParser(self.link.url)
             try:
+                url = r2utils.UrlParser(self.link.url)
                 return list(url.domain_permutations())
             except ValueError:
                 return None
@@ -295,7 +295,7 @@ class SubredditFields(FieldsBase):
 
     @field
     def header_title(self):
-        return self.sr.header_title
+        return None if self.sr.type == 'private' else self.sr.header_title
 
     @field
     def description(self):
@@ -303,7 +303,7 @@ class SubredditFields(FieldsBase):
 
     @field
     def sidebar(self):
-        return self.sr.description
+        return None if self.sr.type == 'private' else self.sr.description
 
     @field(cloudsearch_type=int)
     def over18(self):
@@ -482,7 +482,8 @@ class CloudSearchUploader(object):
         Raises CloudSearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
-        connection = httplib.HTTPConnection(self.doc_api, 80)
+        connection = httplib.HTTPConnection(
+            self.doc_api, port=80, timeout=_TIMEOUT)
         chunker = chunk_xml(docs)
         try:
             for data in chunker:
@@ -737,18 +738,19 @@ INVALID_QUERY_CODES = ('CS-UnknownFieldInMatchExpression',
                        'CS-InvalidMatchSetExpression',)
 DEFAULT_FACETS = {"reddit": {"count":20}}
 def basic_query(query=None, bq=None, faceting=None, size=1000,
-                start=0, rank="-relevance", return_fields=None, record_stats=False,
-                search_api=None):
+                start=0, rank="-relevance", rank_expressions=None,
+                return_fields=None, record_stats=False, search_api=None):
     if search_api is None:
         search_api = g.CLOUDSEARCH_SEARCH_API
     if faceting is None:
         faceting = DEFAULT_FACETS
-    path = _encode_query(query, bq, faceting, size, start, rank, return_fields)
+    path = _encode_query(query, bq, faceting, size, start, rank,
+                         rank_expressions, return_fields)
     timer = None
     if record_stats:
-        timer = g.stats.get_timer("cloudsearch_timer")
+        timer = g.stats.get_timer("providers.cloudsearch")
         timer.start()
-    connection = httplib.HTTPConnection(search_api, 80)
+    connection = httplib.HTTPConnection(search_api, port=80, timeout=_TIMEOUT)
     try:
         connection.request('GET', path)
         resp = connection.getresponse()
@@ -794,18 +796,22 @@ basic_subreddit = functools.partial(basic_query,
                                     search_api=g.CLOUDSEARCH_SUBREDDIT_SEARCH_API)
 
 
-def _encode_query(query, bq, faceting, size, start, rank, return_fields):
+def _encode_query(query, bq, faceting, size, start, rank, rank_expressions,
+                  return_fields):
     if not (query or bq):
         raise ValueError("Need query or bq")
     params = {}
     if bq:
         params["bq"] = bq
-    else:
+    if query:
         params["q"] = query
     params["results-type"] = "json"
     params["size"] = size
     params["start"] = start
     params["rank"] = rank
+    if rank_expressions:
+        for rank, expression in rank_expressions.iteritems():
+            params['rank-%s' % rank] = expression
     if faceting:
         params["facet"] = ",".join(faceting.iterkeys())
         for facet, options in faceting.iteritems():
@@ -830,39 +836,50 @@ class CloudSearchQuery(object):
     lucene_parser = None
 
     def __init__(self, query, sr=None, sort=None, syntax=None, raw_sort=None,
-                 faceting=None, recent=None):
+                 faceting=None, recent=None, include_over18=True,
+                 rank_expressions=None, start=0, num=1000):
         if syntax is None:
             syntax = self.default_syntax
         elif syntax not in self.known_syntaxes:
             raise ValueError("Unknown search syntax: %s" % syntax)
-        self.query = filters._force_unicode(query or u'')
-        self.converted_data = None
         self.syntax = syntax
+
+        self.query = filters._force_unicode(query or u'')
+
+        # parsed query
+        self.converted_data = None
+        self.q = u''
+        self.bq = u''
+
+        # filters
         self.sr = sr
+        self._recent = recent
+        self.recent = self.recents[recent]
+        self.include_over18 = include_over18
+
+        # rank / rank expressions
         self._sort = sort
         if raw_sort:
             self.sort = raw_sort
         else:
             self.sort = self.sorts[sort]
-        self._recent = recent
-        self.recent = self.recents[recent]
+        self.rank_expressions = rank_expressions
+
+        # pagination
+        self.start = start
+        self.num = num
+
+        # facets
         self.faceting = faceting
-        self.bq = u''
+
         self.results = None
 
-    def run(self, after=None, reverse=False, num=1000, _update=False):
+    def run(self, _update=False):
         results = self._run(_update=_update)
-
-        docs, hits, facets = results.docs, results.hits, results._facets
-
-        after_docs = r2utils.get_after(docs, after, num, reverse=reverse)
-
-        self.results = Results(after_docs, hits, facets)
+        self.results = Results(results.docs, results.hits, results._facets)
         return self.results
 
-    def _run(self, start=0, num=1000, _update=False):
-        '''Run the search against self.query'''
-        q = None
+    def _parse(self):
         if self.syntax == "cloudsearch":
             self.bq = self.customize_query(self.query)
         elif self.syntax == "lucene":
@@ -871,15 +888,37 @@ class CloudSearchQuery(object):
                                    "converted": bq}
             self.bq = self.customize_query(bq)
         elif self.syntax == "plain":
-            q = self.query.encode('utf-8')
+            self.q = self.query.encode('utf-8')
+            self.bq = self.customize_query()
+
+        if not self.q and not self.bq:
+            raise InvalidQuery
+
+    def _run(self, _update=False):
+        '''Run the search against self.query'''
+        try:
+            self._parse()
+        except InvalidQuery:
+            return Results([], 0, {})
+
         if g.sqlprinting:
             g.log.info("%s", self)
-        return self._run_cached(q, self.bq.encode('utf-8'), self.sort,
-                                self.faceting, start=start, num=num,
-                                _update=_update)
 
-    def customize_query(self, bq):
+        return self._run_cached(self.q, self.bq.encode('utf-8'), self.sort,
+                                self.rank_expressions, self.faceting,
+                                start=self.start, num=self.num, _update=_update)
+
+    def customize_query(self, bq=u''):
         return bq
+
+    @classmethod
+    def create_boolean_query(cls, queries):
+        '''Return an AND clause combining all queries'''
+        if len(queries) > 1:
+            return '(and ' + ' '.join(queries) + ')'
+        elif queries:
+            return queries[0]
+        return u''
 
     def __repr__(self):
         '''Return a string representation of this query'''
@@ -894,8 +933,8 @@ class CloudSearchQuery(object):
         return ''.join(result)
 
     @classmethod
-    def _run_cached(cls, query, bq, sort="relevance", faceting=None, start=0,
-                    num=1000, _update=False):
+    def _run_cached(cls, query, bq, sort="relevance", rank_expressions=None,
+                    faceting=None, start=0, num=1000, _update=False):
         '''Query the cloudsearch API. _update parameter allows for supposed
         easy memoization at later date.
         
@@ -930,10 +969,9 @@ class CloudSearchQuery(object):
                    u'rank': u'-text_relevance'}
         
         '''
-        if not query and not bq:
-            return Results([], 0, {})
         response = basic_query(query=query, bq=bq, size=num, start=start,
-                               rank=sort, search_api=cls.search_api,
+                               rank=sort, rank_expressions=rank_expressions,
+                               search_api=cls.search_api,
                                faceting=faceting, record_stats=True)
 
         warnings = response['info'].get('messages', [])
@@ -982,24 +1020,20 @@ class LinkSearchQuery(CloudSearchQuery):
     known_syntaxes = ("cloudsearch", "lucene", "plain")
     default_syntax = "lucene"
 
-    def customize_query(self, bq):
-        queries = [bq]
-        subreddit_query = self._get_sr_restriction(self.sr)
-        if subreddit_query:
-            queries.append(subreddit_query)
+    def customize_query(self, bq=u''):
+        queries = []
+        if bq:
+            queries = [bq]
+        if self.sr:
+            subreddit_query = self._restrict_sr(self.sr)
+            if subreddit_query:
+                queries.append(subreddit_query)
         if self.recent:
             recent_query = self._restrict_recent(self.recent)
             queries.append(recent_query)
+        if not self.include_over18:
+            queries.append('over18:0')
         return self.create_boolean_query(queries)
-
-    @classmethod
-    def create_boolean_query(cls, queries):
-        '''Return an AND clause combining all queries'''
-        if len(queries) > 1:
-            bq = '(and ' + ' '.join(queries) + ')'
-        else:
-            bq = queries[0]
-        return bq
 
     @staticmethod
     def _restrict_recent(recent):
@@ -1008,51 +1042,56 @@ class LinkSearchQuery(CloudSearchQuery):
         return 'timestamp:%i..' % since
 
     @staticmethod
-    def _get_sr_restriction(sr):
+    def _restrict_sr(sr):
         '''Return a cloudsearch appropriate query string that restricts
         results to only contain results from self.sr
         
         '''
-        bq = []
-        if (not sr) or sr == All or isinstance(sr, DefaultSR):
-            return None
-        elif isinstance(sr, MultiReddit):
-            bq = ["(or"]
-            for sr_id in sr.sr_ids:
-                bq.append("sr_id:%s" % sr_id)
-            bq.append(")")
+        if isinstance(sr, MultiReddit):
+            if not sr.sr_ids:
+                raise InvalidQuery
+            srs = ["sr_id:%s" % sr_id for sr_id in sr.sr_ids]
+            return "(or %s)" % ' '.join(srs)
         elif isinstance(sr, DomainSR):
-            bq = ["site:'%s'" % sr.domain]
-        elif sr == Friends:
+            return "site:'%s'" % sr.domain
+        elif isinstance(sr, FriendsSR):
             if not c.user_is_loggedin or not c.user.friends:
-                return None
-            bq = ["(or"]
+                raise InvalidQuery
             # The query limit is roughly 8k bytes. Limit to 200 friends to
             # avoid getting too close to that limit
             friend_ids = c.user.friends[:200]
             friends = ["author_fullname:'%s'" %
                        Account._fullname_from_id36(r2utils.to36(id_))
                        for id_ in friend_ids]
-            bq.extend(friends)
-            bq.append(")")
-        elif isinstance(sr, ModContribSR):
-            bq = ["(or"]
-            for sr_id in sr.sr_ids:
-                bq.append("sr_id:%s" % sr_id)
-            bq.append(")")
+            return "(or %s)" % ' '.join(friends)
         elif not isinstance(sr, FakeSubreddit):
-            bq = ["sr_id:%s" % sr._id]
+            return "sr_id:%s" % sr._id
 
-        return ' '.join(bq)
+        return None
 
 
 class SubredditSearchQuery(CloudSearchQuery):
     search_api = g.CLOUDSEARCH_SUBREDDIT_SEARCH_API
-    sorts = {'relevance': '-activity',
-             None: '-activity',
-             }
-    sorts_menu_mapping = {'relevance': 1,
-                          }
+    sorts = {
+        'relevance': '-activity',
+        'activity': '-activity',
+        'rel1': '-rel1',
+        'rel2': '-rel2',
+    }
+    sorts_menu_mapping = {
+        'relevance': 1,
+        'activity': 2,
+        'rel1': 3,
+        'rel2': 4,
+    }
 
     known_syntaxes = ("plain",)
     default_syntax = "plain"
+
+    def customize_query(self, bq=u''):
+        queries = []
+        if bq:
+            queries = [bq]
+        if not self.include_over18:
+            queries.append('over18:0')
+        return self.create_boolean_query(queries)

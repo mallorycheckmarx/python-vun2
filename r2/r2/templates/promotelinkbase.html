@@ -16,11 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+  from r2.config import feature
   from r2.lib.media import thumbnail_url
   from r2.lib.pages import UserText
   import simplejson
@@ -36,6 +37,7 @@
   r.sponsored.init();
   r.sponsored.set_form_render_fnc(r.sponsored.fill_campaign_editor);
   r.sponsored.setup(${unsafe(simplejson.dumps(thing.inventory))},
+                    ${unsafe(simplejson.dumps(thing.price_dict))},
                     ${simplejson.dumps(not thing.campaigns)},
                     ${simplejson.dumps(c.user_is_sponsor)});
   r.sponsored.setup_geotargeting(${unsafe(simplejson.dumps(thing.regions))},
@@ -124,12 +126,35 @@
              %if link and link.domain_override:
                value="${link.domain_override}" class="rounded"
              %else:
-               class="gray rounded" value="optional"
+               class="rounded" placeholder="optional"
              %endif
-      />
-
+      >
       <div class="infotext rounded">
         <p>${_("Choose a different domain name to display on the site (the small grey text next to a link)")}</p>
+      </div>
+
+      <label style="display:block; text-align:right" for="third_party_tracking">${_("Impression tracking URL:")}</label>
+      <input id="third_party_tracking" name="third_party_tracking" type="text"
+             %if link and link.third_party_tracking:
+               value="${link.third_party_tracking}" class="rounded"
+             %else:
+               class="rounded" placeholder="optional"
+             %endif
+      >
+      <div class="infotext rounded">
+        <p>${_("Enter a URL to insert into a 3rd-party impression tracking code snippet")}</p>
+      </div>
+
+      <label style="display:block; text-align:right" for="third_party_tracking_2">${_("Secondary Impression tracking URL:")}</label>
+      <input id="third_party_tracking_2" name="third_party_tracking_2" type="text"
+             %if link and link.third_party_tracking_2:
+               value="${link.third_party_tracking_2}" class="rounded"
+             %else:
+               class="rounded" placeholder="optional (not common)"
+             %endif
+      >
+      <div class="infotext rounded">
+        <p>${_("Enter a second 3rd-party impression tracking URL (not common)")}</p>
       </div>
     %endif
   </%utils:line_field>
@@ -142,32 +167,43 @@
   </%utils:line_field>
 </%def>
 
-<%def name="image_field(link)">
-  <% current_image = getattr(link, 'thumbnail_url', '') %>
+<%def name="image_field(link=None)">
+  <% 
+    if link:
+        current_image = getattr(link, 'thumbnail_url', '')
+        link_name = link._fullname
+    else:
+        current_image = ''
+        link_name = ''
+  %>
   <%utils:line_field title="${_('thumbnail')}" 
                      css_class="rounded image-field ${'has-image' if current_image else ''}">
     <div class="infotext">
-      ${_('images will be resized if larger than 70 x 70 pixels')}
+      ${_('images will be resized if larger than 140x140 pixels (displayed at 70x70)')}
     </div>
     <div class="delete-field">
-      <%utils:image_upload post_target="/api/link_thumb" 
-                           current_image="${current_image}"
-                           label="${_('upload header image:')}"
-                           ask_type="True">
-        <input type="hidden" name="link_name" value="${link._fullname}" />
+      %if link_name:
+        <%utils:image_upload post_target="/api/link_thumb" 
+                             current_image="${current_image}"
+                             label="${_('upload header image:')}"
+                             ask_type="True">
+          <input type="hidden" name="link_name" value="${link_name}" />
 
-        ## overwrite the completed image function
-        <script type="text/javascript">
-          completedUploadImage = (function(cu) {
-            return function(status, img_src, name, errors) {
-              cu(status, "", "", errors);
-              $.things('${link._fullname}').find(".thumbnail img")
-                .attr("src", img_src + "?v=" + Math.random());
-            }
-          })(completedUploadImage);
-        </script>
+          ## overwrite the completed image function
+          <script type="text/javascript">
+            completedUploadImage = (function(cu) {
+              return function(status, img_src, name, errors) {
+                cu(status, "", "", errors);
+                $.things('${link_name}').find(".thumbnail img")
+                  .attr("src", img_src + "?v=" + Math.random());
+              }
+            })(completedUploadImage);
+          </script>
+        </%utils:image_upload>
+      %else:
+        <input type="file" name="file" id="file"/>
+      %endif
 
-      </%utils:image_upload>
       <div class="clearleft"></div>
     </div>
   </%utils:line_field>
@@ -194,12 +230,35 @@
 <%def name="media_field(link)">
   <%utils:line_field title="${_('media')}" id="media-field" css_class="rounded media-field">
     <div class="delete-field">
-      <p>
-        <label for="media_url">Source URL</label>
+      <div class="radio-group">
+        <%
+          scraper_checked = link.media_url or not link.gifts_embed_url
+        %>
+        <label class="form-group checkbox">
+          <input type="radio" id="scrape" value="scrape" name="media_url_type"
+                 ${"checked='checked'" if scraper_checked else ''}>
+          <span class="label">scraper</span>
+        </label>
+        <label class="form-group checkbox">
+          <input type="radio" id="redditgifts" value="redditgifts" name="media_url_type"
+                 ${"checked='checked'" if not scraper_checked else ''}>
+          <span class="label">redditgifts</span>
+        </label>
+      </div>
+      <p id="scraper_input" ${"" if scraper_checked else "style='display:none'"}>
+        <label for="media_url">source URL to scrape</label>
         <input id="media_url" name="media_url" type="text" class="rounded"
-               value="${link.media_url or ""}">
+               value="${link.media_url or ""}"
+               ${"" if scraper_checked else "disabled"}>
         ${error_field("BAD_URL", "media_url", "div")}
         ${error_field("SCRAPER_ERROR", "media_url", "div")}
+      </p>
+      <p id="rg_input" ${"style='display:none'" if scraper_checked else ""}>
+        <label for="gifts_embed_url">redditgifts embed URL</label>
+        <input id="gifts_embed_url" name="gifts_embed_url" type="text" class="rounded"
+               value="${link.gifts_embed_url or ''}"
+               ${"disabled" if scraper_checked else ""}>
+        ${error_field("BAD_URL", "gifts_embed_url", "div")}
       </p>
       ${checkbox("media_autoplay",
                  _("autoplay"),
@@ -209,7 +268,19 @@
                  _("media override (adds an onclick to the link to generate a drop-down rather than a link out)"),
                  getattr(link, "media_override", False) or False)}
       <br>
+    </div>
+  </%utils:line_field>
+</%def>
 
+<%def name="managed_field(link)">
+  <%utils:line_field title="" id="managed-field" css_class="rounded managed-field">
+    <div class="checkbox-group">
+      <div class="form-group">
+        ${checkbox("is_managed", _("managed promotion"), link.managed_promo if link else False)}
+      </div>
+      <div class="infotext rounded">
+        <p>${_("Managed promotions don't appear in the selfserve approval queues.")}</p>
+      </div>
     </div>
   </%utils:line_field>
 </%def>
@@ -308,9 +379,8 @@
                   value="${'%.2f' % g.default_promote_bid}"
                   data-default_bid="${g.default_promote_bid}"
                   data-min_bid="${thing.min_bid}"
-                  data-base_cpm="${thing.author.cpm_selfserve_pennies}"
-                  data-geotarget_metro_cpm="${g.cpm_selfserve_geotarget_metro.pennies}"
-                  data-collection_cpm="${g.cpm_selfserve_collection.pennies}"/>
+                  data-real_min_bid="${g.min_promote_bid}"
+                  data-max_bid="${thing.max_bid}"/>
           <div class="minimum-spend">
             ${_('%(minimum)s minimum') % dict(minimum=format_currency(thing.min_bid, 'USD', locale=c.locale))}
           </div>
@@ -463,7 +533,7 @@
   %if c.user_is_sponsor:
     <div class="spacer bidding-history">
       %if thing.bids:
-        <%utils:line_field title="${_('bidding history')}" css_class="rounded">
+        <%utils:line_field title="${_('spend history')}" css_class="rounded">
           <table class="bid-table">
             <tr>
               <th>date</th>
@@ -471,7 +541,7 @@
               <th>transaction id</th>
               <th>campaign id</th>
               <th>pay id</th>
-              <th>bid</th>
+              <th>spend</th>
               <th>charge</th>
               <th>status</th>
             </tr>

@@ -16,19 +16,19 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from webob.exc import HTTPBadRequest, HTTPForbidden, status_map
 from r2.lib.utils import Storage, tup
-from pylons import request
+from pylons import g, request
 from pylons.i18n import _
 from copy import copy
 
 
 error_list = dict((
-        ('USER_REQUIRED', _("please login to do that")),
+        ('USER_REQUIRED', _("please sign in to do that")),
         ('HTTPS_REQUIRED', _("this page must be accessed using https")),
         ('WRONG_DOMAIN', _("you can't do that on this domain")),
         ('VERIFIED_USER_REQUIRED', _("you need to set a valid email address to do that.")),
@@ -37,20 +37,23 @@ error_list = dict((
         ('INVALID_SCHEME', _('URI scheme must be one of: %(schemes)s')),
         ('BAD_CAPTCHA', _('care to try these again?')),
         ('BAD_USERNAME', _('invalid user name')),
+        ('USERNAME_TOO_SHORT', _('username must be between %(min)d and %(max)d characters')),
+        ('USERNAME_INVALID_CHARACTERS', _('username must contain only letters, numbers, "-", and "_"')),
         ('USERNAME_TAKEN', _('that username is already taken')),
         ('USERNAME_TAKEN_DEL', _('that username is taken by a deleted account')),
         ('USER_BLOCKED', _("you can't send to a user that you have blocked")),
         ('NO_THING_ID', _('id not specified')),
         ('TOO_MANY_THING_IDS', _('you provided too many ids')),
         ('NOT_AUTHOR', _("you can't do that")),
-        ('NOT_USER', _("you are not logged in as that user")),
+        ('NOT_USER', _("you are not signed in as that user")),
         ('NOT_FRIEND', _("you are not friends with that user")),
-        ('LOGGED_IN', _("you are already logged in")),
+        ('LOGGED_IN', _("you are already signed in")),
         ('DELETED_LINK', _('the link you are commenting on has been deleted')),
         ('DELETED_COMMENT', _('that comment has been deleted')),
         ('DELETED_THING', _('that element has been deleted')),
+        ('SHORT_PASSWORD', _('the password must be at least %(chars)d characters')),
         ('BAD_PASSWORD', _('that password is unacceptable')),
-        ('WRONG_PASSWORD', _('invalid password')),
+        ('WRONG_PASSWORD', _('wrong password')),
         ('BAD_PASSWORD_MATCH', _('passwords do not match')),
         ('NO_NAME', _('please enter a name')),
         ('NO_EMAIL', _('please enter an email address')),
@@ -70,7 +73,9 @@ error_list = dict((
         ('SUBREDDIT_EXISTS', _('that subreddit already exists')),
         ('SUBREDDIT_NOEXIST', _('that subreddit doesn\'t exist')),
         ('SUBREDDIT_NOTALLOWED', _("you aren't allowed to post there.")),
+        ('SUBREDDIT_NO_ACCESS', _("you aren't allowed access to this subreddit")),
         ('SUBREDDIT_REQUIRED', _('you must specify a subreddit')),
+        ('SUBREDDIT_DISABLED_ADS', _('this subreddit has chosen to disable their ads at this time')),
         ('BAD_SR_NAME', _('that name isn\'t going to work')),
         ('COLLECTION_NOEXIST', _('that collection doesn\'t exist')),
         ('INVALID_TARGET', _('that target type is not valid')),
@@ -83,21 +88,23 @@ error_list = dict((
         ('BAD_CNAME', "that domain isn't going to work"),
         ('USED_CNAME', "that domain is already in use"),
         ('INVALID_OPTION', _('that option is not valid')),
-        ('BAD_EMAIL', _('the following email is invalid: %(email)s')),
+        ('BAD_EMAIL', _('that email is invalid')),
         ('BAD_EMAILS', _('the following emails are invalid: %(emails)s')),
         ('NO_EMAILS', _('please enter at least one email address')),
         ('TOO_MANY_EMAILS', _('please only share to %(num)s emails at a time.')),
+        ('NEWSLETTER_NO_EMAIL', _('where should we send that weekly newsletter?')),
+        ('NEWSLETTER_EMAIL_UNACCEPTABLE', _('That email could not be added. Check your email for an existing confirmation email.')),
         ('OVERSOLD', _('that subreddit has already been oversold on %(start)s to %(end)s. Please pick another subreddit or date.')),
         ('OVERSOLD_DETAIL', _("We have insufficient inventory to fulfill your requested budget, target, and dates. Only %(available)s impressions available on %(target)s from %(start)s to %(end)s.")),
         ('BAD_DATE', _('please provide a date of the form mm/dd/yyyy')),
         ('BAD_DATE_RANGE', _('the dates need to be in order and not identical')),
-        ('DATE_RANGE_TOO_LARGE', _('you must choose a date range of less than %(days)s days')),
         ('DATE_TOO_LATE', _('please enter a date %(day)s or earlier')),
         ('DATE_TOO_EARLY', _('please enter a date %(day)s or later')),
         ('BAD_ADDRESS', _('address problem: %(message)s')),
         ('BAD_CARD', _('card problem: %(message)s')),
         ('TOO_LONG', _("this is too long (max: %(max_length)s)")),
         ('NO_TEXT', _('we need something here')),
+        ('TOO_SHORT', _("this is too short (min: %(min_length)s)")),
         ('INVALID_CODE', _("we've never seen that code before")),
         ('CLAIMED_CODE', _("that code has already been claimed -- perhaps by you?")),
         ('NO_SELFS', _("that subreddit doesn't allow text posts")),
@@ -105,6 +112,7 @@ error_list = dict((
         ('TOO_OLD', _("that's a piece of history now; it's too late to reply to it")),
         ('BAD_CSS_NAME', _('invalid css name')),
         ('BAD_CSS', _('invalid css')),
+        ('BAD_COLOR', _('invalid color')),
         ('BAD_REVISION', _('invalid revision ID')),
         ('TOO_MUCH_FLAIR_CSS', _('too many flair css classes')),
         ('BAD_FLAIR_TARGET', _('not a valid flair target')),
@@ -137,6 +145,7 @@ error_list = dict((
         ('MULTI_CANNOT_EDIT', _('you can\'t change that multireddit')),
         ('MULTI_TOO_MANY_SUBREDDITS', _('no more space for subreddits in that multireddit')),
         ('MULTI_SPECIAL_SUBREDDIT', _("can't add special subreddit %(path)s")),
+        ('TOO_MANY_SUBREDDITS', _('maximum %(max)s subreddits')),
         ('JSON_PARSE_ERROR', _('unable to parse JSON data')),
         ('JSON_INVALID', _('unexpected JSON structure')),
         ('JSON_MISSING_KEY', _('JSON missing key: "%(key)s"')),
@@ -146,6 +155,14 @@ error_list = dict((
         ('GOLD_REQUIRED', _('you must have an active reddit gold subscription to do that')),
         ('INSUFFICIENT_CREDDITS', _("insufficient creddits")),
         ('SCRAPER_ERROR', _("unable to scrape provided url")),
+        ('NO_SR_TO_SR_MESSAGE', _("can't send a message from a subreddit to another subreddit")),
+        ('USER_BLOCKED_MESSAGE', _("can't send message to that user")),
+        ('USER_BAN_NO_MESSAGE', _("that user will not be sent a ban notification, remove note to be able to ban")),
+        ('ADMIN_REQUIRED', _("you must be in admin mode for this")),
+        ('CANT_CONVERT_TO_GOLD_ONLY', _("to convert an existing subreddit to gold only, send a message to %(admin_modmail)s") 
+            % dict(admin_modmail=g.admin_message_acct)),
+        ('GOLD_ONLY_SR_REQUIRED', _("this subreddit must be 'gold only' to select this")),
+        ('CANT_CREATE_SR', _("your account is too new to create a subreddit. please contact the admins to request an exemption.")),
     ))
 
 errors = Storage([(e, e) for e in error_list.keys()])
@@ -210,6 +227,14 @@ class ErrorSet(object):
 
     def get(self, name, default=None):
         return self.errors.get(name, default)
+
+    def get_first(self, field_name, *error_names):
+        error = None
+
+        for error_name in error_names:
+            error = self.get((error_name, field_name))
+            if error:
+                return error
 
     def __getitem__(self, name):
         return self.errors[name]

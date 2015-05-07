@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -86,7 +86,7 @@ clean_ini:
 
 #################### CSS file lists
 SPRITED_STYLESHEETS += reddit.less compact.css
-LESS_STYLESHEETS := wiki.less adminbar.less policies.less
+LESS_STYLESHEETS := wiki.less adminbar.less policies.less reddit-embed.less
 OTHER_STYLESHEETS := mobile.css highlight.css
 
 #################### Static Files
@@ -162,10 +162,10 @@ $(MINIFIED_OTHER_STYLESHEETS): $(STATIC_BUILD_DIR)/%.css: $(CSS_SOURCE_DIR)/%.cs
 $(STATIC_BUILD_DIR)/sprite-%.png $(STATIC_BUILD_DIR)/%.css: $(CSS_SOURCE_DIR)/%.less $(STATIC_BUILDSTAMP)
 	# see above
 	rm -f $(STATIC_BUILD_DIR)/sprite-$*.png $(STATIC_BUILD_DIR)/$*.css
-	$(PYTHON) r2/lib/nymph.py $(CSS_SOURCE_DIR)/$*.less $(STATIC_BUILD_DIR)/sprite-$*.png > $(STATIC_BUILD_DIR)/$*.less.tmp
-	$(LESSC) $(STATIC_BUILD_DIR)/$*.less.tmp > $(STATIC_BUILD_DIR)/$*.css.tmp
+	$(PYTHON) r2/lib/nymph.py $(CSS_SOURCE_DIR)/$*.less $(STATIC_BUILD_DIR)/sprite-$*.png > $(CSS_SOURCE_DIR)/$*.less.tmp
+	$(LESSC) $(CSS_SOURCE_DIR)/$*.less.tmp > $(STATIC_BUILD_DIR)/$*.css.tmp
 	$(CSS_COMPRESS) < $(STATIC_BUILD_DIR)/$*.css.tmp > $(STATIC_BUILD_DIR)/$*.css
-	rm $(STATIC_BUILD_DIR)/$*.less.tmp $(STATIC_BUILD_DIR)/$*.css.tmp
+	rm $(CSS_SOURCE_DIR)/$*.less.tmp $(STATIC_BUILD_DIR)/$*.css.tmp
 
 # deprecated; remove once compact.scss has been converted to LESS
 $(STATIC_BUILD_DIR)/sprite-%.png $(STATIC_BUILD_DIR)/%.css: $(CSS_SOURCE_DIR)/%.css $(STATIC_BUILDSTAMP)

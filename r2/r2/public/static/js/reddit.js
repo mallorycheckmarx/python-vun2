@@ -9,6 +9,11 @@ function open_menu(menu) {
         .addClass("active inuse");
 };
 
+function close_menu(item) {
+    $(item).closest('.drop-choices')
+        .removeClass('active inuse');
+}
+
 function close_menus(event) {
     $(".drop-choices.inuse").not(".active")
         .removeClass("inuse");
@@ -147,12 +152,14 @@ function emptyInput(elem, msg) {
 
 
 function showlang() {
-    $(".lang-popup:first").show();
-    return false;
-};
+    var content = $('#lang-popup').prop('innerHTML');
+    var popup = new r.ui.Popup({
+        className: 'lang-modal',
+        content: content,
+    });
 
-function hidecover(where) {
-    $(where).parents(".cover-overlay").hide();
+    popup.show();
+
     return false;
 };
 
@@ -191,6 +198,7 @@ function unread_thing(elem) {
     if (!t.hasClass("thing")) {
         t = t.thing();
     }
+
     $(t).addClass("new unread");
 }
 
@@ -204,6 +212,7 @@ function read_thing(elem) {
     } else {
         $(t).removeClass("unread");
     }
+
     $.request("read_message", {"id": $(t).thing_id()});
 }
 
@@ -230,11 +239,29 @@ function click_thing(elem) {
 }
 
 function hide_thing(elem) {
-    $(elem).thing().fadeOut(function() {
-            $(this).toggleClass("hidden");
+    var $thing = $(elem).thing();
+
+    if ($thing.is('.comment') && $thing.has('.child:not(:empty)').length) {
+        var deleted = '[' + _.escape(r._('deleted')) + ']';
+        var $entry = $thing.addClass('deleted').find('.entry:first');
+
+        $entry.find('.usertext')
+            .addClass('grayed')
+            .find('.md')
+                .html('<p>' + deleted + '</p>');
+
+        $entry.find('.author')
+            .replaceWith('<em>' + deleted + '</em>')  ;  
+        
+        $entry.find('.userattrs, .score, .buttons')
+            .remove();
+    } else {
+        $thing.fadeOut(function() {
+            $(this).toggleClass('hidden');
             unexpando_child(elem);
-    });
-};
+        });
+    }
+}
 
 function toggle_label (elem, callback, cancelback) {
   $(elem).parent().find(".option").toggle();
@@ -335,15 +362,21 @@ function unfriend(user_name, container_name, type) {
 };
 
 function share(elem) {
-    $.request("new_captcha");
-    $(elem).new_thing_child($(".sharelink:first").clone(true)
-                            .attr("id", "sharelink_" + $(elem).thing_id()),
-                             false);
-    $.request("new_captcha");
+  var thingId = $(elem).thing_id();
+  r.analytics.fireGAEvent('share', 'shareOpen', thingId);
+
+  $.request("new_captcha");
+  $(elem).new_thing_child($(".sharelink:first").clone(true)
+                          .attr("id", "sharelink_" + thingId),
+                           false);
+  $.request("new_captcha");
 };
 
 function cancelShare(elem) {
-    return cancelToggleForm(elem, ".sharelink", ".share-button");
+  var thingId = $(elem).thing_id();
+  r.analytics.fireGAEvent('share', 'shareClose', thingId);
+
+  return cancelToggleForm(elem, ".sharelink", ".share-button");
 };
 
 function reject_promo(elem) {
@@ -355,8 +388,14 @@ function cancel_reject_promo(elem) {
 }
 
 function complete_reject_promo(elem) {
-    $(elem).thing().removeClass("accepted").addClass("rejected")
+    var $el = $(elem);
+
+    $el.thing().removeClass("accepted").addClass("rejected")
         .find(".reject_promo").remove();
+
+    if ($el.data('hide-after-seen')) {
+        hide_thing(elem);
+    }
 }
 
 /* Comment generation */
@@ -443,14 +482,21 @@ function togglemessage(elem) {
   }
 }
 
-function morechildren(form, link_id, sort, children, depth, pv_hex) {
+function morechildren(form, link_id, sort, children, depth) {
     $(form).html(reddit.status_msg.loading)
         .css("color", "red");
     var id = $(form).parents(".thing.morechildren:first").thing_id();
-    $.request('morechildren', {link_id: link_id, sort: sort,
-              children: children, depth: depth, id: id, pv_hex: pv_hex});
+    var child_params = {
+        link_id: link_id,
+        sort: sort,
+        children: children,
+        depth: depth,
+        id: id,
+    };
+    $.request('morechildren', child_params, undefined, undefined,
+              undefined, true);
     return false;
-};
+}
 
 function moremessages(elem) {
     $(elem).html(reddit.status_msg.loading).css("color", "red");
@@ -774,7 +820,7 @@ function expando_child(elem) {
                       expando.html($.unsafe(r));
                       $(document).trigger('expando_thing', thing)
                   },
-                  false, "html");
+                  false, "html", true);
     }
     else {
         expando.html($.unsafe(child_cache[key]));
@@ -787,10 +833,13 @@ function expando_child(elem) {
 function unexpando_child(elem) {
     var thing = $(elem).thing();
     var button = thing.find(".expando-button");
-    button
-        .addClass("collapsed")
-        .removeClass("expanded")
-        .get(0).onclick = function() {expando_child(elem)};
+
+    if (button.length) {
+        button
+            .addClass("collapsed")
+            .removeClass("expanded")
+            .get(0).onclick = function() {expando_child(elem)};
+    }
 
     thing.find(".expando").hide().empty();
 }
@@ -914,6 +963,18 @@ function set_distinguish(elem, value) {
   change_state(elem, "distinguish/" + value);
   $(elem).children().toggle();
 }
+
+function toggle_clear_suggested_sort(elem) {
+  var form = $(elem).parents("form")[0];
+  $(form).children().toggle();
+}
+
+function set_suggested_sort(elem, value) {
+  $(elem).parents('form').first().find('input[name="sort"]').val(value);
+  change_state(elem, "set_suggested_sort");
+  $(elem).children().toggle();
+}
+
 
 function populate_click_gadget() {
     /* if we can find the click-gadget, populate it */
@@ -1169,6 +1230,14 @@ $(function() {
             $("#searchexpando").slideDown();
         });
 
+        // Store the user's choice for restrict_sr
+        $('#search input[name="restrict_sr"]')
+          .change(function() {
+            store.set('search.restrict_sr.checked', this.checked)
+          });
+        $('#searchexpando input[name="restrict_sr"]')
+          .prop("checked", !!store.get('search.restrict_sr.checked'));
+
         $("#search_showmore").click(function(event) {
             $("#search_showmore").parent().hide();
             $("#moresearchinfo").slideDown();
@@ -1187,6 +1256,26 @@ $(function() {
         /* Select shortlink text on click */
         $("#shortlink-text").click(function() {
             $(this).select();
+        });
+
+        $(".sr_style_toggle").change(function() {
+            $('#sr_style_throbber')
+            .html('<img src="' + r.utils.staticURL('throbber.gif') + '" />')
+            .css("display", "inline-block");
+            return post_form($(this).parent(), "set_sr_style_enabled");
+        });
+
+        $(".reddit-themes .theme").click(function() {
+          $("div.theme.selected").removeClass("selected");
+          $("input[name='enable_default_themes']").prop("checked", true);
+          // if other is selected
+          if ($(this).hasClass("select-custom-theme")) {
+            $("#other_theme_selector").prop("checked", true);
+          } else {
+            $("input[name='theme_selector'][value='" + $(this).attr("id") + "']")
+              .prop("checked", true);
+          }
+          $(this).addClass("selected");
         });
 
         /* ajax ynbutton */
@@ -1226,36 +1315,6 @@ function show_unfriend(account_fullname) {
                 $(this).html("");
             }
         });
-}
-
-function search_feedback(elem, approval) {
-  f = $("form#search");
-  var q    = f.find('input[name="q"]').val();
-  var sort = f.find('input[name="sort"]').val();
-  var t    = f.find('input[name="t"]').val();
-  var d = {
-    q: q,
-    sort: sort,
-    t: t,
-    approval: approval
-  };
-  $.request("searchfeedback", d, null, true);
-  elem.siblings(".pretty-button").removeClass("pressed");
-  elem.siblings(".thanks").show();
-  elem.addClass("pressed");
-  return false;
-}
-
-function highlight_new_comments(period) {
-  var i;
-  for (i = 0 ; i <= 9; i++) {
-    items = $(".comment-period-" + i);
-    if (period >= 0 && i >= period) {
-      items.addClass("new-comment");
-    } else {
-      items.removeClass("new-comment");
-    }
-  }
 }
 
 function save_href(link) {

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -95,6 +95,10 @@ ${pr.javascript_setup()}
         ${pr.timing_field()}
         ${pr.priority_field()}
         ${pr.budget_field()}
+        <%utils:line_field title="${_('confirm')}" css_class="rounded confirmation-field">
+          <div id="campaign-creator">
+          </div>
+        </%utils:line_field>
       </div>
       <footer class="buttons">
         <input type="hidden" name="campaign_id36" value="">
@@ -104,16 +108,6 @@ ${pr.javascript_setup()}
         <button name="cancel"
                 onclick="return cancel_edit_campaign()">
           ${_("cancel")}
-        </button>
-        <button name="save"
-                onclick="return post_pseudo_form('.campaign', 'edit_campaign')"
-                class="primary-button">
-          ${_("save")}
-        </button>
-        <button name="create"
-                onclick="return post_pseudo_form('.campaign', 'edit_campaign')"
-                class="primary-button">
-          ${_("create")}
         </button>
       </footer>
     </div>
@@ -140,7 +134,7 @@ ${pr.javascript_setup()}
              data-max-campaigns="${g.MAX_CAMPAIGNS_PER_LINK}">
           <table style="${'display:none' if not thing.campaigns else ''}">
             <thead>
-              <tr>
+              <tr class="campaign-header-row">
                 <th class="campaign-start-date" title="${start_title}">${_("start")}</th>
                 <th class="campaign-end-date" title="${end_title}">${_("end")}</th>
                 <th class="campaign-duration">${_("duration")}</th>
@@ -151,6 +145,9 @@ ${pr.javascript_setup()}
                 <th class="campaign-spent">${_("spent")}</th>
                 <th class="campaign-target" title="${targeting_title}">${_("targeting")}</th>
                 <th class="campaign-location">${_("location")}</th>
+                %if c.user_is_sponsor:
+                  <th class="campaign-payment-mismatch">${_("payment mismatch")}</th>
+                %endif
                 <th class="campaign-buttons" style="align:right"></th>
               </tr>
             </thead>
@@ -203,6 +200,7 @@ ${pr.javascript_setup()}
           ${pr.commenting_field(thing.link)}
 
           %if c.user_is_sponsor:
+            ${pr.managed_field(thing.link)}
             ${pr.media_field(thing.link)}
           %endif
         %endif

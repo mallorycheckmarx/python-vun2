@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -75,7 +75,8 @@ class FeatureState(object):
 
         return config
 
-    def is_enabled(self, user=None):
+    def is_enabled(self, user=None, subreddit=None, subdomain=None,
+                   oauth_client=None):
         cfg = self.config
         world = self.world
 
@@ -95,8 +96,23 @@ class FeatureState(object):
         if cfg.get('employee') and world.is_employee(user):
             return True
 
-        users = cfg.get('users')
-        if users and user and user.name in users:
+        if cfg.get('gold') and world.has_gold(user):
+            return True
+
+        users = [u.lower() for u in cfg.get('users', [])]
+        if users and user and user.name.lower() in users:
+            return True
+
+        subreddits = [s.lower() for s in cfg.get('subreddits', [])]
+        if subreddits and subreddit and subreddit.lower() in subreddits:
+            return True
+
+        subdomains = [s.lower() for s in cfg.get('subdomains', [])]
+        if subdomains and subdomain and subdomain.lower() in subdomains:
+            return True
+
+        clients = set(cfg.get('oauth_clients', []))
+        if clients and oauth_client and oauth_client in clients:
             return True
 
         # Unknown value, default to off.

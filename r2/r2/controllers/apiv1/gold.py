@@ -16,17 +16,14 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import c, g
+from pylons import c, g, request
 
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope
-from r2.controllers.reddit_base import (
-    abort_with_error,
-    OAuth2ResourceController,
-)
+from r2.controllers.reddit_base import OAuth2OnlyController
 from r2.controllers.ipn import send_gift
 from r2.lib.errors import RedditError
 from r2.lib.validator import (
@@ -35,38 +32,38 @@ from r2.lib.validator import (
     VByName,
     VInt,
 )
-from r2.models import Comment, Link
+from r2.models import Account, Comment, Link, NotFound
 from r2.models.gold import creddits_lock
+from r2.lib.validator import VUser
 
 
-class APIv1GoldController(OAuth2ResourceController):
-    def pre(self):
-        OAuth2ResourceController.pre(self)
-        self.authenticate_with_token()
-        self.set_up_user_context()
-        self.run_sitewide_ratelimits()
-
-    def try_pagecache(self):
-        pass
-
-    @staticmethod
-    def on_validation_error(error):
-        abort_with_error(error, error.code or 400)
-
-    def _gift_using_creddits(self, recipient, months=1, thing_fullname=None):
+class APIv1GoldController(OAuth2OnlyController):
+    def _gift_using_creddits(self, recipient, months=1, thing_fullname=None,
+            proxying_for=None):
         with creddits_lock(c.user):
             if not c.user.employee and c.user.gold_creddits < months:
                 err = RedditError("INSUFFICIENT_CREDDITS")
                 self.on_validation_error(err)
 
+            note = None
+            buyer = c.user
+            if c.user.name.lower() in g.live_config["proxy_gilding_accounts"]:
+                note = "proxy-%s" % c.user.name
+                if proxying_for:
+                    try:
+                        buyer = Account._by_name(proxying_for)
+                    except NotFound:
+                        pass
+
             send_gift(
-                buyer=c.user,
+                buyer=buyer,
                 recipient=recipient,
                 months=months,
                 days=months * 31,
                 signed=False,
                 giftmessage=None,
                 thing_fullname=thing_fullname,
+                note=note,
             )
 
             if not c.user.employee:
@@ -75,6 +72,7 @@ class APIv1GoldController(OAuth2ResourceController):
 
     @require_oauth2_scope("creddits")
     @validate(
+        VUser(),
         target=VByName("fullname"),
     )
     @api_doc(
@@ -89,10 +87,12 @@ class APIv1GoldController(OAuth2ResourceController):
         self._gift_using_creddits(
             recipient=target.author_slow,
             thing_fullname=target._fullname,
+            proxying_for=request.POST.get("proxying_for"),
         )
 
     @require_oauth2_scope("creddits")
     @validate(
+        VUser(),
         user=VAccountByName("username"),
         months=VInt("months", min=1, max=36),
     )
@@ -104,4 +104,5 @@ class APIv1GoldController(OAuth2ResourceController):
         self._gift_using_creddits(
             recipient=user,
             months=months,
+            proxying_for=request.POST.get("proxying_for"),
         )

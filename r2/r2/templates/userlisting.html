@@ -16,11 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from r2.lib.template_helpers import format_html
    from r2.models import Sub
  %>
 <%namespace file="utils.html" import="error_field, plain_link" />
@@ -35,27 +36,32 @@
     <input type="hidden" name="action" value="add">
     <input type="hidden" name="container" value="${container_name}">
     <input type="hidden" name="type" value="${add_type}">
+    %if add_type == "banned":
+      <div class="note">
+        ${_("note: the banned user will only receive a message notifying them of their ban if they are subscribed to the subreddit or have previously gained or lost any karma (either link or comment) in the subreddit.")}
+      </div>
+    %endif
     %if add_type in ("banned", "wikibanned"):
         <label for="name">${_('who to ban?')} &nbsp;</label>
-        <input type="text" onfocus="$(this).parent('form').addClass('edited')" class="friend-name" name="name" id="name">
-        <span class="ban-details">
+        <input type="text" class="friend-name" name="name" id="name">
+        <div>
             <label for="note">${_('why the ban?')}</label>
             <input type="text" maxlength="300" name="note" id="note">
             <span>${_('(will not be visible to user)')}</span>
-        </span>
-        <span class="ban-details">
+        </div>
+        <div>
             <label for="duration">${_('how long?')}</label>
             <input type="number" min="1" max="999" name="duration" id="duration">
             <span>${_('days (leave blank for permanent)')}</span>
-        </span>
+        </div>
     %else:
         <input type="text" name="name" id="name">
     %endif
     %if add_type == "banned":
-      <span class="ban-details">
+      <div>
           <label for="note">${_('note to include in ban PM')}</label>
           <textarea name="ban_message" id="ban_message"></textarea>
-      </span>
+      </div>
     %endif
     %if permissions_form:
       ${permissions_form}
@@ -69,6 +75,7 @@
     ${error_field("USER_DOESNT_EXIST", "name")}
     ${error_field("ALREADY_MODERATOR", "name")}
     ${error_field("BANNED_FROM_SUBREDDIT", "name")}
+    ${error_field("USER_BAN_NO_MESSAGE", "ban_message")}
     %if caller:
       ${caller.body()}
     %endif
@@ -105,13 +112,13 @@
   %if thing.prev:
     ${plain_link(_("first"), thing.first, _sr_path = (c.site != Sub), rel="nofollow first")} 
     <span class="separator"></span>
-    ${plain_link(unsafe("&lsaquo; " + _("prev")), thing.prev, _sr_path = (c.site != Sub), rel="nofollow prev")}
+    ${plain_link(format_html("&lsaquo; %s", _("prev")), thing.prev, _sr_path = (c.site != Sub), rel="nofollow prev")}
   %endif
   %if thing.prev and thing.next:
     <span class="separator"></span>
   %endif
   %if thing.next:
-  ${plain_link(unsafe(_("next") + " &rsaquo;"), thing.next,  _sr_path = (c.site != Sub), rel="nofollow next")}
+  ${plain_link(format_html("%s &rsaquo;", _("next")), thing.next,  _sr_path = (c.site != Sub), rel="nofollow next")}
   %endif
   </p>
 %endif

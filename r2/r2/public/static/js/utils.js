@@ -1,4 +1,16 @@
 r.utils = {
+
+    fullnameToId: function(fullname) {
+        var parts = fullname.split('_');
+        var id36 = parts && parts[1];
+
+        return id36 && parseInt(id36, 36);
+    },
+
+    escapeSelector: function(str) {
+        return str.replace(/([ #;?%&,.+*~\':"!^$[\]()=>|\/@])/g,'\\$1');
+    },
+
     clamp: function(val, min, max) {
         return Math.max(min, Math.min(max, val))
     },
@@ -15,6 +27,19 @@ r.utils = {
         }
     },
 
+    parseTimestamp: function($el) {
+      var timestamp = $el.data('timestamp')
+      var isoTimestamp
+
+      if (!timestamp) {
+        isoTimestamp = $el.attr('datetime')
+        timestamp = Date.parse(isoTimestamp)
+        $el.data('timestamp', timestamp)
+      }
+
+      return timestamp
+    },
+
     joinURLs: function(/* arguments */) {
         return _.map(arguments, function(url, idx) {
             if (idx > 0 && url && url[0] != '/') {
@@ -22,6 +47,34 @@ r.utils = {
             }
             return url
         }).join('')
+    },
+
+    _scOn: "<!-- SC_ON -->",
+    _scOff: "<!-- SC_OFF -->",
+    _scBetweenTags1: />\s+/g,
+    _scBetweenTags2: /\s+</g,
+    _scSpaces: /\s+/g,
+    _scDirectives: /(<!-- SC_ON -->|<!-- SC_OFF -->)/,
+    spaceCompress: function (content) {
+        var res = '';
+        var compressionOn = true;
+        var splitContent = content.split(this._scDirectives);
+        for (var i=0; i<splitContent.length; ++i) {
+            var part = splitContent[i];
+            if (part === this._scOn) {
+                compressionOn = true;
+            } else if (part === this._scOff) {
+                compressionOn = false;
+            } else if (compressionOn) {
+                part = part.replace(this._scSpaces, ' ');
+                part = part.replace(this._scBetweenTags1, '>');
+                part = part.replace(this._scBetweenTags2, '<');
+                res += part;
+            } else {
+                res += part;
+            }
+        }
+        return res;
     },
 
     tup: function(list) {
@@ -169,7 +222,23 @@ r.utils = {
                 return $.ajax(options).done(_.bind(this.set, this, key))
             }
         }
-    }
+    },
+
+    parseError: function(error) {
+        var name = error[0];
+        var message = error[1];
+        var field = error[2];
+
+        return {
+            name: name,
+            message: message,
+            field: field,
+        }
+    },
+
+    onTrident: function() {
+        return 'ActiveXObject' in window;
+    },
 
 }
 

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -38,7 +38,12 @@ def is_enabled(name):
     :param name string - a given feature name
     :return bool
     """
-    return _get_featurestate(name).is_enabled(_world.current_user())
+    return _get_featurestate(name).is_enabled(
+               user=_world.current_user(),
+               subreddit=_world.current_subreddit(),
+               subdomain=_world.current_subdomain(),
+               oauth_client=_world.current_oauth_client(),
+    )
 
 
 def is_enabled_for(name, user):

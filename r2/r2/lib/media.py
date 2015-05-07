@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -42,10 +42,17 @@ import requests
 
 from pylons import g
 
+from r2.config import feature
 from r2.lib import amqp, hooks
 from r2.lib.memoize import memoize
 from r2.lib.nymph import optimize_png
-from r2.lib.utils import TimeoutFunction, TimeoutFunctionException, domain
+from r2.lib.utils import (
+    TimeoutFunction,
+    TimeoutFunctionException,
+    UrlParser,
+    coerce_url_to_protocol,
+    domain,
+)
 from r2.models.link import Link
 from r2.models.media_cache import (
     ERROR_MEDIA,
@@ -58,8 +65,6 @@ from urllib2 import (
 )
 
 
-thumbnail_size = 70, 70
-
 # TODO: replace this with data from the embedly service api when available
 _SECURE_SERVICES = [
     "youtube",
@@ -67,6 +72,7 @@ _SECURE_SERVICES = [
     "soundcloud",
     "wistia",
     "slideshare",
+    "vine",
 ]
 
 
@@ -115,6 +121,18 @@ def _square_image(img):
 
 def _prepare_image(image):
     image = _square_image(image)
+
+    if feature.is_enabled('hidpi_thumbnails'):
+        hidpi_dims = [int(d * g.thumbnail_hidpi_scaling) for d in g.thumbnail_size]
+
+        # If the image width is smaller than hidpi requires, set to non-hidpi
+        if image.size[0] < hidpi_dims[0]:
+            thumbnail_size = g.thumbnail_size
+        else:
+            thumbnail_size = hidpi_dims
+    else:
+        thumbnail_size = g.thumbnail_size
+
     image.thumbnail(thumbnail_size, Image.ANTIALIAS)
     return image
 
@@ -126,14 +144,15 @@ def _clean_url(url):
     return url
 
 
-def _initialize_request(url, referer):
+def _initialize_request(url, referer, gzip=False):
     url = _clean_url(url)
 
     if not url.startswith(("http://", "https://")):
         return
 
     req = urllib2.Request(url)
-    req.add_header('Accept-Encoding', 'gzip')
+    if gzip:
+        req.add_header('Accept-Encoding', 'gzip')
     if g.useragent:
         req.add_header('User-Agent', g.useragent)
     if referer:
@@ -142,7 +161,7 @@ def _initialize_request(url, referer):
 
 
 def _fetch_url(url, referer=None):
-    request = _initialize_request(url, referer=referer)
+    request = _initialize_request(url, referer=referer, gzip=True)
     if not request:
         return None, None
     response = urllib2.urlopen(request)
@@ -327,6 +346,7 @@ def _set_media(link, force=False, **kwargs):
         link._commit()
 
         hooks.get_hook("scraper.set_media").call(link=link)
+        amqp.add_item("new_media_embed", link._fullname)
 
 
 def force_thumbnail(link, image_data, file_type=".jpg"):
@@ -339,11 +359,12 @@ def force_thumbnail(link, image_data, file_type=".jpg"):
     link._commit()
 
 
-def upload_icon(file_name, image_data, size):
+def upload_icon(image_data, size):
     image = str_to_image(image_data)
     image.format = 'PNG'
     image.thumbnail(size, Image.ANTIALIAS)
     icon_data = _image_to_str(image)
+    file_name = _filename_from_content(icon_data)
     return g.media_provider.put(file_name + ".png", icon_data)
 
 
@@ -444,9 +465,17 @@ class Scraper(object):
 class _ThumbnailOnlyScraper(Scraper):
     def __init__(self, url):
         self.url = url
+        # Having the source document's protocol on hand makes it easier to deal
+        # with protocol-relative urls we extract from it.
+        self.protocol = UrlParser(url).scheme
 
     def scrape(self):
         thumbnail_url = self._find_thumbnail_image()
+        # When isolated from the context of a webpage, protocol-relative URLs
+        # are ambiguous, so let's absolutify them now.
+        if thumbnail_url and thumbnail_url.startswith('//'):
+            thumbnail_url = coerce_url_to_protocol(thumbnail_url, self.protocol)
+
         thumbnail = _make_thumbnail_from_url(thumbnail_url, referer=self.url)
         return thumbnail, None, None
 
@@ -483,6 +512,10 @@ class _ThumbnailOnlyScraper(Scraper):
         max_area = 0
         max_url = None
         for image_url in self._extract_image_urls(soup):
+            # When isolated from the context of a webpage, protocol-relative
+            # URLs are ambiguous, so let's absolutify them now.
+            if image_url.startswith('//'):
+                image_url = coerce_url_to_protocol(image_url, self.protocol)
             size = _fetch_image_size(image_url, referer=self.url)
             if not size:
                 continue
@@ -533,7 +566,12 @@ class _EmbedlyScraper(Scraper):
 
         param_dict.update(self.embedly_params)
         params = urllib.urlencode(param_dict)
+
+        timer = g.stats.get_timer("providers.embedly.oembed")
+        timer.start()
         content = requests.get(self.EMBEDLY_API_URL + "?" + params).content
+        timer.stop()
+
         return json.loads(content)
 
     def _make_media_object(self, oembed):

@@ -16,12 +16,12 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from reddit_base import RedditController
-from r2.lib.pages import AdminPage, AdminCreddits
+from r2.lib.pages import AdminPage, AdminCreddits, AdminGold
 from r2.lib.validator import nop, validate, VAdmin
 
 class AdminToolController(RedditController):
@@ -31,3 +31,10 @@ class AdminToolController(RedditController):
     )
     def GET_creddits(self, recipient):
         return AdminPage(content=AdminCreddits(recipient)).render()
+
+    @validate(
+        VAdmin(),
+        recipient=nop('recipient'),
+    )
+    def GET_gold(self, recipient):
+        return AdminPage(content=AdminGold(recipient)).render()

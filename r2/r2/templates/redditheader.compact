@@ -16,14 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
    from r2.lib.template_helpers import display_link_karma, header_url
-   from r2.models.subreddit import DefaultSR
-   from r2.lib import authentication
+   from r2.models.subreddit import DefaultSR, FakeSubreddit
    
  %>
 <%namespace file="utils.html" import="plain_link, img_link, separator, logout"/>
@@ -92,17 +91,17 @@
     <div class="menuitem">
       ${plain_link("submit", "/submit", _sr_path=False)}
     </div>
-    %if authentication.user_can_log_out():
+    %if g.auth_provider.is_logout_allowed():
     <div class="menuitem bottm-bar">
       ${logout(dest=request.fullpath)}
     </div>
     % endif
    %else:
     <div class="menuitem">
-      ${plain_link("login", "/login", _sr_path=False)}
+      ${plain_link("sign in", "/login", _sr_path=False)}
     </div>
     <div class="menuitem bottm-bar">
-      ${plain_link("register", "/register", _sr_path=False)}
+      ${plain_link("create an account", "/register", _sr_path=False)}
     </div>
     <div class="menuitem">
       ${plain_link("subreddits", "/subreddits/", _sr_path=False)}
@@ -111,6 +110,11 @@
     <div class="menuitem">
       ${plain_link("search", "/search")}
     </div>
+    %if not isinstance(c.site, FakeSubreddit):
+    <div class="menuitem">
+      ${plain_link("sidebar", "/about/sidebar")}
+    </div>
+    %endif
   </div>
 </div>
 %if toolbars:

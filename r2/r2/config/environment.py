@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -99,10 +99,10 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
         error_handler=handle_mako_error,
         module_directory=module_directory,
         input_encoding="utf-8",
-        default_filters=["mako_websafe"],
+        default_filters=["conditional_websafe"],
         filesystem_checks=getattr(g, "reload_templates", False),
         imports=[
-            "from r2.lib.filters import websafe, unsafe, mako_websafe",
+            "from r2.lib.filters import websafe, unsafe, conditional_websafe",
             "from pylons import c, g, request",
             "from pylons.i18n import _, ungettext",
         ],

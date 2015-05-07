@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,6 +31,8 @@ import time
 from pylons import c, g, request
 from pylons.i18n import _
 
+from r2.config import feature
+from r2.config.extensions import API_TYPES, RSS_TYPES
 from r2.lib.comment_tree import (
     conversation,
     link_comments_and_sort,
@@ -61,6 +63,7 @@ from r2.models import (
     wiki,
 )
 from r2.models.admintools import compute_votes, ip_span
+from r2.models.flair import Flair
 from r2.models.listing import Listing
 
 
@@ -69,7 +72,7 @@ MAX_RECURSION = 10
 
 class Builder(object):
     def __init__(self, wrap=Wrapped, keep_fn=None, stale=True,
-                 spam_listing=False):
+                 spam_listing=False, **kw):
         self.stale = stale
         self.wrap = wrap
         self.keep_fn = keep_fn
@@ -353,6 +356,7 @@ class QueryBuilder(Builder):
         self.query = query
         self.skip = skip
         self.num = kw.get('num')
+        self.sr_detail = kw.get('sr_detail')
         self.start_count = kw.get('count', 0) or 0
         self.after = kw.get('after')
         self.reverse = kw.get('reverse')
@@ -397,7 +401,7 @@ class QueryBuilder(Builder):
                     q._rules = deepcopy(self.orig_rules)
                     q._after(last_item)
                     last_item = None
-                q._limit = max(int(num_need * EXTRA_FACTOR), 1)
+                q._limit = max(int(num_need * EXTRA_FACTOR), self.num // 2, 1)
         else:
             done = True
         new_items = list(q)
@@ -414,6 +418,7 @@ class QueryBuilder(Builder):
         count = self.start_count
         fetch_after = None
         loopcount = 0
+        stopped_early = False
 
         while not done:
             done, fetched_items = self.fetch_more(fetch_after, num_have)
@@ -422,6 +427,7 @@ class QueryBuilder(Builder):
             loopcount += 1
             if loopcount == 20:
                 done = True
+                stopped_early = True
 
             #no results, we're done
             if not fetched_items:
@@ -453,8 +459,13 @@ class QueryBuilder(Builder):
 
         # Is there a next page or not?
         have_next = True
-        if self.num and num_have < self.num:
+        if self.num and num_have < self.num and not stopped_early:
             have_next = False
+
+        if getattr(self, 'sr_detail', False):
+            for item in items:
+                item.sr_detail = True
+
 
         # Make sure first_item and last_item refer to things in items
         # NOTE: could retrieve incorrect item if there were items with
@@ -525,7 +536,7 @@ class IDBuilder(QueryBuilder):
             else:
                 if last_item:
                     last_item = None
-                slice_size = max(int(num_need * EXTRA_FACTOR), 1)
+                slice_size = max(int(num_need * EXTRA_FACTOR), self.num // 2, 1)
         else:
             slice_size = len(names)
             done = True
@@ -535,11 +546,31 @@ class IDBuilder(QueryBuilder):
         return done, new_items
 
 
+class ActionBuilder(IDBuilder):
+    def init_query(self):
+        self.actions = {}
+        ids = []
+        for id, date, action in self.query:
+            ids.append(id)
+            self.actions[id] = action
+        self.query = ids
+
+        super(ActionBuilder, self).init_query()
+
+    def thing_lookup(self, names):
+        items = super(ActionBuilder, self).thing_lookup(names)
+
+        for item in items:
+            if item._fullname in self.actions:
+                item.action_type = self.actions[item._fullname]
+        return items
+
+
 class CampaignBuilder(IDBuilder):
     """Build on a list of PromoTuples."""
 
     def __init__(self, query, wrap=Wrapped, keep_fn=None, prewrap_fn=None,
-                 skip=False, num=None, after=None, reverse=False, count=0):
+                 skip=False, num=None, after=None, reverse=False, count=0, **kw):
         Builder.__init__(self, wrap=wrap, keep_fn=keep_fn)
         self.query = query
         self.skip = skip
@@ -607,6 +638,23 @@ class CampaignBuilder(IDBuilder):
         return not self.must_skip(after)
 
 
+class ModActionBuilder(QueryBuilder):
+    def wrap_items(self, items):
+        wrapped = []
+        by_render_class = defaultdict(list)
+
+        for item in items:
+            w = self.wrap(item)
+            wrapped.append(w)
+            w.fullname = item._fullname
+            by_render_class[w.render_class].append(w)
+
+        for render_class, _items in by_render_class.iteritems():
+            render_class.add_props(c.user, _items)
+
+        return wrapped
+
+
 class SimpleBuilder(IDBuilder):
     def thing_lookup(self, names):
         return names
@@ -648,6 +696,7 @@ class SearchBuilder(IDBuilder):
         self.results = self.query.run()
         names = list(self.results.docs)
         self.total_num = self.results.hits
+        self.subreddit_facets = self.results.subreddit_facets
 
         after = self.after._fullname if self.after else None
 
@@ -667,8 +716,23 @@ class SearchBuilder(IDBuilder):
         elif (self.skip_deleted_authors and
               getattr(item, "author", None) and item.author._deleted):
             return False
+
+        # show NSFW to API and RSS users unless obey_over18=true
+        is_api_or_rss = (c.render_style in API_TYPES
+                         or c.render_style in RSS_TYPES)
+        if is_api_or_rss:
+            include_over18 = not c.obey_over18 or c.over18
+        elif feature.is_enabled('safe_search'):
+            include_over18 = c.over18
         else:
-            return True
+            include_over18 = True
+
+        is_nsfw = (item.over_18 or
+            (hasattr(item, 'subreddit') and item.subreddit.over_18))
+        if is_nsfw and not include_over18:
+            return False
+
+        return True
 
 class WikiRevisionBuilder(QueryBuilder):
     show_extended = True
@@ -736,7 +800,8 @@ def make_wrapper(parent_wrapper = Wrapped, **params):
 class CommentBuilder(Builder):
     def __init__(self, link, sort, comment=None, children=None, context=None,
                  load_more=True, continue_this_thread=True,
-                 max_depth=MAX_RECURSION, num=None, **kw):
+                 max_depth=MAX_RECURSION, edits_visible=True, num=None,
+                 show_deleted=False, **kw):
         Builder.__init__(self, **kw)
         self.link = link
         self.comment = comment
@@ -744,10 +809,13 @@ class CommentBuilder(Builder):
         self.context = context or 0
         self.load_more = load_more
         self.max_depth = max_depth
+        self.show_deleted = show_deleted or c.user_is_admin
+        self.edits_visible = edits_visible
         self.num = num
         self.continue_this_thread = continue_this_thread
         self.sort = sort
         self.rev_sort = isinstance(sort, operators.desc)
+        self.comments = None
 
     def update_candidates(self, candidates, sorter, to_add=None):
         for comment in (comment for comment in tup(to_add)
@@ -756,6 +824,11 @@ class CommentBuilder(Builder):
             heapq.heappush(candidates, (sort_val, comment))
 
     def get_items(self):
+        if self.comments is None:
+            self._get_comments()
+        return self._make_wrapped_tree()
+
+    def _get_comments(self):
         timer = g.stats.get_timer("CommentBuilder.get_items")
         timer.start()
         r = link_comments_and_sort(self.link, self.sort.col)
@@ -810,10 +883,6 @@ class CommentBuilder(Builder):
 
         timer.intermediate("pick_candidates")
 
-        if not candidates:
-            timer.stop()
-            return []
-
         # choose which comments to show
         items = []
         while (self.num is None or len(items) < self.num) and candidates:
@@ -845,31 +914,122 @@ class CommentBuilder(Builder):
 
         timer.intermediate("pick_comments")
 
+        self.top_level_candidates = [comment for sort_val, comment in candidates
+            if depth.get(comment, 0) == 0]
+        self.comments = Comment._byID(
+            items, data=True, return_dict=False, stale=self.stale)
+        timer.intermediate("lookup_comments")
+
+        self.timer = timer
+        self.cid_tree = cid_tree
+        self.depth = depth
+        self.more_recursions = more_recursions
+        self.offset_depth = offset_depth
+        self.dont_collapse = dont_collapse
+
+    def _make_wrapped_tree(self):
+        timer = self.timer
+        comments = self.comments
+        cid_tree = self.cid_tree
+        top_level_candidates = self.top_level_candidates
+        depth = self.depth
+        more_recursions = self.more_recursions
+        offset_depth = self.offset_depth
+        dont_collapse = self.dont_collapse
+        timer.intermediate("waiting")
+
+        if not comments and not top_level_candidates:
+            timer.stop()
+            return []
+
         # retrieve num_children for the visible comments
-        top_level_candidates = [comment for sort_val, comment in candidates
-                                        if depth.get(comment, 0) == 0]
-        needs_num_children = items + top_level_candidates
+        needs_num_children = [c._id for c in comments] + top_level_candidates
         num_children = get_num_children(needs_num_children, cid_tree)
         timer.intermediate("calc_num_children")
 
-        comments = Comment._byID(items, data=True, return_dict=False,
-                                 stale=self.stale)
-        timer.intermediate("lookup_comments")
         wrapped = self.wrap_items(comments)
         timer.intermediate("wrap_comments")
         wrapped_by_id = {comment._id: comment for comment in wrapped}
         final = []
 
+        # We have some special collapsing rules for the Q&A sort type.
+        # However, we want to show everything when we're building a specific
+        # set of children (like from "load more" links) or when viewing a
+        # comment permalink.
+        qa_sort_hiding = ((self.sort.col == '_qa') and not self.children and
+                          self.comment is None)
+        if qa_sort_hiding:
+            special_responder_ids = self.link.responder_ids
+        else:
+            special_responder_ids = ()
+
+        max_relation_walks = g.max_comment_parent_walk
         for comment in wrapped:
             # skip deleted comments with no children
             if (comment.deleted and not cid_tree.has_key(comment._id)
-                and not c.user_is_admin):
+                and not self.show_deleted):
+                comment.hidden_completely = True
                 continue
 
             comment.num_children = num_children[comment._id]
+            comment.edits_visible = self.edits_visible
+
+            # In the Q&A sort type, we want to collapse all comments other than
+            # those that are:
+            #
+            # 1. Top-level comments,
+            # 2. Responses from the OP(s),
+            # 3. Responded to by the OP(s) (dealt with below), or
+            # 4. Otherwise normally prevented from collapse (eg distinguished
+            #    comments).
+            if (qa_sort_hiding and
+                   depth[comment._id] != 0 and # (1)
+                   comment.author_id not in special_responder_ids and # (2)
+                   not comment.prevent_collapse): # (4)
+                comment.hidden = True
 
             if comment.collapsed and comment._id in dont_collapse:
                 comment.collapsed = False
+                comment.hidden = False
+
+            parent = wrapped_by_id.get(comment.parent_id)
+            if parent:
+                if (qa_sort_hiding and
+                        comment.author_id in special_responder_ids):
+                    # Un-collapse parents as necessary.  It's a lot easier to
+                    # do this here, upwards, than to check through all the
+                    # children when we were iterating at the parent.
+                    ancestor = parent
+                    counter = 0
+                    while (ancestor and
+                            not getattr(ancestor, 'walked', False) and
+                            counter < max_relation_walks):
+                        ancestor.hidden = False
+                        # In case we haven't processed this comment yet.
+                        ancestor.prevent_collapse = True
+                        # This allows us to short-circuit when the rest of the
+                        # tree has already been uncollapsed.
+                        ancestor.walked = True
+
+                        ancestor = wrapped_by_id.get(ancestor.parent_id)
+                        counter += 1
+
+        # One more time through to actually add things to the final list.  We
+        # couldn't do that the first time because in the Q&A sort we don't know
+        # if a comment should be visible until after we've processed all its
+        # children.
+        for comment in wrapped:
+            if getattr(comment, 'hidden_completely', False):
+                # Don't add it to the tree, don't put it in "load more", don't
+                # acknowledge its existence at all.
+                continue
+
+            if getattr(comment, 'hidden', False):
+                # Remove it from the list of visible comments so it'll
+                # automatically be a candidate for the "load more" links.
+                del wrapped_by_id[comment._id]
+                # And don't add it to the tree.
+                continue
 
             # add the comment as a child of its parent or to the top level of
             # the tree if it has no parent
@@ -1125,7 +1285,7 @@ class MultiredditMessageBuilder(MessageBuilder):
 class TopCommentBuilder(CommentBuilder):
     """A comment builder to fetch only the top-level, non-spam,
        non-deleted comments"""
-    def __init__(self, link, sort, num=None, wrap=Wrapped):
+    def __init__(self, link, sort, num=None, wrap=Wrapped, **kw):
         CommentBuilder.__init__(self, link, sort,
                                 load_more = False,
                                 continue_this_thread = False,
@@ -1195,3 +1355,20 @@ class SavedBuilder(IDBuilder):
             category = categories.get(w._id, '')
             w.savedcategory = category
         return wrapped
+
+
+class FlairListBuilder(UserListBuilder):
+    def init_query(self):
+        q = self.query
+
+        if self.reverse:
+            q._reverse()
+
+        q._data = True
+        self.orig_rules = deepcopy(q._rules)
+        # FlairLists use Accounts for afters
+        if self.after:
+            if self.reverse:
+                q._filter(Flair.c._thing2_id < self.after._id)
+            else:
+                q._filter(Flair.c._thing2_id > self.after._id)

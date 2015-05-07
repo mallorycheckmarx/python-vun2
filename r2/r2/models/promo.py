@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,7 +28,6 @@ from pylons import g, c
 from pylons.i18n import _, N_
 
 from r2.lib import filters
-from r2.lib.cache import sgm
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import Thing, NotFound
 from r2.lib.memoize import memoize
@@ -162,8 +161,9 @@ NO_TRANSACTION = 0
 
 
 class Collection(object):
-    def __init__(self, name, sr_names, description=None):
+    def __init__(self, name, sr_names, over_18=False, description=None):
         self.name = name
+        self.over_18 = over_18
         self.sr_names = sr_names
         self.description = description
 
@@ -193,11 +193,32 @@ class CollectionStorage(tdb_cassandra.View):
     SR_NAMES_DELIM = '|'
 
     @classmethod
-    def set(cls, name, description, srs):
-        rowkey = name
+    def _from_columns(cls, name, columns):
+        description = columns['description']
+        sr_names = columns['sr_names'].split(cls.SR_NAMES_DELIM)
+        over_18 = bool(columns.get("over_18", "False"))
+        return Collection(name, sr_names, over_18=over_18, description=description)
+
+    @classmethod
+    def _to_columns(cls, description, srs, over_18):
         columns = {
             'description': description,
             'sr_names': cls.SR_NAMES_DELIM.join(sr.name for sr in srs),
+            'over_18': str(over_18),
+        }
+        return columns
+
+    @classmethod
+    def set(cls, name, description, srs, over_18):
+        rowkey = name
+        columns = cls._to_columns(description, srs, over_18)
+        cls._set_values(rowkey, columns)
+
+    @classmethod
+    def set_over_18(cls, name, over_18):
+        rowkey = name
+        columns = {
+            'over_18': str(over_18),
         }
         cls._set_values(rowkey, columns)
 
@@ -212,17 +233,13 @@ class CollectionStorage(tdb_cassandra.View):
         except tdb_cassandra.NotFoundException:
             return None
 
-        description = columns['description']
-        sr_names = columns['sr_names'].split(cls.SR_NAMES_DELIM)
-        return Collection(name, sr_names, description=description)
+        return cls._from_columns(name, columns)
 
     @classmethod
     def get_all(cls):
         ret = []
         for name, columns in cls._cf.get_range():
-            description = columns['description']
-            sr_names = columns['sr_names'].split(cls.SR_NAMES_DELIM)
-            ret.append(Collection(name, sr_names, description=description))
+            ret.append(cls._from_columns(name, columns))
         return ret
 
     def delete(cls, name):
@@ -287,7 +304,13 @@ class PromoCampaign(Thing):
     _defaults = dict(
         priority_name=PROMOTE_DEFAULT_PRIORITY.name,
         trans_id=NO_TRANSACTION,
+        trans_ip=None,
+        trans_ip_country=None,
+        trans_billing_country=None,
+        trans_country_match=None,
         location_code=None,
+        platform='desktop',
+        mobile_os_names=None,
     )
 
     # special attributes that shouldn't set Thing data attributes because they
@@ -571,3 +594,187 @@ class PromotedLinkRoadblock(tdb_cassandra.View):
                 start, end = cls._dates_from_key(key)
                 ret.append((sr.name, start, end))
         return ret
+
+
+class PromotionPrices(tdb_cassandra.View):
+    """
+    Check all the following potentially specially priced conditions:
+    * metro level targeting
+    * country level targeting (but not if the metro targeting is used)
+    * collection targeting
+    * frontpage targeting
+    * subreddit targeting
+
+    The price is the maximum price for all matching conditions. If no special
+    conditions are met use the global price.
+
+    """
+
+    _use_db = True
+    _connection_pool = 'main'
+    _read_consistency_level = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.ALL
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.UTF8_TYPE,
+        "column_name_class": tdb_cassandra.UTF8_TYPE,
+        "default_validation_class": tdb_cassandra.INT_TYPE,
+    }
+
+    COLLECTION_DEFAULT = g.cpm_selfserve_collection.pennies
+    SUBREDDIT_DEFAULT = g.cpm_selfserve.pennies
+    COUNTRY_DEFAULT = g.cpm_selfserve_collection.pennies
+    METRO_DEFAULT = g.cpm_selfserve_geotarget_metro.pennies
+
+    @classmethod
+    def _rowkey_and_column_from_target(cls, target):
+        rowkey = column_name = None
+
+        if isinstance(target, Target):
+            if target.is_collection:
+                rowkey = "COLLECTION"
+                column_name = target.collection.name
+            else:
+                rowkey = "SUBREDDIT"
+                column_name = target.subreddit_name
+
+        if not rowkey or not column_name:
+            raise ValueError("target must be Target")
+
+        return rowkey, column_name
+
+    @classmethod
+    def _rowkey_and_column_from_location(cls, location):
+        if not isinstance(location, Location):
+            raise ValueError("location must be Location")
+
+        if location.metro:
+            rowkey = "METRO"
+            # NOTE: the column_name will also be the key used in the frontend
+            # to determine pricing
+            column_name = ''.join(map(str, (location.country, location.metro)))
+        else:
+            rowkey = "COUNTRY"
+            column_name = location.country
+        return rowkey, column_name
+
+    @classmethod
+    def set_target_price(cls, target, cpm):
+        rowkey, column_name = cls._rowkey_and_column_from_target(target)
+        cls._cf.insert(rowkey, {column_name: cpm})
+
+    @classmethod
+    def set_location_price(cls, location, cpm):
+        rowkey, column_name = cls._rowkey_and_column_from_location(location)
+        cls._cf.insert(rowkey, {column_name: cpm})
+
+    @classmethod
+    def lookup_target_price(cls, target, default):
+        rowkey, column_name = cls._rowkey_and_column_from_target(target)
+        target_price = cls._lookup_price(rowkey, column_name)
+        return target_price or default
+
+    @classmethod
+    def lookup_location_price(cls, location, default):
+        rowkey, column_name = cls._rowkey_and_column_from_location(location)
+        location_price = cls._lookup_price(rowkey, column_name)
+        return location_price or default
+
+    @classmethod
+    def _lookup_price(cls, rowkey, column_name):
+        try:
+            columns = cls._cf.get(rowkey, columns=[column_name])
+        except tdb_cassandra.NotFoundException:
+            columns = {}
+
+        return columns.get(column_name)
+
+    @classmethod
+    def get_price(cls, user, target, location):
+        if user.selfserve_cpm_override_pennies:
+            return user.selfserve_cpm_override_pennies
+
+        prices = []
+
+        # set location specific prices or use defaults
+        if location and location.metro:
+            metro_price = cls.lookup_location_price(location, cls.METRO_DEFAULT)
+            prices.append(metro_price)
+        elif location:
+            country_price = cls.lookup_location_price(
+                location, cls.COUNTRY_DEFAULT)
+            prices.append(country_price)
+
+        # set target specific prices or use default
+        if (not target.is_collection and
+                target.subreddit_name == Frontpage.name):
+            # Frontpage is priced as a collection
+            prices.append(cls.COLLECTION_DEFAULT)
+        elif target.is_collection:
+            collection_price = cls.lookup_target_price(
+                target, cls.COLLECTION_DEFAULT)
+            prices.append(collection_price)
+        else:
+            subreddit_price = cls.lookup_target_price(
+                target, cls.SUBREDDIT_DEFAULT)
+            prices.append(subreddit_price)
+
+        return max(prices)
+
+    @classmethod
+    def get_price_dict(cls, user):
+        if user.selfserve_cpm_override_pennies:
+            r = {
+                "COLLECTION": {},
+                "SUBREDDIT": {},
+                "COUNTRY": {},
+                "METRO": {},
+                "COLLECTION_DEFAULT": user.selfserve_cpm_override_pennies,
+                "SUBREDDIT_DEFAULT": user.selfserve_cpm_override_pennies,
+                "COUNTRY_DEFAULT": user.selfserve_cpm_override_pennies,
+                "METRO_DEFAULT": user.selfserve_cpm_override_pennies,
+            }
+        else:
+            r = {
+                "COLLECTION": {},
+                "SUBREDDIT": {},
+                "COUNTRY": {},
+                "METRO": {},
+                "COLLECTION_DEFAULT": g.cpm_selfserve_collection.pennies,
+                "SUBREDDIT_DEFAULT": g.cpm_selfserve.pennies,
+                "COUNTRY_DEFAULT": g.cpm_selfserve_collection.pennies,
+                "METRO_DEFAULT": g.cpm_selfserve_geotarget_metro.pennies,
+            }
+
+            try:
+                collections = cls._cf.get("COLLECTION")
+            except tdb_cassandra.NotFoundException:
+                collections = {}
+
+            try:
+                subreddits = cls._cf.get("SUBREDDIT")
+            except tdb_cassandra.NotFoundException:
+                subreddits = {}
+
+            try:
+                countries = cls._cf.get("COUNTRY")
+            except tdb_cassandra.NotFoundException:
+                countries = {}
+
+            try:
+                metros = cls._cf.get("METRO")
+            except tdb_cassandra.NotFoundException:
+                metros = {}
+
+            for name, cpm in collections.iteritems():
+                r["COLLECTION"][name] = cpm
+
+            for name, cpm in subreddits.iteritems():
+                r["SUBREDDIT"][name] = cpm
+
+            for name, cpm in countries.iteritems():
+                r["COUNTRY"][name] = cpm
+
+            for name, cpm in metros.iteritems():
+                r["METRO"][name] = cpm
+
+        return r

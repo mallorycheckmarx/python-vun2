@@ -16,13 +16,15 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from r2.lib.filters import websafe
    from r2.lib.strings import strings, Score
    from r2.lib.pages import WrappedUser, SubscribeButton
+   from r2.lib.template_helpers import _ws
    from r2.models.listing import ModListing
  %>
 
@@ -62,6 +64,18 @@
                  id=thing.sr._fullname))}
   %endif
 
+  %if thing.sr_style_toggle:
+    <form class="toggle sr_style_toggle">
+      <input id="sr_style_enabled" type="checkbox" name="sr_style_enabled"
+        ${'checked="checked"' if thing.use_subreddit_style else ""}
+      >
+      <label for="sr_style_enabled">
+        ${_("Show this subreddit's theme")}
+      </label>
+      <div id="sr_style_throbber" class="throbber"></div>
+    </form>
+  %endif
+
   %if thing.flair_prefs:
     ${thing.flair_prefs}
   %endif
@@ -72,7 +86,7 @@
 
   <div class="bottom">
     %if thing.sr.author:
-      ${unsafe(_("created by&#32;%(user)s") % dict(user = unsafe(thing.creator_text)))}
+      ${unsafe(_ws("created by %(user)s").replace(" ", "&#32;") % dict(user = unsafe(thing.creator_text)))}
     %endif
     
     <span class="age">

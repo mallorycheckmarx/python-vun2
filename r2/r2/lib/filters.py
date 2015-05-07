@@ -16,28 +16,26 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 import cgi
-import os
-import urllib
+import json
 import re
 
 from collections import Counter
 
 import snudown
-from cStringIO import StringIO
 
-from xml.sax.handler import ContentHandler
-from lxml.sax import saxify
-import lxml.etree
 from BeautifulSoup import BeautifulSoup, Tag
-
 from pylons import g, c
 
-from wrapped import Templated, CacheStub
+from r2.lib.souptest import (
+    souptest_fragment,
+    SoupError,
+    SoupUnsupportedEntityError,
+)
 
 SC_OFF = "<!-- SC_OFF -->"
 SC_ON = "<!-- SC_ON -->"
@@ -90,7 +88,12 @@ except ImportError:
 
         return res
 
-class _Unsafe(unicode): pass
+
+class _Unsafe(unicode):
+    # Necessary so Wrapped instances with these can get cached
+    def cache_key(self, style):
+        return unicode(self)
+
 
 def _force_unicode(text):
     if text == None:
@@ -116,7 +119,10 @@ def unsafe(text=''):
 def websafe_json(text=""):
     return c_websafe_json(_force_unicode(text))
 
-def mako_websafe(text = ''):
+
+def conditional_websafe(text = ''):
+    from wrapped import Templated, CacheStub
+
     if text.__class__ == _Unsafe:
         return text
     elif isinstance(text, Templated):
@@ -129,6 +135,12 @@ def mako_websafe(text = ''):
         text = _force_unicode(text)
     return c_websafe(text)
 
+
+def mako_websafe(text=''):
+    """Wrapper for conditional_websafe so cached templates don't explode"""
+    return conditional_websafe(text)
+
+
 def websafe(text=''):
     if text.__class__ != unicode:
         text = _force_unicode(text)
@@ -136,67 +148,59 @@ def websafe(text=''):
     return _Unsafe(c_websafe(text))
 
 
-valid_link_schemes = (
-    '/',
-    '#',
-    'http://',
-    'https://',
-    'ftp://',
-    'mailto:',
-    'steam://',
-    'irc://',
-    'ircs://',
-    'news://',
-    'mumble://',
-    'ssh://',
-    'git://',
-    'ts3server://',
-)
+# From https://github.com/django/django/blob/master/django/utils/html.py
+_js_escapes = {
+    ord('\\'): u'\\u005C',
+    ord('\''): u'\\u0027',
+    ord('"'): u'\\u0022',
+    ord('>'): u'\\u003E',
+    ord('<'): u'\\u003C',
+    ord('&'): u'\\u0026',
+    ord('='): u'\\u003D',
+    ord('-'): u'\\u002D',
+    ord(';'): u'\\u003B',
+    ord(u'\u2028'): u'\\u2028',
+    ord(u'\u2029'): u'\\u2029',
+}
+# Escape every ASCII character with a value less than 32.
+_js_escapes.update((ord('%c' % z), u'\\u%04X' % z) for z in range(32))
 
-class SouptestSaxHandler(ContentHandler):
-    def __init__(self, ok_tags):
-        self.ok_tags = ok_tags
 
-    def startElementNS(self, tagname, qname, attrs):
-        if qname not in self.ok_tags:
-            raise ValueError('HAX: Unknown tag: %r' % qname)
+def jssafe(text=u''):
+    """Prevents text from breaking outside of string literals in JS"""
+    if text.__class__ != unicode:
+        text = _force_unicode(text)
+    # wrap the response in _Unsafe so conditional_websafe doesn't touch it
+    return _Unsafe(text.translate(_js_escapes))
 
-        for (ns, name), val in attrs.items():
-            if ns is not None:
-                raise ValueError('HAX: Unknown namespace? Seriously? %r' % ns)
 
-            if name not in self.ok_tags[qname]:
-                raise ValueError('HAX: Unknown attribute-name %r' % name)
+_json_escapes = {
+    ord('>'): u'\\u003E',
+    ord('<'): u'\\u003C',
+    ord('&'): u'\\u0026',
+}
 
-            if qname == 'a' and name == 'href':
-                lv = val.lower()
-                if not any(lv.startswith(scheme) for scheme in valid_link_schemes):
-                    raise ValueError('HAX: Unsupported link scheme %r' % val)
 
-markdown_ok_tags = {
-    'div': ('class'),
-    'a': set(('href', 'title', 'target', 'nofollow', 'rel')),
-    'img': set(('src', 'alt')),
-    }
+def scriptsafe_dumps(obj, **kwargs):
+    """
+    Like `json.dumps()`, but safe for use in `<script>` blocks.
 
-markdown_boring_tags =  ('p', 'em', 'strong', 'br', 'ol', 'ul', 'hr', 'li',
-                         'pre', 'code', 'blockquote', 'center',
-                          'sup', 'del', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',)
+    Also nice for response bodies that might be consumed by terrible browsers!
 
-markdown_user_tags = ('table', 'th', 'tr', 'td', 'tbody',
-                     'tbody', 'thead', 'tr', 'tfoot', 'caption')
+    You should avoid using this to template data into inline event handlers.
+    When possible, you should do something like this instead:
+    ```
+    <button
+      onclick="console.log($(this).data('json-thing'))"
+      data-json-thing="${json_thing}">
+    </button>
+    ```
+    """
+    text = _force_unicode(json.dumps(obj, **kwargs))
+    # wrap the response in _Unsafe so conditional_websafe doesn't touch it
+    # TODO: this might be a hot path soon, C-ify it?
+    return _Unsafe(text.translate(_json_escapes))
 
-for bt in markdown_boring_tags:
-    markdown_ok_tags[bt] = ('id', 'class')
-
-for bt in markdown_user_tags:
-    markdown_ok_tags[bt] = ('colspan', 'rowspan', 'cellspacing', 'cellpadding', 'align', 'scope')
-
-markdown_xhtml_dtd_path = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    'contrib/dtds/xhtml.dtd')
-
-markdown_dtd = '<!DOCTYPE div- SYSTEM "file://%s">' % markdown_xhtml_dtd_path
 
 def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
     if not text:
@@ -207,15 +211,7 @@ def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
     elif renderer == 'wiki':
         smd = wikimarkdown(text)
 
-    # Prepend a DTD reference so we can load up definitions of all the standard
-    # XHTML entities (&nbsp;, etc.).
-    smd_with_dtd = markdown_dtd + smd
-
-    s = StringIO(smd_with_dtd)
-    parser = lxml.etree.XMLParser(load_dtd=True)
-    tree = lxml.etree.parse(s, parser)
-    handler = SouptestSaxHandler(markdown_ok_tags)
-    saxify(tree, handler)
+    souptest_fragment(smd)
 
     return smd
 
@@ -239,7 +235,7 @@ def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
         return SC_OFF + text + SC_ON
 
 def wikimarkdown(text, include_toc=True, target=None):
-    from r2.lib.template_helpers import media_https_if_secure
+    from r2.lib.template_helpers import make_url_protocol_relative
 
     # this hard codes the stylesheet page for now, but should be parameterized
     # in the future to allow per-page images.
@@ -254,7 +250,7 @@ def wikimarkdown(text, include_toc=True, target=None):
         name = name and name.group(1)
         if name and name in page_images:
             url = page_images[name]
-            url = media_https_if_secure(url)
+            url = make_url_protocol_relative(url)
             tag['src'] = url
         else:
             tag.extract()

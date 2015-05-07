@@ -10,9 +10,7 @@ r.ui.init = function() {
     }
 
     // mobile suggest infobar
-    var smallScreen = window.matchMedia
-                      ? matchMedia('(max-device-width: 700px)').matches
-                      : $(window).width() < 700,
+    var smallScreen = r.ui.isSmallScreen(),
         onFrontPage = $.url().attr('path') == '/'
     if (smallScreen && onFrontPage && r.config.renderstyle != 'compact') {
         var infobar = $('<div class="infobar mellow">')
@@ -32,18 +30,52 @@ r.ui.init = function() {
         $(el).data('SubredditSubmitText', new r.ui.SubredditSubmitText({el: el}))
     })
 
-    if (r.config.new_window) {
-        $(document.body).on('click', 'a.may-blank, .may-blank-within a', function() {
+    /* Open links in new tabs if they have the preference set or are logged out
+     * and on a "large" screen. */
+    if (r.config.new_window && (r.config.logged || !smallScreen)) {
+        $(document.body).on('click', 'a.may-blank, .may-blank-within a', function(e) {
+
             if (!this.target) {
-                this.target = '_blank'
+                // Trident doesn't support `rel="noreferrer"` and requires a
+                // fallback to make sure `window.opener` is unset
+                var isWebLink = _.contains(['http:', 'https:'], this.protocol);
+                if (this.href && isWebLink && r.utils.onTrident()) {
+                    var w = window.open(this.href, '_blank');
+                    // some popup blockers appear to return null for
+                    // `window.open` even inside click handlers.
+                    if (w !== null) {
+                        // try to nullify `window.opener` so the new tab can't
+                        // navigate us
+                        w.opener = null;
+                        // suppress normal link opening behaviour
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+
+                this.target = '_blank';
+                // Required so the tabs can't navigate us via `window.opener`
+                this.rel = 'noreferrer';
             }
-            return true // continue bubbling
+
+            return true; // continue bubbling
         })
     }
 
     r.ui.PermissionEditor.init()
 
     r.ui.initLiveTimestamps()
+
+    r.ui.initNewCommentHighlighting()
+
+    r.ui.initTimings()
+}
+
+r.ui.isSmallScreen = function() {
+ return window.matchMedia
+          // 736px is the width of the iPhone 6+.
+          ? matchMedia('(max-device-width: 736px)').matches
+          : $(window).width() < 736;
 }
 
 r.ui.TimeTextScrollListener = r.ScrollUpdater.extend({
@@ -74,6 +106,87 @@ r.ui.initLiveTimestamps = function() {
           listener.restart()
       })
     }
+}
+
+r.ui.initNewCommentHighlighting = function() {
+  if (!$('body').hasClass('comments-page')) {
+    return;
+  }
+
+  $visitSelector = $('#comment-visits');
+  if ($visitSelector.length === 0) {
+    return;
+  }
+
+  $(document).on('new_things_inserted', r.ui.highlightNewComments);
+  $visitSelector.on('change', r.ui.highlightNewComments);
+  r.ui.highlightNewComments();
+}
+
+r.ui.highlightNewComments = function() {
+  var $comments = $('.comment');
+  var selectedVisitTimestamp = $('#comment-visits').val();
+  var selectedVisit;
+
+  if (selectedVisitTimestamp) {
+    selectedVisit = Date.parse(selectedVisitTimestamp);
+  }
+
+  $comments.each(function() {
+    var $commentEl = $(this);
+    var $timeEl = $commentEl.find('> .entry .tagline time:first-of-type');
+    var commentTime = r.utils.parseTimestamp($timeEl);
+    var shouldHighlight = !!selectedVisit && commentTime > selectedVisit;
+
+    $commentEl.toggleClass('new-comment', shouldHighlight);
+  });
+}
+
+r.ui.initTimings = function() {
+  // return if we're not configured for sending stats
+  if (!r.config.pageInfo.actionName || !r.config.stats_domain) {
+    return
+  }
+
+  // Sample based on the configuration sample rate
+  if (Math.random() > r.config.stats_sample_rate / 100) {
+    return
+  }
+
+  var browserTimings = new r.NavigationTimings()
+
+  $(function() {
+    _.defer(function() {
+      browserTimings.fetch()
+
+      var timingData = browserTimings.filter(function(t) {
+        return t.get('key') !== 'start'
+      }).reduce(function(o, t) {
+        if (!t.isValid()) { return o }
+
+        var val = t.duration()
+
+        if (val > 0) {
+        // Add 'Timing' because some of these keys clobber globals in pylons
+          var key = t.get('key') + 'Timing'
+          o[key] = val
+        }
+
+        return o
+      }, {})
+
+      timingData.actionName = r.config.pageInfo.actionName
+      timingData.verification = r.config.pageInfo.verification
+
+      $.ajax({
+        type: 'POST',
+        url: r.config.stats_domain,
+        data: JSON.stringify({ rum: timingData  }),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+      })
+    })
+  })
 }
 
 r.ui.showWorkingDeferred = function(el, deferred) {
@@ -128,33 +241,62 @@ r.ui.Form = function(el) {
         e.preventDefault()
         this.submit(e)
     }, this))
+
+    this.$el.find('[data-validate-url]')
+        .validator({ https: !!r.config.https_endpoint })
+        .on('initialize.validator', function(e) {
+            var $el = $(this);
+
+            if ($el.hasClass('c-has-error')) {
+                $el.stateify('showError');
+            }
+        })
+        .on('valid.validator', function(e) {
+            $(this).stateify('set', 'success');
+        })
+        .on('invalid.validator', function(e, resp) {
+            // resp may not always be set if client side validation triggered, like
+            // from input type=email
+            if (resp) {
+              var error = r.utils.parseError(resp.errors[0]);
+
+              $(this).stateify('set', 'error', error.message);
+            }
+        })
+        .on('loading.validator', function(e) {
+            $(this).stateify('set', 'loading');
+        })
+        .on('cleared.validator', function(e) {
+            $(this).stateify('clear');
+        });
 }
 r.ui.Form.prototype = $.extend(new r.ui.Base(), {
     showStatus: function(msg, isError) {
-        this.$el.find('.status')
+        this.$el.find('.status, .c-alert')
             .show()
             .toggleClass('error', !!isError)
             .text(msg)
     },
 
     showErrors: function(errors) {
-        statusMsgs = []
-        $.each(errors, $.proxy(function(i, err) {
-            var errName = err[0],
-                errMsg = err[1],
-                errField = err[2],
-                errCls = '.error.'+errName + (errField ? '.field-'+errField : ''),
-                errEl = this.$el.find(errCls)
+        var messages = [];
 
-            if (errEl.length) {
-                errEl.show().text(errMsg)
+        $.each(errors, $.proxy(function(i, err) {
+            var obj = r.utils.parseError(err);
+            var $el = this.$el.find('.error.' + obj.name + (obj.field ? '.field-' + obj.field : ''));
+            var $v2el = this.$el.filter('.form-v2').find('[name="' + obj.field + '"]');
+
+            if ($el.length) {
+                $el.show().text(obj.message);
+            } else if ($v2el.length) {
+                $v2el.stateify('set', 'error', obj.message);
             } else {
-                statusMsgs.push(errMsg)
+                messages.push(obj.message);
             }
         }, this))
 
-        if (statusMsgs.length) {
-            this.showStatus(statusMsgs.join(', '), true)
+        if (messages.length) {
+            this.showStatus(messages.join(', '), true);
         }
     },
 

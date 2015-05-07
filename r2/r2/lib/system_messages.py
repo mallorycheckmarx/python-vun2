@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -104,7 +104,7 @@ def notify_user_added(rel_type, author, user, target, message=None):
         else:
             item, inbox_rel = Message._new(author, user, subject, msg, request.ip)
 
-        queries.new_message(item, inbox_rel)
+        queries.new_message(item, inbox_rel, update_modmail=False)
 
     if "modmail" in msgs:
         subject = msgs["modmail"]["subject"] % d

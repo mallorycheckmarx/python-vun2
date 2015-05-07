@@ -16,10 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
-
+<%!
+   from r2.lib.filters import websafe
+   from r2.lib.template_helpers import _ws
+ %>
 <%namespace file="utils.html" import="md,_md"/>
 <%
    clone_class = ''
@@ -60,7 +63,21 @@
               %endif
             </div>
           </div>
-          <div class="buttons">
+
+          %if thing.clone_template:
+            <ul class="indent">
+              <li>
+                <input type="checkbox" id="signed-false" name="signed" ${'checked' if not c.user.gild_reveal_username else ''}>${_('make my gift anonymous')}
+              </li>
+              <li>
+                <input type="checkbox" id="message" name="message">${_('include a message')}
+              </li>
+              <li>
+                <textarea rows="3" cols="50" id="giftmessage" name="giftmessage" placeholder="${_('enter your message')}" class="hidden giftmessage" maxlength="500">${thing.giftmessage}</textarea>
+              </li>
+            </ul>
+          %endif
+            <div class="buttons">
               <p>${_("Please select a payment method.")}</p>
 
               %if thing.can_use_creddits:
@@ -83,8 +100,13 @@
                 ${self.stripe_form()}
               %endif
 
-              %if thing.clone_template and not thing.user_creddits:
-                <div class="note">${_md("Give gold often? Consider [buying creddits to use](/creddits), they're 40% cheaper if purchased in a set of 12.")}</div>
+              %if thing.clone_template:
+                <div class="note">
+                  %if not thing.user_creddits:
+                    ${_md("Give gold often? Consider [buying creddits to use](/creddits), they're 40% cheaper if purchased in a set of 12.")}
+                  %endif
+                  ${_md("Would you like to [learn more about giving gold](/gilding)?")}
+                </div>
               %endif
           </div>
           <div class="throbber"></div>
@@ -97,12 +119,13 @@
 
 <%def name="creddits_button()">
   <form id="giftgold" action="/api/spendcreddits" method="post"
-        class="gold-checkout creddits-gold">
+        class="gold-checkout creddits-gold"
+        data-vendor="creddits">
     <input type="hidden" name="months" value="${thing.months}">
     <input type="hidden" name="passthrough" value="${thing.passthrough}" class="passthrough">
-    <button class="btn gold-button"><span class="snoo-head"></span>${_("creddits")}</button>
+    <button class="btn gold-button" type="button"><span class="snoo-head"></span>${_("creddits")}</button>
     <span class="status">
-      <span class="remaining" data-current="${thing.months}" data-total="${thing.user_creddits}" data-template="${_('(%(current)s of %(total)s remaining)') % dict(current='<%= current %>', total='<%= total %>')}">
+      <span class="remaining" data-current="${thing.months}" data-total="${thing.user_creddits}" data-template="${websafe(_ws('(use %(current)s of your %(total)s creddits)')) % dict(current='<%- current %>', total='<%- total %>')}">
       </span>
     </span>
   </form>
@@ -118,13 +141,14 @@
       <input type="hidden" name="quantity" value="${thing.quantity}">
     %endif
     <input type="hidden" name="hosted_button_id" value="${thing.paypal_buttonid}">
-    <button type="submit" class="btn gold-button">${_("PayPal")}</button>
+    <button type="submit" class="btn gold-button" type="button">${_("PayPal")}</button>
   </form>
 </%def>
 
 <%def name="stripe_button()">
   <span class="gold-checkout">
-    <button class="btn stripe-gold gold-button">${_('Credit Card')}</button>
+    <button data-vendor="credit card" class="btn stripe-gold gold-button">${_('Credit Card')}</button>
+    <input type="hidden" name="custom" value="${thing.passthrough}" class="passthrough">
   </span>
 </%def>
 
@@ -224,6 +248,7 @@
           %endif
           >${_('Bitcoin')}</button>
   <input type="hidden" name="cbbaseurl" value="https://coinbase.com/checkouts/${thing.coinbase_button_id}">
+  <input type="hidden" name="custom" value="${thing.passthrough}" class="passthrough">
 </%def>
 
 % if not thing.clone_template:

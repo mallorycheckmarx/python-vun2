@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """
@@ -180,25 +180,35 @@ class CachedQuery(_CachedQueryBase):
                     pure.append(q.key)
                 else:
                     need_mangling.append(q.key)
+
             mangled = model.index_mangle_keys(need_mangling)
-            fetched = model.get(pure + mangled)
-            cached_queries.update(fetched)
+            fetched = model.get(pure + mangled.keys())
+            for key, values in fetched.iteritems():
+                key = mangled.get(key, key)
+                cached_queries[key] = values
 
         for q in queries:
             cached_query = cached_queries.get(q.key)
             if cached_query:
                 q.data, q.timestamps = cached_query
 
+    def _cols_from_things(self, things):
+        cols = {}
+        for thing in things:
+            t = self._make_item_tuple(thing)
+            cols[t[0]] = tuple(t[1:])
+        return cols
+
     def _insert(self, mutator, things):
         if not things:
             return
 
-        values = {}
-        for thing in things:
-            t = self._make_item_tuple(thing)
-            values[t[0]] = tuple(t[1:])
+        cols = self._cols_from_things(things)
+        self.model.insert(mutator, self.key, cols)
 
-        self.model.insert(mutator, self.key, values)
+    def _replace(self, mutator, things, ttl):
+        cols = self._cols_from_things(things)
+        self.model.replace(mutator, self.key, cols, ttl)
 
     def _delete(self, mutator, things):
         if not things:
@@ -208,25 +218,44 @@ class CachedQuery(_CachedQueryBase):
         self.model.remove(mutator, self.key, fullnames)
 
     def _prune(self, mutator):
-        extraneous_ids = [t[0] for t in self.data[MAX_CACHED_ITEMS:]]
+        to_keep = [t[0] for t in self.data[:MAX_CACHED_ITEMS]]
+        to_prune = [t[0] for t in self.data[MAX_CACHED_ITEMS:]]
 
-        if extraneous_ids:
-            # if something has gone wrong with previous prunings, there may be
-            # a lot of extraneous items.  we'll limit this pruning to the
-            # oldest N items to avoid a dangerously large operation.
-            # N = the average number of items to prune (doubled for safety)
-            prune_size = int(MAX_CACHED_ITEMS * PRUNE_CHANCE) * 2
-            extraneous_ids = extraneous_ids[-prune_size:]
+        if to_prune:
+            oldest_keep = min(self.timestamps[_id] for _id in to_keep)
+            fast_prunable = [_id for _id in to_prune
+                if self.timestamps[_id] < oldest_keep]
 
-            self.model.remove_if_unchanged(mutator, self.key,
-                                           extraneous_ids, self.timestamps)
+            num_to_prune = len(to_prune)
+            num_fast_prunable = len(fast_prunable)
+            num_unpruned_if_fast = num_to_prune - num_fast_prunable
+            if (num_fast_prunable > num_to_prune * 0.5 and
+                    num_unpruned_if_fast < MAX_CACHED_ITEMS * 0.5):
+                # do a fast prune if we can remove a good number of items but
+                # don't let the cached query grow too large
+                newest_prune = max(self.timestamps[_id] for _id in fast_prunable)
+                self.model.remove_older_than(mutator, self.key, newest_prune)
+                event_name = 'fast_pruned'
+                num_pruned = num_fast_prunable
+            else:
+                # if something has gone wrong with previous prunings, there may
+                # be a lot of items to prune.  we'll limit this pruning to the
+                # oldest N items to avoid a dangerously large operation.
+                # N = the average number of items to prune (doubled for safety)
+                prune_size = int(MAX_CACHED_ITEMS * PRUNE_CHANCE) * 2
+                to_prune = to_prune[-prune_size:]
+
+                self.model.remove_if_unchanged(mutator, self.key,
+                                               to_prune, self.timestamps)
+                event_name = 'pruned'
+                num_pruned = len(to_prune)
 
             cf_name = self.model.__name__
             query_name = self.key.split('.')[0]
             counter_key = "cache.%s.%s" % (cf_name, query_name)
             counter = g.stats.get_counter(counter_key)
             if counter:
-                counter.increment('pruned', delta=len(extraneous_ids))
+                counter.increment(event_name, delta=num_pruned)
 
     @classmethod
     def _prune_multi(cls, queries):
@@ -312,6 +341,21 @@ class CachedQueryMutator(object):
 
         if (random.random() / len(things)) < PRUNE_CHANCE:
             self.to_prune.add(query)
+
+    def replace(self, query, things, ttl=None):
+        """Replace a precomputed query with a new set of things.
+
+        The query index will be updated. If a TTL is specified, it will be
+        applied to all columns generated by this action allowing old
+        precomputed queries to fall away after they're no longer useful.
+
+        """
+        assert query.is_precomputed
+
+        if isinstance(ttl, datetime.timedelta):
+            ttl = ttl.total_seconds()
+
+        query._replace(self.mutator, things, ttl)
 
     def delete(self, query, things):
         """Remove things from the query."""
@@ -514,22 +558,24 @@ class _BaseQueryCache(object):
     @classmethod
     def index_mangle_keys(cls, keys):
         if not keys:
-            return []
+            return {}
 
         index_keys = ["/".join((key, "index")) for key in keys]
         rows = cls._cf.multiget(index_keys,
                                 column_reversed=True,
                                 column_count=1)
 
-        res = []
+        res = {}
         for key, columns in rows.iteritems():
+            root_key = key.rsplit("/")[0]
             index_component = columns.keys()[0]
-            res.append("/".join((key, index_component)))
+            mangled = "/".join((root_key, index_component))
+            res[mangled] = root_key
         return res
 
     @classmethod
     @tdb_cassandra.will_write
-    def insert(cls, mutator, key, columns):
+    def insert(cls, mutator, key, columns, ttl=None):
         """Insert things into the cached query.
 
         This works as an upsert; if the thing already exists, it is updated. If
@@ -538,7 +584,16 @@ class _BaseQueryCache(object):
         """
         updates = dict((key, json.dumps(value))
                        for key, value in columns.iteritems())
-        mutator.insert(cls._cf, key, updates)
+        mutator.insert(cls._cf, key, updates, ttl=ttl)
+
+    @classmethod
+    @tdb_cassandra.will_write
+    def replace(cls, mutator, key, columns, ttl):
+        # XXX: this assumes that precomputed queries aren't updated at a
+        # frequency / simultaneously in a way that could collide.
+        job_key = datetime.datetime.now(g.tz).isoformat()
+        cls.insert(mutator, key + "/" + job_key, columns, ttl=ttl)
+        mutator.insert(cls._cf, key + "/index", {job_key: ""}, ttl=ttl)
 
     @classmethod
     @tdb_cassandra.will_write
@@ -559,6 +614,22 @@ class _BaseQueryCache(object):
         for col in columns:
             mutator.remove(cls._cf, key, columns=[col],
                            timestamp=timestamps.get(col))
+
+    @classmethod
+    @tdb_cassandra.will_write
+    def remove_older_than(cls, mutator, key, removal_timestamp):
+        """Remove things older than the specified timestamp.
+
+        Removing specific columns can cause tombstones to build up. When a row
+        has tons of tombstones fetching that row gets slow because Cassandra
+        must retrieve all the tombstones as well. Issuing a row remove with
+        the timestamp specified clears out all the columns modified before
+        that timestamp and somehow doesn't result in tombstones being left
+        behind. This behavior was verified via request tracing.
+
+        """
+
+        mutator.remove(cls._cf, key, timestamp=removal_timestamp)
 
 
 class UserQueryCache(_BaseQueryCache):

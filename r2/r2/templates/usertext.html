@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -126,7 +126,7 @@
   <input type="hidden" name="thing_id" value="${thing.fullname}"/>
 
   %if not thing.creating:
-    <div class="usertext-body may-blank-within">
+    <div class="usertext-body may-blank-within md-container">
       % if not thing.expunged:
       ${unsafe(safemarkdown(thing.text, nofollow = thing.nofollow,
                                         target = thing.target))}
@@ -138,10 +138,9 @@
 
   %if thing.editable or thing.creating:
     ##keep this on one line so we don't add extra spaces
-    <div class="usertext-edit"
+    <div class="usertext-edit md-container"
          style="${"" if thing.creating else 'display: none'}">
-      ##this div prevents IE7 from adding extra margin to the textarea.
-      <div>
+      <div class="md">
         <textarea rows="1" cols="1"
                   name="${thing.name}"
                   class="${thing.textarea_class}"

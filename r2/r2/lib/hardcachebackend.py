@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -341,7 +341,7 @@ def delete_expired(expiration="now", limit=5000):
 
         # Delete them from memcache
         mc_keys = [ "%s-%s" % (c, i) for e, c, i in rows ]
-        g.memcache.delete_multi(mc_keys)
+        g.cache.delete_multi(mc_keys)
 
         # Now delete them from the backend.
         engine.delete(expiration_clause).execute()

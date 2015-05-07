@@ -16,11 +16,13 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from r2.lib import amqp
 from r2.lib.db import tdb_cassandra
+from r2.lib.db.thing import NotFound
 from r2.lib.errors import MessageError
 from r2.lib.utils import tup, fetch_things2
 from r2.lib.filters import websafe
@@ -86,6 +88,9 @@ class AdminTools(object):
 
             t.ban_info = ban_info
             t._commit()
+
+            if auto:
+                amqp.add_item("auto_removed", t._fullname)
 
         if not auto:
             self.author_spammer(new_things, True)
@@ -168,33 +173,42 @@ class AdminTools(object):
                 sr._commit()
                 sr._incr('mod_actions', len(sr_things))
 
-    def engolden(self, account, days):
-        account.gold = True
-
+    def adjust_gold_expiration(self, account, days=0, months=0, years=0):
         now = datetime.now(g.display_tz)
+        if months % 12 == 0:
+            years += months / 12
+        else:
+            days += months * 31
+        days += years * 366
 
         existing_expiration = getattr(account, "gold_expiration", None)
         if existing_expiration is None or existing_expiration < now:
             existing_expiration = now
         account.gold_expiration = existing_expiration + timedelta(days)
+        
+        if account.gold_expiration > now and not account.gold:
+            self.engolden(account)
+        elif account.gold_expiration <= now and account.gold:
+            self.degolden(account)
 
+        account._commit()     
+
+    def engolden(self, account):
+        now = datetime.now(g.display_tz)
+        account.gold = True
         description = "Since " + now.strftime("%B %Y")
+        
         trophy = Award.give_if_needed("reddit_gold", account,
                                      description=description,
                                      url="/gold/about")
         if trophy and trophy.description.endswith("Member Emeritus"):
             trophy.description = description
             trophy._commit()
-        account._commit()
 
+        account._commit()
         account.friend_rels_cache(_update=True)
 
-    def degolden(self, account, severe=False):
-
-        if severe:
-            account.gold_charter = False
-            Award.take_away("charter_subscriber", account)
-
+    def degolden(self, account):
         Award.take_away("reddit_gold", account)
         account.gold = False
         account._commit()
@@ -237,7 +251,7 @@ def all_gold_users():
                        data=True, sort="_id")
     return fetch_things2(q)
 
-def accountid_from_paypalsubscription(subscr_id):
+def accountid_from_subscription(subscr_id):
     if subscr_id is None:
         return None
 
@@ -259,7 +273,7 @@ def update_gold_users():
                   "rants, suggestions about reddit gold, please write "
                   "to us at %(gold_email)s. Your feedback would be "
                   "much appreciated.\n\nThank you for your past "
-                  "patronage.") % {'gold_email': g.goldthanks_email}
+                  "patronage.") % {'gold_email': g.goldsupport_email}
 
     for account in all_gold_users():
         days_left = (account.gold_expiration - now).days
@@ -267,7 +281,7 @@ def update_gold_users():
             if account.pref_creddit_autorenew:
                 with creddits_lock(account):
                     if account.gold_creddits > 0:
-                        admintools.engolden(account, 31)
+                        admintools.adjust_gold_expiration(account, days=31)
                         account.gold_creddits -= 1
                         account._commit()
                         continue
@@ -297,9 +311,6 @@ def update_gold_users():
                 send_system_message(account, subject, message,
                                     distinguished='gold-auto')
 
-
-def admin_ratelimit(user):
-    return True
 
 def is_banned_domain(dom):
     return None
@@ -391,8 +402,6 @@ def filter_quotas(unfiltered):
         # Then, make sure it's worthy of quota-clogging
         if item._spam:
             pass
-        elif item._deleted:
-            pass
         elif item._score <= 0:
             pass
         elif age < 86400 and item._score <= g.QUOTA_THRESHOLD and not approved:
@@ -413,7 +422,10 @@ def filter_quotas(unfiltered):
 def wiki_template(template_slug, sr=None):
     """Pull content from a subreddit's wiki page for internal use."""
     if not sr:
-        sr = Subreddit._by_name(g.default_sr)
+        try:
+            sr = Subreddit._by_name(g.default_sr)
+        except NotFound:
+            return None
 
     try:
         wiki = WikiPage.get(sr, "templates/%s" % template_slug)
@@ -425,22 +437,22 @@ def wiki_template(template_slug, sr=None):
 
 @admintools_hooks.on("account.registered")
 def send_welcome_message(user):
-    welcome_title = wiki_template("welcome_title").format(
-        username=user.name,
-    )
-    welcome_message = wiki_template("welcome_message").format(
-        username=user.name,
-    )
+    welcome_title = wiki_template("welcome_title")
+    welcome_message = wiki_template("welcome_message")
 
     if not welcome_title or not welcome_message:
         g.log.warning("Unable to send welcome message: invalid wiki templates.")
         return
 
+    welcome_title = welcome_title.format(username=user.name)
+    welcome_message = welcome_message.format(username=user.name)
+
     return send_system_message(user, welcome_title, welcome_message)
 
 
 def send_system_message(user, subject, body, system_user=None,
-                        distinguished='admin', repliable=False):
+                        distinguished='admin', repliable=False,
+                        add_to_sent=True, author=None):
     from r2.lib.db import queries
 
     if system_user is None:
@@ -449,15 +461,18 @@ def send_system_message(user, subject, body, system_user=None,
         g.log.warning("Can't send system message "
                       "- invalid system_user or g.system_user setting")
         return
+    if not author:
+        author = system_user
 
-    item, inbox_rel = Message._new(system_user, user, subject, body,
+    item, inbox_rel = Message._new(author, user, subject, body,
                                    ip='0.0.0.0')
     item.distinguished = distinguished
     item.repliable = repliable
+    item.display_author = system_user._id
     item._commit()
 
     try:
-        queries.new_message(item, inbox_rel)
+        queries.new_message(item, inbox_rel, add_to_sent=add_to_sent)
     except MemcachedError:
         raise MessageError('reddit_inbox')
 

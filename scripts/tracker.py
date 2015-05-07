@@ -17,18 +17,12 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """
 This is a tiny Flask app used for a couple of self-serve ad tracking
 mechanisms. The URLs it provides are:
-
-/fetch-trackers
-
-    Given a list of Ad IDs, generate tracking hashes specific to the user's
-    IP address. This must run outside the original request because the HTML
-    may be cached by the CDN.
 
 /click
 
@@ -44,8 +38,12 @@ use on Amazon Elastic Beanstalk (and possibly other systems).
 
 
 import cStringIO
+import os
 import hashlib
+import hmac
 import time
+import urllib
+from urlparse import parse_qsl, urlparse, urlunparse
 
 from ConfigParser import RawConfigParser
 from wsgiref.handlers import format_date_time
@@ -54,7 +52,6 @@ from flask import Flask, request, json, make_response, abort, redirect
 
 
 application = Flask(__name__)
-MAX_FULLNAME_LENGTH = 128  # can include srname and codename, leave room
 REQUIRED_PACKAGES = [
     "flask",
 ]
@@ -69,7 +66,8 @@ class ApplicationConfig(object):
     """
     def __init__(self):
         self.input = RawConfigParser()
-        with open("production.ini") as f:
+        config_filename = os.environ.get("CONFIG", "production.ini")
+        with open(config_filename) as f:
             self.input.readfp(f)
         self.output = RawConfigParser()
 
@@ -92,31 +90,8 @@ class ApplicationConfig(object):
 
 config = ApplicationConfig()
 tracking_secret = config.get('DEFAULT', 'tracking_secret')
-adtracker_url = config.get('DEFAULT', 'adtracker_url')
-
-
-def jsonpify(callback_name, data):
-    data = callback_name + '(' + json.dumps(data) + ')'
-    response = make_response(data)
-    response.mimetype = 'text/javascript'
-    return response
-
-
-def get_client_ip():
-    """Figure out the IP address of the remote client.
-
-    If the remote address is on the 10.* network, we'll assume that it is a
-    trusted load balancer and that the last component of X-Forwarded-For is
-    trustworthy.
-
-    """
-
-    if request.remote_addr.startswith("10."):
-        # it's a load balancer, use x-forwarded-for
-        return request.access_route[-1]
-    else:
-        # direct connection to someone outside
-        return request.remote_addr
+reddit_domain = config.get('DEFAULT', 'domain')
+reddit_domain_prefix = config.get('DEFAULT', 'domain_prefix')
 
 
 @application.route("/")
@@ -124,37 +99,88 @@ def healthcheck():
     return "I am healthy."
 
 
-@application.route('/fetch-trackers')
-def fetch_trackers():
-    ip = get_client_ip()
-    jsonp_callback = request.args['callback']
-    ids = request.args.getlist('ids[]')
-
-    if len(ids) > 100:
-        abort(400)
-
-    hashed = {}
-    for fullname in ids:
-        if len(fullname) > MAX_FULLNAME_LENGTH:
-            continue
-        text = ''.join((ip, fullname, tracking_secret))
-        hashed[fullname] = hashlib.sha1(text).hexdigest()
-    return jsonpify(jsonp_callback, hashed)
-
-
 @application.route('/click')
 def click_redirect():
-    ip = get_client_ip()
     destination = request.args['url'].encode('utf-8')
-    fullname = request.args['id']
-    observed_hash = request.args['hash']
+    fullname = request.args['id'].encode('utf-8')
+    observed_mac = request.args['hash']
 
-    expected_hash_text = ''.join((ip, fullname, tracking_secret))
-    expected_hash = hashlib.sha1(expected_hash_text).hexdigest()
+    expected_hashable = ''.join((destination, fullname))
+    expected_mac = hmac.new(
+            tracking_secret, expected_hashable, hashlib.sha1).hexdigest()
 
-    if expected_hash != observed_hash:
+    if not constant_time_compare(expected_mac, observed_mac):
         abort(403)
 
+    # fix encoding in the query string of the destination
+    destination = urllib.unquote(destination)
+    u = urlparse(destination)
+    if u.query:
+        u = _fix_query_encoding(u)
+        destination = u.geturl()
+
+    return _redirect_nocache(destination)
+
+
+@application.route('/event_redirect')
+def event_redirect():
+    destination = request.args['url'].encode('utf-8')
+
+    # Parse and avoid open redirects
+    netloc = "%s.%s" % (reddit_domain_prefix, reddit_domain)
+    u = urlparse(destination)._replace(netloc=netloc, scheme="https")
+
+    if u.query:
+        u = _fix_query_encoding(u)
+        destination = u.geturl()
+
+    return _redirect_nocache(destination)
+
+
+@application.route('/event_click')
+def event_click():
+    """Take in an evented request, append session data to payload, and redirect.
+
+    This is only useful for situations in which we're navigating from a request
+    that does not have session information - i.e. served from redditmedia.com.
+    If we want to track a click and the user that did so from these pages,
+    we need to identify the user before sending the payload.
+
+    Note: If we add hmac validation, this will need verify and resign before
+    redirecting. We can also probably drop a redirect here once we're not
+    relying on log files for event tracking and have a proper events endpoint.
+    """
+    try:
+        session_str = urllib.unquote(request.cookies.get('reddit_session', ''))
+        user_id = int(session_str.split(',')[0])
+    except ValueError:
+        user_id = None
+
+    args = request.args.to_dict()
+    if user_id:
+        payload = args.get('data').encode('utf-8')
+        try:
+            payload_json = json.loads(payload)
+        except ValueError:
+            # if we fail to load the JSON, continue on to the redirect to not
+            # block the user - ETL can deal with/report the malformed data.
+            pass
+        else:
+            payload_json['user_id'] = user_id
+            args['data'] = json.dumps(payload_json)
+
+    return _redirect_nocache('/event_redirect?%s' % urllib.urlencode(args))
+
+
+def _fix_query_encoding(parse_result):
+    "Fix encoding in the query string."
+    query_dict = dict(parse_qsl(parse_result.query))
+
+    # this effectively calls urllib.quote_plus on every query value
+    return parse_result._replace(query=urllib.urlencode(query_dict))
+
+
+def _redirect_nocache(destination):
     now = format_date_time(time.time())
     response = redirect(destination)
     response.headers['Cache-control'] = 'no-cache'
@@ -162,6 +188,23 @@ def click_redirect():
     response.headers['Date'] = now
     response.headers['Expires'] = now
     return response
+
+
+# copied from r2.lib.utils
+def constant_time_compare(actual, expected):
+    """
+    Returns True if the two strings are equal, False otherwise
+
+    The time taken is dependent on the number of characters provided
+    instead of the number of characters that match.
+    """
+    actual_len   = len(actual)
+    expected_len = len(expected)
+    result = actual_len ^ expected_len
+    if expected_len > 0:
+        for i in xrange(actual_len):
+            result |= ord(actual[i]) ^ ord(expected[i % expected_len])
+    return result == 0
 
 
 if __name__ == "__main__":

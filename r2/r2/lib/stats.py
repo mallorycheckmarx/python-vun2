@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -70,7 +70,6 @@ class TimingStatBuffer:
                 break
 
             total_time, count = v.real, v.imag
-            yield k, str(int(count)) + '|c'
             divisor = count or 1
             mean = total_time / divisor
             yield k, str(mean * 1000) + '|ms'
@@ -329,6 +328,9 @@ class Stats:
         if counter:
             counter.increment(parts[-1], delta=delta)
 
+    def simple_timing(self, event_name, ms):
+        self.client.timing_stats.record(event_name, start=0, end=ms)
+
     def event_count(self, event_name, name, sample_rate=None):
         if sample_rate is None:
             sample_rate = 1.0
@@ -337,14 +339,7 @@ class Stats:
             counter.increment(name)
             counter.increment('total')
 
-    def cache_count(self, name, delta=1, sample_rate=None):
-        if sample_rate is None:
-            sample_rate = self.CACHE_SAMPLE_RATE
-        counter = self.get_counter('cache')
-        if counter and random.random() < sample_rate:
-            counter.increment(name, delta=delta)
-
-    def cache_count_multi(self, data, cache_name=None, sample_rate=None):
+    def cache_count_multi(self, data, sample_rate=None):
         if sample_rate is None:
             sample_rate = self.CACHE_SAMPLE_RATE
         counter = self.get_counter('cache')
@@ -422,16 +417,35 @@ class CacheStats:
         self.hit_stat_name = '%s.hit' % self.cache_name
         self.miss_stat_name = '%s.miss' % self.cache_name
         self.total_stat_name = '%s.total' % self.cache_name
+        self.hit_stat_template = '%s.%%s.hit' % self.cache_name
+        self.miss_stat_template = '%s.%%s.miss' % self.cache_name
+        self.total_stat_template = '%s.%%s.total' % self.cache_name
 
-    def cache_hit(self, delta=1):
+    def cache_hit(self, delta=1, subname=None):
         if delta:
-            self.parent.cache_count(self.hit_stat_name, delta=delta)
-            self.parent.cache_count(self.total_stat_name, delta=delta)
+            data = {
+                self.hit_stat_name: delta,
+                self.total_stat_name: delta,
+            }
+            if subname:
+                data.update({
+                    self.hit_stat_template % subname: delta,
+                    self.total_stat_template % subname: delta,
+                })
+            self.parent.cache_count_multi(data)
 
-    def cache_miss(self, delta=1):
+    def cache_miss(self, delta=1, subname=None):
         if delta:
-            self.parent.cache_count(self.miss_stat_name, delta=delta)
-            self.parent.cache_count(self.total_stat_name, delta=delta)
+            data = {
+                self.miss_stat_name: delta,
+                self.total_stat_name: delta,
+            }
+            if subname:
+                data.update({
+                    self.miss_stat_template % subname: delta,
+                    self.total_stat_template % subname: delta,
+                })
+            self.parent.cache_count_multi(data)
 
     def cache_report(self, hits=0, misses=0, cache_name=None, sample_rate=None):
         if hits or misses:
@@ -445,8 +459,44 @@ class CacheStats:
                 miss_stat_name: misses,
                 total_stat_name: hits + misses,
             }
-            self.parent.cache_count_multi(data, cache_name=cache_name,
-                                          sample_rate=sample_rate)
+            self.parent.cache_count_multi(data, sample_rate=sample_rate)
+
+
+class StaleCacheStats(CacheStats):
+    def __init__(self, parent, cache_name):
+        CacheStats.__init__(self, parent, cache_name)
+        self.stale_hit_name = '%s.stale.hit' % self.cache_name
+        self.stale_miss_name = '%s.stale.miss' % self.cache_name
+        self.stale_total_name = '%s.stale.total' % self.cache_name
+        self.stale_hit_stat_template = '%s.stale.%%s.hit' % self.cache_name
+        self.stale_miss_stat_template = '%s.stale.%%s.miss' % self.cache_name
+        self.stale_total_stat_template = '%s.stale.%%s.total' % self.cache_name
+
+    def stale_hit(self, delta=1, subname=None):
+        if delta:
+            data = {
+                self.stale_hit_name: delta,
+                self.stale_total_name: delta,
+            }
+            if subname:
+                data.update({
+                    self.stale_hit_stat_template % subname: delta,
+                    self.stale_total_stat_template % subname: delta,
+                })
+            self.parent.cache_count_multi(data)
+
+    def stale_miss(self, delta=1, subname=None):
+        if delta:
+            data = {
+                self.stale_miss_name: delta,
+                self.stale_total_name: delta,
+            }
+            if subname:
+                data.update({
+                    self.stale_miss_stat_template % subname: delta,
+                    self.stale_total_stat_template % subname: delta,
+                })
+            self.parent.cache_count_multi(data)
 
 
 class StatsCollectingConnectionPool(pool.ConnectionPool):

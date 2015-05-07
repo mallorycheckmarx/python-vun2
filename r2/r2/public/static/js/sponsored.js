@@ -1,4 +1,484 @@
-r.sponsored = {
+!function(r) {
+
+var UseDefaultClassName = (function() {
+  var camelCaseRegex = /([a-z])([A-Z])/g;
+  function hyphenate(match, $1, $2) {
+    return $1 + '-' + $2;
+  }
+
+  return {
+    /**
+     * derive a className automatically from the displayName property
+     * e.g. MyDisplayName => my-display-name
+     * if a className state or prop is passed in, add that
+     * if values are passed into the function, add those in as well
+     * @param {string} arguments optionally pass in any number of
+     *                           classNames to to add to the list
+     * @return {string} css class name
+     */
+    getClassName: function(/* classNames */) {
+      var classNames = [];
+
+      if (this.constructor.displayName) {
+        classNames.push(
+          this.constructor.displayName.replace(camelCaseRegex, hyphenate)
+                                      .toLowerCase()
+          );
+      }
+
+      if (this.state && this.state.className) {
+        classNames.push(this.state.className);
+      }
+      else if (this.props.className) {
+        classNames.push(this.props.className);
+      }
+
+      if (arguments.length) {
+        classNames.push.apply(classNames, arguments);
+      }
+
+      return classNames.join(' ');
+    }
+  };
+})();
+
+
+var CampaignFormattedProps = {
+  componentWillMount: function() {
+    this.formattedProps = this.getFormattedProps(_.clone(this.props), this.props);
+  },
+
+  componentWillUpdate: function(nextProps) {
+    this.formattedProps = this.getFormattedProps(_.clone(nextProps), nextProps);
+  },
+
+  getFormattedProps: function(formattedProps, props) {
+    if (props.impressions) {
+      formattedProps.impressions = r.utils.prettyNumber(props.impressions);
+    }
+    if (props.bid === null) {
+      formattedProps.bid = 'N/A';
+    } else if (props.bid) {
+      formattedProps.bid = props.bid.toFixed(2);
+    }
+    return formattedProps;
+  },
+};
+
+
+var CampaignButton = React.createClass({
+  displayName: 'CampaignButton',
+
+  mixins: [UseDefaultClassName],
+
+  getDefaultProps: function() {
+    return {
+      isNew: true,
+    };
+  },
+
+  render: function() {
+    if (this.props.isNew) {
+      return React.DOM.div({ className: 'button-group' },
+        React.DOM.button(
+          { ref: 'keepOpen', className: 'campaign-button', onClick: this.handleClick },
+          r._('create')
+        ),
+        React.DOM.button(
+          { className: this.getClassName(), onClick: this.handleClick },
+          r._('+ close')
+        ) 
+      );
+    }
+    return React.DOM.button(
+      { className: this.getClassName(), onClick: this.handleClick },
+      this.props.isNew ? r._('create') : r._('save')
+    );
+  },
+
+  handleClick: function(e) {
+    var close = true;
+    if (this.refs.keepOpen) {
+      close = !(e.target === this.refs.keepOpen.getDOMNode());
+    }
+    if (typeof this.props.onClick === 'function') {
+      this.props.onClick(close);
+    }
+  },
+});
+
+
+var InfoText = React.createClass({
+  displayName: 'InfoText',
+
+  mixins: [UseDefaultClassName, CampaignFormattedProps],
+
+  render: function() {
+    var text = Array.isArray(this.props.children)
+             ? this.props.children.join('\n')
+             : this.props.children;
+    return React.DOM.span({ className: this.getClassName() },
+      text.format(this.formattedProps)
+    );
+  },
+
+});
+
+var CampaignOptionTable = React.createClass({
+  displayName: 'CampaignOptionTable',
+
+  mixins: [UseDefaultClassName],
+
+  render: function() {
+    return React.DOM.table({ className: this.getClassName() },
+      React.DOM.tbody(null, this.props.children)
+    );
+  }
+})
+
+var CampaignOption = React.createClass({
+  displayName: 'CampaignOption',
+
+  mixins: [UseDefaultClassName, CampaignFormattedProps],
+
+  getDefaultProps: function() {
+    return {
+      primary: false,
+      start: '',
+      end: '',
+      bid: '',
+      impressions: '',
+      isNew: true,
+    };
+  },
+
+  render: function() {
+    return React.DOM.tr({ className: this.getClassName() },
+      React.DOM.td({ className: 'date start-date' }, this.props.start),
+      React.DOM.td({ className: 'date end-date' }, this.props.end),
+      React.DOM.td({ className: 'bid' }, '$', this.formattedProps.bid),
+      React.DOM.td({ className: 'impressions' },
+        this.formattedProps.impressions, ' impressions'
+      ),
+      React.DOM.td({ className: 'buttons' },
+        CampaignButton({
+          className: this.props.primary ? 'primary-button' : '',
+          isNew: this.props.isNew,
+          onClick: this.handleClick,
+        })
+      )
+    );
+  },
+
+  handleClick: function(close) {
+    var $startdate = $('#startdate');
+    var $enddate = $('#enddate');
+    var $bid = $('#bid');
+    var userStartdate = $startdate.val();
+    var userEnddate = $enddate.val();
+    var userBid = $bid.val();
+    $('#startdate').val(this.props.start);
+    $('#enddate').val(this.props.end);
+    $('#bid').val(this.props.bid);
+    setTimeout(function(){
+      send_campaign(close);
+      // hack, needed because post_pseudo_form hides any element in the form
+      // with an `error` class, which might be one of our InfoText components
+      // but we want react to manage that
+      $('.campaign-creator .info-text').removeAttr('style');
+      // reset the form with the user's original values
+      $startdate.val(userStartdate);
+      $enddate.val(userEnddate);
+      $bid.val(userBid);
+    }, 0);
+  },
+});
+
+
+var CampaignSet = React.createClass({
+  displayName: 'CampaignSet',
+
+  mixins: [UseDefaultClassName],
+
+  render: function() {
+    return React.DOM.div({ className: this.getClassName() },
+      this.props.children
+    );
+  },
+});
+
+
+var CampaignCreator = React.createClass({
+  displayName: 'CampaignCreator',
+
+  mixins: [UseDefaultClassName],
+
+  getDefaultProps: function() {
+    return {
+      bid: 0,
+      targetName: '',
+      cpm: 0,
+      maxValidBid: 0,
+      minValidBid: 0,
+      dates: [],
+      inventory: [],
+      requested: 0,
+      override: false,
+      isNew: true,
+    };
+  },
+
+  getInitialState: function() {
+    var totalAvailable = this.getAvailable(this.props);
+    var available = totalAvailable;
+    if (this.props.maxValidBid) {
+      available = Math.min(available, this.getImpressions(this.props.maxValidBid));
+    }
+    return {
+      totalAvailable: totalAvailable,
+      available: available,
+      maxTime: 0,
+    };
+  },
+
+  componentWillMount: function() {
+    this.setState({
+      maxTime: dateFromInput('#date-start-max').getTime(),
+    });
+  },
+
+  componentWillReceiveProps: function(nextProps) {
+    var totalAvailable = this.getAvailable(nextProps);
+    var available = totalAvailable;
+    if (this.props.maxValidBid) {
+      available = Math.min(available, this.getImpressions(this.props.maxValidBid));
+    }
+    this.setState({
+      totalAvailable: totalAvailable,
+      available: available,
+    });
+  },
+
+  getAvailable: function(props) {
+    if (props.override) {
+      return _.reduce(props.inventory, sum, 0);
+    }
+    else {
+      return _.min(props.inventory) * props.dates.length;
+    }
+  },
+
+  render: function() {
+    return React.DOM.div({
+        className: this.getClassName(),
+      },
+      this.getCampaignSets()
+    );
+  },
+
+  getCampaignSets: function() {
+    var requested = this.getRequestedOption();
+    requested.primary = true;
+    var maximized = this.getMaximizedOption();
+    if (this.props.override) {
+      if (requested.impressions <= this.state.available) {
+        return [CampaignSet(null,
+            InfoText(null, r._('the campaign you requested is available!')),
+            CampaignOptionTable(null, CampaignOption(requested))
+          ),
+          InfoText(maximized,
+              r._('the maximum budget available is $%(bid)s (%(impressions)s impressions)')
+          )
+        ];
+      }
+      else {
+        return CampaignSet(null,
+          InfoText({
+              className: 'error',
+              available: this.state.available,
+              target: this.props.targetName
+            },
+            r._('we expect to only have %(available)s impressions on %(target)s. ' +
+                 'we may not fully deliver.')
+          ),
+          CampaignOptionTable(null, CampaignOption(requested))
+        );
+      }
+    }
+    else if (requested.bid >= this.props.minValidBid &&
+             requested.impressions <= this.state.available) {
+      var result = CampaignSet(null,
+        InfoText(null, r._('the campaign you requested is available!')),
+        CampaignOptionTable(null, CampaignOption(requested))
+      );
+      if (maximized.bid > requested.bid &&
+          requested.bid * 1.2 >= maximized.bid &&
+          this.state.available === this.state.totalAvailable) {
+        var difference = maximized.bid - requested.bid;
+        result = [result, CampaignSet(null,
+          InfoText({ difference: difference.toFixed(2) },
+            r._('want to maximize your campaign? for only $%(difference)s more ' +
+                 'you can buy all available inventory for your selected dates!')
+          ),
+          CampaignOptionTable(null, CampaignOption(maximized))
+        )];
+      }
+      else {
+        result = [result, InfoText(maximized,
+          r._('the maximum budget available is $%(bid)s (%(impressions)s impressions)')
+        )];
+      }
+      return result;
+    }
+    else if (requested.bid < this.props.minValidBid) {
+      var minimal = this.getMinimizedOption();
+      if (minimal.impressions <= this.state.available) {
+        return CampaignSet(null,
+          InfoText({ className: 'error' },
+            r._('the campaign you requested is too small! this campaign is available:')
+          ),
+          CampaignOptionTable(null, CampaignOption(minimal))
+        );
+      }
+      else {
+        return InfoText({ className: 'error' },
+          r._('the campaign you requested is too small!')
+        );
+      }
+    }
+    else if (requested.impressions > this.state.available &&
+             this.state.totalAvailable > this.state.available &&
+             maximized.bid > this.props.minValidBid) {
+      return CampaignSet(null,
+        InfoText(null, 
+          r._('the campaign you requested is too big! the largest campaign ' +
+               'available is:')
+        ),
+        CampaignOptionTable(null, CampaignOption(maximized))
+      );
+    }
+    else if (requested.impressions > this.state.available) {
+
+      var options = [];
+      if (maximized.bid >= this.props.minValidBid) {
+        options.push(CampaignOption(maximized));
+      }
+      var reduced = this.getReducedWindowOption();
+      if (reduced && reduced.bid >= this.props.minValidBid) {
+        if (reduced.impressions > requested.impressions) {
+          reduced.impressions = requested.impressions;
+          reduced.bid = requested.bid;
+        }
+        options.push(CampaignOption(reduced));
+      }
+      if (options.length) {
+        return CampaignSet(null,
+          InfoText({
+              className: 'error',
+              target: this.props.targetName,
+            },
+            r._('we have insufficient available inventory in %(target)s to fulfill ' +
+                 'your requested dates. the following campaigns are available:')
+          ),
+          CampaignOptionTable(null, options)
+        );
+      }
+      else {
+        r.analytics.fireFunnelEvent('ads', 'inventory-error');
+
+        return InfoText({
+            className: 'error',
+            target: this.props.targetName
+          },
+          r._('inventory for %(target)s is sold out for your requested dates. ' +
+               'please try a different target or different dates.')
+        );
+      }
+    }
+    return null;
+  },
+
+  formatDate: function(date) {
+    return $.datepicker.formatDate('mm/dd/yy', date);
+  },
+
+  getBid: function(impressions, requestedBid) {
+    if (this.getImpressions(requestedBid) === impressions) {
+      return requestedBid; 
+    } else {
+      return Math.floor((impressions / 1000) * this.props.cpm) / 100;
+    }
+  },
+
+  getImpressions: function(bid) {
+    return Math.floor(bid / this.props.cpm * 1000 * 100);
+  },
+
+  getOptionData: function(startDate, duration, impressions, requestedBid) {
+    var endDate = new Date();
+    endDate.setTime(startDate.getTime());
+    endDate.setDate(startDate.getDate() + duration);
+    return {
+      start: this.formatDate(startDate),
+      end: this.formatDate(endDate),
+      bid: this.getBid(impressions, requestedBid),
+      impressions: Math.floor(impressions),
+      isNew: this.props.isNew,
+    };
+  },
+
+  getRequestedOption: function() {
+    return this.getOptionData(
+      this.props.dates[0],
+      this.props.dates.length,
+      this.props.requested,
+      this.props.bid
+    );
+  },
+
+  getMaximizedOption: function() {
+    return this.getOptionData(
+      this.props.dates[0],
+      this.props.dates.length,
+      this.state.available,
+      this.props.bid
+    );
+  },
+
+  getMinimizedOption: function() {
+    return this.getOptionData(
+      this.props.dates[0],
+      this.props.dates.length,
+      this.getImpressions(this.props.minValidBid),
+      this.props.minValidBid
+    );
+  },
+
+  getReducedWindowOption: function() {
+    var days = (1000 * 60 * 60 * 24);
+    var maxOffset = (this.state.maxTime - this.props.dates[0].getTime()) / days | 0;
+    var res =  r.sponsored.getMaximumRequest(
+      this.props.inventory,
+      this.getImpressions(this.props.minValidBid),
+      this.props.requested,
+      maxOffset
+    );
+    if (res && res.days.length < this.props.dates.length) {
+      return this.getOptionData(
+        this.props.dates[res.offset],
+        res.days.length,
+        res.maxRequest,
+        this.props.bid
+      );
+    }
+    else {
+      return null;
+    }
+  },
+});
+
+
+var exports = r.sponsored = {
     set_form_render_fnc: function(render) {
         this.render = render;
     },
@@ -11,10 +491,12 @@ r.sponsored = {
         })
         this.inventory = {}
         this.campaignListColumns = $('.existing-campaigns thead th').length
+        $("input[name='media_url_type']").on("change", this.mediaInputChange)
     },
 
-    setup: function(inventory_by_sr, isEmpty, userIsSponsor) {
+    setup: function(inventory_by_sr, priceDict, isEmpty, userIsSponsor) {
         this.inventory = inventory_by_sr
+        this.priceDict = priceDict
         if (isEmpty) {
             this.render()
             init_startdate()
@@ -147,7 +629,7 @@ r.sponsored = {
     get_dates: function(startdate, enddate) {
         var start = $.datepicker.parseDate('mm/dd/yy', startdate),
             end = $.datepicker.parseDate('mm/dd/yy', enddate),
-            ndays = (end - start) / (1000 * 60 * 60 * 24),
+            ndays = Math.round((end - start) / (1000 * 60 * 60 * 24)),
             dates = []
 
         for (var i=0; i < ndays; i++) {
@@ -281,6 +763,14 @@ r.sponsored = {
 
     },
 
+    getAvailableImpsByDay: function(dates, booked, inventoryKey) {
+       return _.map(dates, function(date) {
+            var datestr = $.datepicker.formatDate('mm/dd/yy', date);
+            var daily_booked = booked[datestr] || 0;
+            return r.sponsored.inventory[inventoryKey][datestr] + daily_booked;
+        });
+    },
+
     check_inventory: function($form, targeting, timing, budget, isOverride) {
         var bid = budget.bid,
             cpm = budget.cpm,
@@ -289,70 +779,40 @@ r.sponsored = {
             inventoryKey = targeting.inventoryKey,
             booked = this.get_booked_inventory($form, targeting.sr, 
                     targeting.geotarget, isOverride);
+        
+        var minbid_amt = r.sponsored.get_real_min_bid();
+        var maxbid_amt = r.sponsored.get_max_bid();
 
         $.when(r.sponsored.get_check_inventory(targeting, timing)).then(
             function() {
-                if (isOverride) {
-                    // do a simple sum of available inventory for override
-                    var available = _.reduce(_.map(timing.dates, function(date){
-                        var datestr = $.datepicker.formatDate('mm/dd/yy', date),
-                            daily_booked = booked[datestr] || 0
-                        return r.sponsored.inventory[inventoryKey][datestr] + daily_booked
-                    }), function(memo, num){ return memo + num; }, 0)
-                } else {
-                    // calculate conservative inventory estimate
-                    var minDaily = _.min(_.map(timing.dates, function(date) {
-                        var datestr = $.datepicker.formatDate('mm/dd/yy', date),
-                            daily_booked = booked[datestr] || 0
-                        return r.sponsored.inventory[inventoryKey][datestr] + daily_booked
-                    }))
-                    var available = minDaily * timing.duration
-                }
-
-                var maxbid = r.sponsored.calc_bid(available, cpm)
-
-                if (available < requested) {
-                    if (isOverride) {
-                        var message = r._("We expect to only have %(available)s " + 
-                                          "impressions on %(target)s from %(start)s " +
-                                          "to %(end)s. We may not fully deliver."
-                                      ).format({
-                                          available: r.utils.prettyNumber(available),
-                                          target: targeting.displayName,
-                                          start: timing.startdate,
-                                          end: timing.enddate
-                                      })
-                        $(".available-info").text('')
-                        $(".OVERSOLD_DETAIL").text(message).show()
-                    } else {
-                        var message = r._("We have insufficient inventory to fulfill" +
-                                          " your requested budget, target, and dates." +
-                                          " Only %(available)s impressions available" +
-                                          " on %(target)s from %(start)s to %(end)s. " +
-                                          "Maximum budget is $%(max)s."
-                                      ).format({
-                                          available: r.utils.prettyNumber(available),
-                                          target: targeting.displayName,
-                                          start: timing.startdate,
-                                          end: timing.enddate,
-                                          max: maxbid
-                                      })
-
-                        $(".available-info").text('')
-                        $(".OVERSOLD_DETAIL").text(message).show()
-                        r.sponsored.disable_form($form)
-                    }
-                } else {
-                    $(".available-info").text(r._("%(num)s available (maximum budget is $%(max)s)").format({num: r.utils.prettyNumber(available), max: maxbid}))
-                    $(".OVERSOLD_DETAIL").hide()
-                }
-            },
+                var dates = timing.dates;
+                var availableByDay = this.getAvailableImpsByDay(dates, booked, inventoryKey)
+                React.renderComponent(
+                  CampaignCreator({
+                    bid: bid,
+                    cpm: cpm,
+                    dates: dates,
+                    inventory: availableByDay,
+                    isNew: !$("#campaign").parents('tr:first').length,
+                    maxValidBid: parseFloat(maxbid_amt),
+                    minValidBid: parseFloat(minbid_amt),
+                    override: isOverride,
+                    requested: requested,
+                    targetName: targeting.displayName,
+                  }),
+                  document.getElementById('campaign-creator')
+                );
+            }.bind(this),
             function () {
-                var message = r._("sorry, there was an error retrieving available" +
-                                  " impressions. please try again later.")
-                $(".available-info").addClass('error').text(message)
-                $(".OVERSOLD_DETAIL").hide()
-                r.sponsored.disable_form($("#campaign"))
+                React.renderComponent(
+                  CampaignSet(null,
+                    InfoText(null,
+                      r._('sorry, there was an error retrieving available impressions. ' +
+                           'please try again later.')
+                    )
+                  ),
+                  document.getElementById('campaign-creator')
+                );
             }
         )
     },
@@ -366,20 +826,34 @@ r.sponsored = {
     },
 
     get_cpm: function($form) {
-        var baseCpm = parseInt($("#bid").data("base_cpm")),
-            geotargetMetroCpm = parseInt($("#bid").data("geotarget_metro_cpm")),
-            collectionCpm = parseInt($("#bid").data("collection_cpm")),
-            isMetroGeotarget = $('#metro').val() !== null && !$('#metro').is(':disabled'),
-            isCollectionTarget = $('input[name="targeting"][value="collection"]').is(':checked'),
-            isTechCollection = isCollectionTarget && $('input[name="collection"]:checked').val() == "technology buffs"
+        var isMetroGeotarget = $('#metro').val() !== null && !$('#metro').is(':disabled');
+        var metro = $('#metro').val();
+        var country = $('#country').val();
+        var isGeotarget = country !== '' && !$('#country').is(':disabled');
+        var isSubreddit = $form.find('input[name="targeting"][value="one"]').is(':checked');
+        var collectionVal = $form.find('input[name="collection"]:checked').val();
+        var isFrontpage = !isSubreddit && collectionVal === 'none';
+        var isCollection = !isSubreddit && !isFrontpage;
+        var sr = isSubreddit ? $form.find('*[name="sr"]').val() : '';
+        var collection = isCollection ? collectionVal : null;
+        var prices = [];
 
         if (isMetroGeotarget) {
-            return geotargetMetroCpm
-        } else if (isCollectionTarget && !isTechCollection) {
-            return collectionCpm
-        } else {
-            return baseCpm
+            var metroKey = metro + country;
+            prices.push(this.priceDict.METRO[metro] || this.priceDict.METRO_DEFAULT);
+        } else if (isGeotarget) {
+            prices.push(this.priceDict.COUNTRY[country] || this.priceDict.COUNTRY_DEFAULT);
         }
+
+        if (isFrontpage) {
+            prices.push(this.priceDict.COLLECTION_DEFAULT);
+        } else if (isCollection) {
+            prices.push(this.priceDict.COLLECTION[collectionVal] || this.priceDict.COLLECTION_DEFAULT);
+        } else {
+            prices.push(this.priceDict.SUBREDDIT[sr] || this.priceDict.SUBREDDIT_DEFAULT);
+        }
+
+        return _.max(prices);
     },
 
     get_targeting: function($form) {
@@ -392,7 +866,7 @@ r.sponsored = {
             collection = isCollection ? collectionVal : null,
             displayName = isFrontpage ? 'the frontpage' : isCollection ? collection : sr,
             priority = this.get_priority($form),
-            canGeotarget = isFrontpage || this.userIsSponsor && (isSubreddit || !priority.isCpm),
+            canGeotarget = isFrontpage || this.userIsSponsor,
             country = canGeotarget && $('#country').val() || '',
             region = canGeotarget && $('#region').val() || '',
             metro = canGeotarget && $('#metro').val() || '',
@@ -476,10 +950,10 @@ r.sponsored = {
                 isCollection = (data.targetingCollection === 'True'),
                 mappingFunction = isCollection ? mapCollection : mapSubreddit;
             mappingFunction(data.targeting);
-            var bid = parseInt(data.bid, 10);
+            var bid = parseFloat(data.bid, 10);
             var cpm = parseInt(data.cpm, 10);
             var impressions = bid / cpm * 1000 * 100;
-            totalBid += parseInt(data.bid, 10);
+            totalBid += bid;
             totalImpressions += impressions;
         });
 
@@ -487,7 +961,7 @@ r.sponsored = {
             count: campaignRows.length,
             subreddits: _.keys(subreddits),
             totalBid: totalBid,
-            totalImpressions: totalImpressions,
+            totalImpressions: totalImpressions | 0,
             prettyBid: '$' + totalBid.toFixed(2),
             prettyImpressions: r.utils.prettyNumber(totalImpressions),
         };
@@ -572,6 +1046,35 @@ r.sponsored = {
 
         if (checkInventory) {
             this.check_inventory($form, targeting, timing, budget, priority.isOverride)
+        } else if (!priority.isCpm) {
+          var booked = this.get_booked_inventory($form, targeting.sr, 
+                                                 targeting.geotarget, priority.isOverride);
+          var availableByDate = this.getAvailableImpsByDay(timing.dates, booked,
+                                                           targeting.inventoryKey);
+          var totalImpsAvailable = _.reduce(availableByDate, sum, 0);    
+
+
+          React.renderComponent(
+            React.DOM.div(null,
+              CampaignSet(null,
+                InfoText(null, r._('house campaigns, man.')),
+                CampaignOptionTable(null,
+                  CampaignOption({
+                    bid: null,
+                    end: timing.enddate,
+                    impressions: 'unsold ',
+                    isNew: !$("#campaign").parents('tr:first').length,
+                    primary: true,
+                    start: timing.startdate,
+                  })
+                )
+              ),
+              InfoText({impressions: totalImpsAvailable},
+                  r._('maximum possible impressions: %(impressions)s')
+              )
+            ),
+            document.getElementById('campaign-creator')
+          );
         }
             
         if (targeting.canGeotarget) {
@@ -592,13 +1095,13 @@ r.sponsored = {
     },
 
     disable_form: function($form) {
-        $form.find('button[name="create"], button[name="save"]')
+        $form.find('.create, button[name="save"]')
             .prop("disabled", true)
             .addClass("disabled");
     },
 
     enable_form: function($form) {
-        $form.find('button[name="create"], button[name="save"]')
+        $form.find('.create, button[name="save"]')
             .prop("disabled", false)
             .removeClass("disabled");
     },
@@ -682,9 +1185,21 @@ r.sponsored = {
         this.render()
     },
 
+    get_min_bid: function() {
+        return $('#bid').data('min_bid');
+    },
+
+    get_real_min_bid: function() {
+        return $('#bid').data('real_min_bid');
+    },
+
+    get_max_bid: function() {
+        return $('#bid').data('max_bid');
+    },
+
     check_bid: function($form) {
         var bid = this.get_bid($form),
-            minimum_bid = $("#bid").data("min_bid"),
+            minimum_bid = this.get_min_bid(),
             campaignName = $form.find('*[name=campaign_name]').val()
 
         $('.budget-change-warning').hide()
@@ -706,7 +1221,7 @@ r.sponsored = {
     },
 
     calc_impressions: function(bid, cpm_pennies) {
-        return bid / cpm_pennies * 1000 * 100
+        return Math.floor(bid / cpm_pennies * 1000 * 100);
     },
 
     calc_bid: function(impressions, cpm_pennies) {
@@ -756,13 +1271,15 @@ r.sponsored = {
     submit_reporting_form: function() {
         var $form = $('.reporting-dashboard'),
             timing = this.get_timing($form),
-            reporting = this.get_reporting($form);
+            reporting = this.get_reporting($form),
+            grouping = $form.find("[name='grouping']").val();
 
         var data = {
             startdate: timing.startdate,
             enddate: timing.enddate,
             link_text: reporting.link_text,
             owner: reporting.owner,
+            grouping: grouping,
         };
 
         this.reload_with_params(data);
@@ -780,7 +1297,20 @@ r.sponsored = {
         var location = window.location;
         window.location = location.origin + location.pathname + queryString;
     },
-}
+
+    mediaInputChange: function() {
+        var $scraperInputWrapper = $('#scraper_input');
+        var $rgInputWrapper = $('#rg_input');
+        var isScraper = $(this).val() === 'scrape';
+
+        $scraperInputWrapper.toggle(isScraper);
+        $scraperInputWrapper.find('input').prop('disabled', !isScraper);
+        $rgInputWrapper.toggle(!isScraper);
+        $rgInputWrapper.find('input').prop('disabled', isScraper);
+    },
+};
+
+}(r);
 
 var dateFromInput = function(selector, offset) {
    if(selector) {
@@ -829,6 +1359,11 @@ function attach_calendar(where, min_date_src, max_date_src, callback, min_date_o
      }).click(function() {
         $(this).siblings(".datepicker.inuse").addClass("active");
      });
+}
+
+function sum(a, b) {
+    // for things like _.reduce(list, sum);
+    return a + b;
 }
 
 function check_enddate(startdate, enddate) {
@@ -883,11 +1418,14 @@ function detach_campaign_form() {
 }
 
 function cancel_edit(callback) {
-    if($("#campaign").parents('tr:first').length) {
-        var tr = $("#campaign").parents("tr:first").prev();
+    var $campaign = $('#campaign');
+    var isEditingExistingCampaign = !!$campaign.parents('tr:first').length;
+
+    if (isEditingExistingCampaign) {
+        var tr = $campaign.parents("tr:first").prev();
         /* copy the campaign element */
         /* delete the original */
-        $("#campaign").slideUp(function() {
+        $campaign.slideUp(function() {
                 $(this).parent('tr').prev().fadeIn();
                 var td = $(this).parent();
                 var campaign = detach_campaign_form();
@@ -900,16 +1438,33 @@ function cancel_edit(callback) {
                     });
             });
     } else {
-        if ($("#campaign:visible").length) {
-            $("#campaign").slideUp(function() {
-                    if (callback) {
-                        callback();
-                    }});
-        }
-        else if (callback) {
+        var keep_open = $campaign.hasClass('keep-open');
+        
+        if ($campaign.is(':visible') && !keep_open) {
+            $campaign.slideUp(callback);
+        } else if (callback) {
             callback();
         }
+
+        if (keep_open) {
+            $campaign.removeClass('keep-open');
+            $campaign.find('.status')
+                .text(r._('Created new campaign!'))
+                .show()
+                .delay(1000)
+                .fadeOut();
+
+            r.sponsored.render();
+        }
     }
+}
+
+function send_campaign(close) {
+    if (!close) {
+        $('#campaign').addClass('keep-open');
+    }
+
+    post_pseudo_form('.campaign', 'edit_campaign');
 }
 
 function del_campaign($campaign_row) {
@@ -995,7 +1550,7 @@ function edit_campaign($campaign_row) {
             init_enddate();
 
             campaign.find('button[name="save"]').show().end()
-                .find('button[name="create"]').hide().end();
+                .find('.create').hide().end();
             campaign.slideDown();
             r.sponsored.render();
         })
@@ -1018,6 +1573,9 @@ function create_campaign() {
     if (check_number_of_campaigns()){
         return;
     }
+
+    r.analytics.fireFunnelEvent('ads', 'new-campaign');
+
     cancel_edit(function() {
             cancel_edit_promotion();
             var defaultBid = $("#bid").data("default_bid");
@@ -1035,7 +1593,7 @@ function create_campaign() {
 
             $("#campaign")
                 .find('button[name="save"]').hide().end()
-                .find('button[name="create"]').show().end()
+                .find('.create').show().end()
                 .find('input[name="campaign_id36"]').val('').end()
                 .find('input[name="campaign_name"]').val('').end()
                 .find('input[name="sr"]').val('').prop("disabled", true).end()
@@ -1069,6 +1627,7 @@ function terminate_campaign($campaign_row) {
 }
 
 function edit_promotion() {
+    $("button.new-campaign").prop("disabled", false);
     cancel_edit(function() {
         $('.promotelink-editor')
             .find('.collapsed-display').slideUp().end()
@@ -1090,3 +1649,137 @@ function cancel_edit_campaign() {
     return cancel_edit()
 }
 
+!function(exports) {
+    /*
+     * @param {number[]} days An array of inventory for the campaign's timing
+     * @param {number} minValidRequest The minimum request a campaign is allowed
+     *                                 to have, should be in the same units as `days`
+     * @param {number} requested The campaign's requested inventory, in the same
+     *                           units as `days` and `minValidRequest`.
+     * @param {number} maxOffset maximum valid start index
+     * @returns {{days: number[], maxRequest: number, offset:number}|null}
+     *                            The sub-array, maximum request for it, and
+     *                            its offset from the original `days` array.
+     */
+    exports.getMaximumRequest = _.memoize(
+      function getMaximumRequest(days, minValidRequest, requested, maxOffset) {
+        return check(days, 0);
+
+        /**
+         * check if a set of days is valid, then compare to results of this 
+         * function called on subsets of that date range
+         * @param  {Number[]} days inventory values
+         * @param  {Number} offset offset from the original days array we are
+         *                         working on
+         * @return {Object|null}  object describing the best range found,
+         *                        or null if no valid range was found
+         */
+        function check(days, offset) {
+          var bestOption = null;
+          if (days.length > 0 && offset <= maxOffset) {
+            // check the validity of the days array.
+            var minValue = min(days);
+            var maxRequest = minValue * days.length;
+            if (maxRequest >= minValidRequest) {
+              bestOption = {days: days, maxRequest: maxRequest, offset: offset};
+            }
+          }
+          if (bestOption === null || bestOption.maxRequest < requested) {
+            // if bestOptions does not hit our target, check sub-arrays.  start
+            // by splitting on values that invalidate the date range (anything
+            // with inventory below the minimum daily amount).
+            // subtract 0.1 because the comparison used to filter is > (not >=)
+            var minDaily = days.length / minValidRequest - 0.1;
+            return split(days, offset, bestOption, minDaily, check, true)
+          }
+          else {
+            return bestOption;
+          }
+        }
+      },
+      function hashFunction(days, minValidRequest, requested) {
+        return [days.join(','), minValidRequest, requested].join('|');
+      }
+    );
+
+    /**
+     * compare two date range options, returning the better
+     * options are compared on their maximum request first, then their duration
+     * @param  {Object|null} a
+     * @param  {Object|null} b
+     * @return {Object|null}
+     */
+    function compare(a, b) {
+      if (!b) {
+        return a;
+      }
+      else if (!a) {
+        return b;
+      }
+      if (b.maxRequest > a.maxRequest ||
+          (b.maxRequest === a.maxRequest && b.days.length > a.days.length)) {
+        return b;
+      }
+      else {
+        return a;
+      }
+    }
+
+    function min(arr) {
+      return Math.min.apply(Math, arr);
+    }
+
+    /**
+     * split an array of inventory into sub-arrays, checking each
+     * @param  {number[]} days - inventory data for a range of contiguous dates
+     * @param  {number} offset - index offset from original array
+     * @param  {Object|null} bestOption - current best option
+     * @param  {number} minValue - value used to split the days array on; values
+     *                             below this are excluded
+     * @param  {function} check - function to call on sub-arrays
+     * @param  {boolean} recurse - whether or not to call this function again if
+     *                             unable to split array (more on this below)
+     * @return {Object|null} - best option found
+     */
+    function split(days, offset, bestOption, minValue, check, recurse) {
+      var sub = [];
+      var subOffset = 0;
+      for (var i = 0, l = days.length; i < l; i++) {
+        if (days[i] > minValue) {
+          if (sub.length === 0) {
+            subOffset = offset + i;
+          }
+          sub.push(days[i])
+        }
+        else {
+          // whenever we hit the end of a contiguous set of days above the 
+          // minValue threshold, compare that sub-array to our current bestOption
+          if (sub.length) {
+            bestOption = compare(bestOption, check(sub, subOffset))
+            sub = [];
+          }
+        }
+      }
+      if (sub.length === days.length) {
+        // if the array was not split at all:
+        if (recurse) {
+          // if we were previously splitting on the minimum valid value, try
+          // splitting on the smallest value in the array.  The `recurse` value
+          // prevents this from looping infinitely
+          return compare(bestOption, split(days, offset, null, min(days), check, false));
+        }
+        else {
+          // otherwise, just return the current best
+          return bestOption;
+        }
+      }
+      else if (sub.length) {
+        // need to compare the last sub array, as it won't checked in the for loop
+        return compare(bestOption, check(sub, subOffset));
+      }
+      else {
+        // if _no_ values were found above the minValue threshold
+        return bestOption;
+      }
+    }
+}(r.sponsored);

@@ -16,12 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%! 
-   from r2.lib.template_helpers import static, get_domain, add_sr
+   from r2.lib.template_helpers import static, get_domain, add_sr, format_html
    from r2.lib.strings import Score
 %>
 
@@ -90,7 +90,7 @@
          class="clickable" target="_top">${thing.user_name}</a>
     %else:
       <a href="${thing.loginurl}" target="_top" class="clickable">
-        ${_("login / register")}
+        ${_("sign in / create an account")}
       </a>
     %endif
 
@@ -141,7 +141,7 @@
       <img src="${static('tb-loginarrow-right.png')}" class="login-arrow-right"/>
       <div class="login-arrow-left">
         <p class="login-message">
-          ${_("you'll need to login or register to do that")}
+          ${_("you'll need to sign in or create an account to do that")}
         </p>
       </div>
     </div>
@@ -158,7 +158,7 @@
     });
   </script>
   <span class="entry ${'likes' if thing.likes else 'dislikes' if thing.likes is False else 'unvoted'}">
-    ${score(thing, thing.likes, tag='b')}
+    ${score(thing, tag='b')}
   </span>
   <span class="arrows">
     <%def name="arrow(direction, style, message)">
@@ -188,21 +188,21 @@
     <span>
     %if thing.saved:
       ${state_button("unsave", _("unsave"),
-        "return change_state(this, 'unsave');", "<b>%s</b>" % _("unsaved"),
+        "return change_state(this, 'unsave');", format_html("<b>%s</b>", _("unsaved")),
         a_class="clickable")}
     %else:
        ${state_button("save", _("save"),
-         "return change_state(this, 'save');", "<b>%s</b>" % _("saved"),
+         "return change_state(this, 'save');", format_html("<b>%s</b>", _("saved")),
          a_class="clickable")}
     %endif
     </span><span>
     %if thing.hidden:
       ${state_button("unhide", _("unhide"),
-        "return change_state(this, 'unhide');", "<b>%s</b>" % _("unhidden"),
+        "return change_state(this, 'unhide');", format_html("<b>%s</b>", _("unhidden")),
         a_class="clickable")}
     %else:
        ${state_button("hide", _("hide"),
-         "return change_state(this, 'hide');", "<b>%s</b>" % _("hide"),
+         "return change_state(this, 'hide');", format_html("<b>%s</b>", _("hide")),
          a_class="clickable")}
     %endif
     </span>
