@@ -865,6 +865,8 @@ class Reddit(Templated):
                 classes.add('moderator')
             if c.user.gold:
                 classes.add('gold')
+            if c.site.is_banned(c.user):
+                classes.add('banned')
 
         if c.user_is_admin:
             if not isinstance(c.site, FakeSubreddit) and c.site._spam:
