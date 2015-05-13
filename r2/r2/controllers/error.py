@@ -229,7 +229,7 @@ class ErrorController(RedditController):
             elif code == 500:
                 randmin = {'admin': random.choice(self.admins)}
                 failien_url = make_failien_url()
-                sad_message = safemarkdown(rand_strings.sadmessages % randmin)
+                sad_message = rand_strings.sadmessages % randmin
                 return redditbroke % (failien_url, sad_message)
             elif code == 503:
                 return self.send503()
