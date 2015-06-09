@@ -18,6 +18,11 @@
     },
 
     toggleExpando: function(e) {
+      // temporary fix for RES http://redd.it/392zol
+      if (!$this.$button.is(e.target)) {
+        return;
+      }
+      
       this.expanded ? this.collapse() : this.expand();
     },
 
@@ -49,10 +54,21 @@
   });
 
   $(function() {
-    var expandoThings = $('.expando-button').closest('.thing');
+    $('.link-listing').on('click', '.expando-button', function(e) {
+      if (e.target.tagName === 'DIV')) {
+        // temporary fix for RES http://redd.it/392zol
+        // RES uses <a class="expando-button" />
+        return;
+      }
+      var $thing = $(this).closest('.thing')
 
-    expandoThings.each(function() {
-      new ExpandoLink({ el: this });
+      if ($thing.data('expando')) {
+        return;
+      }
+
+      $thing.data('expando', true);
+      var view = new ExpandoLink({ el: $thing[0] });
+      view.toggleExpando(e);
     });
   });
 }(r);
