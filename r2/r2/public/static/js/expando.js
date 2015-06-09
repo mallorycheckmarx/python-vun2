@@ -55,6 +55,11 @@
 
   $(function() {
     $('.link-listing').on('click', '.expando-button', function(e) {
+      if (e.target.tagName === 'DIV')) {
+        // temporary fix for RES http://redd.it/392zol
+        // RES uses <a class="expando-button" />
+        return;
+      }
       var $thing = $(this).closest('.thing')
 
       if ($thing.data('expando')) {
