@@ -18,6 +18,11 @@
     },
 
     toggleExpando: function(e) {
+      // temporary fix for RES http://redd.it/392zol
+      if (!$this.$button.is(e.target)) {
+        return;
+      }
+      
       this.expanded ? this.collapse() : this.expand();
     },
 
