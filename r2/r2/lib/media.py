@@ -80,6 +80,7 @@ _SECURE_SERVICES = [
     "wistia",
     "slideshare",
     "vine",
+    "vidme",
 ]
 
 
