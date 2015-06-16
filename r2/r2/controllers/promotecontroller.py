@@ -563,7 +563,7 @@ class PromoteApiController(ApiController):
                    location=VLocation(),
                    start=VDate('startdate'),
                    end=VDate('enddate'),
-                   platform=VOneOf('platform', ('mobile', 'desktop', 'all'), 
+                   platform=VOneOf('platform', ('mobile', 'desktop', 'all'),
                                    default='all'))
     def GET_check_inventory(self, responder, sr, collection, location, start,
                             end, platform):

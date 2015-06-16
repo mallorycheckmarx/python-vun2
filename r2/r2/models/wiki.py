@@ -47,7 +47,7 @@ WIKI_RECENT_DAYS = g.wiki_keep_recent_days
 MAX_PAGE_LENGTH_BYTES = g.wiki_max_page_length_bytes
 
 # Page names which should never be
-impossible_namespaces = ('edit/', 'revisions/', 'settings/', 'discussions/', 
+impossible_namespaces = ('edit/', 'revisions/', 'settings/', 'discussions/',
                          'revisions/', 'pages/', 'create/')
 
 # Namespaces in which access is denied to do anything but view
@@ -112,33 +112,33 @@ class WikiPageEditors(tdb_cassandra.View):
 
 class WikiRevision(tdb_cassandra.UuidThing, Printable):
     """ Contains content (markdown), author of the edit, page the edit belongs to, and datetime of the edit """
-    
+
     _use_db = True
     _connection_pool = 'main'
-    
+
     _str_props = ('pageid', 'content', 'author', 'reason')
     _bool_props = ('hidden', 'admin_deleted')
     _defaults = {'admin_deleted': False}
 
     cache_ignore = set(list(_str_props)).union(Printable.cache_ignore).union(['wikipage'])
-    
+
     def get_author(self):
         author = self._get('author')
         return Account._byID36(author, data=True) if author else None
-    
+
     @classmethod
     def get_authors(cls, revisions):
         authors = [r._get('author') for r in revisions]
         authors = filter(None, authors)
         return Account._byID36(authors, data=True)
-    
+
     @classmethod
     def get_printable_authors(cls, revisions):
         from r2.lib.pages import WrappedUser
         authors = cls.get_authors(revisions)
         return dict([(id36, WrappedUser(v))
                      for id36, v in authors.iteritems() if v])
-    
+
     @classmethod
     def add_props(cls, user, wrapped):
         authors = cls.get_printable_authors(wrapped)
@@ -151,19 +151,19 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
             author = item._get('author')
             item.printable_author = authors.get(author, '[unknown]')
             item.reported = False
-    
+
     @classmethod
     def get(cls, revid, pageid):
         wr = cls._byID(revid)
         if wr.pageid != pageid:
             raise WikiBadRevision('Revision is not for the expected page')
         return wr
-    
+
     def toggle_hide(self):
         self.hidden = not self.is_hidden
         self._commit()
         return self.hidden
-    
+
     @classmethod
     def create(cls, pageid, content, author=None, reason=None):
         kw = dict(pageid=pageid, content=content)
@@ -176,19 +176,19 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
         WikiRevisionsByPage.add_object(wr)
         WikiRevisionsRecentBySR.add_object(wr)
         return wr
-    
+
     def _on_commit(self):
         WikiRevisionsByPage.add_object(self)
         WikiRevisionsRecentBySR.add_object(self)
-    
+
     @classmethod
     def get_recent(cls, sr, count=100):
         return WikiRevisionsRecentBySR.query([sr._id36], count=count)
-    
+
     @property
     def is_hidden(self):
         return bool(getattr(self, 'hidden', False))
-    
+
     @property
     def info(self, sep=PAGE_ID_SEP):
         info = self.pageid.split(sep, 1)
@@ -197,11 +197,11 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
         except IndexError:
             g.log.error('Broken wiki page ID "%s" did PAGE_ID_SEP change?', self.pageid)
             return {'sr': 'broken', 'page': 'broken'}
-    
+
     @property
     def page(self):
         return self.info['page']
-    
+
     @property
     def sr(self):
         return self.info['sr']
@@ -210,13 +210,13 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
 class WikiPage(tdb_cassandra.Thing):
     """ Contains permissions, current content (markdown), subreddit, and current revision (ID)
         Key is subreddit-pagename """
-    
+
     _use_db = True
     _connection_pool = 'main'
-    
+
     _read_consistency_level = tdb_cassandra.CL.QUORUM
     _write_consistency_level = tdb_cassandra.CL.QUORUM
-    
+
     _date_props = ('last_edit_date')
     _str_props = ('revision', 'name', 'last_edit_by', 'content', 'sr')
     _int_props = ('permlevel')
@@ -227,27 +227,27 @@ class WikiPage(tdb_cassandra.Thing):
         if self._get('last_edit_by'):
             return Account._byID36(self.last_edit_by, data=True)
         return None
-    
+
     @classmethod
     def id_for(cls, sr, name):
         id = getattr(sr, '_id36', None)
         if not id:
             raise tdb_cassandra.NotFound
         return wiki_id(id, name)
-    
+
     @classmethod
     def get_multiple(cls, pages):
         """Get multiple wiki pages.
-        
+
         Arguments:
         pages -- list of tuples in the form of [(sr, names),..]
         """
         return cls._byID([cls.id_for(sr, name) for sr, name in pages])
-    
+
     @classmethod
     def get(cls, sr, name):
         return cls._byID(cls.id_for(sr, name))
-    
+
     @classmethod
     def create(cls, sr, name):
         # Sanity check for a page name and subreddit
@@ -258,7 +258,7 @@ class WikiPage(tdb_cassandra.Thing):
         page = cls(**kw)
         page._commit()
         return page
-    
+
     @property
     def restricted(self):
         return WikiPage.is_restricted(self.name)
@@ -266,11 +266,11 @@ class WikiPage(tdb_cassandra.Thing):
     @classmethod
     def is_impossible(cls, page):
         return ("%s/" % page) in impossible_namespaces or page.startswith(impossible_namespaces)
-    
+
     @classmethod
     def is_restricted(cls, page):
         return ("%s/" % page) in restricted_namespaces or page.startswith(restricted_namespaces)
-    
+
     @classmethod
     def is_special(cls, page):
         return page in special_pages
@@ -282,26 +282,26 @@ class WikiPage(tdb_cassandra.Thing):
     @classmethod
     def is_automatically_created(cls, page):
         return page in automatically_created_pages
-    
+
     @property
     def special(self):
         return WikiPage.is_special(self.name)
-    
+
     def add_to_listing(self):
         WikiPagesBySR.add_object(self)
-    
+
     def _on_create(self):
         self.add_to_listing()
-    
+
     def _on_commit(self):
          self.add_to_listing()
-    
+
     def remove_editor(self, user):
         WikiPageEditors._remove(self._id, [user])
-    
+
     def add_editor(self, user):
         WikiPageEditors._set_values(self._id, {user: ''})
-    
+
     @classmethod
     def get_pages(cls, sr, after=None, filter_check=None):
         NUM_AT_A_TIME = num = 1000
@@ -315,7 +315,7 @@ class WikiPage(tdb_cassandra.Thing):
             pages += wikipages
             after = wikipages[-1] if num else None
         return filter(filter_check, pages)
-    
+
     @classmethod
     def get_listing(cls, sr, filter_check=None):
         """
@@ -348,7 +348,7 @@ class WikiPage(tdb_cassandra.Thing):
                 cur_node[pagename] = [page, OrderedDict()]
 
         return page_tree, pages
-    
+
     def get_editor_accounts(self):
         editors = self.get_editors()
         accounts = [Account._byID36(editor, data=True)
@@ -356,16 +356,16 @@ class WikiPage(tdb_cassandra.Thing):
         accounts = [account for account in accounts
                     if not account._deleted]
         return accounts
-    
+
     def get_editors(self, properties=None):
         try:
             return WikiPageEditors._byID(self._id, properties=properties)._values().keys() or []
         except tdb_cassandra.NotFoundException:
             return []
-    
+
     def has_editor(self, editor):
         return bool(self.get_editors(properties=[editor]))
-    
+
     def revise(self, content, previous = None, author=None, force=False, reason=None):
         if content is None:
             content = ""
@@ -375,9 +375,9 @@ class WikiPage(tdb_cassandra.Thing):
         max_length = special_length_restrictions_bytes.get(self.name, MAX_PAGE_LENGTH_BYTES)
         if len(content) > max_length:
             raise ContentLengthError(max_length)
-        
+
         revision = getattr(self, 'revision', None)
-        
+
         if not force and (revision and previous != revision):
             if previous:
                 origcontent = WikiRevision.get(previous, pageid=self._id).content
@@ -388,7 +388,7 @@ class WikiPage(tdb_cassandra.Thing):
             except ConflictException as e:
                 e.new_id = revision
                 raise e
-        
+
         wr = WikiRevision.create(self._id, content, author, reason)
         self.content = content
         self.last_edit_by = author
@@ -399,7 +399,7 @@ class WikiPage(tdb_cassandra.Thing):
         LastModified.touch(self._fullname, "Edit")
 
         return wr
-    
+
     def change_permlevel(self, permlevel, force=False):
         NUM_PERMLEVELS = 3
         if permlevel == self.permlevel:
@@ -408,10 +408,10 @@ class WikiPage(tdb_cassandra.Thing):
             raise ValueError('Permlevel not valid')
         self.permlevel = permlevel
         self._commit()
-    
+
     def get_revisions(self, after=None, count=100):
         return WikiRevisionsByPage.query([self._id], after=after, count=count)
-    
+
     def _commit(self, *a, **kw):
         if not self._id: # Creating a new page
             pageid = wiki_id(self.sr, self.name)
@@ -419,17 +419,17 @@ class WikiPage(tdb_cassandra.Thing):
                 WikiPage._byID(pageid)
                 raise WikiPageExists()
             except tdb_cassandra.NotFound:
-                self._id = pageid   
+                self._id = pageid
         return tdb_cassandra.Thing._commit(self, *a, **kw)
 
 class WikiRevisionsByPage(tdb_cassandra.DenormalizedView):
     """ Associate revisions with pages """
-    
+
     _use_db = True
     _connection_pool = 'main'
     _view_of = WikiRevision
     _compare_with = TIME_UUID_TYPE
-    
+
     @classmethod
     def _rowkey(cls, wr):
         return wr.pageid
@@ -439,7 +439,7 @@ class WikiPagesBySR(tdb_cassandra.DenormalizedView):
     _use_db = True
     _connection_pool = 'main'
     _view_of = WikiPage
-    
+
     @classmethod
     def _rowkey(cls, wp):
         return wp.sr
@@ -451,7 +451,7 @@ class WikiRevisionsRecentBySR(tdb_cassandra.DenormalizedView):
     _view_of = WikiRevision
     _compare_with = TIME_UUID_TYPE
     _ttl = timedelta(days=WIKI_RECENT_DAYS)
-    
+
     @classmethod
     def _rowkey(cls, wr):
         return wr.sr
@@ -523,5 +523,5 @@ class WikiPageIniItem(object):
 
             if item.is_enabled:
                 items[section] = item
-        
+
         return items if return_dict else items.values()

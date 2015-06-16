@@ -370,7 +370,7 @@ def add_request_info(select):
             hasattr(request, 'ip') and
             hasattr(request, 'user_agent')):
             comment = '/*\n%s\n%s\n%s\n*/' % (
-                tb or "", 
+                tb or "",
                 sanitize(request.fullpath),
                 sanitize(request.ip))
             return select.prefix_with(comment)
@@ -460,7 +460,7 @@ def set_thing_props(type_id, thing_id, **props):
 
 def incr_thing_prop(type_id, thing_id, prop, amount):
     table = get_thing_table(type_id, action = 'write')[0]
-    
+
     def do_update(t):
         transactions.add_engine(t.bind)
         u = t.update(t.c.thing_id == thing_id,
@@ -476,12 +476,12 @@ class CreationError(Exception): pass
 def make_relation(rel_type_id, thing1_id, thing2_id, name, date=None):
     table = get_rel_table(rel_type_id, action = 'write')[0]
     transactions.add_engine(table.bind)
-    
+
     if not date: date = datetime.now(g.tz)
     try:
         r = table.insert().execute(thing1_id = thing1_id,
                                    thing2_id = thing2_id,
-                                   name = name, 
+                                   name = name,
                                    date = date)
         g.stats.event_count('rel.create', table.rel_name)
         return r.inserted_primary_key[0]
@@ -490,7 +490,7 @@ def make_relation(rel_type_id, thing1_id, thing2_id, name, date=None):
             raise
         # wrap the error to prevent db layer bleeding out
         raise CreationError, "Relation exists (%s, %s, %s)" % (name, thing1_id, thing2_id)
-        
+
 
 def set_rel_props(rel_type_id, rel_id, **props):
     t = get_rel_table(rel_type_id, action = 'write')[0]
@@ -589,7 +589,7 @@ def fetch_query(table, id_col, thing_id):
     if not isinstance(thing_id, iters):
         single = True
         thing_id = (thing_id,)
-    
+
     s = sa.select([table], id_col.in_(thing_id))
 
     try:
@@ -610,7 +610,7 @@ def get_data(table, thing_id):
         val = db2py(row.value, row.kind)
         stor = res if single else res.setdefault(row.thing_id, storage())
         if single and row.thing_id != thing_id:
-            raise ValueError, ("tdb_sql.py: there's shit in the plumbing." 
+            raise ValueError, ("tdb_sql.py: there's shit in the plumbing."
                                + " got %s, wanted %s" % (row.thing_id,
                                                          thing_id))
         stor[row.key] = val
@@ -627,7 +627,7 @@ def set_thing_data(type_id, thing_id, brand_new_thing, **vals):
 
 def incr_thing_data(type_id, thing_id, prop, amount):
     table = get_thing_table(type_id, action = 'write')[1]
-    return incr_data_prop(table, type_id, thing_id, prop, amount)    
+    return incr_data_prop(table, type_id, thing_id, prop, amount)
 
 def get_thing_data(type_id, thing_id):
     table = get_thing_table(type_id)[1]
@@ -649,7 +649,7 @@ def get_thing(type_id, thing_id):
             res = stor
             # check that we got what we asked for
             if row.thing_id != thing_id:
-                raise ValueError, ("tdb_sql.py: there's shit in the plumbing." 
+                raise ValueError, ("tdb_sql.py: there's shit in the plumbing."
                                     + " got %s, wanted %s" % (row.thing_id,
                                                               thing_id))
         else:
@@ -675,7 +675,7 @@ def get_rel_data(rel_type_id, rel_id):
 def get_rel(rel_type_id, rel_id):
     r_table = get_rel_table(rel_type_id)[0]
     r, single = fetch_query(r_table, r_table.c.rel_id, rel_id)
-    
+
     res = {} if not single else None
     for row in r:
         stor = storage(thing1_id = row.thing1_id,
@@ -791,7 +791,7 @@ def add_sort(sort, t_table, select):
         #default to asc
         return (sa.desc(real_col) if isinstance(s, operators.desc)
                 else sa.asc(real_col))
-        
+
     sa_sort = [make_sa_sort(s) for s in sort]
 
     s = select.order_by(*sa_sort)
@@ -810,7 +810,7 @@ def find_things(type_id, get_cols, sort, limit, offset, constraints):
     constraints = deepcopy(constraints)
 
     s = sa.select([table.c.thing_id.label('thing_id')])
-    
+
     for op in operators.op_iter(constraints):
         #assume key starts with _
         #if key.startswith('_'):
@@ -846,9 +846,9 @@ def translate_data_value(alias, op):
     #add the substring func
     if need_substr:
         lval = sa.func.substring(lval, 1, max_val_len)
-    
+
     op.lval = lval
-        
+
     #convert the rval to db types
     #convert everything to strings for pg8.3
     op.rval = tuple(str(py2db(v)) for v in tup(op.rval))
@@ -888,10 +888,10 @@ def find_data(type_id, get_cols, sort, limit, offset, constraints):
 
             if id_col is not None:
                 s.append_whereclause(id_col == alias.c.thing_id)
-            
+
             s.append_column(alias.c.value.label(key))
             s.append_whereclause(alias.c.key == key)
-            
+
             #add the substring constraint if no other functions are there
             translate_data_value(alias, op)
 
@@ -905,7 +905,7 @@ def find_data(type_id, get_cols, sort, limit, offset, constraints):
     if sort:
         need_join = True
         s, cols = add_sort(sort, {'_':t_table}, s)
-            
+
     if need_join:
         s.append_whereclause(first_alias.c.thing_id == t_table.c.thing_id)
 
@@ -941,7 +941,7 @@ def find_rels(rel_type_id, get_cols, sort, limit, offset, constraints):
         #vals = con.rval
         key = op.lval_name
         prefix = key[:4]
-        
+
         if prefix in ('_t1_', '_t2_'):
             #not a thing attribute
             key = key[4:]
@@ -977,17 +977,17 @@ def find_rels(rel_type_id, get_cols, sort, limit, offset, constraints):
         s, cols = add_sort(sort,
                            {'_':r_table, '_t1_':t1_table, '_t2_':t2_table},
                            s)
-        
+
         #do we need more joins?
         for (col, table) in cols:
             if table == need_join1[1]:
                 joins_needed.add(need_join1)
             elif table == need_join2[1]:
                 joins_needed.add(need_join2)
-        
+
     for j in joins_needed:
         col, table = j
-        s.append_whereclause(r_table.c[col] == table.c.thing_id)    
+        s.append_whereclause(r_table.c[col] == table.c.thing_id)
 
     if limit:
         s = s.limit(limit)

@@ -35,7 +35,7 @@ class ExportError(Exception):
 
 def export(exported_entity):
     """Use a decorator to avoid retyping function/class names.
-  
+
     * Based on an idea by Duncan Booth:
     http://groups.google.com/group/comp.lang.python/msg/11cbb03e09611b8a
     * Improved via a suggestion by Dave Angel:

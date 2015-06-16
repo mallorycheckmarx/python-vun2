@@ -148,7 +148,7 @@ class ThingJsonTemplate(JsonTemplate):
         d = cls._data_attrs_.copy()
         d.update(kw)
         return d
-    
+
     def kind(self, wrapped):
         """
         Returns a string literal which identifies the type of this
@@ -860,7 +860,7 @@ class CommentJsonTemplate(ThingTemplate):
             if item._spam:
                 data["approved_by"] = None
                 if ban_info.get('moderator_banned'):
-                    data["banned_by"] = ban_info.get("banner") 
+                    data["banned_by"] = ban_info.get("banner")
                 else:
                     data["banned_by"] = True
             else:
@@ -1024,7 +1024,7 @@ class ListingJsonTemplate(ThingJsonTemplate):
         children="things",
         modhash="modhash",
     )
-    
+
     def thing_attr(self, thing, attr):
         if attr == "modhash":
             return c.modhash
@@ -1036,11 +1036,11 @@ class ListingJsonTemplate(ThingJsonTemplate):
                 res.append(r)
             return res
         return ThingJsonTemplate.thing_attr(self, thing, attr)
-        
+
 
     def rendered_data(self, thing):
         return self.thing_attr(thing, "things")
-    
+
     def kind(self, wrapped):
         return "Listing"
 
@@ -1189,7 +1189,7 @@ class WikiJsonTemplate(JsonTemplate):
 class WikiPageListingJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
         return "wikipagelisting"
-    
+
     def data(self, thing):
         pages = [p.name for p in thing.linear_pages]
         return pages
@@ -1197,7 +1197,7 @@ class WikiPageListingJsonTemplate(ThingJsonTemplate):
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
         return "wikipage"
-    
+
     def data(self, thing):
         edit_date = time.mktime(thing.edit_date.timetuple()) if thing.edit_date else None
         edit_by = None
@@ -1212,7 +1212,7 @@ class WikiViewJsonTemplate(ThingJsonTemplate):
 class WikiSettingsJsonTemplate(ThingJsonTemplate):
      def kind(self, thing):
          return "wikipagesettings"
-    
+
      def data(self, thing):
          editors = [Wrapped(e).render() for e in thing.mayedit]
          return dict(permlevel=thing.permlevel,

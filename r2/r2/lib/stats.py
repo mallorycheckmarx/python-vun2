@@ -408,7 +408,7 @@ class Stats:
 
     def count_string(self, key, value, count=1):
         self.client.string_counts.record(key, str(value), count=count)
-   
+
 
 class CacheStats:
     def __init__(self, parent, cache_name):

@@ -41,7 +41,7 @@ class Printable(object):
                         # displayed score is cachable, so remove score
                         # related fields.
                         'voting_score', 'display_score',
-                        'render_score', 'score', '_score', 
+                        'render_score', 'score', '_score',
                         'upvotes', '_ups',
                         'downvotes', '_downs',
                         'subreddit_slow', '_deleted', '_spam',
@@ -94,7 +94,7 @@ class Printable(object):
             s.append('user_flair_enabled')
 
         if style == 'htmllite':
-            s.extend([c.bgcolor, c.bordercolor, 
+            s.extend([c.bgcolor, c.bordercolor,
                       request.GET.has_key('style'),
                       request.GET.get("expanded"),
                       getattr(wrapped, 'embed_voting_style', None)])

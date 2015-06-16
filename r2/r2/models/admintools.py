@@ -136,7 +136,7 @@ class AdminTools(object):
         self.author_spammer(things, False)
         self.set_last_sr_ban(things)
         queries.unban(things, insert)
-    
+
     def report(self, thing):
         pass
 
@@ -185,19 +185,19 @@ class AdminTools(object):
         if existing_expiration is None or existing_expiration < now:
             existing_expiration = now
         account.gold_expiration = existing_expiration + timedelta(days)
-        
+
         if account.gold_expiration > now and not account.gold:
             self.engolden(account)
         elif account.gold_expiration <= now and account.gold:
             self.degolden(account)
 
-        account._commit()     
+        account._commit()
 
     def engolden(self, account):
         now = datetime.now(g.display_tz)
         account.gold = True
         description = "Since " + now.strftime("%B %Y")
-        
+
         trophy = Award.give_if_needed("reddit_gold", account,
                                      description=description,
                                      url="/gold/about")
@@ -300,7 +300,7 @@ def update_gold_users():
             already_warned = g.hardcache.get(hc_key)
             if not already_warned:
                 g.hardcache.set(hc_key, True, 86400 * (warning_days + 1))
-                
+
                 subject = _("Your reddit gold subscription is about to "
                             "expire!")
                 message = _("Your subscription to reddit gold will be "

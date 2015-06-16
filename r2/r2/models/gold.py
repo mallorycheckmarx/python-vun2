@@ -319,7 +319,7 @@ def create_gold_code(trans_id, payer_email, paying_id, pennies, days, date):
                 date=date)
             return code
 
-                
+
 def account_by_payingid(paying_id):
     s = sa.select([sa.distinct(gold_table.c.account_id)],
                   gold_table.c.paying_id == paying_id)

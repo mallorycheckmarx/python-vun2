@@ -165,7 +165,7 @@ class WikiController(RedditController):
                 message = _("viewing revision from %s ago") % timesince(version.date)
                 content = version.content
 
-        renderer = RENDERERS_BY_PAGE.get(page.name, 'wiki') 
+        renderer = RENDERERS_BY_PAGE.get(page.name, 'wiki')
 
         return WikiPageView(content, alert=message, v=version, diff=diffcontent,
                             may_revise=this_may_revise(page), edit_by=edit_by,

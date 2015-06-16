@@ -108,7 +108,7 @@ class ToolbarController(RedditController):
         '''/tb/$id36, show a given link with the toolbar
         If the user doesn't have the toolbar enabled, redirect to comments
         page.
-        
+
         '''
         from r2.lib.media import thumbnail_url
         redirect_url = None
@@ -122,7 +122,7 @@ class ToolbarController(RedditController):
             redirect_url = link.url
         elif not (c.user_is_loggedin and c.user.uses_toolbar):
             redirect_url = link.make_permalink_slow(force_domain=True)
-        
+
         if redirect_url:
             if query_params:
                 url = UrlParser(redirect_url)
@@ -167,7 +167,7 @@ class ToolbarController(RedditController):
 
         if c.cname and not c.authorized_cname:
             # In this case, we make some bad guesses caused by the
-            # cname frame on unauthorised cnames. 
+            # cname frame on unauthorised cnames.
             # 1. User types http://foo.com/http://myurl?cheese=brie
             #    (where foo.com is an unauthorised cname)
             # 2. We generate a frame that points to

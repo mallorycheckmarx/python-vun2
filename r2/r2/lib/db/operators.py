@@ -90,7 +90,7 @@ class Slots(object):
 
     def __getitem__(self, attr):
         return Slot(attr)
-        
+
 def op_iter(ops):
     for o in ops:
         if isinstance(o, op):

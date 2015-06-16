@@ -226,7 +226,7 @@ class JQueryResponse(JsonResponse):
         if not self._new_captcha:
             self.captcha(get_iden())
             self._new_captcha = True
-        
+
     def get_input(self, name):
         return self.find("*[name=%s]" % name)
 

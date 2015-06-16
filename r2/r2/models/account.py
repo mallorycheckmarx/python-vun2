@@ -338,7 +338,7 @@ class Account(Thing):
             # permitted OAuth scopes.
             return None
         return modhash(self, rand = rand, test = test)
-    
+
     def valid_hash(self, hash):
         if self == c.oauth_user:
             # OAuth authenticated requests do not require CSRF protection.
@@ -502,7 +502,7 @@ class Account(Thing):
             # New PW doesn't matter, they can't log in with it anyway.
             # Even if their PW /was/ 'banned' for some reason, this
             # will change the salt and thus invalidate the cookies
-            change_password(self, 'banned') 
+            change_password(self, 'banned')
 
             # deauthorize all access tokens
             from r2.models.token import OAuth2AccessToken
@@ -1062,7 +1062,7 @@ class AccountsByCanonicalEmail(tdb_cassandra.View):
             return []
         account_id36s = cls.get_time_sorted_columns(canonical).keys()
         return Account._byID36(account_id36s, data=True, return_dict=False)
-    
+
 
 class SubredditParticipationByAccount(tdb_cassandra.DenormalizedRelation):
     _use_db = True

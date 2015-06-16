@@ -24,7 +24,7 @@ class TicketProvider(object):
     """Provider for handling support tickets interactions.
 
     """
-    
+
     def build_ticket_url_from_id(self, ticket_id):
         """
         Creates a URL to access a ticket based on URL
@@ -34,9 +34,9 @@ class TicketProvider(object):
         Returns a URL to the ticket
         """
         raise NotImplementedError
-        
+
     def create(self):
-        """Creates a new support ticket with the provider. 
+        """Creates a new support ticket with the provider.
 
         Parameters may vary depending on the provider you use.
 

@@ -438,7 +438,7 @@ class HotController(ListingWithPromos):
                         self.count -= 1
                         self.num += 1
                     return link_list
-            
+
             # no sticky or sticky hidden
             return c.site.get_links('hot', 'all')
 
@@ -870,7 +870,7 @@ class UserController(ListingController):
                 if query_string:
                     path += "?" + query_string
                 return self.redirect(path, code=301)
-        
+
         self.where = where
         self.sort = sort
         self.time = time
@@ -1257,8 +1257,8 @@ class MessageController(ListingController):
             content = MessageCompose(to=to, subject=subject, captcha=captcha,
                                      message=message)
 
-        return MessagePage(content=content, 
-            title=self.title(), 
+        return MessagePage(content=content,
+            title=self.title(),
             page_classes=self.extra_page_classes + ['compose-page'],
         ).render()
 

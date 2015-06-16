@@ -205,7 +205,7 @@ def scriptsafe_dumps(obj, **kwargs):
 def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
     if not text:
         return text
-    
+
     if renderer == 'reddit':
         smd = safemarkdown(text, nofollow=nofollow, target=target)
     elif renderer == 'wiki':
@@ -243,7 +243,7 @@ def wikimarkdown(text, include_toc=True, target=None):
     from r2.lib.utils import UrlParser
     from r2.lib.template_helpers import add_sr
     page_images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
-    
+
     def img_swap(tag):
         name = tag.get('src')
         name = custom_img_url.search(name)
@@ -254,16 +254,16 @@ def wikimarkdown(text, include_toc=True, target=None):
             tag['src'] = url
         else:
             tag.extract()
-    
+
     nofollow = True
-    
+
     text = snudown.markdown(_force_utf8(text), nofollow, target,
                             renderer=snudown.RENDERER_WIKI)
-    
+
     # TODO: We should test how much of a load this adds to the app
     soup = BeautifulSoup(text.decode('utf-8'))
     images = soup.findAll('img')
-    
+
     if images:
         [img_swap(image) for image in images]
 
@@ -280,9 +280,9 @@ def wikimarkdown(text, include_toc=True, target=None):
         tocdiv = generate_table_of_contents(soup, prefix="wiki")
         if tocdiv:
             soup.insert(0, tocdiv)
-    
+
     text = str(soup)
-    
+
     return SC_OFF + WIKI_MD_START + text + WIKI_MD_END + SC_ON
 
 title_re = re.compile('[^\w.-]')
@@ -300,34 +300,34 @@ def generate_table_of_contents(soup, prefix):
     previous = 0
     for header in headers:
         contents = u''.join(header.findAll(text=True))
-        
+
         # In the event of an empty header, skip
         if not contents:
             continue
-        
+
         # Convert html entities to avoid ugly header ids
         aid = unicode(BeautifulSoup(contents, convertEntities=BeautifulSoup.XML_ENTITIES))
         # Prefix with PREFIX_ to avoid ID conflict with the rest of the page
         aid = u'%s_%s' % (prefix, aid.replace(" ", "_").lower())
         # Convert down to ascii replacing special characters with hex
         aid = str(title_re.sub(lambda c: '.%X' % ord(c.group()), aid))
-        
+
         # Check to see if a tag with the same ID exists
         id_num = header_ids[aid] + 1
         header_ids[aid] += 1
         # Only start numbering ids with the second instance of an id
         if id_num > 1:
             aid = '%s%d' % (aid, id_num)
-        
+
         header['id'] = aid
-        
+
         li = Tag(soup, "li", [("class", aid)])
         a = Tag(soup, "a", [("href", "#%s" % aid)])
         a.string = contents
         li.append(a)
-        
+
         thislevel = int(header.name[-1])
-        
+
         if previous and thislevel > previous:
             newul = Tag(soup, "ul")
             newul.level = thislevel
@@ -340,10 +340,10 @@ def generate_table_of_contents(soup, prefix):
             while level and parent.level > thislevel:
                 parent = parent.findParent("ul")
                 level -= 1
-        
+
         previous = thislevel
         parent.append(li)
-    
+
     return tocdiv
 
 
