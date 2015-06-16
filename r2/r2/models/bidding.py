@@ -49,10 +49,10 @@ from r2.models import Link, Frontpage
 
 
 engine = g.dbm.get_engine('authorize')
-# Allocate a session maker for communicating object changes with the back end  
+# Allocate a session maker for communicating object changes with the back end
 Session = sessionmaker(autocommit = True, autoflush = True, bind = engine)
 # allocate a SQLalchemy base class for auto-creation of tables based
-# on class fields.  
+# on class fields.
 # NB: any class that inherits from this class will result in a table
 # being created, and subclassing doesn't work, hence the
 # object-inheriting interface classes.
@@ -75,7 +75,7 @@ class Sessionized(object):
         """
         for k, v in self._disambiguate_args(None, *a, **kw):
             setattr(self, k.name, v)
-    
+
     @classmethod
     def _new(cls, *a, **kw):
         """
@@ -95,7 +95,7 @@ class Sessionized(object):
 
     def _delete(self):
         """
-        Deletes current object from the db. 
+        Deletes current object from the db.
         """
         with self.session.begin():
             self.session.delete(self)
@@ -103,7 +103,7 @@ class Sessionized(object):
     @classmethod
     def query(cls, **kw):
         """
-        Ubiquitous class-level query function. 
+        Ubiquitous class-level query function.
         """
         q = cls.session.query(cls)
         if kw:
@@ -118,7 +118,7 @@ class Sessionized(object):
 
         For example, if a class Foo has fields a and b, this function
         allows the two to work identically:
-        
+
         >>> foo = Foo(a = 'arg1', b = 'arg2')
         >>> foo = Foo('arg1', 'arg2')
 
@@ -175,7 +175,7 @@ class Sessionized(object):
             # uniform
             if not res:
                 raise NoResultFound
-        except NoResultFound: 
+        except NoResultFound:
             raise NotFound, "%s with %s" % \
                 (cls.__name__,
                  ",".join("%s=%s" % x for x in args))
@@ -192,7 +192,7 @@ class Sessionized(object):
     @classmethod
     def one(cls, *a, **kw):
         """
-        Same as lookup, but returns only one argument. 
+        Same as lookup, but returns only one argument.
         """
         return cls._lookup(False, *a, **kw)
 
@@ -202,14 +202,14 @@ class Sessionized(object):
             cls.one(key, *a)
         except NotFound:
             cls(key, *a)._commit()
-    
+
     @classmethod
     def delete(cls, key, *a):
         try:
             cls.one(key, *a)._delete()
         except NotFound:
             pass
-    
+
     @classmethod
     def get(cls, key):
         try:
@@ -235,7 +235,7 @@ class CustomerID(Sessionized, Base):
             existing._commit()
         except NotFound:
             cls(user, _id)._commit()
-    
+
     @classmethod
     def get_id(cls, user):
         try:
@@ -290,7 +290,7 @@ class Bid(Sessionized, Base):
 
     @classmethod
     def _new(cls, trans_id, user, pay_id, thing_id, bid, campaign = 0):
-        bid = Bid(trans_id, user, pay_id, 
+        bid = Bid(trans_id, user, pay_id,
                   thing_id, getattr(request, 'ip', '0.0.0.0'), bid = bid,
                   campaign = campaign)
         bid._commit()

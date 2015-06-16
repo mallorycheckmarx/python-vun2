@@ -252,7 +252,7 @@ def top1k_writefiles(dirname):
                 f.write('%s\t' % key)
                 f.write('\t'.join(item))
                 f.write('\n')
-        
+
     mr_tools.mr_reduce_max_per_key(lambda x: map(float, x[:-1]), num=1000,
                                    post=post)
 

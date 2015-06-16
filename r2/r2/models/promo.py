@@ -406,7 +406,7 @@ class PromoCampaign(Thing):
     @classmethod
     def _by_user(cls, account_id):
         '''
-        Returns an iterable of all campaigns owned by account_id or an empty 
+        Returns an iterable of all campaigns owned by account_id or an empty
         list if there are none.
         '''
         return cls._query(PromoCampaign.c.owner_id == account_id, data=True)

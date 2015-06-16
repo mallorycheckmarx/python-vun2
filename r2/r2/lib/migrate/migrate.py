@@ -72,7 +72,7 @@ def upgrade_messages(update_comments = True, update_messages = True,
     def batch_fn(items):
         g.reset_caches()
         return items
-    
+
     if update_messages or update_trees:
         q = Message._query(Message.c.new == True,
                            sort = desc("_date"),

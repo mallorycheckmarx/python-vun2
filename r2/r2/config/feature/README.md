@@ -89,7 +89,7 @@ feature_some_flag = {"admin": true, "users": ["user1", "user2"]}
 
 Since we're currently overloading live_config, each feature flag should be
 prepended with `feature_` in the config. We may choose to make a live-updating
-features block in the future. 
+features block in the future.
 
 
 ## When should I use this?

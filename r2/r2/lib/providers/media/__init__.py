@@ -34,7 +34,7 @@ class MediaProvider(object):
 
         `url` must be a url linking to the content
 
-        The return value should be a 
+        The return value should be a
         """
         raise NotImplementedError
 

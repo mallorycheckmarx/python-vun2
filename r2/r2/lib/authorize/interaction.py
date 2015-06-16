@@ -71,7 +71,7 @@ test_address = Address(firstName="John",
 
 
 @export
-def get_account_info(user, recursed=False): 
+def get_account_info(user, recursed=False):
     # if we don't have an ID for the user, try to make one
     if not CustomerID.get_id(user):
         cust_id = CreateCustomerProfileRequest(user).make_request()
@@ -173,7 +173,7 @@ def auth_transaction(amount, user, payid, thing, campaign):
               (res.response_code, res.response_reason_code) == (3, 11)):
             # duplicate transaction, which is bad, but not horrible.  Log
             # the transaction id, creating a new bid if necessary.
-            g.log.error("Authorize.net duplicate trans %d on campaign %d" % 
+            g.log.error("Authorize.net duplicate trans %d on campaign %d" %
                         (res.trans_id, campaign))
             try:
                 Bid.one(res.trans_id, campaign=campaign)

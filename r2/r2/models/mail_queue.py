@@ -290,7 +290,7 @@ class Email(object):
     handler = EmailHandler()
 
     # Do not modify in any way other than appending new items!
-    # Database tables storing mail stuff use an int column as an index into 
+    # Database tables storing mail stuff use an int column as an index into
     # this Enum, so anything other than appending new items breaks mail history.
     Kind = Enum("SHARE", "FEEDBACK", "ADVERTISE", "OPTOUT", "OPTIN",
                 "VERIFY_EMAIL", "RESET_PASSWORD",

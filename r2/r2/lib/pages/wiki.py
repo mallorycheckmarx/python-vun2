@@ -97,9 +97,9 @@ class WikiPageDiscussions(Templated):
 
 class WikiBasePage(Reddit):
     extra_page_classes = ['wiki-page']
-    
+
     def __init__(self, content, page=None, may_revise=False,
-                 actionless=False, alert=None, description=None, 
+                 actionless=False, alert=None, description=None,
                  showtitle=False, **context):
         pageactions = []
         if not actionless and page:
@@ -112,18 +112,18 @@ class WikiBasePage(Reddit):
                 pageactions += [('settings', _("settings"), True)]
 
         action = context.get('wikiaction', (page, 'wiki'))
-        
+
         if alert:
             context['infotext'] = alert
         elif c.wikidisabled:
             context['infotext'] = _("this wiki is currently disabled, only mods may interact with this wiki")
-        
+
         self.pageactions = pageactions
         self.page = page
         self.base_url = c.wiki_base_url
         self.action = action
         self.description = description
-        
+
         if showtitle:
             self.pagetitle = action[1]
         else:
@@ -137,7 +137,7 @@ class WikiBasePage(Reddit):
                 "page": page}
             page_classes = ['wiki-page-%s' % page.replace('/', '-')]
 
-        Reddit.__init__(self, extra_js_config={'wiki_page': page}, 
+        Reddit.__init__(self, extra_js_config={'wiki_page': page},
                         show_wiki_actions=True, page_classes=page_classes,
                         content=content, short_title=page, **context)
 
@@ -150,7 +150,7 @@ class WikiPageView(WikiBasePage):
         if not content and not context.get('alert'):
             if may_revise:
                 context['alert'] = _("this page is empty, edit it to add some content.")
-        content = WikiView(content, context.get('edit_by'), context.get('edit_date'), 
+        content = WikiView(content, context.get('edit_by'), context.get('edit_date'),
                            may_revise=may_revise, page=page, diff=diff, renderer=renderer)
         WikiBasePage.__init__(self, content, page=page, **context)
 

@@ -279,10 +279,10 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage,
     else:
         sender = _("An anonymous redditor")
         md_sender = _("An anonymous redditor")
-        
+
         if buyer.name in g.live_config["proxy_gilding_accounts"]:
             repliable = False
-        else:    
+        else:
             repliable = True
 
     create_gift_gold(buyer._id, recipient._id, days, c.start_time, signed, note)
@@ -299,15 +299,15 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage,
         url = thing.make_permalink_slow()
         if isinstance(thing, Comment):
             subject = _('Your comment has been gilded!')
-            message = strings.youve_been_gilded_comment 
+            message = strings.youve_been_gilded_comment
             message %= {'sender': md_sender, 'url': url}
         else:
             subject = _('Your submission has been gilded!')
-            message = strings.youve_been_gilded_link 
+            message = strings.youve_been_gilded_link
             message %= {'sender': md_sender, 'url': url}
 
     if giftmessage and giftmessage.strip():
-        message += ("\n\n" + strings.giftgold_note + 
+        message += ("\n\n" + strings.giftgold_note +
                     _force_unicode(giftmessage) + '\n\n----')
 
     message += '\n\n' + strings.gold_benefits_msg
@@ -366,7 +366,7 @@ def send_gold_code(buyer, months, days,
         # bought by a logged-out user, send an email
         contents = GoldGiftCodeEmail(message=message).render(style='email')
         _system_email(buyer_email, contents, Email.Kind.GOLD_GIFT_CODE)
-                      
+
     g.log.info("%s bought a gold code for %s", buyer_name, amount)
     return code
 
@@ -578,7 +578,7 @@ class IpnController(RedditController):
             admintools.adjust_gold_expiration(buyer, days=days)
 
             subject = _("Eureka! Thank you for investing in reddit gold!")
-            
+
             message = _("Thank you for buying reddit gold. Your patronage "
                         "supports the site and makes future development "
                         "possible. For example, one month of reddit gold "
@@ -720,7 +720,7 @@ class GoldPaymentController(RedditController):
         if not constant_time_compare(secret, self.webhook_secret):
             g.log.error('%s: invalid webhook secret from %s' % (self.name,
                                                                 request.ip))
-            self.abort403() 
+            self.abort403()
 
     @classmethod
     def process_response(cls):

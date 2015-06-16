@@ -38,28 +38,28 @@ from r2.lib.db.operators import desc
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.providers.search import SearchProvider
 from r2.lib.providers.search.common import (
-        InvalidQuery, 
-        LinkFields, 
+        InvalidQuery,
+        LinkFields,
         Results,
-        safe_get, 
+        safe_get,
         safe_xml_str,
         SearchError,
-        SearchHTTPError, 
-        SubredditFields, 
+        SearchHTTPError,
+        SubredditFields,
     )
 import r2.lib.utils as r2utils
 from r2.models import (
-        Account, 
-        All, 
+        Account,
+        All,
         DefaultSR,
-        DomainSR, 
-        FakeSubreddit, 
-        Friends, 
-        Link, 
+        DomainSR,
+        FakeSubreddit,
+        Friends,
+        Link,
         ModContribSR,
-        MultiReddit, 
+        MultiReddit,
         NotFound,
-        Subreddit, 
+        Subreddit,
         Thing,
     )
 
@@ -155,7 +155,7 @@ class SolrSearchQuery(object):
         self._recent = recent
         self.recent = self.recents[recent]
         self.include_over18 = include_over18
-        
+
         # rank / rank expressions
         self._sort = sort
         if raw_sort:
@@ -172,7 +172,7 @@ class SolrSearchQuery(object):
 
         # facets
         self.faceting = faceting
-        
+
         self.results = None
 
     def run(self, after=None, reverse=False, num=1000, _update=False):
@@ -188,7 +188,7 @@ class SolrSearchQuery(object):
 
     def _run(self, start=0, num=1000, _update=False):
         '''Run the search against self.query'''
-        
+
         q = self.query.encode('utf-8')
         if g.sqlprinting:
             g.log.info("%s", self)
@@ -217,7 +217,7 @@ class SolrSearchQuery(object):
                     num=1000, _update=False):
         '''Query the solr HOST. _update parameter allows for supposed
         easy memoization at later date.
-        
+
         Example result set:
         {
             u'responseHeader':{
@@ -246,15 +246,15 @@ class SolrSearchQuery(object):
                         u'num_comments':0,
                         u'downs':1,
                         u'title':u'013',
-                        u'site':u"[u'reddit.com',u'hamsandwich.reddit.com']", 
-                        u'author_s': u'grandpa', 
-                        u'over18': False, 
-                        u'timestamp': 1427180669, 
-                        u'sr_id': 2, 
-                        u'author_fullname': u't2_1', 
-                        u'is_self': False, 
-                        u'subreddit': u'coffee', 
-                        u'ups': 0, u'id': u't5_3'}, 
+                        u'site':u"[u'reddit.com',u'hamsandwich.reddit.com']",
+                        u'author_s': u'grandpa',
+                        u'over18': False,
+                        u'timestamp': 1427180669,
+                        u'sr_id': 2,
+                        u'author_fullname': u't2_1',
+                        u'is_self': False,
+                        u'subreddit': u'coffee',
+                        u'ups': 0, u'id': u't5_3'},
                     {
                 ]
             }
@@ -280,8 +280,8 @@ class SolrSearchQuery(object):
                 while facet_fields[field]:
                     value = facet_fields[field].pop(0)
                     count = facet_fields[field].pop(0)
-                    facets[field].append(dict(value=value, count=count)) 
-            
+                    facets[field].append(dict(value=value, count=count))
+
 
         results = Results(docs, hits, facets)
         return results
@@ -322,7 +322,7 @@ class LinkSearchQuery(SolrSearchQuery):
     def create_boolean_query(cls, queries):
         '''Return an AND clause combining all queries'''
         if len(queries) > 1:
-            bq = ' AND  '.join(['(%s)' %q for q in queries]) 
+            bq = ' AND  '.join(['(%s)' %q for q in queries])
         else:
             bq = queries[0]
         return bq
@@ -337,7 +337,7 @@ class LinkSearchQuery(SolrSearchQuery):
     def _get_sr_restriction(sr):
         '''Return a solr-appropriate query string that restricts
         results to only contain results from self.sr
-        
+
         '''
         bq = []
         if (not sr) or sr == All or isinstance(sr, DefaultSR):
@@ -381,7 +381,7 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
     #params["defType"] = "edismax"
     params["size"] = size
     params["start"] = start
-    if rank: 
+    if rank:
         params['sort'] = rank.strip().lower()
         if not params['sort'].split()[-1] in ['asc', 'desc']:
             params['sort'] = '%s desc' % params['sort']
@@ -398,7 +398,7 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
                 facet_sort.append(options["sort"])
         params["facet.limit"] = ",".join([str(l) for l in facet_limit])
         params["facet.sort"] = ",".join(facet_sort)
-        params["facet.sort"] = params["facet.sort"] or 'score desc' 
+        params["facet.sort"] = params["facet.sort"] or 'score desc'
     if return_fields:
         params["qf"] = ",".join(return_fields)
     encoded_query = urllib.urlencode(params)
@@ -407,15 +407,15 @@ def _encode_query(query, faceting, size, start, rank, return_fields):
             (getattr(g, 'solr_core', 'collection1'), encoded_query)
     else:
         path = '/solr/select?%s' %  encoded_query
-    return path    
+    return path
 
 
 class SolrSearchUploader(object):
-    
+
     def __init__(self, solr_host=None, solr_port=None, fullnames=None):
         self.solr_host = solr_host or g.solr_doc_host
         self.solr_port = solr_port or g.solr_port
-        self.fullnames = fullnames    
+        self.fullnames = fullnames
 
     @classmethod
     def desired_fullnames(cls, items):
@@ -444,7 +444,7 @@ class SolrSearchUploader(object):
     def delete_xml(self, thing):
         '''Return the solr XML representation of
         "delete this from the index"
-        
+
         '''
         delete = etree.fromstring('<id>%s</id>' % thing._id)
         return delete
@@ -452,7 +452,7 @@ class SolrSearchUploader(object):
     def delete_ids(self, ids):
         '''Delete documents from the index.
         'ids' should be a list of fullnames
-        
+
         '''
         deletes = [etree.fromstring('<id>%s</id>' % id_) \
                 for id_ in ids]
@@ -462,21 +462,21 @@ class SolrSearchUploader(object):
         batch.extend(deletes)
         return self.send_documents(batch)
 
-    def batch_lookups(self):                                                                                            
-        try:                                                                                                            
-            self.things = Thing._by_fullname(self.fullnames, data=True,                                                 
-                                             return_dict=False)                                                         
-        except NotFound:                                                                                                
-            if self.use_safe_get:                                                                                       
-                self.things = safe_get(Thing._by_fullname, self.fullnames,                                              
-                                       data=True, return_dict=False)                                                    
-            else:                                                                                                       
-                raise 
+    def batch_lookups(self):
+        try:
+            self.things = Thing._by_fullname(self.fullnames, data=True,
+                                             return_dict=False)
+        except NotFound:
+            if self.use_safe_get:
+                self.things = safe_get(Thing._by_fullname, self.fullnames,
+                                       data=True, return_dict=False)
+            else:
+                raise
 
     def xml_from_things(self):
         '''Generate a <batch> XML tree to send to solr for
         adding/updating/deleting the given things
-        
+
         '''
         add = etree.Element("add")
         delete = etree.Element("delete")
@@ -519,7 +519,7 @@ class SolrSearchUploader(object):
     def inject(self, quiet=False):
         '''Send things to solr. Return value is time elapsed, in seconds,
         of the communication with the solr endpoint
-        
+
         '''
 
         xml_things = self.xml_from_things()
@@ -536,7 +536,7 @@ class SolrSearchUploader(object):
                 response = etree.fromstring(record)
                 status = response.find(STATUS_XPATH).text
                 if status == '0':
-                    # success! 
+                    # success!
                     adds += len(batch.findall('doc'))
                     deletes += len(batch.findall('delete'))
                     for w in response.find(WARNING_XPATH) or []:
@@ -554,16 +554,16 @@ class SolrSearchUploader(object):
                     print "%s Warnings: %s" % (self.__class__.__name__,
                                                "; ".join(warnings))
 
-        return cs_time    
+        return cs_time
 
     def send_documents(self, docs):
         '''Open a connection to the Solr endpoint, and send the documents
         for indexing. Multiple requests are sent if a large number of documents
         are being sent (see chunk_xml())
-        
+
         Raises SearchHTTPError if the endpoint indicates a failure
         '''
-        core = getattr(g, 'solr_core', 'collection1') 
+        core = getattr(g, 'solr_core', 'collection1')
         responses = []
         connection = httplib.HTTPConnection(self.solr_host, self.solr_port)
         chunker = chunk_xml(docs)
@@ -575,7 +575,7 @@ class SolrSearchUploader(object):
                 if getattr(g, 'solr_version', '1').startswith('4'):
                     connection.request('POST', "/solr/%s/update/" % core,
                                        data, headers)
-                else:     
+                else:
                     connection.request('POST', "/solr/update/",
                                        data, headers)
                 response = connection.getresponse()
@@ -592,7 +592,7 @@ class SolrSearchUploader(object):
 
 def chunk_xml(xml, depth=0):
     '''Chunk POST data into pieces that are smaller than the 20 MB limit.
-    
+
     Ideally, this never happens (if chunking is necessary, would be better
     to avoid xml'ifying before testing content_length)'''
     data = etree.tostring(xml)
@@ -619,7 +619,7 @@ def chunk_xml(xml, depth=0):
 def _run_changed(msgs, chan):
     '''Consume the cloudsearch_changes queue, and print reporting information
     on how long it took and how many remain
-    
+
     '''
     start = datetime.now(g.tz)
 
@@ -686,7 +686,7 @@ class SolrLinkUploader(SolrSearchUploader):
 
     def should_index(self, thing):
         return (thing.promoted is None and getattr(thing, "sr_id", None) != -1)
-    
+
 
 class SolrSubredditUploader(SolrSearchUploader):
     types = (Subreddit,)
@@ -697,7 +697,7 @@ class SolrSubredditUploader(SolrSearchUploader):
     def should_index(self, thing):
         return thing._id != Subreddit.get_promote_srid()
 
- 
+
 def _progress_key(item):
     return "%s/%s" % (item._id, item._date)
 
@@ -706,7 +706,7 @@ _REBUILD_INDEX_CACHE_KEY = "solrsearch_cursor_%s"
 
 
 def _rebuild_link_index(start_at=None, sleeptime=1, cls=Link,
-                       uploader=SolrLinkUploader, estimate=50000000, 
+                       uploader=SolrLinkUploader, estimate=50000000,
                        chunk_size=1000):
     cache_key = _REBUILD_INDEX_CACHE_KEY % uploader.__name__.lower()
     uploader = uploader()
@@ -728,7 +728,7 @@ def _rebuild_link_index(start_at=None, sleeptime=1, cls=Link,
                          key=_progress_key)
     for chunk in r2utils.in_chunks(q, size=chunk_size):
         uploader.things = chunk
-        uploader.fullnames = [c._fullname for c in chunk] 
+        uploader.fullnames = [c._fullname for c in chunk]
         for x in range(5):
             try:
                 uploader.inject()
@@ -775,14 +775,14 @@ def _translate_raw_sort(sort):
     if sort.startswith('-'):
         sort = sort[1:]
         sort_dir = ' desc'
-    sort = SORTS_DICT.get(sort, sort) 
+    sort = SORTS_DICT.get(sort, sort)
     return '%s%s' % (sort, sort_dir)
 
 class SolrSearchProvider(SearchProvider):
     '''Provider implementation: wrap it all up as a SearchProvider
-    
+
     example config:
-    # version of solr service--versions 1.x and 4.x have been tested. 
+    # version of solr service--versions 1.x and 4.x have been tested.
     # only the major version number matters here
     solr_version = 1
     # solr search service hostname or IP
@@ -797,17 +797,17 @@ class SolrSearchProvider(SearchProvider):
     solr_port = 8080
     # solr4 core name (not used with Solr 1.x)
     solr_core = collection1
-    # default batch size 
+    # default batch size
     # limit is hard-coded to 1000
     # set to 1 for testing
     solr_min_batch = 500
     # optionally, you may select your solr query parser here
     # see documentation for your version of Solr
-    solr_query_parser = 
+    solr_query_parser =
     '''
 
     SOLR_VERSION = 1
-  
+
     config = {
         ConfigValue.int: [
             "solr_port",
@@ -821,7 +821,7 @@ class SolrSearchProvider(SearchProvider):
             "solr_core",
             "solr_version",
         ],
-    }    
+    }
 
     InvalidQuery = (InvalidQuery,)
     SearchException = (SearchHTTPError, SearchError)
@@ -829,8 +829,8 @@ class SolrSearchProvider(SearchProvider):
     SearchQuery = LinkSearchQuery
 
     SubredditSearchQuery = SolrSubredditSearchQuery
-    
-    def run_changed(self, drain=False, min_size=int(getattr(g, 'solr_min_batch', 500)), limit=1000, sleep_time=10, 
+
+    def run_changed(self, drain=False, min_size=int(getattr(g, 'solr_min_batch', 500)), limit=1000, sleep_time=10,
             use_safe_get=False, verbose=False):
         '''Run by `cron` (through `paster run`) on a schedule to send Things to Solr
         '''
@@ -847,12 +847,12 @@ class SolrSearchProvider(SearchProvider):
         query = u"title:'%s'" % query
         nsfw = nsfw and u"nsfw:0" or u""
         query = u"(%s timestamp:[%s TO %s] %s)" % (query, start, end, nsfw)
-        return g.search.SearchQuery(query, 
+        return g.search.SearchQuery(query,
                                     raw_sort="-text_relevance",
                                     syntax="solr")
 
     def rebuild_link_index(self, start_at=None, sleeptime=1, cls=Link,
-                           uploader=SolrLinkUploader, estimate=50000000, 
+                           uploader=SolrLinkUploader, estimate=50000000,
                            chunk_size=1000):
-         _rebuild_link_index(start_at, sleeptime, cls, uploader, estimate,  
+         _rebuild_link_index(start_at, sleeptime, cls, uploader, estimate,
                             chunk_size)

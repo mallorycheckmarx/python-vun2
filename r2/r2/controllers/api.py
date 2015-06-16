@@ -164,12 +164,12 @@ class ApiminimalController(MinimalController):
 
         iden = get_iden()
         jquery("body").captcha(iden)
-        form._send_data(iden = iden) 
+        form._send_data(iden = iden)
 
 
 class ApiController(RedditController):
     """
-    Controller which deals with almost all AJAX site interaction.  
+    Controller which deals with almost all AJAX site interaction.
     """
     @validatedForm()
     def ajax_login_redirect(self, form, jquery, dest):
@@ -270,7 +270,7 @@ class ApiController(RedditController):
         """
         Check whether a password is valid.
         """
-    
+
         if not (responder.has_errors("passwd", errors.SHORT_PASSWORD) or
                 responder.has_errors("passwd", errors.BAD_PASSWORD)):
             # Pylons does not handle 204s correctly.
@@ -608,7 +608,7 @@ class ApiController(RedditController):
                 form.set_text(".title-status", "")
             else:
                 form.set_text(".title-status", _("no title found"))
-        
+
     def _login(self, responder, user, rem = None):
         """
         AJAX login handler, used by both login and register to set the
@@ -681,7 +681,7 @@ class ApiController(RedditController):
                 responder.has_errors("passwd2", errors.BAD_PASSWORD_MATCH) or
                 responder.has_errors('ratelimit', errors.RATELIMIT) or
                 (not g.disable_captcha and bad_captcha)):
-            
+
             newsletter_subscribe = False
             if feature.is_enabled('newsletter'):
                 # Todo: add to validatedForm when feature is released
@@ -750,7 +750,7 @@ class ApiController(RedditController):
         """
         if container and container.is_moderator(c.user):
             container.remove_moderator(c.user)
-            ModAction.create(container, c.user, 'removemoderator', target=c.user, 
+            ModAction.create(container, c.user, 'removemoderator', target=c.user,
                              details='remove_self')
 
     @require_oauth2_scope("modself")
@@ -843,7 +843,7 @@ class ApiController(RedditController):
         self.check_api_friend_oauth_scope(type)
 
         victim = iuser or nuser
-        
+
         if type in self._sr_friend_types:
             if isinstance(c.site, FakeSubreddit):
                 abort(403, 'forbidden')
@@ -1296,7 +1296,7 @@ class ApiController(RedditController):
                 form.set_text('.status', _('your email has been updated'))
 
         # user is removing their email
-        if (not email and c.user.email and 
+        if (not email and c.user.email and
             (errors.NO_EMAILS, 'email') in c.errors):
             c.errors.remove((errors.NO_EMAILS, 'email'))
             if c.user.email:
@@ -1526,7 +1526,7 @@ class ApiController(RedditController):
     @api_doc(api_section.links_and_comments)
     def POST_set_contest_mode(self, form, jquery, thing, state):
         """Set or unset "contest mode" for a link's comments.
-        
+
         `state` is a boolean that indicates whether you are enabling or
         disabling contest mode - true to enable, false to disable.
 
@@ -1544,13 +1544,13 @@ class ApiController(RedditController):
     @api_doc(api_section.links_and_comments)
     def POST_set_subreddit_sticky(self, form, jquery, thing, state):
         """Set or unset a self-post as the sticky post in its subreddit.
-        
+
         `state` is a boolean that indicates whether to sticky or unsticky
         this post - true to sticky, false to unsticky.
 
         Note that if another post was previously stickied, stickying a new
         one will replace the previous one.
-        
+
         """
         if not isinstance(thing, Link) or not thing.is_self:
             return
@@ -1716,7 +1716,7 @@ class ApiController(RedditController):
 
         if isinstance(item, Link) and not item.is_self:
             return abort(403, "forbidden")
-            
+
         if getattr(item, 'admin_takedown', False):
             # this item has been takendown by the admins,
             # and not not be edited
@@ -1910,8 +1910,8 @@ class ApiController(RedditController):
                            rate_user=True, rate_ip=True),
         share_from=VLength('share_from', max_length=100),
         emails=ValidEmailsOrExistingUnames("share_to"),
-        reply_to=ValidEmails("replyto", num=1), 
-        message=VLength("message", max_length=1000), 
+        reply_to=ValidEmails("replyto", num=1),
+        message=VLength("message", max_length=1000),
         link=VByName('parent', thing_cls=Link),
     )
     def POST_share(self, shareform, jquery, emails, link, share_from, reply_to,
@@ -2003,7 +2003,7 @@ class ApiController(RedditController):
                     "source_url": pm_source_url,
                     "comments_url": pm_comments_url,
                 }
-        
+
         # E-mail everyone
         emailer.share(link, emails, from_name = share_from or "",
                       body = email_message or "", reply_to = reply_to or "")
@@ -2013,7 +2013,7 @@ class ApiController(RedditController):
         # Prepend this subject to the message - we're repeating ourselves
         # because it looks very abrupt without it.
         pm_message = "%s\n\n%s" % (subject, pm_message)
-        
+
         for target in users:
             m, inbox_rel = Message._new(c.user, target, subject,
                                         pm_message, request.ip)
@@ -2100,7 +2100,7 @@ class ApiController(RedditController):
         `op` should be `save` to update the contents of the stylesheet.
 
         """
-        
+
         css_errors, parsed = c.site.parse_css(stylesheet_contents)
 
         if g.css_killswitch:
@@ -2136,7 +2136,7 @@ class ApiController(RedditController):
             if links:
 
                 jquery('#preview-table').show()
-    
+
                 # do a regular link
                 jquery('#preview_link_normal').html(
                     SubredditStylesheet.rendered_link(
@@ -2153,7 +2153,7 @@ class ApiController(RedditController):
                 jquery('#preview_link_stickied').html(
                     SubredditStylesheet.rendered_link(
                         links, media='off', compress=False, stickied=True))
-    
+
             # and do a comment
             comments = SubredditStylesheet.find_preview_comments(c.site)
             if comments:
@@ -2189,7 +2189,7 @@ class ApiController(RedditController):
             return
 
         wiki.ImagesByWikiPage.delete_image(c.site, "config/stylesheet", name)
-        ModAction.create(c.site, c.user, action='editsettings', 
+        ModAction.create(c.site, c.user, action='editsettings',
                          details='del_image', description=name)
 
     @require_oauth2_scope("modconfig")
@@ -2211,7 +2211,7 @@ class ApiController(RedditController):
             c.site.header = None
             c.site.header_size = None
             c.site._commit()
-            ModAction.create(c.site, c.user, action='editsettings', 
+            ModAction.create(c.site, c.user, action='editsettings',
                              details='del_header')
 
         # hide the button which started this
@@ -2220,7 +2220,7 @@ class ApiController(RedditController):
         form.find('.img-preview-container').hide()
         # reset the status boxes
         form.set_text('.img-status', _("deleted"))
-        
+
     @require_oauth2_scope("modconfig")
     @validatedForm(VSrModerator(perms='config'),
                    VModhash())
@@ -2337,12 +2337,12 @@ class ApiController(RedditController):
         # for backwards compatibility, map header to upload_type
         if upload_type is None:
             upload_type = 'header' if header else 'img'
-        
+
         if upload_type == 'img' and not name:
             # error if the name wasn't specified and the image was not for a sponsored link or header
             # this may also fail if a sponsored image was added and the user is not an admin
             errors['BAD_CSS_NAME'] = _("bad image name")
-        
+
         if upload_type == 'img' and not c.user_is_admin:
             image_count = wiki.ImagesByWikiPage.get_image_count(
                 c.site, "config/stylesheet")
@@ -2401,7 +2401,7 @@ class ApiController(RedditController):
 
             ModAction.create(c.site, c.user, action='editsettings', **kw)
 
-            return UploadedImage(_('saved'), new_url, name, 
+            return UploadedImage(_('saved'), new_url, name,
                                  errors=errors, form_id=form_id).render()
 
     @require_oauth2_scope("modconfig")
@@ -2567,7 +2567,7 @@ class ApiController(RedditController):
                 public_description,
                 'public_description',
             )
-        
+
         if not sr and not c.user.can_create_subreddit:
             form.set_error(errors.CANT_CREATE_SR, "")
             c.errors.add(errors.CANT_CREATE_SR, field="")
@@ -2634,7 +2634,7 @@ class ApiController(RedditController):
                                'submit_text',
                                'description'), errors.TOO_LONG)):
             pass
-        elif (form.has_errors(('wiki_edit_karma', 'wiki_edit_age'), 
+        elif (form.has_errors(('wiki_edit_karma', 'wiki_edit_age'),
                               errors.BAD_NUMBER)):
             pass
         elif form.has_errors('comment_score_hide_mins', errors.BAD_NUMBER):
@@ -2697,7 +2697,7 @@ class ApiController(RedditController):
 
             for k, v in kw.iteritems():
                 if getattr(sr, k, None) != v:
-                    ModAction.create(sr, c.user, action='editsettings', 
+                    ModAction.create(sr, c.user, action='editsettings',
                                      details=k)
 
                 if k in no_clobber and k not in request.params:
@@ -3951,7 +3951,7 @@ class ApiController(RedditController):
         if secret_used and not award.api_ok:
             c.errors.add(errors.NO_API, field='secret')
             form.has_errors('secret', errors.NO_API)
-        
+
         if form.has_error():
             return
 
@@ -3988,7 +3988,7 @@ class ApiController(RedditController):
         if form.has_errors("recipient",
                            errors.USER_DOESNT_EXIST, errors.NO_USER):
             return
-        
+
         if not recipient.gold and num_months < 0:
             form.set_text(".status", _('no gold to take'))
             return

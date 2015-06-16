@@ -42,7 +42,7 @@ from r2.lib.sgm import sgm # get this into our namespace so that it's
                            # importable from us
 
 import random
-                           
+
 # This is for use in the health controller
 _CACHE_SERVERS = set()
 
@@ -852,7 +852,7 @@ CL_QUORUM = ConsistencyLevel.QUORUM
 
 class Permacache(object):
     """Cassandra key/value column family backend with a cachechain in front.
-    
+
     Probably best to not think of this as a cache but rather as a key/value
     datastore that's faster to access than cassandra because of the cache.
 
@@ -979,7 +979,7 @@ def test_cache(cache, prefix=''):
 
     #set multi, no prefix
     cache.set_multi({'%s3' % prefix:3, '%s4' % prefix: 4})
-    assert cache.get_multi(('%s3' % prefix, '%s4' % prefix)) == {'%s3' % prefix: 3, 
+    assert cache.get_multi(('%s3' % prefix, '%s4' % prefix)) == {'%s3' % prefix: 3,
                                                                  '%s4' % prefix: 4}
 
     #set multi, prefix

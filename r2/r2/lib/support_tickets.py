@@ -32,20 +32,20 @@ def create_support_ticket(subject,
                           comment_body,
                           comment_is_public=False,
                           group=None,
-                          requester_email=None, 
+                          requester_email=None,
                           product=None,
                           ):
     requester_id = None
     if requester_email == 'contact@reddit.com':
         requester_id = g.live_config['ticket_contact_user_id']
-        
+
     custom_fields = []
     if product:
         custom_fields.append({
             'id': g.live_config['ticket_user_fields']['Product'],
             'value': product,
         })
-        
+
     return g.ticket_provider.create(
         requester_id=requester_id,
         subject=subject,
@@ -71,10 +71,10 @@ def update_support_ticket(ticket=None, ticket_id=None,
         raise SupportTickerNotFoundError(
             'No ticket provided to update.'
         )
-        
+
     if not ticket:
         ticket = get_support_ticket(ticket_id)
-    
+
     return g.ticket_provider.update(
             ticket=ticket,
             status=status,

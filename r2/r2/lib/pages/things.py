@@ -73,7 +73,7 @@ class PrintableButtons(Styled):
                         show_givegold=show_givegold,
                         show_new_post_sharing=show_new_post_sharing,
                         **kw)
-        
+
 class BanButtons(PrintableButtons):
     def __init__(self, thing,
                  show_delete = False, show_report = True):
@@ -135,7 +135,7 @@ class LinkButtons(PrintableButtons):
                 kw["payment_flagged_reason"] = thing.payment_flagged_reason
                 kw["hide_after_seen"] = getattr(thing, "hide_after_seen", False)
 
-        PrintableButtons.__init__(self, 'linkbuttons', thing, 
+        PrintableButtons.__init__(self, 'linkbuttons', thing,
                                   # user existence and preferences
                                   is_loggedin = c.user_is_loggedin,
                                   # comment link params
@@ -144,8 +144,8 @@ class LinkButtons(PrintableButtons):
                                   permalink  = thing.permalink,
                                   # button visibility
                                   saved = thing.saved,
-                                  editable = editable, 
-                                  hidden = thing.hidden, 
+                                  editable = editable,
+                                  hidden = thing.hidden,
                                   ignore_reports = thing.ignore_reports,
                                   show_delete = show_delete,
                                   show_report = show_report and c.user_is_loggedin,
@@ -203,7 +203,7 @@ class CommentButtons(PrintableButtons):
             embed_button.build()
 
         PrintableButtons.__init__(self, "commentbuttons", thing,
-                                  is_author = is_author, 
+                                  is_author = is_author,
                                   profilepage = c.profilepage,
                                   permalink = thing.permalink,
                                   saved = thing.saved,
@@ -212,7 +212,7 @@ class CommentButtons(PrintableButtons):
                                   full_comment_path = thing.full_comment_path,
                                   full_comment_count = thing.full_comment_count,
                                   deleted = thing.deleted,
-                                  parent_permalink = thing.parent_permalink, 
+                                  parent_permalink = thing.parent_permalink,
                                   can_reply = thing.can_reply,
                                   suppress_reply_buttons = suppress_reply_buttons,
                                   show_report=show_report,
@@ -274,7 +274,7 @@ def default_thing_wrapper(**params):
 
 # TODO: move this into lib somewhere?
 def wrap_links(links, wrapper = default_thing_wrapper(),
-               listing_cls = LinkListing, 
+               listing_cls = LinkListing,
                num = None, show_nums = False, nextprev = False, **kw):
     links = tup(links)
     if not all(isinstance(x, basestring) for x in links):

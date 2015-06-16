@@ -562,7 +562,7 @@ def set_content_type():
             if request.GET.get("keep_extension"):
                 c.cookies['reddit_mobility'] = Cookie(ext, expires=NEVER)
     # allow JSONP requests to generate callbacks, but do not allow
-    # the user to be logged in for these 
+    # the user to be logged in for these
     callback = request.GET.get("jsonp")
     if is_api() and request.method.upper() == "GET" and callback:
         if not valid_jsonp_callback(callback):
@@ -1551,7 +1551,7 @@ class RedditController(OAuth2ResourceController):
 
         delete_obsolete_cookies()
 
-        # the user could have been logged in via one of the feeds 
+        # the user could have been logged in via one of the feeds
         maybe_admin = False
         is_otpcookie_valid = False
 

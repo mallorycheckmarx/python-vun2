@@ -109,7 +109,7 @@ class BaseController(WSGIController):
         request.fullpath = environ.get('FULLPATH', request.path)
         request.fullurl = request.host_url + request.fullpath
         request.port = environ.get('request_port')
-        
+
         if_modified_since = environ.get('HTTP_IF_MODIFIED_SINCE')
         if if_modified_since:
             request.if_modified_since = read_http_date(if_modified_since)
