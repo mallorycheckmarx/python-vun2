@@ -171,7 +171,7 @@ class ToolbarController(RedditController):
             # 1. User types http://foo.com/http://myurl?cheese=brie
             #    (where foo.com is an unauthorised cname)
             # 2. We generate a frame that points to
-            #    http://www.reddit.com/r/foo/http://myurl?cnameframe=0.12345&cheese=brie
+            #    https://www.reddit.com/r/foo/http://myurl?cnameframe=0.12345&cheese=brie
             # 3. Because we accept everything after the /r/foo/, and
             #    we've now parsed, modified, and reconstituted that
             #    URL to add cnameframe, we really can't make any good
