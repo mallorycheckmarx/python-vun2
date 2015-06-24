@@ -2130,13 +2130,13 @@ class VLocation(Validator):
 
 class VImageType(Validator):
     def run(self, img_type):
-        if not img_type in ('png', 'jpg'):
+        if not img_type in ('png', 'jpg', 'svg'):
             return 'png'
         return img_type
 
     def param_docs(self):
         return {
-            self.param: "one of `png` or `jpg` (default: `png`)",
+            self.param: "one of `png`, `jpg` or `svg` (default: `png`)",
         }
 
 

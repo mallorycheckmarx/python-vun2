@@ -101,7 +101,7 @@ from r2.lib import tracking, emailer, newsletter
 from r2.lib.subreddit_search import search_reddits
 from r2.lib.log import log_text
 from r2.lib.filters import safemarkdown
-from r2.lib.media import str_to_image
+from r2.lib.media import str_to_image, svg_size
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope, allow_oauth2_access
 from r2.lib.template_helpers import add_sr, get_domain, make_url_protocol_relative
@@ -2313,7 +2313,7 @@ class ApiController(RedditController):
         * If the `header` field has value `1`, then `upload_type` is `header`.
 
         The `img_type` field specifies whether to store the uploaded image as a
-        PNG or JPEG.
+        PNG, JPEG or SVG.
 
         Subreddits have a limited number of images that can be in use at any
         given time. If no image with the specified name already exists, one of
@@ -2350,7 +2350,10 @@ class ApiController(RedditController):
                 errors['IMAGE_ERROR'] = _("too many images (you only get %d)") % g.max_sr_images
 
         try:
-            size = str_to_image(file).size
+            if img_type == "svg":
+                size = svg_size(file)
+            else:
+                size = str_to_image(file).size
         except (IOError, TypeError):
             errors['IMAGE_ERROR'] = _('Invalid image or general image error')
         else:
