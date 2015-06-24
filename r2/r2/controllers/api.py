@@ -4193,7 +4193,7 @@ class ApiController(RedditController):
         if not query or len(query) < 2:
             return []
 
-        # http://en.wikipedia.org/wiki/Most_common_words_in_English
+        # https://en.wikipedia.org/wiki/Most_common_words_in_English
         common_english_words = {
             'the', 'be', 'to', 'of', 'and', 'in', 'that', 'have', 'it', 'for',
             'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but',
