@@ -38,7 +38,7 @@ from urllib2 import HTTPError
 def renderurl_cached(path):
     # Needed so http://reddit.com/help/ works
     fp = path.rstrip("/")
-    u = "http://code.reddit.com/wiki" + fp + '?stripped=1'
+    u = "https://code.reddit.com/wiki" + fp + '?stripped=1'
 
     g.log.debug("Pulling %s for help" % u)
 
