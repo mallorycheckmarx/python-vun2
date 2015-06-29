@@ -111,13 +111,13 @@ def _base_domain():
         return g.domain
 
 def promo_traffic_url(l): # old traffic url
-    return "http://%s/traffic/%s/" % (_base_domain(), l._id36)
+    return "https://%s/traffic/%s/" % (_base_domain(), l._id36)
 
 def promotraffic_url(l): # new traffic url
-    return "http://%s/promoted/traffic/headline/%s" % (_base_domain(), l._id36)
+    return "https://%s/promoted/traffic/headline/%s" % (_base_domain(), l._id36)
 
 def promo_edit_url(l):
-    return "http://%s/promoted/edit_promo/%s" % (_base_domain(), l._id36)
+    return "https://%s/promoted/edit_promo/%s" % (_base_domain(), l._id36)
 
 def pay_url(l, campaign):
     return "%spromoted/pay/%s/%s" % (g.payment_domain, l._id36, campaign._id36)
@@ -126,7 +126,7 @@ def view_live_url(l, srname):
     domain = _base_domain()
     if srname:
         domain += '/r/%s' % srname
-    return 'http://%s/?ad=%s' % (domain, l._fullname)
+    return 'https://%s/?ad=%s' % (domain, l._fullname)
 
 
 def refund_url(link, campaign):
