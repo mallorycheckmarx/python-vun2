@@ -1,7 +1,7 @@
 # The contents of this file are subject to the Common Public Attribution
 # License Version 1.0. (the "License"); you may not use this file except in
 # compliance with the License. You may obtain a copy of the License at
-# http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
+# https://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 # License Version 1.1, but Sections 14 and 15 have been added to cover use of
 # software over a computer network and provide for limited attribution for the
 # Original Developer. In addition, Exhibit A has been modified to be consistent
@@ -354,8 +354,8 @@ def send_gold_code(buyer, months, days,
     subject = _('Your gold gift code has been generated!')
     message = _('Here is your gift code for %(amount)s of reddit gold:\n\n'
                 '%(code)s\n\nThe recipient (or you!) can enter it at '
-                'http://www.reddit.com/gold or go directly to '
-                'http://www.reddit.com/thanks/%(code)s to claim it.'
+                'https://www.reddit.com/gold or go directly to '
+                'https://www.reddit.com/thanks/%(code)s to claim it.'
               ) % {'amount': amount, 'code': code}
 
     if buyer:
