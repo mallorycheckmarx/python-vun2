@@ -65,7 +65,7 @@
         '<input class="post-sharing-recipient-input c-form-control" ' +
                'ref="$shareTo" ' +
                'name="recipient" type="text" ' +
-               'placeholder="name@example.com, name@example.com, /u/ExampleUsername">' +
+               'placeholder="name@example.com, name@example.com, /u/username">' +
         feedbackTemplate({ ref: '$shareToFeedback' }) +
       '</div>' +
       '<div class="c-form-group">' +
