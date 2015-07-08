@@ -610,6 +610,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         gilded="gildings",
         hidden="hidden",
         is_self="is_self",
+        lang="lang",
         likes="likes",
         link_flair_css_class="flair_css_class",
         link_flair_text="flair_text",
