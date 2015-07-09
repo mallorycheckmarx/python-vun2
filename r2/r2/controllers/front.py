@@ -837,8 +837,9 @@ class FrontController(RedditController):
         return Reddit(content=usertext).render()
 
     @require_oauth2_scope("read")
+    @validate(sort=VMenu('sort', SearchSortMenu, remember=False))
     @api_doc(api_section.subreddits, uses_site=True)
-    def GET_sticky(self):
+    def GET_sticky(self, sort):
         """Get the post stickied to the current subreddit
 
         Will 404 if there is not currently a sticky post in this subreddit
@@ -846,7 +847,7 @@ class FrontController(RedditController):
         """
         if c.site.sticky_fullname:
             sticky = Link._by_fullname(c.site.sticky_fullname, data=True)
-            self.redirect(sticky.make_permalink_slow())
+            self.redirect(sticky.make_permalink_slow() + query_string(dict(sort=sort)))
         else:
             abort(404)
 
