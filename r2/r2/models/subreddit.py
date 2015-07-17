@@ -256,6 +256,7 @@ class Subreddit(Thing, Printable, BaseSite):
         use_quotas=True,
         description="",
         public_description="",
+        private_message="",
         submit_text="",
         allow_gilding=True,
         public_traffic=False,

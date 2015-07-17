@@ -2405,6 +2405,7 @@ class ApiController(RedditController):
                    domain = VCnameDomain("domain"),
                    submit_text = VMarkdownLength("submit_text", max_length=1024),
                    public_description = VMarkdownLength("public_description", max_length = 500),
+                   private_message = VMarkdownLength("private_message", max_length=500),
                    description = VMarkdownLength("description", max_length = 5120),
                    lang = VLang("lang"),
                    over_18 = VBoolean('over_18'),
@@ -2502,6 +2503,7 @@ class ApiController(RedditController):
             'link_type',
             'name',
             'over_18',
+            'private_message',
             'public_description',
             'public_traffic',
             'related_subreddits',
@@ -2619,7 +2621,8 @@ class ApiController(RedditController):
                               errors.INVALID_OPTION) or
               form.has_errors(('public_description',
                                'submit_text',
-                               'description'), errors.TOO_LONG)):
+                               'description',
+                               'private_message'), errors.TOO_LONG)):
             pass
         elif (form.has_errors(('wiki_edit_karma', 'wiki_edit_age'), 
                               errors.BAD_NUMBER)):

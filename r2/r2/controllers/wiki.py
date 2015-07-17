@@ -88,14 +88,17 @@ page_descriptions = {
     "config/sidebar": _("The contents of this page appear on the subreddit sidebar"),
     "config/description": _("The contents of this page appear in the public subreddit description"),
     "config/automoderator": _("This page is used to configure AutoModerator for the subreddit, please see [the full documentation](/wiki/automoderator/full-documentation) for information"),
+    "config/private_message": _("This contents of this page appear when the user does not have access to a private subreddit"),
 }
 
 ATTRIBUTE_BY_PAGE = {"config/sidebar": "description",
                      "config/submit_text": "submit_text",
-                     "config/description": "public_description"}
+                     "config/description": "public_description",
+                     "config/private_message": "private_message"}
 RENDERERS_BY_PAGE = {
     "config/automoderator": "automoderator",
     "config/description": "reddit",
+    "config/private_message": "reddit",
     "config/sidebar": "reddit",
     "config/stylesheet": "stylesheet",
     "config/submit_text": "reddit",

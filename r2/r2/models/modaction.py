@@ -137,6 +137,7 @@ class ModAction(tdb_cassandra.UuidThing):
                      # editsettings
                      'title': _('title'),
                      'public_description': _('description'),
+                     'private_message': _('private message'),
                      'description': _('sidebar'),
                      'lang': _('language'),
                      'type': _('type'),
