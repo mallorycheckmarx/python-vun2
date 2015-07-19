@@ -1677,12 +1677,12 @@ class RedditController(OAuth2ResourceController):
                     request.environ['usable_error_content'] = errpage.render()
                     self.abort403()
                 else:
-                    public_description = c.site.public_description
+                    message = c.site.private_message
                     errpage = pages.RedditError(
                         strings.private_subreddit_title,
                         strings.private_subreddit_message,
                         image="subreddit-private.png",
-                        sr_description=public_description,
+                        sr_description=message,
                     )
                     request.environ['usable_error_content'] = errpage.render()
                     self.abort403()
