@@ -1,7 +1,7 @@
 ## The contents of this file are subject to the Common Public Attribution
 ## License Version 1.0. (the "License"); you may not use this file except in
 ## compliance with the License. You may obtain a copy of the License at
-## http://code.reddit.com/LICENSE. The License is based on the Mozilla Public
+## https://code.reddit.com/LICENSE. The License is based on the Mozilla Public
 ## License Version 1.1, but Sections 14 and 15 have been added to cover use of
 ## software over a computer network and provide for limited attribution for the
 ## Original Developer. In addition, Exhibit A has been modified to be
@@ -90,7 +90,7 @@ has been rejected.
 Please review the following link and optional explanation for reasons for
 rejection:
 
-http://www.reddit.com/wiki/selfserve#wiki_why_did_my_ad_get_rejected.3F
+https://www.reddit.com/wiki/selfserve#wiki_why_did_my_ad_get_rejected.3F
 
 %if thing.body:
 Optional note about rejection (for special cases):
@@ -164,7 +164,7 @@ so feel free to reply to this email to let us know if you have any feedback.
 We've also set up a community just for self-serve advertisers like yourself to
 discuss the platform with each other:
 
-    http://www.reddit.com/r/selfserve
+    https://www.reddit.com/r/selfserve
 
 We're hoping to create a place for you to exchange tips and tricks for getting
 the most out of your sponsored links, as well as to provide support for new
@@ -208,4 +208,4 @@ The reddit team
 selfservicepromotion@reddit.com
 
 _____
-http://www.reddit.com/help/selfservicepromotion
+https://www.reddit.com/help/selfservicepromotion
