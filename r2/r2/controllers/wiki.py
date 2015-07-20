@@ -88,7 +88,7 @@ page_descriptions = {
     "config/sidebar": _("The contents of this page appear on the subreddit sidebar"),
     "config/description": _("The contents of this page appear in the public subreddit description"),
     "config/automoderator": _("This page is used to configure AutoModerator for the subreddit, please see [the full documentation](/wiki/automoderator/full-documentation) for information"),
-    "config/private_message": _("This contents of this page appear when the user does not have access to a private subreddit"),
+    "config/private_message": _("The contents of this page appear when the user does not have access to a private subreddit"),
 }
 
 ATTRIBUTE_BY_PAGE = {"config/sidebar": "description",
