@@ -2527,6 +2527,7 @@ class ApiController(RedditController):
 
         kw = {k: v for k, v in kw.iteritems() if k in keyword_fields}
 
+        private_message = kw.pop('private_message')
         public_description = kw.pop('public_description')
         description = kw.pop('description')
         submit_text = kw.pop('submit_text')
@@ -2555,6 +2556,14 @@ class ApiController(RedditController):
                 'config/description',
                 public_description,
                 'public_description',
+            )
+
+            apply_wikid_field(
+                sr,
+                form,
+                'config/private_message',
+                private_message,
+                'private_message',
             )
         
         if not sr and not c.user.can_create_subreddit:
