@@ -88,11 +88,11 @@ try participating in other communities on reddit for a little while first before
     </div>
   </%utils:line_field>
 
-  <%utils:line_field title="${_('private_message')}" css_class="usertext"
-                     description="${_('message to show if this user does not have access to this subreddi. 500 characters max.')}">
+  <%utils:line_field title="${_('private message')}" css_class="usertext"
+                     description="${_('shown if this user does not have access to this subreddit. 500 characters max.')}">
     <div class="usertext-edit md-container">
       <div class="md">
-        <textarea rows="1" cols="1" name="public_description" class="usertext">
+        <textarea rows="1" cols="1" name="private_message" class="usertext">
           %if thing.site and thing.site.private_message:
             ${keep_space(thing.site.private_message or "")}
           %endif

@@ -57,6 +57,7 @@ restricted_namespaces = ('reddit/', 'config/', 'special/')
 special_pages = {
     'config/automoderator',
     'config/description',
+    'config/private_message',
     'config/sidebar',
     'config/stylesheet',
     'config/submit_text',
@@ -69,6 +70,7 @@ special_page_view_permlevels = {
 # Pages that get created automatically from the subreddit settings page
 automatically_created_pages = {
     'config/description',
+    'config/private_message',
     'config/sidebar',
     'config/stylesheet',
     'config/submit_text',
@@ -79,7 +81,8 @@ special_length_restrictions_bytes = {
     'config/stylesheet': 128*1024,
     'config/submit_text': 1024,
     'config/sidebar': 5120,
-    'config/description': 500
+    'config/description': 500,
+    'config/private_message': 500
 }
 
 modactions = {
@@ -87,6 +90,7 @@ modactions = {
     "config/description": "Updated subreddit description",
     "config/sidebar": "Updated subreddit sidebar",
     "config/submit_text": "Updated submission text",
+    "config/private_message": "Updated private message"
 }
 
 # Page "index" in the subreddit "reddit.com" and a seperator of "\t" becomes:
