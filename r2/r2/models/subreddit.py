@@ -256,6 +256,7 @@ class Subreddit(Thing, Printable, BaseSite):
         use_quotas=True,
         description="",
         public_description="",
+        private_message="",
         submit_text="",
         allow_gilding=True,
         public_traffic=False,
@@ -891,6 +892,7 @@ class Subreddit(Thing, Printable, BaseSite):
 
     cache_ignore = {
         "description",
+        "private_message",
         "public_description",
         "subscribers",
     }.union(Printable.cache_ignore)

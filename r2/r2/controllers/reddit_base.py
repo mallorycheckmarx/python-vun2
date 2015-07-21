@@ -1661,26 +1661,26 @@ class RedditController(OAuth2ResourceController):
             # is sent in those cases - just a set of headers
             if (not c.site.can_view(c.user) and not c.error_page and
                     request.method != "OPTIONS"):
+                private_message = c.site.private_message
                 if isinstance(c.site, LabeledMulti):
                     # do not leak the existence of multis via 403.
                     self.abort404()
                 elif c.site.type == 'gold_only' and not (c.user.gold or c.user.gold_charter):
-                    public_description = c.site.public_description
                     errpage = pages.RedditError(
                         strings.gold_only_subreddit_title,
                         strings.gold_only_subreddit_message,
                         image="subreddit-gold-only.png",
-                        sr_description=public_description,
+                        sr_description=private_message,
                     )
                     request.environ['usable_error_content'] = errpage.render()
                     self.abort403()
                 else:
-                    public_description = c.site.public_description
+                    message = c.site.private_message
                     errpage = pages.RedditError(
                         strings.private_subreddit_title,
                         strings.private_subreddit_message,
                         image="subreddit-private.png",
-                        sr_description=public_description,
+                        sr_description=private_message,
                     )
                     request.environ['usable_error_content'] = errpage.render()
                     self.abort403()

@@ -292,6 +292,8 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         # key_color="key_color",
         lang="lang",
         over18="over_18",
+        private_message="private_message",
+        private_message_html="private_message_html",
         public_description="public_description",
         public_description_html="public_description_html",
         public_traffic="public_traffic",
@@ -326,7 +328,10 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         "name",
         # Canonical subreddit URL, relative to reddit.com
         "path",
-        # Text shown on the access denied page
+        # Text shown to users who cannot access a subreddit
+        "private_message",
+        "private_message_html",
+        # Public description used for search
         "public_description",
         "public_description_html",
         # Title shown in search
@@ -361,6 +366,8 @@ class SubredditJsonTemplate(ThingJsonTemplate):
             return None
         elif attr == 'description_html':
             return safemarkdown(thing.description)
+        elif attr == 'private_message_html':
+            return safemarkdown(thing.private_message)
         elif attr == 'public_description_html':
             return safemarkdown(thing.public_description)
         elif attr == "is_moderator":
