@@ -1218,7 +1218,12 @@ class MinimalController(BaseController):
         would_poison = any((k not in CACHEABLE_COOKIES) for k in dirty_cookies)
 
         if c.user_is_loggedin or would_poison:
-            response.headers['Cache-Control'] = 'private, no-cache'
+            # Don't send no-cache, with https browsers will refresh the page when
+            # the back button is used and no-cache is set. Instead use private and
+            # max-age=0 to prevent proxies from caching the result but allowing the
+            # browser to cache it for the back button. When the page is refreshed
+            # in another way the max-age=0 makes the browser send a new request.
+            response.headers['Cache-Control'] = 'private, max-age=0'
             response.headers['Pragma'] = 'no-cache'
 
         # save the result of this page to the pagecache if possible.  we
