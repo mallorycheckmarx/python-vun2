@@ -72,7 +72,7 @@ def get_record(ips):
         result = {
             ip : {
                 'country_code': gc.country_code_by_addr(ip),
-                'country_name': gc.country_name_by_addr(ip)
+                'country_name': gc.country_name_by_addr(ip),
             } for ip in ips.split('+')
         }
     else:
