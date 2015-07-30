@@ -164,6 +164,7 @@ class Link(Thing, Printable):
 
         links = Link._byID36(link_id36s, data=True, return_dict=False)
         links = [l for l in links if not l._deleted]
+
         if sr:
             links = [link for link in links if link.sr_id == sr._id]
 
@@ -562,8 +563,7 @@ class Link(Thing, Printable):
             item.can_gild = (
                 c.user_is_loggedin and
                 # you can't gild your own submission
-                not (item.author and
-                     item.author._id == user._id) and
+                not (item.author and (item.author._id == user._id)) and
                 # no point in showing the button for things you've already gilded
                 not item.user_gilded and
                 # ick, if the author deleted their account we shouldn't waste gold
@@ -1351,10 +1351,9 @@ class Comment(Thing, Printable):
             # not deleted on profile pages,
             # deleted if spam and not author or admin
             item.deleted = (not profilepage and
-                           (item._deleted or
-                            (item._spam and
-                             item.author != user and
-                             not item.show_spam)))
+                               (item._deleted or (item._spam and
+                                                  item.author != user and
+                                                  not item.show_spam)))
 
             item.have_form = not item.deleted
 
@@ -1400,7 +1399,7 @@ class Comment(Thing, Printable):
 
             # always use the default collapse threshold in contest mode threads
             # if the user has a custom collapse threshold
-            if (item.link.contest_mode and 
+            if (item.link.contest_mode and
                     user.pref_min_comment_score is not None):
                 min_score = Account._defaults['pref_min_comment_score']
             else:
@@ -1466,8 +1465,7 @@ class Comment(Thing, Printable):
                     item.subreddit.contest_mode_upvotes_only and
                     not item.score_hidden):
                 item.score = item._ups
-                item.voting_score = [
-                    item.score - 1, item.score, item.score + 1]
+                item.voting_score = [(item.score + x - 1) for x in range(3)]
                 item.collapsed = False
 
             if item.is_author:
@@ -1759,18 +1757,15 @@ class Message(Thing, Printable):
             first_sender_modmail = sr.is_moderator_with_perms(
                 first_sender, 'mail')
 
-            if (first_sender != author and
-                    first_sender != to and
-                    not first_sender_modmail):
+            if not (first_sender in (author, to) or first_sender_modmail):
                 inbox_rel.append(Inbox._add(first_sender, m, 'inbox'))
 
             if first_message.to_id:
                 first_recipient = Account._byID(first_message.to_id, data=True)
                 first_recipient_modmail = sr.is_moderator_with_perms(
                     first_recipient, 'mail')
-                if (first_recipient != author and
-                        first_recipient != to and
-                        not first_recipient_modmail):
+                if not (first_recipient in (author, to) or
+                        first_recipient_modmail):
                     inbox_rel.append(Inbox._add(first_recipient, m, 'inbox'))
 
         return (m, inbox_rel)
@@ -2076,7 +2071,7 @@ class _ThingSavesByAccount(_SaveHideByAccount):
     @classmethod
     def value_for(cls, thing1, thing2, category=None):
         return category or ''
-    
+
     @classmethod
     def _remove_from_category_listings(cls, user, things, category):
         things = tup(things)
@@ -2245,7 +2240,7 @@ class _ThingSavesByCategory(_ThingSavesBySubreddit):
 
     @classmethod
     def _get_query_fn():
-        raise NotImplementedError 
+        raise NotImplementedError
 
     @classmethod
     def _check_empty(cls, user, category):
