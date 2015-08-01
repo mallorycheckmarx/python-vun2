@@ -25,7 +25,17 @@
     <div>
     <p class="debuginfo">
       <span class="icon">&delta;</span>&nbsp;
-      <span class="content">${_('converted query to %(syntax)s syntax: %(converted)s') % thing.converted_data}</span>
+      <span class="content">  
+        ${plain_link(  
+            _('converted query to %(syntax)s syntax: %(converted)s') % thing.converted_data,
+            search_url(converted_data["converted"], thing.name,
+                       restrict_sr=thing.restrict_sr, sort=thing.sort,
+                       recent=thing.recent, syntax=converted_data["syntax"]),
+            sr_path=False,
+            cname=False,
+            title=_('switch to %(syntax)s syntax' % thing.converted_data)
+        )}
+      </span>
     </p>
     </div>
   </div>
