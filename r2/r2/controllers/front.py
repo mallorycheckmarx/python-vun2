@@ -1158,10 +1158,12 @@ class FrontController(RedditController):
         query = q.query
         recent = q.recent
         sort = q.sort
+        syntax = q.syntax
         def wrapper_fn(thing):
             thing.prev_search = query
             thing.recent = recent
             thing.sort = sort
+            thing.syntax = syntax
             w = Wrapped(thing)
             if isinstance(thing, Link):
                 w.render_class = SearchResultLink
