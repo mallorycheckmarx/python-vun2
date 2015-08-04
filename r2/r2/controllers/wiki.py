@@ -100,6 +100,7 @@ RENDERERS_BY_PAGE = {
     "config/stylesheet": "stylesheet",
     "config/submit_text": "reddit",
     "usernotes": "rawcode",
+    "toolbox": "rawcode",
 }
 
 class WikiController(RedditController):
