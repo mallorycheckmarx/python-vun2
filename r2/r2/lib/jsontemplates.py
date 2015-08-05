@@ -310,6 +310,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         user_is_moderator="is_moderator",
         user_is_subscriber="is_subscriber",
         user_sr_theme_enabled="user_sr_style_enabled",
+        quarantine="quarantine",
     )
 
     # subreddit *attributes* (right side of the equals)
@@ -387,6 +388,11 @@ class SubredditJsonTemplate(ThingJsonTemplate):
                 return c.user.use_subreddit_style(thing)
             else:
                 return True
+        elif attr == 'quarantine':
+            if thing.quarantine_enabled:
+                return thing.quarantine
+            else:
+                return None
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
