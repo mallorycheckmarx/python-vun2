@@ -881,6 +881,12 @@ class CommentJsonTemplate(ThingTemplate):
             else:
                 link_url = item.link.url
             data["link_url"] = link_url
+            
+            if item.quarantine_enabled:
+                if item.subreddit.quarantine:
+                    data["quarantine"] = True
+                else:
+                    data["quarantine"] = False
 
         return data
 
