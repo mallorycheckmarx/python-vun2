@@ -125,10 +125,10 @@ def send_ban_message(subreddit, mod, user, note=None, days=None):
         message += "\n\n" + blockquote_text(note)
 
     message += "\n\n" + ("you can contact the moderators regarding your ban "
-        "by replying to this message. **warning**: using other accounts to "
-        "circumvent a subreddit ban is considered a violation of reddit's "
-        "[site rules](/rules) and can result in being banned from reddit "
-        "entirely.")
+        "by replying to this message. \n\n"
+        "**warning**: if you use another account to circumvent this subreddit ban, "
+        "it would be considered a violation of reddit's [site rules](/rules) "
+        "and could result in you being banned from reddit entirely.")
 
     item, inbox_rel = Message._new(mod, user, subject, message, request.ip,
         sr=subreddit, from_sr=True)
