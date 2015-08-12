@@ -67,7 +67,7 @@ ${thing.formtabs_menu}
 <div class="spacer">
   <%utils:round_field title="${_('url')}" id="url-field">
     <input name="kind" value="link" type="hidden"/>
-    <input id="url" name="url" type="url" value="${thing.url}"/>
+    <input id="url" name="url" type="text" value="${thing.url}"/>
     ${error_field("NO_URL", "url", "div")}
     ${error_field("BAD_URL", "url", "div")}
     ${error_field("ALREADY_SUB", "url", "div")}
