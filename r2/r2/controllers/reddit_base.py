@@ -1124,6 +1124,12 @@ class MinimalController(BaseController):
         c.subdomain = extract_subdomain()
         c.errors = ErrorSet()
         c.cookies = Cookies()
+
+        # Check CORS needs to be called before set_content_type as it will
+        # set render_type to api for preflight Oauth CORS requests
+        if is_subdomain(request.host, g.oauth_domain):
+            self.check_cors()
+
         # if an rss feed, this will also log the user in if a feed=
         # GET param is included
         set_content_type()
@@ -1133,9 +1139,6 @@ class MinimalController(BaseController):
         c.update_last_visit = None
 
         g.stats.count_string('user_agents', request.user_agent)
-
-        if is_subdomain(request.host, g.oauth_domain):
-            self.check_cors()
 
         if not self.defer_ratelimiting:
             self.run_sitewide_ratelimits()
@@ -1301,11 +1304,13 @@ class MinimalController(BaseController):
         elif error.name == errors.VERIFIED_USER_REQUIRED:
             self.intermediate_redirect('/verify')
 
-    def abort404(self):
-        abort(404, "not found")
+    def abort404(self, error=None):
+        msg = error or "not found"
+        abort(404, msg)
 
-    def abort403(self):
-        abort(403, "forbidden")
+    def abort403(self, error=None):
+        msg = error or "forbidden"
+        abort(403, msg)
 
     COMMON_REDDIT_HEADERS = ", ".join((
         "X-Ratelimit-Used",
@@ -1328,6 +1333,7 @@ class MinimalController(BaseController):
 
         via_oauth = is_subdomain(request.host, g.oauth_domain)
         if via_oauth:
+            set_extension(request.environ, "json")
             response.headers["Access-Control-Allow-Origin"] = "*"
             response.headers["Access-Control-Allow-Methods"] = \
                 "GET, POST, PUT, PATCH, DELETE"
@@ -1719,7 +1725,7 @@ class RedditController(OAuth2ResourceController):
                             include_message_mods_link=True,
                         )
                     request.environ['usable_error_content'] = errpage.render()
-                    self.abort403()
+                    self.abort403("Insufficient permissions to view object.")
                 else:
                     if c.render_style != 'html':
                         self.abort403()

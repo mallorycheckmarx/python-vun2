@@ -115,6 +115,8 @@ class ErrorController(RedditController):
         try:
             c.error_page = True
             RedditController.__before__(self)
+            # clear cookies the old fashioned way
+            c.cookies = Cookies()
         except (HTTPMovedPermanently, HTTPFound):
             # ignore an attempt to redirect from an error page
             pass
@@ -177,14 +179,31 @@ class ErrorController(RedditController):
             response.headers["Retry-After"] = str(retry_after)
         return request.environ['usable_error_content']
 
+    @pagecache_policy(PAGECACHE_POLICY.NEVER)
+    def GET_api_error(self):
+        try:
+            code = int(request.GET.get('code'))
+        except:
+            code = 400
+        exception = request.environ['r2.controller.exception']
+        if exception and exception.detail:
+            text = exception.detail
+        else:
+            text = request.GET.get('explanation', '?')
+        resp = {'error': code}
+        return self.api_wrapper(resp)
+
+    POST_api_error = GET_api_error
+    PUT_api_error = GET_api_error
+    PATCH_api_error = GET_api_error
+    DELETE_api_error = GET_api_error
+
     # Misses are both incredibly common and cheap for this endpoint, don't force
     # more useful things out of the pagecache.
     @pagecache_policy(PAGECACHE_POLICY.NEVER)
     def GET_document(self):
         try:
             c.errors = c.errors or ErrorSet()
-            # clear cookies the old fashioned way 
-            c.cookies = Cookies()
 
             code =  request.GET.get('code', '')
             try:

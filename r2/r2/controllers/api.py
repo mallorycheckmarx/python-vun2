@@ -2792,7 +2792,9 @@ class ApiController(RedditController):
             action = 'remove' + thing.__class__.__name__.lower()
             ModAction.create(sr, c.user, action, **kw)
 
-        if isinstance(thing, Comment):
+        if isinstance(thing, Link):
+            sr.remove_sticky(thing)
+        elif isinstance(thing, Comment):
             queries.unnotify(thing)
 
 
@@ -3842,9 +3844,11 @@ class ApiController(RedditController):
 
     @csrf_exempt
     @require_oauth2_scope("flair")
-    @validate(VUser(),
-              user = VFlairAccount('name'),
-              link = VFlairLink('link'))
+    @validate(
+        VUser(),
+        user=VFlairAccount('name'),
+        link=VFlairLink('link'),
+    )
     @api_doc(api_section.flair, uses_site=True)
     def POST_flairselector(self, user, link):
         """Return information about a users's flair options.
@@ -3857,21 +3861,32 @@ class ApiController(RedditController):
         retrieve that user's flair.
 
         """
+
         if link:
             if not (c.user_is_admin or link.can_flair_slow(c.user)):
                 abort(403)
 
-            return FlairSelector(link=link, site=link.subreddit_slow).render()
+            site = link.subreddit_slow
+            user = c.user
+            return FlairSelector(user, site, link).render()
+        else:
+            if isinstance(c.site, FakeSubreddit):
+                abort(403)
+            else:
+                site = c.site
 
-        if user and not (c.user_is_admin
-                         or c.site.is_moderator_with_perms(c.user, 'flair')):
-            # ignore user parameter if c.user is not mod/admin
-            user = None
-        # Don't leak old flair for deleted users
-        if user and user._deleted:
-            abort(403)
+            if user:
+                if (user != c.user and
+                        not c.user_is_admin and
+                        not site.is_moderator_with_perms(c.user, 'flair')):
+                    abort(403)
+            else:
+                user = c.user
 
-        return FlairSelector(user=user).render()
+            if user._deleted:
+                abort(403)
+
+            return FlairSelector(user, site).render()
 
     @require_oauth2_scope("flair")
     @validatedForm(VUser(),
