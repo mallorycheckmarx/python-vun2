@@ -1,0 +1,3 @@
+monoco.require('db').collections().Person.find({
+  'firstName': 'Morris'
+});
