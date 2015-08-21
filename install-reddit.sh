@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 # The contents of this file are subject to the Common Public Attribution
 # License Version 1.0. (the "License"); you may not use this file except in
 # compliance with the License. You may obtain a copy of the License at
@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -82,6 +82,15 @@ if [ "$DISTRIB_ID" != "Ubuntu" -o "$DISTRIB_RELEASE" != "12.04" ]; then
     exit 1
 fi
 
+if [[ "2000000" -gt $(awk '/MemTotal/{print $2}' /proc/meminfo) ]]; then
+    LOW_MEM_PROMPT="reddit requires at least 2GB of memory to work properly, continue anyway? [y/n] "
+    read -er -n1 -p "$LOW_MEM_PROMPT" response
+    if [[ "$response" != "y" ]]; then
+      echo "Quitting."
+      exit 1
+    fi
+fi
+
 ###############################################################################
 # Install prerequisites
 ###############################################################################
@@ -106,6 +115,10 @@ Package: *
 Pin: release o=LP-PPA-reddit
 Pin-Priority: 600
 HERE
+
+# add the datastax cassandra repos
+echo deb http://debian.datastax.com/community stable main > /etc/apt/sources.list.d/cassandra.sources.list
+wget -qO- -L https://debian.datastax.com/debian/repo_key | sudo apt-key add -
 
 # grab the new ppas' package listings
 apt-get update
@@ -141,6 +154,9 @@ python-zope.interface
 python-kazoo
 python-stripe
 python-tinycss2
+python-unidecode
+python-mock
+python-yaml
 
 python-flask
 geoip-bin
@@ -159,16 +175,17 @@ memcached
 postgresql
 postgresql-client
 rabbitmq-server
-cassandra
+cassandra=1.2.19
 haproxy
 nginx
 stunnel
 gunicorn
 sutro
+libpcre3-dev
 PACKAGES
 
-# paper over stack size issues with cassandra
-sed -i s/-Xss128k/-Xss228k/ /etc/cassandra/cassandra-env.sh
+# we don't want to upgrade to C* 2.0 yet, so we'll put it on hold
+apt-mark hold cassandra
 
 ###############################################################################
 # Wait for all the services to be up
@@ -222,14 +239,20 @@ done
 ###############################################################################
 # Configure Cassandra
 ###############################################################################
-if ! echo | cassandra-cli -h localhost -k reddit &> /dev/null; then
-    echo "create keyspace reddit;" | cassandra-cli -h localhost -B
-fi
+python <<END
+import pycassa
+sys = pycassa.SystemManager("localhost:9160")
 
-cat <<CASS | cassandra-cli -B -h localhost -k reddit || true
-create column family permacache with column_type = 'Standard' and
-                                     comparator = 'BytesType';
-CASS
+if "reddit" not in sys.list_keyspaces():
+    print "creating keyspace 'reddit'"
+    sys.create_keyspace("reddit", "SimpleStrategy", {"replication_factor": "1"})
+    print "done"
+
+if "permacache" not in sys.get_keyspace_column_families("reddit"):
+    print "creating column family 'permacache'"
+    sys.create_column_family("reddit", "permacache")
+    print "done"
+END
 
 ###############################################################################
 # Configure PostgreSQL
@@ -293,6 +316,9 @@ if [ ! -f development.update ]; then
 # generate a new development.ini
 
 [DEFAULT]
+# global debug flag -- displays pylons stacktrace rather than 500 page on error when true
+# WARNING: a pylons stacktrace allows remote code execution. Make sure this is false
+# if your server is publicly accessible.
 debug = true
 
 disable_ads = true
@@ -303,13 +329,13 @@ disable_require_admin_otp = true
 page_cache_time = 0
 
 domain = $REDDIT_DOMAIN
+oauth_domain = $REDDIT_DOMAIN
 
 plugins = $plugin_str
 
 media_provider = filesystem
 media_fs_root = /srv/www/media
 media_fs_base_url_http = http://%(domain)s/media/
-media_fs_base_url_https = https://%(domain)s/media/
 
 [server:main]
 port = 8001
@@ -318,6 +344,7 @@ DEVELOPMENT
 else
     sed -i "s/^plugins = .*$/plugins = $plugin_str/" $REDDIT_HOME/src/reddit/r2/development.update
     sed -i "s/^domain = .*$/domain = $REDDIT_DOMAIN/" $REDDIT_HOME/src/reddit/r2/development.update
+    sed -i "s/^oauth_domain = .*$/oauth_domain = $REDDIT_DOMAIN/" $REDDIT_HOME/src/reddit/r2/development.update
 fi
 
 sudo -u $REDDIT_USER make ini
@@ -329,17 +356,68 @@ fi
 ###############################################################################
 # some useful helper scripts
 ###############################################################################
-cat > /usr/local/bin/reddit-run <<REDDITRUN
+function helper-script() {
+    cat > $1
+    chmod 755 $1
+}
+
+helper-script /usr/local/bin/reddit-run <<REDDITRUN
 #!/bin/bash
 exec paster --plugin=r2 run $REDDIT_HOME/src/reddit/r2/run.ini "\$@"
 REDDITRUN
 
-cat > /usr/local/bin/reddit-shell <<REDDITSHELL
+helper-script /usr/local/bin/reddit-shell <<REDDITSHELL
 #!/bin/bash
 exec paster --plugin=r2 shell $REDDIT_HOME/src/reddit/r2/run.ini
 REDDITSHELL
 
-chmod 755 /usr/local/bin/reddit-run /usr/local/bin/reddit-shell
+helper-script /usr/local/bin/reddit-start <<REDDITSTART
+#!/bin/bash
+initctl emit reddit-start
+REDDITSTART
+
+helper-script /usr/local/bin/reddit-stop <<REDDITSTOP
+#!/bin/bash
+initctl emit reddit-stop
+REDDITSTOP
+
+helper-script /usr/local/bin/reddit-restart <<REDDITRESTART
+#!/bin/bash
+initctl emit reddit-restart TARGET=${1:-all}
+REDDITRESTART
+
+helper-script /usr/local/bin/reddit-flush <<REDDITFLUSH
+#!/bin/bash
+echo flush_all | nc localhost 11211
+REDDITFLUSH
+
+###############################################################################
+# pixel and click server
+###############################################################################
+mkdir -p /var/opt/reddit/
+chown $REDDIT_USER:$REDDIT_GROUP /var/opt/reddit/
+
+mkdir -p /srv/www/pixel
+chown $REDDIT_USER:$REDDIT_GROUP /srv/www/pixel
+cp $REDDIT_HOME/src/reddit/r2/r2/public/static/pixel.png /srv/www/pixel
+
+if [ ! -f /etc/gunicorn.d/click.conf ]; then
+    cat > /etc/gunicorn.d/click.conf <<CLICK
+CONFIG = {
+    "mode": "wsgi",
+    "working_dir": "$REDDIT_HOME/src/reddit/scripts",
+    "user": "$REDDIT_USER",
+    "group": "$REDDIT_USER",
+    "args": (
+        "--bind=unix:/var/opt/reddit/click.sock",
+        "--workers=1",
+        "tracker:application",
+    ),
+}
+CLICK
+fi
+
+service gunicorn start
 
 ###############################################################################
 # nginx
@@ -360,10 +438,47 @@ server {
 }
 MEDIA
 
+cat > /etc/nginx/sites-available/reddit-pixel <<PIXEL
+upstream click_server {
+  server unix:/var/opt/reddit/click.sock fail_timeout=0;
+}
+
+server {
+  listen 8082;
+
+  log_format directlog '\$remote_addr - \$remote_user [\$time_local] '
+                      '"\$request_method \$request_uri \$server_protocol" \$status \$body_bytes_sent '
+                      '"\$http_referer" "\$http_user_agent"';
+  access_log      /var/log/nginx/traffic/traffic.log directlog;
+
+  location / {
+
+    rewrite ^/pixel/of_ /pixel.png;
+
+    add_header Last-Modified "";
+    add_header Pragma "no-cache";
+
+    expires -1;
+    root /srv/www/pixel/;
+  }
+
+  location /click {
+    proxy_pass http://click_server;
+  }
+}
+PIXEL
+
 # remove the default nginx site that may conflict with haproxy
 rm -rf /etc/nginx/sites-enabled/default
 # put our config in place
 ln -nsf /etc/nginx/sites-available/reddit-media /etc/nginx/sites-enabled/
+ln -nsf /etc/nginx/sites-available/reddit-pixel /etc/nginx/sites-enabled/
+
+# make the pixel log directory
+mkdir -p /var/log/nginx/traffic
+
+# link the ini file for the Flask click tracker
+ln -nsf $REDDIT_HOME/src/reddit/r2/development.ini $REDDIT_HOME/src/reddit/scripts/production.ini
 
 service nginx restart
 
@@ -409,6 +524,11 @@ frontend frontend
     acl is-media path_beg /media/
     use_backend media if is-media
 
+    # send pixel stuff to local nginx
+    acl is-pixel path_beg /pixel/
+    acl is-click path_beg /click
+    use_backend pixel if is-pixel || is-click
+
     default_backend reddit
 
 backend reddit
@@ -418,7 +538,7 @@ backend reddit
     timeout queue 60000
     balance roundrobin
 
-    server app01-8001 localhost:8001 maxconn 1
+    server app01-8001 localhost:8001 maxconn 30
 
 backend sutro
     mode http
@@ -436,6 +556,15 @@ backend media
     balance roundrobin
 
     server nginx localhost:9000 maxconn 20
+
+backend pixel
+    mode http
+    timeout connect 4000
+    timeout server 30000
+    timeout queue 60000
+    balance roundrobin
+
+    server nginx localhost:8082 maxconn 20
 HAPROXY
 
 # this will start it even if currently stopped
@@ -611,13 +740,15 @@ function set_consumer_count {
 }
 
 set_consumer_count log_q 0
-set_consumer_count cloudsearch_q 0
+set_consumer_count search_q 0
+set_consumer_count del_account_q 1
 set_consumer_count scraper_q 1
 set_consumer_count markread_q 1
 set_consumer_count commentstree_q 1
 set_consumer_count newcomments_q 1
 set_consumer_count vote_link_q 1
 set_consumer_count vote_comment_q 1
+set_consumer_count automoderator_q 0
 
 chown -R $REDDIT_USER:$REDDIT_GROUP $CONSUMER_CONFIG_ROOT/
 
@@ -669,16 +800,25 @@ Cron jobs start with "reddit-job-" and queue processors start with
 "reddit-consumer-". The crons are managed by /etc/cron.d/reddit. You can
 initiate a restart of all the consumers by running:
 
-    sudo initctl emit reddit-restart
+    sudo reddit-restart
 
 or target specific ones:
 
-    sudo initctl emit reddit-restart TARGET=scraper_q
+    sudo reddit-restart scraper_q
 
 See the GitHub wiki for more information on these jobs:
 
 * https://github.com/reddit/reddit/wiki/Cron-jobs
 * https://github.com/reddit/reddit/wiki/Services
+
+The reddit code can be shut down or started up with
+
+    sudo reddit-stop
+    sudo reddit-start
+
+And if you think caching might be hurting you, you can flush memcache with
+
+    reddit-flush
 
 Now that the core of reddit is installed, you may want to do some additional
 steps:
@@ -687,8 +827,8 @@ steps:
 
 * To populate the database with test data, run:
 
-    cd $REDDIT_HOME/src/reddit/r2
-    reddit-run r2/models/populatedb.py -c 'populate()'
+    cd $REDDIT_HOME/src/reddit
+    reddit-run scripts/inject_test_data.py -c 'inject_test_data()'
 
 * Manually run reddit-job-update_reddits immediately after populating the db
   or adding your own subreddits.

@@ -350,15 +350,6 @@ $.things = function() {
     return $(sel);
 };
 
-$.fn.same_author = function() {
-    var aid = $(this).thing_id("author");
-    var ids = [];
-    $(".author.id-" + aid).each(function() {
-            ids.push(".thing.id-" + $(this).thing_id());
-        });
-    return $(ids.join(", "));
-};
-
 $.fn.things = function() {
     /* 
      * try to find all things that occur below a given selector, like:
@@ -561,7 +552,7 @@ $.fn.insert_table_rows = function(rows, index) {
                       i = Math.min(i, table.rows.length);
 
                       var $newRow = $(table.insertRow(i)),
-                          $toInsert = $($.unsafe(row))
+                          $toInsert = $($.parseHTML($.unsafe(row)))
 
                       $toInsert.hide()
                       $newRow.replaceWith($toInsert)
@@ -579,7 +570,7 @@ $.fn.captcha = function(iden) {
     var c = this.find(".capimage");
     if(iden) {
         c.attr("src", "/captcha/" + iden + ".png")
-            .parents("form").find('input[name="iden"]').val(iden);
+            .siblings('input[name="iden"]').val(iden);
     }
     return c;
 };
@@ -689,11 +680,52 @@ $.apply_stylesheet = function(cssText) {
     
 };
 
-$.rehighlight_new_comments = function() {
-  checked = $(".comment-visits-box input:checked");
-  if (checked.length > 0) {
-    var v = checked[0].value;
-    highlight_new_comments(v);
+$.apply_stylesheet_url = function(cssUrl, srStyleEnabled) {
+  var sheetTitle = 'applied_subreddit_stylesheet';
+  var $stylesheet = $('link[title="' + sheetTitle + '"]');
+  if ($stylesheet.length == 0) {
+    $('head').append('<link type="text/css" title="' + sheetTitle + '" rel="stylesheet">');
+    $stylesheet = $('link[title="' + sheetTitle + '"]');
+  }
+
+  $stylesheet.attr("href", cssUrl);
+  $("#sr_style_enabled").prop("checked", srStyleEnabled);
+  $("#sr_style_throbber")
+    .html("")
+    .css("display", "none");
+};
+
+$.apply_header_image = function(src, size, title) {
+  var $headerImage = $("#header-img");
+  if ($headerImage.is("a")) {
+    $headerImage
+      .attr("id", "header-img-a")
+      .text("")
+      .append('<img id="header-img"/>');
+    $headerImage = $("#header-img");
+  }
+  $headerImage.removeClass("default-header");
+  $headerImage.attr("src", src);
+  $headerImage.attr("title", title);
+  if (size) {
+    $headerImage.attr("width", size[0]);
+    $headerImage.attr("height", size[1]);
+  } else {
+    $headerImage.removeAttr("width");
+    $headerImage.removeAttr("height");
+  }
+}
+
+$.remove_header_image = function() {
+  var $headerLink = $("#header-img-a");
+
+  if ($headerLink) {
+    $headerLink
+      .addClass("default-header")
+      .attr("id", "header-img")
+      .empty();
+    $("#header-img").empty();
+    $headerLink.attr("id", "header-img");
   }
 }
 
@@ -749,5 +781,20 @@ $.cookie_read = function(name, prefix) {
 
     return {name: name, data: data}
 }
+
+$.fn.highlight = function(text) {
+  if (!text) { return this; }
+
+  var escaped = $.websafe(text.trim()).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var regex = new RegExp("\\b" + escaped + "\\b", "gi");
+
+  return this.each(function() {
+    if (this.children.length) { return; }
+
+    this.innerHTML = this.innerHTML.replace(regex, function(matched) {
+      return "<mark>" + matched + "</mark>";
+    });
+  });
+};
 
 })(jQuery);

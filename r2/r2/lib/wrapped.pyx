@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -459,9 +459,17 @@ class CachedTemplate(Templated):
         # these values are needed to render any link on the site, and
         # a menu is just a set of links, so we best cache against
         # them.
-        keys = [c.user_is_loggedin, c.user_is_admin, c.domain_prefix,
-                style, c.secure, c.cname, c.lang, c.site.path,
-                self.template_hash(style)]
+        keys = [
+            c.user_is_loggedin,
+            c.user_is_admin,
+            c.domain_prefix,
+            style,
+            c.secure,
+            c.cname,
+            c.lang,
+            c.site.user_path,
+            self.template_hash(style),
+        ]
 
         if c.secure:
             keys.append(request.host)

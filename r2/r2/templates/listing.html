@@ -16,18 +16,22 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
-   from r2.models import Sub
+   from r2.lib.template_helpers import format_html
  %>
 <%namespace file="utils.html" import="plain_link" />
 
 <%
    _id = ("_%s" % thing.parent_name) if hasattr(thing, 'parent_name') else ''
    cls = thing.lookups[0].__class__.__name__.lower()
+
+   # this is a hack to restore linklisting for the search page
+   if cls == 'searchlisting':
+       cls = 'linklisting'
  %>
 <div id="siteTable${_id}" class="sitetable ${cls}">
   %for a in thing.things:
@@ -38,13 +42,13 @@
     <div class="nav-buttons">
       <span class="nextprev">${_("view more:")}&#32;
       %if thing.prev:
-        ${plain_link(unsafe("&lsaquo; " + _("prev")), thing.prev, _sr_path = (c.site != Sub), rel="nofollow prev")}
+        ${plain_link(format_html("&lsaquo; %s", _("prev")), thing.prev, rel="nofollow prev")}
       %endif
       %if thing.prev and thing.next:
         <span class="separator"></span>
       %endif
       %if thing.next:
-        ${plain_link(unsafe(_("next") + " &rsaquo;"), thing.next,  _sr_path = (c.site != Sub), rel="nofollow next")}
+        ${plain_link(format_html("%s &rsaquo;", _("next")), thing.next, rel="nofollow next")}
       %endif
       </span>
       %if thing.next_suggestions:

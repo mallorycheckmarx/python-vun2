@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -41,10 +41,9 @@ import pkg_resources
 import pytz
 
 from r2.config import queues
+import r2.lib.amqp
 from r2.lib.cache import (
     CacheChain,
-    CassandraCache,
-    CassandraCacheChain,
     CL_ONE,
     CL_QUORUM,
     CMemcache,
@@ -52,21 +51,37 @@ from r2.lib.cache import (
     HardcacheChain,
     LocalCache,
     MemcacheChain,
+    Permacache,
     SelfEmptyingCache,
     StaleCacheChain,
+    TransitionalCache,
+    validate_size_error,
+    validate_size_warn,
 )
 from r2.lib.configparse import ConfigValue, ConfigValueParser
 from r2.lib.contrib import ipaddress
+from r2.lib.eventcollector import EventQueue
 from r2.lib.lock import make_lock_factory
 from r2.lib.manager import db_manager
 from r2.lib.plugin import PluginLoader
 from r2.lib.providers import select_provider
-from r2.lib.stats import Stats, CacheStats, StatsCollectingConnectionPool
+from r2.lib.stats import (
+    CacheStats,
+    StaleCacheStats,
+    Stats,
+    StatsCollectingConnectionPool,
+)
 from r2.lib.translation import get_active_langs, I18N_PATH
 from r2.lib.utils import config_gold_price, thread_dump
 
 
 LIVE_CONFIG_NODE = "/config/live"
+
+SEARCH_SYNTAXES = {
+        'cloudsearch': ('cloudsearch', 'lucene', 'plain'),
+        'solr': ('solr', 'plain'),
+        }
+
 SECRETS_NODE = "/config/secrets"
 
 
@@ -135,6 +150,12 @@ class PermissionFilteredEmployeeList(object):
         return "<PermissionFilteredEmployeeList %r>" % (list(self),)
 
 
+SHUTDOWN_CALLBACKS = []
+def on_app_shutdown(arbiter, worker):
+    for callback in SHUTDOWN_CALLBACKS:
+        callback()
+
+
 class Globals(object):
     spec = {
 
@@ -159,6 +180,7 @@ class Globals(object):
             'num_comments',
             'max_comments',
             'max_comments_gold',
+            'max_comment_parent_walk',
             'max_sr_images',
             'num_serendipity',
             'sr_dropdown_threshold',
@@ -179,8 +201,6 @@ class Globals(object):
             'wiki_max_page_length_bytes',
             'wiki_max_page_name_length',
             'wiki_max_page_separators',
-            'min_promote_future',
-            'max_promote_future',
             'RL_RESET_MINUTES',
             'RL_OAUTH_RESET_MINUTES',
             'comment_karma_display_floor',
@@ -195,6 +215,9 @@ class Globals(object):
             'querycache_prune_chance',
             'RL_AVG_REQ_PER_SEC',
             'RL_OAUTH_AVG_REQ_PER_SEC',
+            'RL_LOGIN_AVG_PER_SEC',
+            'RL_LOGIN_IP_AVG_PER_SEC',
+            'RL_SHARE_AVG_PER_SEC',
         ],
 
         ConfigValue.bool: [
@@ -218,7 +241,7 @@ class Globals(object):
             'trust_local_proxies',
             'shard_link_vote_queues',
             'shard_commentstree_queues',
-            'subreddit_stylesheets_static',
+            'authnet_validate',
             'ENFORCE_RATELIMIT',
             'RL_SITEWIDE_ENABLED',
             'RL_OAUTH_SITEWIDE_ENABLED',
@@ -234,7 +257,9 @@ class Globals(object):
             'pagecaches',
             'memoizecaches',
             'srmembercaches',
+            'relcaches',
             'ratelimitcaches',
+            'hardcache_memcaches',
             'cassandra_seeds',
             'automatic_reddits',
             'hardcache_categories',
@@ -246,10 +271,18 @@ class Globals(object):
             'exempt_login_user_agents',
             'timed_templates',
             'autoexpand_media_types',
+            'multi_icons',
+            'hide_subscribers_srs',
         ],
 
         ConfigValue.tuple_of(ConfigValue.int): [
             'thumbnail_size',
+            'mobile_ad_image_size',
+        ],
+
+        ConfigValue.tuple_of(ConfigValue.float): [
+            'ios_versions',
+            'android_versions',
         ],
 
         ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
@@ -261,6 +294,15 @@ class Globals(object):
             'wiki_page_privacy_policy',
             'wiki_page_user_agreement',
             'wiki_page_gold_bottlecaps',
+            'fraud_email',
+            'feedback_email',
+            'share_reply',
+            'nerds_email',
+            'community_email',
+            'smtp_server',
+            'events_collector_url',
+            'events_collector_test_url',
+            'search_provider',
         ],
 
         ConfigValue.choice(ONE=CL_ONE, QUORUM=CL_QUORUM): [
@@ -270,6 +312,7 @@ class Globals(object):
 
         ConfigValue.timeinterval: [
             'ARCHIVE_AGE',
+            "vote_queue_grace_period",
         ],
 
         config_gold_price: [
@@ -277,6 +320,7 @@ class Globals(object):
             'gold_year_price',
             'cpm_selfserve',
             'cpm_selfserve_geotarget_metro',
+            'cpm_selfserve_geotarget_country',
             'cpm_selfserve_collection',
         ],
     }
@@ -286,6 +330,11 @@ class Globals(object):
             'frontend_logging',
         ],
         ConfigValue.int: [
+            'captcha_exempt_comment_karma',
+            'captcha_exempt_link_karma',
+            'create_sr_account_age_days',
+            'create_sr_comment_karma',
+            'create_sr_link_karma',
             'cflag_min_votes',
         ],
         ConfigValue.float: [
@@ -294,12 +343,17 @@ class Globals(object):
             'spotlight_interest_sub_p',
             'spotlight_interest_nosub_p',
             'gold_revenue_goal',
+            'invalid_key_sample_rate',
+            'events_collector_vote_sample_rate',
+            'events_collector_mod_sample_rate',
+            'events_collector_quarantine_sample_rate',
         ],
         ConfigValue.tuple: [
             'fastlane_links',
             'listing_chooser_sample_multis',
             'discovery_srs',
             'proxy_gilding_accounts',
+            'mweb_blacklist_expressions',
         ],
         ConfigValue.str: [
             'listing_chooser_gold_multi',
@@ -312,6 +366,10 @@ class Globals(object):
             'welcomebar_messages',
             'sidebar_message',
             'gold_sidebar_message',
+        ],
+        ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
+            'ticket_groups',
+            'ticket_user_fields', 
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.float): [
             'pennies_per_server_second',
@@ -396,14 +454,53 @@ class Globals(object):
             raise AttributeError
 
     def setup(self):
+        self.env = 'unit_test' if 'test' in sys.argv[0] else ''
         self.queues = queues.declare_queues(self)
 
+        self.extension_subdomains = dict(
+            simple="mobile",
+            i="compact",
+            api="api",
+            rss="rss",
+            xml="xml",
+            json="json",
+        )
+
         ################# PROVIDERS
+        self.auth_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.auth",
+            self.authentication_provider,
+        )
         self.media_provider = select_provider(
             self.config,
             self.pkg_resources_working_set,
             "r2.provider.media",
             self.media_provider,
+        )
+        self.cdn_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.cdn",
+            self.cdn_provider,
+        )
+        self.ticket_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.support",
+            # TODO: fix this later, it refuses to pick up 
+            # g.config['ticket_provider'] value, so hardcoding for now.
+            # really, the next uncommented line should be:
+            #self.ticket_provider,
+            # instead of:
+            "zendesk",
+        )
+        self.image_resizing_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.image_resizing",
+            self.image_resizing_provider,
         )
         self.startup_timer.intermediate("providers")
 
@@ -462,13 +559,18 @@ class Globals(object):
         self.log = logging.LoggerAdapter(log, {"pool": pool})
 
         # set locations
-        self.locations = {}
+        locations = pkg_resources.resource_stream(__name__,
+                                                  "../data/locations.json")
+        self.locations = json.loads(locations.read())
 
         if not self.media_domain:
             self.media_domain = self.domain
         if self.media_domain == self.domain:
             print >> sys.stderr, ("Warning: g.media_domain == g.domain. " +
                    "This may give untrusted content access to user cookies")
+        if self.oauth_domain == self.domain:
+            print >> sys.stderr, ("Warning: g.oauth_domain == g.domain. "
+                    "CORS requests to g.domain will be allowed")
 
         for arg in sys.argv:
             tokens = arg.split("=")
@@ -495,6 +597,13 @@ class Globals(object):
         self.RL_OAUTH_MAX_REQS = int(self.config["RL_OAUTH_AVG_REQ_PER_SEC"] *
                                      self.RL_OAUTH_RESET_SECONDS)
 
+        self.RL_LOGIN_MAX_REQS = int(self.config["RL_LOGIN_AVG_PER_SEC"] *
+                                     self.RL_RESET_SECONDS)
+        self.RL_LOGIN_IP_MAX_REQS = int(self.config["RL_LOGIN_IP_AVG_PER_SEC"] *
+                                        self.RL_RESET_SECONDS)
+        self.RL_SHARE_MAX_REQS = int(self.config["RL_SHARE_AVG_PER_SEC"] *
+                                     self.RL_RESET_SECONDS)
+
         self.startup_timer.intermediate("configuration")
 
         ################# ZOOKEEPER
@@ -514,6 +623,9 @@ class Globals(object):
             self.throttles = LiveList(self.zookeeper, "/throttles",
                                       map_fn=ipaddress.ip_network,
                                       reduce_fn=ipaddress.collapse_addresses)
+
+            # close our zk connection when the app shuts down
+            SHUTDOWN_CALLBACKS.append(self.zookeeper.stop)
         else:
             self.zookeeper = None
             parser = ConfigParser.RawConfigParser()
@@ -523,8 +635,6 @@ class Globals(object):
             self.secrets = extract_secrets(parser)
             self.throttles = tuple()  # immutable since it's not real
 
-        self.startup_timer.intermediate("zookeeper")
-
         ################# PRIVILEGED USERS
         self.admins = PermissionFilteredEmployeeList(
             self.live_config, type="admin")
@@ -533,76 +643,115 @@ class Globals(object):
         self.employees = PermissionFilteredEmployeeList(
             self.live_config, type="employee")
 
+        self.startup_timer.intermediate("zookeeper")
+
         ################# MEMCACHE
         num_mc_clients = self.num_mc_clients
 
         # the main memcache pool. used for most everything.
-        self.memcache = CMemcache(
+        memcaches = CMemcache(
+            "main",
             self.memcaches,
-            min_compress_len=50 * 1024,
+            min_compress_len=1400,
             num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         # a pool just used for @memoize results
         memoizecaches = CMemcache(
+            "memoize",
             self.memoizecaches,
             min_compress_len=50 * 1024,
             num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         # a pool just for srmember rels
         srmembercaches = CMemcache(
+            "srmember",
             self.srmembercaches,
             min_compress_len=96,
             num_clients=num_mc_clients,
+            validators=[validate_size_error],
+        )
+
+        # a pool just for rels
+        relcaches = CMemcache(
+            "rel",
+            self.relcaches,
+            min_compress_len=96,
+            num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         ratelimitcaches = CMemcache(
+            "ratelimit",
             self.ratelimitcaches,
             min_compress_len=96,
             num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         # a smaller pool of caches used only for distributed locks.
-        # TODO: move this to ZooKeeper
-        self.lock_cache = CMemcache(self.lockcaches,
-                                    num_clients=num_mc_clients)
+        self.lock_cache = CMemcache(
+            "lock",
+            self.lockcaches,
+            num_clients=num_mc_clients,
+            validators=[validate_size_error],
+        )
         self.make_lock = make_lock_factory(self.lock_cache, self.stats)
 
         # memcaches used in front of the permacache CF in cassandra.
         # XXX: this is a legacy thing; permacache was made when C* didn't have
         # a row cache.
-        if self.permacache_memcaches:
-            permacache_memcaches = CMemcache(self.permacache_memcaches,
-                                             min_compress_len=50 * 1024,
-                                             num_clients=num_mc_clients)
-        else:
-            permacache_memcaches = None
+        permacache_memcaches = CMemcache("perma",
+                                         self.permacache_memcaches,
+                                         min_compress_len=1400,
+                                         num_clients=num_mc_clients,
+                                         validators=[],)
 
         # the stalecache is a memcached local to the current app server used
         # for data that's frequently fetched but doesn't need to be fresh.
         if self.stalecaches:
-            stalecaches = CMemcache(self.stalecaches,
-                                    num_clients=num_mc_clients)
+            stalecaches = CMemcache(
+                "stale",
+                self.stalecaches,
+                num_clients=num_mc_clients,
+                validators=[validate_size_error],
+            )
         else:
             stalecaches = None
 
         # rendercache holds rendered partial templates.
         rendercaches = CMemcache(
+            "render",
             self.rendercaches,
             noreply=True,
             no_block=True,
             num_clients=num_mc_clients,
             min_compress_len=480,
+            validators=[],
         )
 
         # pagecaches hold fully rendered pages
         pagecaches = CMemcache(
+            "page",
             self.pagecaches,
             noreply=True,
             no_block=True,
             num_clients=num_mc_clients,
             min_compress_len=1400,
+            validators=[],
+        )
+
+        # hardcache memcache pool
+        hardcache_memcaches = CMemcache(
+            "hardcache",
+            self.hardcache_memcaches,
+            binary=True,
+            min_compress_len=1400,
+            num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         self.startup_timer.intermediate("memcache")
@@ -623,11 +772,9 @@ class Globals(object):
                 ),
         }
 
-        permacache_cf = CassandraCache(
+        permacache_cf = Permacache._setup_column_family(
             'permacache',
             self.cassandra_pools[self.cassandra_default_pool],
-            read_consistency_level=self.cassandra_rcl,
-            write_consistency_level=self.cassandra_wcl
         )
 
         self.startup_timer.intermediate("cassandra")
@@ -648,10 +795,10 @@ class Globals(object):
             self.cache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                self.memcache,
+                memcaches,
             )
         else:
-            self.cache = MemcacheChain((localcache_cls(), self.memcache))
+            self.cache = CacheChain((localcache_cls(), memcaches))
         cache_chains.update(cache=self.cache)
 
         if stalecaches:
@@ -676,6 +823,17 @@ class Globals(object):
                 (localcache_cls(), srmembercaches))
         cache_chains.update(srmembercache=self.srmembercache)
 
+        if stalecaches:
+            self.relcache = StaleCacheChain(
+                localcache_cls(),
+                stalecaches,
+                relcaches,
+            )
+        else:
+            self.relcache = MemcacheChain(
+                (localcache_cls(), relcaches))
+        cache_chains.update(relcache=self.relcache)
+
         self.ratelimitcache = MemcacheChain(
                 (localcache_cls(), ratelimitcaches))
         cache_chains.update(ratelimitcache=self.ratelimitcache)
@@ -693,21 +851,33 @@ class Globals(object):
         cache_chains.update(pagecache=self.pagecache)
 
         # the thing_cache is used in tdb_cassandra.
-        self.thing_cache = CacheChain((localcache_cls(),))
+        self.thing_cache = CacheChain((localcache_cls(),), check_keys=False)
         cache_chains.update(thing_cache=self.thing_cache)
 
-        self.permacache = CassandraCacheChain(
-            localcache_cls(),
+        if stalecaches:
+            permacache_cache = StaleCacheChain(
+                localcache_cls(),
+                stalecaches,
+                permacache_memcaches,
+                check_keys=False,
+            )
+        else:
+            permacache_cache = CacheChain(
+                (localcache_cls(), permacache_memcaches),
+                check_keys=False,
+            )
+        cache_chains.update(permacache=permacache_cache)
+
+        self.permacache = Permacache(
+            permacache_cache,
             permacache_cf,
-            memcache=permacache_memcaches,
             lock_factory=self.make_lock,
         )
-        cache_chains.update(permacache=self.permacache)
 
         # hardcache is used for various things that tend to expire
         # TODO: replace hardcache w/ cassandra stuff
         self.hardcache = HardcacheChain(
-            (localcache_cls(), self.memcache, HardCache(self)),
+            (localcache_cls(), hardcache_memcaches, HardCache(self)),
             cache_negative_results=True,
         )
         cache_chains.update(hardcache=self.hardcache)
@@ -718,8 +888,14 @@ class Globals(object):
         # 'g'
         def reset_caches():
             for name, chain in cache_chains.iteritems():
+                if isinstance(chain, TransitionalCache):
+                    chain = chain.read_chain
+
                 chain.reset()
-                chain.stats = CacheStats(self.stats, name)
+                if isinstance(chain, StaleCacheChain):
+                    chain.stats = StaleCacheStats(self.stats, name)
+                else:
+                    chain.stats = CacheStats(self.stats, name)
         self.cache_chains = cache_chains
 
         self.reset_caches = reset_caches
@@ -736,6 +912,11 @@ class Globals(object):
         if I18N_PATH:
             i18n_git_path = os.path.join(os.path.dirname(I18N_PATH), ".git")
             self.record_repo_version("i18n", i18n_git_path)
+
+        # Initialize the amqp module globals, start the worker, etc.
+        r2.lib.amqp.initialize(self)
+
+        self.events = EventQueue()
 
         self.startup_timer.intermediate("revisions")
 
@@ -777,8 +958,13 @@ class Globals(object):
     def load_db_params(self):
         self.databases = tuple(ConfigValue.to_iter(self.config.raw_data['databases']))
         self.db_params = {}
+        self.predefined_type_ids = {}
         if not self.databases:
             return
+
+        if self.env == 'unit_test':
+            from mock import MagicMock
+            return MagicMock()
 
         dbm = db_manager.db_manager()
         db_param_names = ('name', 'db_host', 'db_user', 'db_pass', 'db_port',
@@ -821,7 +1007,6 @@ class Globals(object):
             return params, flags
 
         prefix = 'db_table_'
-        self.predefined_type_ids = {}
         for k, v in self.config.raw_data.iteritems():
             if not k.startswith(prefix):
                 continue
@@ -851,3 +1036,19 @@ class Globals(object):
         here.
         """
         pass
+
+    @property
+    def search(self):
+        if getattr(self, 'search_provider', None):
+            if type(self.search_provider) == str:
+                self.search_provider = select_provider(self.config,
+                                       self.pkg_resources_working_set,
+                                       "r2.provider.search",
+                                       self.search_provider,
+                                       )
+            return  self.search_provider
+        return None
+
+    @property
+    def search_syntaxes(self):
+        return SEARCH_SYNTAXES[self.config.get('search_provider')]

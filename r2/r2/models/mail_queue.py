@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -171,6 +171,7 @@ class EmailHandler(object):
             try:
                 o.insert().values({o.c.email: email,
                                    o.c.msg_hash: msg_hash}).execute()
+                g.stats.simple_event('share.opt_out')
 
                 #clear caches
                 has_opted_out(email, _update = True)
@@ -187,6 +188,7 @@ class EmailHandler(object):
             o = self.opt_table
             if self.has_opted_out(email):
                 sa.delete(o, o.c.email == email).execute()
+                g.stats.simple_event('share.opt_in')
 
                 #clear caches
                 has_opted_out(email, _update = True)
@@ -306,6 +308,11 @@ class Email(object):
                 "REFUNDED_PROMO",
                 "VOID_PAYMENT",
                 "GOLD_GIFT_CODE",
+                "SUSPICIOUS_PAYMENT",
+                "FRAUD_ALERT",
+                "USER_FRAUD",
+                "MESSAGE_NOTIFICATION",
+                "ADS_ALERT",
                 )
 
     # Do not remove anything from this dictionary!  See above comment.
@@ -331,6 +338,11 @@ class Email(object):
         Kind.REFUNDED_PROMO: _("[reddit] your campaign didn't get enough impressions"),
         Kind.VOID_PAYMENT: _("[reddit] your payment has been voided"),
         Kind.GOLD_GIFT_CODE: _("[reddit] your reddit gold gift code"),
+        Kind.SUSPICIOUS_PAYMENT: _("[selfserve] suspicious payment alert"),
+        Kind.FRAUD_ALERT: _("[selfserve] fraud alert"),
+        Kind.USER_FRAUD: _("[selfserve] a user has committed fraud"),
+        Kind.MESSAGE_NOTIFICATION: _("[reddit] message notification"),
+        Kind.ADS_ALERT: _("[reddit] Ads Alert"),
         }
 
     def __init__(self, user, thing, email, from_name, date, ip,
@@ -411,7 +423,10 @@ class Email(object):
             self.fr_addr.replace('>', ''),
         )
 
-        if not fr.startswith('-') and not self.to_addr.startswith('-'): # security
+        # Addresses that start with a dash could confuse poorly-written
+        # software's argument parsers, and thus are disallowed by default in
+        # Postfix: http://www.postfix.org/postconf.5.html#allow_min_user
+        if not fr.startswith('-') and not self.to_addr.startswith('-'):
             msg = MIMEText(utf8(self.body, reject_newlines=False))
             msg.set_charset('utf8')
             msg['To']      = utf8(self.to_addr)

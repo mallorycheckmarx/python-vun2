@@ -16,11 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from r2.lib.filters import conditional_websafe
    from r2.lib.promote import promo_edit_url
    from r2.lib import promote
    from r2.lib.pages.things import LinkButtons
@@ -30,6 +31,7 @@
 <%inherit file="link.html"/>
 <%namespace file="printablebuttons.html" import="ynbutton" />
 <%namespace file="utils.html" import="plain_link" />
+<%namespace file="promotelinkedit.html" import="campaign_list" />
 
 <%def name="tagline()">
 <%
@@ -37,7 +39,7 @@
      taglinetext = _("to be promoted by %(author)s") 
    else:
      taglinetext = _("promoted by %(author)s") 
-   taglinetext = taglinetext.replace(" ", "&#32;")
+   taglinetext = conditional_websafe(taglinetext).replace(" ", "&#32;")
    author = WrappedUser(thing.author, thing.attribs, thing,
                         force_show_flair=False).render()
  %>
@@ -53,7 +55,7 @@ ${unsafe(taglinetext % dict(author=author))}
 
 <%def name="domain()">
   %if not thing.is_self:
-    ${parent.domain()}
+    ${parent.domain(link=False)}
   %endif
 </%def>
 
@@ -66,7 +68,7 @@ ${unsafe(taglinetext % dict(author=author))}
       %elif promote.is_unpaid(thing):
         ${_('unpaid sponsored link')}
       %elif promote.is_unapproved(thing):
-        ${_('unapproved sponsored link')}
+        ${_('waiting approval')}
       %elif promote.is_rejected(thing):
         ${_('rejected sponsored link')}
       %elif promote.is_promoted(thing):
@@ -78,5 +80,11 @@ ${unsafe(taglinetext % dict(author=author))}
       ${_('sponsored link')}
     %endif
   </p>
+
+  %if getattr(thing, "show_campaign_summary", False):
+  <div class="campaign-detail">
+    ${campaign_list()}
+  </div>
+  %endif
 </%def>
 

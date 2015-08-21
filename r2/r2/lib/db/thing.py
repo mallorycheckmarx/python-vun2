@@ -16,23 +16,29 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import cPickle as pickle
 import hashlib
 import new
 import sys
+import itertools
 
 from copy import copy, deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pylons import g
 
-from r2.lib import hooks
+from r2.lib import amqp, hooks
 from r2.lib.cache import sgm
 from r2.lib.db import tdb_sql as tdb, sorts, operators
-from r2.lib.utils import Results, tup, to36
+from r2.lib.utils import class_property, Results, tup, to36
+
+
+THING_CACHE_TTL = int(timedelta(days=1).total_seconds())
+QUERY_CACHE_TTL = int(timedelta(days=1).total_seconds())
 
 
 class NotFound(Exception): pass
@@ -182,7 +188,7 @@ class DataThing(object):
 
     def _cache_myself(self):
         ck = self._cache_key()
-        self._cache.set(ck, self)
+        self._cache.set(ck, self, time=THING_CACHE_TTL)
 
     def _sync_latest(self):
         """Load myself from the cache to and re-apply the .dirties
@@ -298,7 +304,7 @@ class DataThing(object):
         prefix = thing_prefix(cls.__name__)
 
         #write the data to the cache
-        cls._cache.set_multi(to_save, prefix=prefix)
+        cls._cache.set_multi(to_save, prefix=prefix, time=THING_CACHE_TTL)
 
     def _load(self):
         self._load_multi(self)
@@ -345,9 +351,13 @@ class DataThing(object):
     def _id36(self):
         return to36(self._id)
 
+    @class_property
+    def _fullname_prefix(cls):
+        return cls._type_prefix + to36(cls._type_id)
+
     @classmethod
     def _fullname_from_id36(cls, id36):
-        return cls._type_prefix + to36(cls._type_id) + '_' + id36
+        return cls._fullname_prefix + '_' + id36
 
     @property
     def _fullname(self):
@@ -360,8 +370,13 @@ class DataThing(object):
         ids, single = tup(ids, True)
         prefix = thing_prefix(cls.__name__)
 
-        if not all(x <= tdb.MAX_THING_ID for x in ids):
-            raise NotFound('huge thing_id in %r' % ids)
+        for x in ids:
+            if not isinstance(x, (int, long)):
+                raise ValueError('non-integer thing_id in %r' % ids)
+            if x > tdb.MAX_THING_ID:
+                raise NotFound('huge thing_id in %r' % ids)
+            elif x < tdb.MIN_THING_ID:
+                raise NotFound('negative thing_id in %r' % ids)
 
         def count_found(ret, still_need):
             cls._cache.stats.cache_report(
@@ -378,8 +393,9 @@ class DataThing(object):
 
             return items
 
-        bases = sgm(cls._cache, ids, items_db, prefix, stale=stale,
-                    found_fn=count_found)
+        bases = sgm(cls._cache, ids, items_db, prefix, time=THING_CACHE_TTL,
+                    stale=stale, found_fn=count_found,
+                    stat_subname=cls.__name__)
 
         # Check to see if we found everything we asked for
         missing = []
@@ -517,7 +533,8 @@ class DataThing(object):
 class ThingMeta(type):
     def __init__(cls, name, bases, dct):
         if name == 'Thing' or hasattr(cls, '_nodb') and cls._nodb: return
-        #print "checking thing", name
+        if g.env == 'unit_test':
+            return
 
         #TODO exceptions
         cls._type_name = name.lower()
@@ -635,11 +652,23 @@ class Thing(DataThing):
 
         return Things(cls, *rules, **kw)
 
+    def update_search_index(self, boost_only=False):
+        msg = {'fullname': self._fullname}
+        if boost_only:
+            msg['boost_only'] = True
+
+        amqp.add_item('search_changes', pickle.dumps(msg),
+                      message_id=self._fullname,
+                      delivery_mode=amqp.DELIVERY_TRANSIENT)
+
 
 class RelationMeta(type):
     def __init__(cls, name, bases, dct):
         if name == 'RelationCls': return
         #print "checking relation", name
+
+        if g.env == 'unit_test':
+            return
 
         cls._type_name = name.lower()
         try:
@@ -673,13 +702,14 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
         _incr_data = staticmethod(tdb.incr_rel_data)
         _type_prefix = Relation._type_prefix
         _eagerly_loaded_data = False
+        _fast_cache = g.relcache
 
         # data means, do you load the reddit_data_rel_* fields (the data on the
         # rel itself). eager_load means, do you load thing1 and thing2
         # immediately. It calls _byID(xxx, data=thing_data).
         @classmethod
         def _byID_rel(cls, ids, data=False, return_dict=True, extra_props=None,
-                      eager_load=False, thing_data=False):
+                      eager_load=False, thing_data=False, thing_stale=False):
 
             ids, single = tup(ids, True)
 
@@ -691,7 +721,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             if values and eager_load:
                 for base in bases.values():
                     base._eagerly_loaded_data = True
-                load_things(values, thing_data)
+                load_things(values, load_data=thing_data, stale=thing_stale)
 
             if single:
                 return bases[ids[0]]
@@ -758,99 +788,126 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                      self._type2.__name__,self._thing2_id,
                      '[unsaved]' if not self._created else '\b'))
 
+        @staticmethod
+        def _fast_cache_key_from_parts(class_name, thing1_id, thing2_id, name):
+            return thing_prefix(class_name) + '_'.join([
+                str(thing1_id),
+                str(thing2_id),
+                name]
+            ).replace(' ', '_')
+
+        def _fast_cache_key(self):
+            return self._fast_cache_key_from_parts(
+                self.__class__.__name__,
+                self._thing1_id,
+                self._thing2_id,
+                self._name)
+
         def _commit(self):
             DataThing._commit(self)
             #if i denormalized i need to check here
             if denorm1: self._thing1._commit(denorm1[0])
             if denorm2: self._thing2._commit(denorm2[0])
             #set fast query cache
-            self._cache.set(thing_prefix(self.__class__.__name__)
-                      + str((self._thing1_id, self._thing2_id, self._name)),
-                      self._id)
+            self._fast_cache.set(self._fast_cache_key(), self._id)
 
         def _delete(self):
             tdb.del_rel(self._type_id, self._id)
-            
+
             #clear cache
-            prefix = thing_prefix(self.__class__.__name__)
-            #TODO - there should be just one cache key for a rel?
-            self._cache.delete(prefix + str(self._id))
+            self._cache.delete(self._cache_key())
             #update fast query cache
-            self._cache.set(prefix + str((self._thing1_id,
-                                    self._thing2_id,
-                                    self._name)), None)
+            self._fast_cache.set(self._fast_cache_key(), None)
             #temporarily set this property so the rest of this request
             #know it's deleted. save -> unsave, hide -> unhide
             self._name = 'un' + self._name
 
         @classmethod
         def _fast_query(cls, thing1s, thing2s, name, data=True, eager_load=True,
-                        thing_data=False):
+                        thing_data=False, thing_stale=False):
             """looks up all the relationships between thing1_ids and
                thing2_ids and caches them"""
-            prefix = thing_prefix(cls.__name__)
 
-            thing1_dict = dict((t._id, t) for t in tup(thing1s))
-            thing2_dict = dict((t._id, t) for t in tup(thing2s))
+            cache_key_lookup = dict()
 
-            thing1_ids = thing1_dict.keys()
-            thing2_ids = thing2_dict.keys()
-
-            name = tup(name)
-
-            # permute all of the pairs
-            pairs = set((x, y, n)
-                        for x in thing1_ids
-                        for y in thing2_ids
-                        for n in name)
-
-            def lookup_rel_ids(pairs):
+            # We didn't find these keys in the cache, look them up in the
+            # database
+            def lookup_rel_ids(uncached_keys):
                 rel_ids = {}
 
+                # Lookup thing ids and name from cache key
                 t1_ids = set()
                 t2_ids = set()
                 names = set()
-                for t1, t2, name in pairs:
-                    t1_ids.add(t1)
-                    t2_ids.add(t2)
+                for cache_key in uncached_keys:
+                    (thing1, thing2, name) = cache_key_lookup[cache_key]
+                    t1_ids.add(thing1._id)
+                    t2_ids.add(thing2._id)
                     names.add(name)
 
-                if t1_ids and t2_ids and names:
-                    q = cls._query(cls.c._thing1_id == t1_ids,
-                                   cls.c._thing2_id == t2_ids,
-                                   cls.c._name == names)
-                else:
-                    q = []
+                q = cls._query(
+                        cls.c._thing1_id == t1_ids,
+                        cls.c._thing2_id == t2_ids,
+                        cls.c._name == names)
 
                 for rel in q:
-                    rel_ids[(rel._thing1_id, rel._thing2_id, rel._name)] = rel._id
+                    rel_ids[cls._fast_cache_key_from_parts(
+                        cls.__name__,
+                        rel._thing1_id,
+                        rel._thing2_id,
+                        str(rel._name)
+                    )] = rel._id
 
-                for p in pairs:
-                    if p not in rel_ids:
-                        rel_ids[p] = None
+                for cache_key in uncached_keys:
+                    if cache_key not in rel_ids:
+                        rel_ids[cache_key] = None
 
                 return rel_ids
 
+            # make lookups for thing ids and names
+            thing1_dict = dict((t._id, t) for t in tup(thing1s))
+            thing2_dict = dict((t._id, t) for t in tup(thing2s))
+
+            names = map(str, tup(name))
+
+            # permute all of the pairs via cartesian product
+            rel_tuples = itertools.product(
+                thing1_dict.values(),
+                thing2_dict.values(),
+                names)
+
+            # create cache keys for all permutations and initialize lookup
+            for t in rel_tuples:
+                thing1, thing2, name = t
+                cache_key = cls._fast_cache_key_from_parts(
+                    cls.__name__,
+                    thing1._id,
+                    thing2._id,
+                    name)
+                cache_key_lookup[cache_key] = t
+
             # get the relation ids from the cache or query the db
-            res = sgm(cls._cache, pairs, lookup_rel_ids, prefix)
+            res = sgm(cls._fast_cache, cache_key_lookup.keys(), lookup_rel_ids)
 
             # get the relation objects
             rel_ids = {rel_id for rel_id in res.itervalues()
                               if rel_id is not None}
-            rels = cls._byID_rel(rel_ids, data=data, eager_load=eager_load,
-                                 thing_data=thing_data)
+            rels = cls._byID_rel(
+                rel_ids,
+                data=data,
+                eager_load=eager_load,
+                thing_data=thing_data,
+                thing_stale=thing_stale)
 
+            # Takes aggregated results from cache and db (res) and transforms
+            # the values from ids to Relations.
             res_obj = {}
-            for (thing1_id, thing2_id, name), rel_id in res.iteritems():
-                pair = (thing1_dict[thing1_id], thing2_dict[thing2_id], name)
+            for cache_key, rel_id in res.iteritems():
+                t = cache_key_lookup[cache_key]
                 rel = rels[rel_id] if rel_id is not None else None
-                res_obj[pair] = rel
+                res_obj[t] = rel
 
             return res_obj
-
-        @classmethod
-        def _gay(cls):
-            return cls._type1 == cls._type2
 
         @classmethod
         def _build(cls, id, bases):
@@ -865,16 +922,19 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
 Relation._type_prefix = 'r'
 
 class Query(object):
+    _cache = g.cache
+
     def __init__(self, kind, *rules, **kw):
         self._rules = []
         self._kind = kind
 
         self._read_cache = kw.get('read_cache')
         self._write_cache = kw.get('write_cache')
-        self._cache_time = kw.get('cache_time', 0)
+        self._cache_time = kw.get('cache_time', QUERY_CACHE_TTL)
         self._limit = kw.get('limit')
         self._offset = kw.get('offset')
         self._data = kw.get('data')
+        self._stale = kw.get('stale', False)
         self._sort = kw.get('sort', ())
         self._filter_primary_sort_only = kw.get('filter_primary_sort_only', False)
 
@@ -986,7 +1046,7 @@ class Query(object):
 
         names = lst = []
 
-        names = g.cache.get(self._iden()) if self._read_cache else None
+        names = self._cache.get(self._iden()) if self._read_cache else None
         if names is None and not self._write_cache:
             # it wasn't in the cache, and we're not going to
             # replace it, so just hit the db
@@ -998,18 +1058,21 @@ class Query(object):
             with g.make_lock("thing_query", "lock_%s" % self._iden()):
                 # see if it was set while we were waiting for our
                 # lock
-                names = g.cache.get(self._iden(), allow_local = False) \
-                                  if self._read_cache else None
+                if self._read_cache:
+                    names = self._cache.get(self._iden(), allow_local=False)
+                else:
+                    names = None
+
                 if names is None:
                     lst = _retrieve()
-                    g.cache.set(self._iden(),
-                              [ x._fullname for x in lst ],
-                              self._cache_time)
+                    _names = [x._fullname for x in lst]
+                    self._cache.set(self._iden(), _names, self._cache_time)
 
         if names and not lst:
             # we got our list of names from the cache, so we need to
             # turn them back into Things
-            lst = Thing._by_fullname(names, data = self._data, return_dict = False)
+            lst = Thing._by_fullname(names, data=self._data, return_dict=False,
+                                     stale=self._stale)
 
         for item in lst:
             yield item
@@ -1058,28 +1121,33 @@ class Things(Query):
             else:
                 _ids = rows
                 extra_props = {}
-            return self._kind._byID(_ids, self._data, False, extra_props)
+            return self._kind._byID(_ids, data=self._data, return_dict=False,
+                                    stale=self._stale, extra_props=extra_props)
 
         return Results(c, row_fn, True)
 
-def load_things(rels, load_data=False):
+def load_things(rels, load_data=False, stale=False):
     rels = tup(rels)
     kind = rels[0].__class__
 
     t1_ids = set()
-    t2_ids = t1_ids if kind._gay() else set()
+    if kind._type1 == kind._type2:
+        t2_ids = t1_ids
+    else:
+        t2_ids = set()
     for rel in rels:
         t1_ids.add(rel._thing1_id)
         t2_ids.add(rel._thing2_id)
-    kind._type1._byID(t1_ids, data=load_data)
-    if not kind._gay():
-        t2_items = kind._type2._byID(t2_ids, data=load_data)
+    kind._type1._byID(t1_ids, data=load_data, stale=stale)
+    if kind._type1 != kind._type2:
+        t2_items = kind._type2._byID(t2_ids, data=load_data, stale=stale)
 
 class Relations(Query):
     #params are thing1, thing2, name, date
     def __init__(self, kind, *rules, **kw):
         self._eager_load = kw.get('eager_load')
         self._thing_data = kw.get('thing_data')
+        self._thing_stale = kw.get('thing_stale')
         Query.__init__(self, kind, *rules, **kw)
 
     def _filter(self, *rules):
@@ -1098,7 +1166,8 @@ class Relations(Query):
         if rels and self._eager_load:
             for rel in rels:
                 rel._eagerly_loaded_data = True
-            load_things(rels, self._thing_data)
+            load_things(rels, load_data=self._thing_data,
+                        stale=self._thing_stale)
         return rels
 
     def _cursor(self):

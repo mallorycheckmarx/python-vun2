@@ -51,6 +51,18 @@ feature_some_flag = {"admin": true}
 # On for employees
 feature_some_flag = {"employee": true}
 
+# On for gold users
+feature_some_flag = {"gold": true}
+
+# On for users with the beta preference enabled
+feature_some_flag = {"beta": true}
+
+# On for logged in users
+feature_some_flag = {"loggedin": true}
+
+# On for logged out users
+feature_some_flag = {"loggedout": true}
+
 # On by URL, like ?feature=public_flag_name
 feature_some_flag = {"url": "public_flag_name"}
 
@@ -59,6 +71,15 @@ feature_some_flag = {"users": ["umbrae", "ajacksified"]}
 
 # On when viewing certain subreddits
 feature_some_flag = {"subreddits": ["wtf", "aww"]}
+
+# On by subdomain
+feature_some_flag = {"subdomains": ["beta"]}
+
+# On by OAuth client IDs
+feature_some_flag = {"oauth_clients: ["xyzABC123"]}
+
+# On for a percentage of loggedin users (0 being no users, 100 being all of them)
+feature_some_flag = {"percent_loggedin": 25}
 
 # For both admin and a group of users
 feature_some_flag = {"admin": true, "users": ["user1", "user2"]}
@@ -94,13 +115,13 @@ Copied essentially wholesale from Etsy's guidelines:
 To make it easier to push features through the life cycle there are a
 few coding guidelines to observe.
 
-First, the feature name argument to the Feature methods (`is_enabled`,
-`is_enabled_for`) should always be a string literal. This will make it easier
-to find all the places that a particular feature is checked. If you find
-yourself creating feature names at run time and then checking them, you’re
-probably abusing the Feature system. Chances are in such a case you don’t
-really want to be using the Feature API but rather simply driving your code
-with some plain old config data.
+First, the feature name argument to the Feature method (`is_enabled`) should
+always be a string literal. This will make it easier to find all the places
+that a particular feature is checked. If you find yourself creating feature
+names at run time and then checking them, you’re probably abusing the Feature
+system. Chances are in such a case you don’t really want to be using the
+Feature API but rather simply driving your code with some plain old config
+data.
 
 Second, the results of the Feature methods should not be cached, such
 as by calling `feature.is_enabled` once and storing the result in an

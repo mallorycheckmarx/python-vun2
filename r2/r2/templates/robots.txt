@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 # 80legs
@@ -33,8 +33,6 @@ User-Agent: *
 Disallow: /*.json
 Disallow: /*.json-compact
 Disallow: /*.json-html
-Disallow: /*.mobile
-Disallow: /*.compact
 Disallow: /*.xml
 Disallow: /*.rss
 Disallow: /*.i
@@ -55,5 +53,7 @@ Disallow: /login
 Disallow: /reddits/search
 Disallow: /search
 Disallow: /r/*/search
+Disallow: /over18
+Disallow: /quarantine
 Allow: /
 

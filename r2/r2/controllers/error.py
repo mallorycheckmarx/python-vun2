@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -35,9 +35,19 @@ try:
     # get caught and the stack trace won't be presented to the user in
     # production
     from r2.config import extensions
-    from r2.controllers.reddit_base import RedditController, Cookies
+    from r2.controllers.reddit_base import (
+        RedditController,
+        Cookies,
+        pagecache_policy,
+        PAGECACHE_POLICY,
+    )
     from r2.lib.errors import ErrorSet
-    from r2.lib.filters import websafe_json, websafe
+    from r2.lib.filters import (
+        safemarkdown,
+        scriptsafe_dumps,
+        websafe,
+        websafe_json,
+    )
     from r2.lib import log, pages
     from r2.lib.strings import rand_strings
     from r2.lib.template_helpers import static
@@ -105,6 +115,8 @@ class ErrorController(RedditController):
         try:
             c.error_page = True
             RedditController.__before__(self)
+            # clear cookies the old fashioned way
+            c.cookies = Cookies()
         except (HTTPMovedPermanently, HTTPFound):
             # ignore an attempt to redirect from an error page
             pass
@@ -156,7 +168,10 @@ class ErrorController(RedditController):
             template_name = '/ratelimit_throttled.html'
 
         template = g.mako_lookup.get_template(template_name)
-        return template.render(logo_url=static(g.default_header_url))
+        return template.render(
+            logo_url=static(g.default_header_url),
+            retry_after=retry_after,
+        )
 
     def send503(self):
         retry_after = request.environ.get("retry_after")
@@ -164,11 +179,31 @@ class ErrorController(RedditController):
             response.headers["Retry-After"] = str(retry_after)
         return request.environ['usable_error_content']
 
+    @pagecache_policy(PAGECACHE_POLICY.NEVER)
+    def GET_api_error(self):
+        try:
+            code = int(request.GET.get('code'))
+        except:
+            code = 400
+        exception = request.environ['r2.controller.exception']
+        if exception and exception.detail:
+            text = exception.detail
+        else:
+            text = request.GET.get('explanation', '?')
+        resp = {'error': code}
+        return self.api_wrapper(resp)
+
+    POST_api_error = GET_api_error
+    PUT_api_error = GET_api_error
+    PATCH_api_error = GET_api_error
+    DELETE_api_error = GET_api_error
+
+    # Misses are both incredibly common and cheap for this endpoint, don't force
+    # more useful things out of the pagecache.
+    @pagecache_policy(PAGECACHE_POLICY.NEVER)
     def GET_document(self):
         try:
             c.errors = c.errors or ErrorSet()
-            # clear cookies the old fashioned way 
-            c.cookies = Cookies()
 
             code =  request.GET.get('code', '')
             try:
@@ -185,6 +220,9 @@ class ErrorController(RedditController):
             if srname:
                 c.site = Subreddit._by_name(srname)
 
+            if request.GET.has_key('allow_framing'):
+                c.allow_framing = bool(request.GET['allow_framing'] == '1')
+
             if code in (204, 304):
                 # NEVER return a content body on 204/304 or downstream
                 # caches may become very confused.
@@ -197,6 +235,8 @@ class ErrorController(RedditController):
                 return str(code)
             elif c.render_style in extensions.API_TYPES:
                 data = request.environ.get('extra_error_data', {'error': code})
+                if request.environ.get("WANT_RAW_JSON"):
+                    return scriptsafe_dumps(data)
                 return websafe_json(json.dumps(data))
             elif takedown and code == 404:
                 link = Link._by_fullname(takedown)
@@ -208,7 +248,8 @@ class ErrorController(RedditController):
             elif code == 500:
                 randmin = {'admin': random.choice(self.admins)}
                 failien_url = make_failien_url()
-                return redditbroke % (failien_url, rand_strings.sadmessages % randmin)
+                sad_message = safemarkdown(rand_strings.sadmessages % randmin)
+                return redditbroke % (failien_url, sad_message)
             elif code == 503:
                 return self.send503()
             elif c.site:

@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -76,7 +76,7 @@ class Source(object):
         """Return the full JavaScript source code."""
         raise NotImplementedError
 
-    def use(self):
+    def use(self, **kwargs):
         """Return HTML to insert the JavaScript source inside a template."""
         raise NotImplementedError
 
@@ -117,12 +117,16 @@ class FileSource(Source):
 
         return os.path.join(STATIC_ROOT, "static", "js", self.name)
 
-    def use(self):
+    def url(self, absolute=False, mangle_name=False):
         from r2.lib.template_helpers import static
         path = [g.static_path, self.name]
         if g.uncompressedJS:
             path.insert(1, "js")
-        return script_tag.format(src=static(os.path.join(*path)))
+
+        return static(os.path.join(*path), absolute, mangle_name)
+
+    def use(self, **kwargs):
+        return script_tag.format(src=self.url(**kwargs))
 
     @property
     def dependencies(self):
@@ -169,12 +173,18 @@ class Module(Source):
                 out.write(source)
         print >> sys.stderr, " done."
 
-    def use(self):
+    def url(self, absolute=False, mangle_name=True):
         from r2.lib.template_helpers import static
         if g.uncompressedJS:
-            return "".join(source.use() for source in self.sources)
+            return [source.url(absolute=absolute, mangle_name=mangle_name) for source in self.sources]
         else:
-            return script_tag.format(src=static(self.name))
+            return static(self.name, absolute=absolute, mangle_name=mangle_name)
+
+    def use(self, **kwargs):
+        if g.uncompressedJS:
+            return "".join(source.use(**kwargs) for source in self.sources)
+        else:
+            return script_tag.format(src=self.url(**kwargs))
 
     @property
     def dependencies(self):
@@ -267,7 +277,7 @@ class TemplateFileSource(DataSource, FileSource):
             return [{
                 "name": name,
                 "style": style.lstrip('.'),
-                "template": f.read()
+                "template": f.read(),
             }]
 
 
@@ -332,6 +342,10 @@ class LocalizedModule(Module):
         self.localized_appendices = kwargs.pop("localized_appendices", [])
         Module.__init__(self, *args, **kwargs)
 
+        for source in self.sources:
+            if isinstance(source, LocalizedModule):
+                self.localized_appendices.extend(source.localized_appendices)
+
     @staticmethod
     def languagize_path(path, lang):
         path_name, path_ext = os.path.splitext(path)
@@ -363,7 +377,7 @@ class LocalizedModule(Module):
                 for appendix in localized_appendices:
                     out.write(appendix.get_localized_source(lang) + ";")
 
-    def use(self):
+    def use(self, **kwargs):
         from pylons.i18n import get_lang
         from r2.lib.template_helpers import static
         from r2.lib.filters import SC_OFF, SC_ON
@@ -372,12 +386,12 @@ class LocalizedModule(Module):
             if c.lang == "en" or c.lang not in g.all_languages:
                 # in this case, the msgids *are* the translated strings and we
                 # can save ourselves the pricey step of lexing the js source
-                return Module.use(self)
+                return Module.use(self, **kwargs)
 
             msgids = extract_javascript_msgids(Module.get_source(self))
             localized_appendices = self.localized_appendices + [StringsSource(msgids)]
 
-            lines = [Module.use(self)]
+            lines = [Module.use(self, **kwargs)]
             for appendix in localized_appendices:
                 line = SC_OFF + inline_script_tag.format(
                     content=appendix.get_localized_source(c.lang)) + SC_ON
@@ -386,54 +400,51 @@ class LocalizedModule(Module):
         else:
             langs = get_lang() or [g.lang]
             url = LocalizedModule.languagize_path(self.name, langs[0])
-            return script_tag.format(src=static(url))
+            return script_tag.format(src=static(url), **kwargs)
 
     @property
     def outputs(self):
         for lang, unused in iter_langs():
             yield LocalizedModule.languagize_path(self.path, lang)
 
-
-class JQuery(Module):
-    versions = {
-        1: "1.11.1",
-        2: "2.1.1",
-    }
-
-    def __init__(self, cdn_url="http://ajax.googleapis.com/ajax/libs/jquery/{version}/jquery", major_version=1):
-        self.jquery_src = FileSource("lib/jquery-{0}.min.js".format(self.versions[major_version]))
-        Module.__init__(self, "jquery-{0}.min.js".format(self.versions[major_version]), self.jquery_src, should_compile=False)
-        self.cdn_src = cdn_url.format(version=self.versions[major_version])
-
-    def use(self):
-        from r2.lib.template_helpers import static
-        if c.secure or (c.user and c.user.pref_local_js):
-            return Module.use(self)
-        else:
-            ext = ".js" if g.uncompressedJS else ".min.js"
-            return script_tag.format(src=self.cdn_src+ext)
-
-
 module = {}
-
-
-module["jquery1x"] = JQuery(major_version=1)
-module["jquery2x"] = JQuery(major_version=2)
-
-
-module["html5shiv"] = Module("html5shiv.js",
-    "lib/html5shiv.js",
-    should_compile=False
-)
 
 catch_errors = "try {{ {content} }} catch (err) {{ r.sendError('Error running module', '{name}', ':', err) }}"
 
-module["reddit-init"] = LocalizedModule("reddit-init.js",
+module["reddit-embed-base"] = Module("reddit-embed-base.js",
     "lib/es5-shim.js",
     "lib/json2.js",
-    "lib/underscore-1.4.4.js",
+    "embed/custom-event.js",
+    "embed/utils.js",
+    "embed/post-message.js",
+    "embed/pixel-tracking.js",
+)
+
+
+module["reddit-embed"] = Module("reddit-embed.js",
+    module["reddit-embed-base"],
+    "embed/embed.js",
+)
+
+
+module["comment-embed"] = Module("comment-embed.js",
+    module["reddit-embed-base"],
+    "embed/comment-embed.js",
+)
+
+
+module["reddit-init-base"] = LocalizedModule("reddit-init-base.js",
+    "lib/modernizr.js",
+    "lib/json2.js",
+    "lib/underscore-1.4.4-1.js",
     "lib/store.js",
     "lib/jed.js",
+    "lib/bootstrap.modal.js",
+    "lib/bootstrap.transition.js",
+    "lib/bootstrap.tooltip.js",
+    "lib/reddit-client-lib.js",
+    "lib/jquery.cookie.js",
+    "bootstrap.tooltip.extension.js",
     "base.js",
     "preload.js",
     "logging.js",
@@ -444,6 +455,10 @@ module["reddit-init"] = LocalizedModule("reddit-init.js",
     "utils.js",
     "analytics.js",
     "jquery.reddit.js",
+    "stateify.js",
+    "validator.js",
+    "strength-meter.js",
+    "toggles.js",
     "reddit.js",
     "spotlight.js",
     localized_appendices=[
@@ -452,16 +467,36 @@ module["reddit-init"] = LocalizedModule("reddit-init.js",
     wrap=catch_errors,
 )
 
+module["reddit-init-legacy"] = LocalizedModule("reddit-init-legacy.js",
+    "lib/html5shiv.js",
+    "lib/jquery-1.11.1.js",
+    "lib/es5-shim.js",
+    "lib/es5-sham.js",
+    module["reddit-init-base"],
+)
+
+module["reddit-init"] = LocalizedModule("reddit-init.js",
+    "lib/jquery-2.1.1.js",
+    "lib/es5-shim.js",
+    module["reddit-init-base"],
+)
+
 module["reddit"] = LocalizedModule("reddit.js",
-    "lib/jquery.cookie.js",
     "lib/jquery.url.js",
     "lib/backbone-1.0.0.js",
+    "embed/custom-event.js",
+    "embed/utils.js",
+    "embed/post-message.js",
+    "embed/pixel-tracking.js",
+    "embed/comment-embed.js",
     "timings.js",
     "templates.js",
     "scrollupdater.js",
     "timetext.js",
     "ui.js",
+    "popup.js",
     "login.js",
+    "newsletter.js",
     "flair.js",
     "interestbar.js",
     "visited.js",
@@ -471,7 +506,10 @@ module["reddit"] = LocalizedModule("reddit.js",
     "multi.js",
     "filter.js",
     "recommender.js",
-    "report.js",
+    "action-forms.js",
+    "embed.js",
+    "post-sharing.js",
+    "expando.js",
     "saved.js",
     "messages.js",
     PermissionsDataSource({
@@ -495,21 +533,15 @@ module["mobile"] = LocalizedModule("mobile.js",
 )
 
 
-module["button"] = Module("button.js",
-    "lib/jquery.cookie.js",
-    "jquery.reddit.js",
-    "blogbutton.js"
-)
-
-
 module["policies"] = Module("policies.js",
     "policies.js",
 )
 
 
-module["sponsored"] = Module("sponsored.js",
+module["sponsored"] = LocalizedModule("sponsored.js",
     "lib/ui.core.js",
     "lib/ui.datepicker.js",
+    "lib/react-with-addons-0.11.2.js",
     "sponsored.js"
 )
 
@@ -548,8 +580,25 @@ module["less"] = Module('less.js',
     should_compile=False,
 )
 
-def use(*names):
-    return "\n".join(module[name].use() for name in names)
+def src(*names, **kwargs):
+    sources = []
+
+    for name in names:
+        urls = module[name].url(**kwargs)
+
+        if isinstance(urls, str) or isinstance(urls, unicode):
+            sources.append(urls)
+        else:
+            for url in list(urls):
+                if isinstance(url, list):
+                    sources.extend(url)
+                else:
+                    sources.append(url)
+
+    return sources
+
+def use(*names, **kwargs):
+    return "\n".join(module[name].use(**kwargs) for name in names)
 
 
 def load_plugin_modules(plugins=None):

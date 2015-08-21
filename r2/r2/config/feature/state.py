@@ -16,11 +16,12 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 import json
+import hashlib
 
 from pylons import g
 
@@ -75,7 +76,8 @@ class FeatureState(object):
 
         return config
 
-    def is_enabled(self, user=None, subreddit=None):
+    def is_enabled(self, user=None, subreddit=None, subdomain=None,
+                   oauth_client=None):
         cfg = self.config
         world = self.world
 
@@ -95,6 +97,19 @@ class FeatureState(object):
         if cfg.get('employee') and world.is_employee(user):
             return True
 
+        if cfg.get('beta') and world.user_has_beta_enabled(user):
+            return True
+
+        if cfg.get('gold') and world.has_gold(user):
+            return True
+
+        loggedin = world.is_user_loggedin()
+        if cfg.get('loggedin') and loggedin:
+            return True
+
+        if cfg.get('loggedout') and not loggedin:
+            return True
+
         users = [u.lower() for u in cfg.get('users', [])]
         if users and user and user.name.lower() in users:
             return True
@@ -102,6 +117,24 @@ class FeatureState(object):
         subreddits = [s.lower() for s in cfg.get('subreddits', [])]
         if subreddits and subreddit and subreddit.lower() in subreddits:
             return True
+
+        subdomains = [s.lower() for s in cfg.get('subdomains', [])]
+        if subdomains and subdomain and subdomain.lower() in subdomains:
+            return True
+
+        clients = set(cfg.get('oauth_clients', []))
+        if clients and oauth_client and oauth_client in clients:
+            return True
+
+        percent_loggedin = cfg.get('percent_loggedin', 0)
+        if percent_loggedin and user:
+            # Mix the feature name in with the user id so the same users
+            # don't get selected for ramp-ups for every feature
+            hashed = hashlib.sha1(self.name + user._fullname)
+            int_digest = long(hashed.hexdigest(), 16)
+
+            if int_digest % 100 < percent_loggedin:
+                return True
 
         # Unknown value, default to off.
         return False

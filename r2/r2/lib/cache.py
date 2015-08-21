@@ -16,28 +16,37 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import sys
 from threading import local
 from hashlib import md5
 import cPickle as pickle
 from copy import copy
+from curses.ascii import isgraph
+import logging
+from time import sleep
+
+from pylons import g
 
 import pylibmc
 from _pylibmc import MemcachedError
 
+import random
+
 from pycassa import ColumnFamily
 from pycassa.cassandra.ttypes import ConsistencyLevel
-from pycassa.cassandra.ttypes import NotFoundException as CassandraNotFound
 
-from r2.lib.utils import in_chunks, prefix_keys, trace
+from r2.lib.utils import in_chunks, prefix_keys, trace, tup
 from r2.lib.hardcachebackend import HardCacheBackend
 
 from r2.lib.sgm import sgm # get this into our namespace so that it's
                            # importable from us
 
+import random
+                           
 # This is for use in the health controller
 _CACHE_SERVERS = set()
 
@@ -62,24 +71,87 @@ class CacheUtils(object):
     def get_multi(self, keys, prefix='', **kw):
         return prefix_keys(keys, prefix, lambda k: self.simple_get_multi(k, **kw))
 
+
+class MemcachedMaximumRetryException(Exception): pass
+
+class MemcachedValueSizeException(Exception):
+    def __init__(self, cache_name, caller, prefix, key, size):
+        self.key = key
+        self.size = size
+        self.cache_name = cache_name
+        self.caller = caller
+        self.prefix = prefix
+
+    def __str__(self):
+        return ("Memcached %s %s: The object for key '%s%s' is too big for memcached at %s bytes" %
+            (self.cache_name, self.caller, self.prefix, self.key, self.size))
+
+
+# validation functions to be used by memcached pools
+MEMCACHED_MAX_VALUE_SIZE = 2048 * 1024 # 2MB
+
+def validate_size_warn(**kwargs):
+    if 'value' in kwargs:
+        size = sys.getsizeof(kwargs["value"])
+        if size >= MEMCACHED_MAX_VALUE_SIZE:
+            key = ".".join((
+                "memcached_large_object",
+                kwargs.get("cache_name", "undefined")
+            ))
+            g.stats.simple_event(key)
+            g.log.debug(
+                "Memcached %s: Attempted to cache an object > 1MB at key: '%s%s' of size %s bytes",
+                kwargs.get("caller", "unknown"),
+                kwargs.get("prefix", ""),
+                kwargs.get("key", "undefined"),
+                size
+            )
+            return False
+
+    return True
+
+def validate_size_error(**kwargs):
+    if 'value' in kwargs:
+        size = sys.getsizeof(kwargs["value"])
+        if size >= MEMCACHED_MAX_VALUE_SIZE:
+            raise MemcachedValueSizeException(
+                kwargs.get("cache_name", "unknown"),
+                kwargs.get("caller", "unknown"),
+                kwargs.get("prefix", ""),
+                kwargs.get("key", "undefined"),
+                size
+            )
+
+    return True
+
 class CMemcache(CacheUtils):
     def __init__(self,
+                 name,
                  servers,
-                 debug = False,
-                 noreply = False,
-                 no_block = False,
+                 debug=False,
+                 noreply=False,
+                 no_block=False,
                  min_compress_len=512 * 1024,
-                 num_clients = 10):
+                 num_clients=10,
+                 timeout_retry=5,
+                 binary=False,
+                 validators=None):
+        self.name = name
         self.servers = servers
         self.clients = pylibmc.ClientPool(n_slots = num_clients)
+        self.timeout_retry = timeout_retry
+        self.validators = validators or []
+
         for x in xrange(num_clients):
-            client = pylibmc.Client(servers, binary=True)
+            client = pylibmc.Client(servers, binary=binary)
             behaviors = {
                 'no_block': no_block, # use async I/O
                 'tcp_nodelay': True, # no nagle
                 '_noreply': int(noreply),
                 'ketama': True, # consistent hashing
-                }
+            }
+            if not binary:
+                behaviors['verify_keys'] = True
 
             client.behaviors.update(behaviors)
             self.clients.put(client)
@@ -88,16 +160,61 @@ class CMemcache(CacheUtils):
 
         _CACHE_SERVERS.update(servers)
 
+
+    def retry(self, times, fn):
+        ex = None
+        for i in xrange(times):
+            try:
+                val = fn()
+                if i != 0:
+                    event_name = "cache.retry.%s" % fn.__name__
+                    name = "success_on_retry_%s" % i
+                    g.stats.event_count(event_name, name)
+                return val
+            except (pylibmc.NotFound,
+                    pylibmc.BadKeyProvided,
+                    pylibmc.UnknownStatKey,
+                    pylibmc.InvalidHostProtocolError,
+                    pylibmc.NotSupportedError):
+                raise
+            except MemcachedError as e:
+                ex = e
+            sleep(random.uniform(0, 0.1))
+
+        event_name = "cache.retry.%s" % fn.__name__
+        g.stats.event_count(event_name, "fail")
+        raise MemcachedMaximumRetryException(ex)
+
+    def validate(self, **kwargs):
+        kwargs['caller'] = sys._getframe().f_back.f_code.co_name
+        kwargs['cache_name'] = self.name
+        if not all(validator(**kwargs) for validator in self.validators):
+            return False
+
+        return True
+
     def get(self, key, default = None):
-        with self.clients.reserve() as mc:
-            ret =  mc.get(key)
-            if ret is None:
-                return default
-            return ret
+        if not self.validate(key=key):
+            return default
+
+        def do_get():
+            with self.clients.reserve() as mc:
+                ret = mc.get(str(key))
+                if ret is None:
+                    return default
+                return ret
+
+        return self.retry(self.timeout_retry, do_get)
 
     def get_multi(self, keys, prefix = ''):
-        with self.clients.reserve() as mc:
-            return mc.get_multi(keys, key_prefix = prefix)
+        validated_keys = [k for k in (str(k) for k in keys)
+                          if self.validate(prefix=prefix, key=k)]
+
+        def do_get_multi():
+            with self.clients.reserve() as mc:
+                return mc.get_multi(validated_keys, key_prefix = prefix)
+
+        return self.retry(self.timeout_retry, do_get_multi)
 
     # simple_get_multi exists so that a cache chain can
     # single-instance the handling of prefixes for performance, but
@@ -108,56 +225,91 @@ class CMemcache(CacheUtils):
     simple_get_multi = get_multi
 
     def set(self, key, val, time = 0):
-        with self.clients.reserve() as mc:
-            return mc.set(key, val, time = time,
-                          min_compress_len = self.min_compress_len)
+        if not self.validate(key=key, value=val):
+            return None
 
-    def set_multi(self, keys, prefix='', time=0):
-        new_keys = {}
-        for k,v in keys.iteritems():
-            new_keys[str(k)] = v
-        with self.clients.reserve() as mc:
-            return mc.set_multi(new_keys, key_prefix = prefix,
-                                time = time,
+        def do_set():
+            with self.clients.reserve() as mc:
+                return mc.set(str(key), val, time=time,
                                 min_compress_len = self.min_compress_len)
 
+        return self.retry(self.timeout_retry, do_set)
+
+    def set_multi(self, keys, prefix='', time=0):
+        str_keys = ((str(k), v) for k, v in keys.iteritems())
+        validated_keys = {k: v for k, v in str_keys
+                          if self.validate(prefix=prefix, key=k, value=v)}
+
+        def do_set_multi():
+            with self.clients.reserve() as mc:
+                return mc.set_multi(validated_keys, key_prefix = prefix,
+                                    time = time,
+                                    min_compress_len = self.min_compress_len)
+
+        return self.retry(self.timeout_retry, do_set_multi)
+
     def add_multi(self, keys, prefix='', time=0):
-        new_keys = {}
-        for k,v in keys.iteritems():
-            new_keys[str(k)] = v
+        str_keys = ((str(k), v) for k, v in keys.iteritems())
+        validated_keys = {k: v for k, v in str_keys
+                          if self.validate(prefix=prefix, key=k, value=v)}
+
         with self.clients.reserve() as mc:
-            return mc.add_multi(new_keys, key_prefix = prefix,
+            return mc.add_multi(validated_keys, key_prefix = prefix,
                                 time = time)
 
     def incr_multi(self, keys, prefix='', delta=1):
+        validated_keys = [k for k in (str(k) for k in keys)
+                          if self.validate(prefix=prefix, key=k)]
+
         with self.clients.reserve() as mc:
-            return mc.incr_multi(map(str, keys),
+            return mc.incr_multi(validated_keys,
                                  key_prefix = prefix,
                                  delta=delta)
 
     def append(self, key, val, time=0):
+        if not self.validate(key=key, value=val):
+            return None
+
         with self.clients.reserve() as mc:
-            return mc.append(key, val, time=time)
+            return mc.append(str(key), val, time=time)
 
     def incr(self, key, delta=1, time=0):
+        if not self.validate(key=key):
+            return None
+
         # ignore the time on these
         with self.clients.reserve() as mc:
-            return mc.incr(key, delta)
+            return mc.incr(str(key), delta)
 
     def add(self, key, val, time=0):
+        if not self.validate(key=key, value=val):
+            return None
+
         try:
             with self.clients.reserve() as mc:
-                return mc.add(key, val, time=time)
+                return mc.add(str(key), val, time=time)
         except pylibmc.DataExists:
             return None
 
     def delete(self, key, time=0):
-        with self.clients.reserve() as mc:
-            return mc.delete(key)
+        if not self.validate(key=key):
+            return None
+
+        def do_delete():
+            with self.clients.reserve() as mc:
+                return mc.delete(str(key))
+
+        return self.retry(self.timeout_retry, do_delete)
 
     def delete_multi(self, keys, prefix=''):
-        with self.clients.reserve() as mc:
-            return mc.delete_multi(keys, key_prefix=prefix)
+        validated_keys = [k for k in (str(k) for k in keys)
+                          if self.validate(prefix=prefix, key=k)]
+
+        def do_delete_multi():
+            with self.clients.reserve() as mc:
+                return mc.delete_multi(validated_keys, key_prefix=prefix)
+
+        return self.retry(self.timeout_retry, do_delete_multi)
 
     def __repr__(self):
         return '<%s(%r)>' % (self.__class__.__name__,
@@ -306,7 +458,9 @@ class TransitionalCache(CacheUtils):
 
     `original_cache` is the cache chain previously in use (this'll frequently
     be `g.cache` since it's the catch-all for most things) and
-    `replacement_cache` is the new place for the keys using this chain to live.
+    `replacement_cache` is the new place for the keys using this chain to
+    live.  `key_transform` is an optional function to translate the key names
+    into different names on the `replacement_cache`.
 
     To use this cache chain, do three separate deployments as follows:
 
@@ -323,10 +477,13 @@ class TransitionalCache(CacheUtils):
 
     """
 
-    def __init__(self, original_cache, replacement_cache, read_original):
+    def __init__(
+            self, original_cache, replacement_cache, read_original,
+            key_transform=None):
         self.original = original_cache
         self.replacement = replacement_cache
         self.read_original = read_original
+        self.key_transform = key_transform
 
     @property
     def stats(self):
@@ -335,11 +492,41 @@ class TransitionalCache(CacheUtils):
         else:
             return self.replacement.stats
 
+    @property
+    def read_chain(self):
+        if self.read_original:
+            return self.original
+        else:
+            return self.replacement
+
+    @property
+    def caches(self):
+        if self.read_original:
+            return self.original.caches
+        else:
+            return self.replacement.caches
+
+    def transform_memcache_key(self, args):
+        if self.key_transform:
+            old_key = args[0]
+            if isinstance(old_key, dict):  # multiget passes a dict
+                new_key = {self.key_transform(k): v for k,v in
+                           old_key.iteritems()}
+            elif isinstance(old_key, list):
+                new_key = [self.key_transform(k) for k in old_key]
+            else:
+                new_key = self.key_transform(old_key)
+
+            return (new_key,) + args[1:]
+        else:
+            return args
+
     def make_get_fn(fn_name):
         def transitional_cache_get_fn(self, *args, **kwargs):
             if self.read_original:
                 return getattr(self.original, fn_name)(*args, **kwargs)
             else:
+                args = self.transform_memcache_key(args)
                 return getattr(self.replacement, fn_name)(*args, **kwargs)
         return transitional_cache_get_fn
 
@@ -349,8 +536,13 @@ class TransitionalCache(CacheUtils):
 
     def make_set_fn(fn_name):
         def transitional_cache_set_fn(self, *args, **kwargs):
-            getattr(self.original, fn_name)(*args, **kwargs)
-            getattr(self.replacement, fn_name)(*args, **kwargs)
+            ret_original = getattr(self.original, fn_name)(*args, **kwargs)
+            args = self.transform_memcache_key(args)
+            ret_replacement = getattr(self.replacement, fn_name)(*args, **kwargs)
+            if self.read_original:
+                return ret_original
+            else:
+                return ret_replacement
         return transitional_cache_set_fn
 
     add = make_set_fn("add")
@@ -367,16 +559,48 @@ class TransitionalCache(CacheUtils):
     delete = make_set_fn("delete")
     delete_multi = make_set_fn("delete_multi")
     flush_all = make_set_fn("flush_all")
-    reset = make_set_fn("reset")
+
+
+def cache_timer_decorator(fn_name):
+    """Use to decorate CacheChain operations so timings will be recorded."""
+    def wrap(fn):
+        def timed_fn(self, *a, **kw):
+            use_timer = kw.pop("use_timer", True)
+
+            try:
+                getattr(g, "log")
+            except TypeError:
+                # don't have access to g, maybe in a thread?
+                return fn(self, *a, **kw)
+
+            if use_timer and self.stats:
+                publish = random.random() < g.stats.CACHE_SAMPLE_RATE
+                cache_name = self.stats.cache_name
+                timer_name = "cache.%s.%s" % (cache_name, fn_name)
+                timer = g.stats.get_timer(timer_name, publish)
+                timer.start()
+            else:
+                timer = None
+
+            result = fn(self, *a, **kw)
+            if timer:
+                timer.stop()
+
+            return result
+        return timed_fn
+    return wrap
 
 
 class CacheChain(CacheUtils, local):
-    def __init__(self, caches, cache_negative_results=False):
+    def __init__(self, caches, cache_negative_results=False,
+                 check_keys=True):
         self.caches = caches
         self.cache_negative_results = cache_negative_results
         self.stats = None
+        self.check_keys = check_keys
 
     def make_set_fn(fn_name):
+        @cache_timer_decorator(fn_name)
         def fn(self, *a, **kw):
             ret = None
             for c in self.caches:
@@ -405,11 +629,14 @@ class CacheChain(CacheUtils, local):
     flush_all = make_set_fn('flush_all')
     cache_negative_results = False
 
+    @cache_timer_decorator("get")
     def get(self, key, default = None, allow_local = True, stale=None):
         stat_outcome = False  # assume a miss until a result is found
+        is_localcache = False
         try:
             for c in self.caches:
-                if not allow_local and isinstance(c,LocalCache):
+                is_localcache = isinstance(c, LocalCache)
+                if not allow_local and is_localcache:
                     continue
 
                 val = c.get(key)
@@ -437,7 +664,8 @@ class CacheChain(CacheUtils, local):
         finally:
             if self.stats:
                 if stat_outcome:
-                    self.stats.cache_hit()
+                    if not is_localcache:
+                        self.stats.cache_hit()
                 else:
                     self.stats.cache_miss()
 
@@ -445,13 +673,17 @@ class CacheChain(CacheUtils, local):
         l = lambda ks: self.simple_get_multi(ks, allow_local = allow_local, **kw)
         return prefix_keys(keys, prefix, l)
 
-    def simple_get_multi(self, keys, allow_local = True, stale=None):
+    @cache_timer_decorator("get_multi")
+    def simple_get_multi(self, keys, allow_local = True, stale=None,
+                         stat_subname=None):
         out = {}
         need = set(keys)
         hits = 0
+        local_hits = 0
         misses = 0
         for c in self.caches:
-            if not allow_local and isinstance(c, LocalCache):
+            is_localcache = isinstance(c, LocalCache)
+            if not allow_local and is_localcache:
                 continue
 
             if c.permanent and not misses:
@@ -462,11 +694,15 @@ class CacheChain(CacheUtils, local):
             if len(out) == len(keys):
                 # we've found them all
                 break
+
             r = c.simple_get_multi(need)
             #update other caches
             if r:
-                if not c.permanent:
+                if is_localcache:
+                    local_hits += len(r)
+                elif not c.permanent:
                     hits += len(r)
+
                 for d in self.caches:
                     if c is d:
                         break # so we don't set caches later in the chain
@@ -489,8 +725,8 @@ class CacheChain(CacheUtils, local):
                 # If this chain contains no permanent caches, then we need to
                 # count the misses here.
                 misses = len(need)
-            self.stats.cache_hit(hits)
-            self.stats.cache_miss(misses)
+            self.stats.cache_hit(hits, subname=stat_subname)
+            self.stats.cache_miss(misses, subname=stat_subname)
 
         return out
 
@@ -551,46 +787,63 @@ class StaleCacheChain(CacheChain):
        cache. Probably doesn't play well with NoneResult cacheing"""
     staleness = 30
 
-    def __init__(self, localcache, stalecache, realcache):
+    def __init__(self, localcache, stalecache, realcache, check_keys=True):
         self.localcache = localcache
         self.stalecache = stalecache
         self.realcache = realcache
         self.caches = (localcache, realcache) # for the other
                                               # CacheChain machinery
         self.stats = None
+        self.check_keys = check_keys
 
+    @cache_timer_decorator("get")
     def get(self, key, default=None, stale = False, **kw):
-        if kw.get('allow_local', True) and key in self.caches[0]:
-            return self.caches[0][key]
+        if kw.get('allow_local', True) and key in self.localcache:
+            return self.localcache[key]
 
         if stale:
             stale_value = self._getstale([key]).get(key, None)
             if stale_value is not None:
+                if self.stats:
+                    self.stats.cache_hit()
+                    self.stats.stale_hit()
                 return stale_value # never return stale data into the
                                    # LocalCache, or people that didn't
                                    # say they'll take stale data may
                                    # get it
+            else:
+                self.stats.stale_miss()
 
-        value = CacheChain.get(self, key, **kw)
+        value = self.realcache.get(key)
         if value is None:
+            if self.stats:
+                self.stats.cache_miss()
             return default
 
-        if value is not None and stale:
+        if stale:
             self.stalecache.set(key, value, time=self.staleness)
+
+        self.localcache.set(key, value)
+
+        if self.stats:
+            self.stats.cache_hit()
 
         return value
 
-    def simple_get_multi(self, keys, stale = False, **kw):
+    @cache_timer_decorator("get_multi")
+    def simple_get_multi(self, keys, stale=False, stat_subname=None, **kw):
         if not isinstance(keys, set):
             keys = set(keys)
 
         ret = {}
+        local_hits = 0
 
         if kw.get('allow_local'):
             for k in list(keys):
                 if k in self.localcache:
                     ret[k] = self.localcache[k]
                     keys.remove(k)
+                    local_hits += 1
 
         if keys and stale:
             stale_values = self._getstale(keys)
@@ -599,12 +852,24 @@ class StaleCacheChain(CacheChain):
                 ret[k] = v
                 keys.remove(k)
 
+            stale_hits = len(stale_values)
+            stale_misses = len(keys)
+            if self.stats:
+                self.stats.stale_hit(stale_hits, subname=stat_subname)
+                self.stats.stale_miss(stale_misses, subname=stat_subname)
+
         if keys:
             values = self.realcache.simple_get_multi(keys)
             if values and stale:
                 self.stalecache.set_multi(values, time=self.staleness)
             self.localcache.update(values)
             ret.update(values)
+
+        if self.stats:
+            misses = len(keys - set(ret.keys()))
+            hits = len(ret) - local_hits
+            self.stats.cache_hit(hits, subname=stat_subname)
+            self.stats.cache_miss(misses, subname=stat_subname)
 
         return ret
 
@@ -627,52 +892,110 @@ class StaleCacheChain(CacheChain):
 
 CL_ONE = ConsistencyLevel.ONE
 CL_QUORUM = ConsistencyLevel.QUORUM
-CL_ALL = ConsistencyLevel.ALL
 
-class CassandraCacheChain(CacheChain):
-    def __init__(self, localcache, cassa, lock_factory, memcache=None, **kw):
-        if memcache:
-            caches = (localcache, memcache, cassa)
-        else:
-            caches = (localcache, cassa)
 
-        self.cassa = cassa
-        self.memcache = memcache
+class Permacache(object):
+    """Cassandra key/value column family backend with a cachechain in front.
+    
+    Probably best to not think of this as a cache but rather as a key/value
+    datastore that's faster to access than cassandra because of the cache.
+
+    """
+
+    COLUMN_NAME = 'value'
+
+    def __init__(self, cache_chain, column_family, lock_factory):
+        self.cache_chain = cache_chain
         self.make_lock = lock_factory
-        CacheChain.__init__(self, caches, **kw)
+        self.cf = column_family
 
-    def mutate(self, key, mutation_fn, default = None, willread=True):
+    @classmethod
+    def _setup_column_family(cls, column_family_name, client):
+        cf = ColumnFamily(client, column_family_name,
+                          read_consistency_level=CL_QUORUM,
+                          write_consistency_level=CL_QUORUM)
+        return cf
+
+    def _backend_get(self, keys):
+        keys, is_single = tup(keys, ret_is_single=True)
+        rows = self.cf.multiget(keys, columns=[self.COLUMN_NAME])
+        ret = {
+            key: pickle.loads(columns[self.COLUMN_NAME])
+            for key, columns in rows.iteritems()
+        }
+        if is_single:
+            if ret:
+                return ret.values()[0]
+            else:
+                return None
+        else:
+            return ret
+
+    def _backend_set(self, key, val):
+        keys = {key: val}
+        ret = self._backend_set_multi(keys)
+        return ret.get(key)
+
+    def _backend_set_multi(self, keys, prefix=''):
+        ret = {}
+        with self.cf.batch():
+            for key, val in keys.iteritems():
+                rowkey = "%s%s" % (prefix, key)
+                column = {self.COLUMN_NAME: pickle.dumps(val, protocol=2)}
+                ret[key] = self.cf.insert(rowkey, column)
+        return ret
+
+    def _backend_delete(self, key):
+        self.cf.remove(key)
+
+    def get(self, key, default=None, allow_local=True, stale=False):
+        val = self.cache_chain.get(
+            key, default=None, allow_local=allow_local, stale=stale)
+
+        if val is None:
+            val = self._backend_get(key)
+            if val:
+                self.cache_chain.set(key, val)
+        return val
+
+    def set(self, key, val):
+        self._backend_set(key, val)
+        self.cache_chain.set(key, val)
+
+    def set_multi(self, keys, prefix='', time=None):
+        # time is sent by sgm but will be ignored
+        self._backend_set_multi(keys, prefix=prefix)
+        self.cache_chain.set_multi(keys, prefix=prefix)
+
+    def get_multi(self, keys, prefix='', allow_local=True, stale=False):
+        call_fn = lambda k: self.simple_get_multi(k, allow_local=allow_local,
+                                                  stale=stale)
+        return prefix_keys(keys, prefix, call_fn)
+
+    def simple_get_multi(self, keys, allow_local=True, stale=False):
+        ret = self.cache_chain.simple_get_multi(
+            keys, allow_local=allow_local, stale=stale)
+        still_need = {key for key in keys if key not in ret}
+        if still_need:
+            from_cass = self._backend_get(keys)
+            self.cache_chain.set_multi(from_cass)
+            ret.update(from_cass)
+        return ret
+
+    def delete(self, key):
+        self._backend_delete(key)
+        self.cache_chain.delete(key)
+
+    def mutate(self, key, mutation_fn, default=None, willread=True):
         """Mutate a Cassandra key as atomically as possible"""
-        with self.make_lock("permacache_mutate", 'mutate_%s' % key):
-            # we have to do some of the the work of the cache chain
-            # here so that we can be sure that if the value isn't in
-            # memcached (an atomic store), we fetch it from Cassandra
-            # with CL_QUORUM (because otherwise it's not an atomic
-            # store). This requires us to know the structure of the
-            # chain, which means that changing the chain will probably
-            # require changing this function. (This has an edge-case
-            # where memcached was populated by a ONE read rather than
-            # a QUORUM one just before running this. We could avoid
-            # this by not using memcached at all for these mutations,
-            # which would require some more row-cache performace
-            # testing)
-            rcl = wcl = self.cassa.write_consistency_level
+        with self.make_lock("permacache_mutate", "mutate_%s" % key):
+            # This has an edge-case where the cache chain was populated by a ONE
+            # read rather than a QUORUM one just before running this. All reads
+            # should use consistency level QUORUM.
             if willread:
-                try:
-                    value = None
-                    if self.memcache:
-                        value = self.memcache.get(key)
-                    if value is None:
-                        value = self.cassa.get(key,
-                                               read_consistency_level = rcl)
-                except CassandraNotFound:
-                    value = default
-
-                # due to an old bug in NoneResult caching, we still
-                # have some of these around
-                if value == NoneResult:
-                    value = default
-
+                value = self.cache_chain.get(key, allow_local=False)
+                if value is None:
+                    value = self._backend_get(key)
             else:
                 value = None
 
@@ -680,118 +1003,13 @@ class CassandraCacheChain(CacheChain):
             new_value = mutation_fn(copy(value))
 
             if not willread or value != new_value:
-                self.cassa.set(key, new_value,
-                               write_consistency_level = wcl)
-            for ca in self.caches[:-1]:
-                # and update the rest of the chain; assumes that
-                # Cassandra is always the last entry
-                ca.set(key, new_value)
+                self._backend_set(key, new_value)
+            self.cache_chain.set(key, new_value, use_timer=False)
         return new_value
 
-    def bulk_load(self, start='', end='', chunk_size = 100):
-        """Try to load everything out of Cassandra and put it into
-           memcached"""
-        cf = self.cassa.cf
-        for rows in in_chunks(cf.get_range(start=start,
-                                           finish=end,
-                                           columns=['value']),
-                              chunk_size):
-            print rows[0][0]
-            rows = dict((key, pickle.loads(cols['value']))
-                        for (key, cols)
-                        in rows
-                        if (cols
-                            # hack
-                            and len(key) < 250))
-            self.memcache.set_multi(rows)
-
-
-class CassandraCache(CacheUtils):
-    permanent = True
-
-    """A cache that uses a Cassandra ColumnFamily. Uses only the
-       column-name 'value'"""
-    def __init__(self, column_family, client,
-                 read_consistency_level = CL_ONE,
-                 write_consistency_level = CL_QUORUM):
-        self.column_family = column_family
-        self.client = client
-        self.read_consistency_level = read_consistency_level
-        self.write_consistency_level = write_consistency_level
-        self.cf = ColumnFamily(self.client,
-                               self.column_family,
-                               read_consistency_level = read_consistency_level,
-                               write_consistency_level = write_consistency_level)
-
-    def _rcl(self, alternative):
-        return (alternative if alternative is not None
-                else self.cf.read_consistency_level)
-
-    def _wcl(self, alternative):
-        return (alternative if alternative is not None
-                else self.cf.write_consistency_level)
-
-    def get(self, key, default = None, read_consistency_level = None):
-        try:
-            rcl = self._rcl(read_consistency_level)
-            row = self.cf.get(key, columns=['value'],
-                              read_consistency_level = rcl)
-            return pickle.loads(row['value'])
-        except (CassandraNotFound, KeyError):
-            return default
-
-    def simple_get_multi(self, keys, read_consistency_level = None):
-        rcl = self._rcl(read_consistency_level)
-        rows = self.cf.multiget(list(keys),
-                                columns=['value'],
-                                read_consistency_level = rcl)
-        return dict((key, pickle.loads(row['value']))
-                    for (key, row) in rows.iteritems())
-
-    def set(self, key, val,
-            write_consistency_level = None,
-            time = None):
-        if val == NoneResult:
-            # NoneResult caching is for other parts of the chain
-            return
-
-        wcl = self._wcl(write_consistency_level)
-        ret = self.cf.insert(key, {'value': pickle.dumps(val)},
-                              write_consistency_level = wcl,
-                             ttl = time)
-        self._warm([key])
-        return ret
-
-    def set_multi(self, keys, prefix='',
-                  write_consistency_level = None,
-                  time = None):
-        if not isinstance(keys, dict):
-            # allow iterables yielding tuples
-            keys = dict(keys)
-
-        wcl = self._wcl(write_consistency_level)
-        ret = {}
-
-        with self.cf.batch(write_consistency_level = wcl):
-            for key, val in keys.iteritems():
-                if val != NoneResult:
-                    ret[key] = self.cf.insert('%s%s' % (prefix, key),
-                                              {'value': pickle.dumps(val)},
-                                              ttl = time or None)
-
-        self._warm(keys.keys())
-
-        return ret
-
-    def _warm(self, keys):
-        import random
-        if False and random.random() > 0.98:
-            print 'Warming', keys
-            self.cf.multiget(keys)
-
-    def delete(self, key, write_consistency_level = None):
-        wcl = self._wcl(write_consistency_level)
-        self.cf.remove(key, write_consistency_level = wcl)
+    def __repr__(self):
+        return '<%s %r %r>' % (self.__class__.__name__,
+                            self.cache_chain, self.cf.column_family)
 
 
 def test_cache(cache, prefix=''):

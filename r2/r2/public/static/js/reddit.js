@@ -9,6 +9,11 @@ function open_menu(menu) {
         .addClass("active inuse");
 };
 
+function close_menu(item) {
+    $(item).closest('.drop-choices')
+        .removeClass('active inuse');
+}
+
 function close_menus(event) {
     $(".drop-choices.inuse").not(".active")
         .removeClass("inuse");
@@ -31,8 +36,6 @@ function close_menus(event) {
     }
 };
 
-function hover_open_menu(menu) { };
-
 function select_tab_menu(tab_link, tab_name) {
     var target = "tabbedpane-" + tab_name;
     var menu = $(tab_link).parent().parent().parent();
@@ -41,17 +44,6 @@ function select_tab_menu(tab_link, tab_name) {
     menu.find(".tabbedpane").each(function() {
         this.style.display = (this.id == target) ? "block" : "none";
       });
-}
-
-function update_user(form) {
-  try {
-    var user = $(form).find('input[name="user"]').val();
-    form.action += "/" + user;
-  } catch (e) {
-    // ignore
-  }
-
-  return true;
 }
 
 function post_user(form, where) {
@@ -138,21 +130,15 @@ function post_multipart_form(form, where) {
     return true;
 }
 
-function emptyInput(elem, msg) {
-    if (! $(elem).val() || $(elem).val() == msg ) 
-        $(elem).addClass("gray").val(msg).attr("rows", 3);
-    else
-        $(elem).focus(function(){});
-};
-
-
 function showlang() {
-    $(".lang-popup:first").show();
-    return false;
-};
+    var content = $('#lang-popup').prop('innerHTML');
+    var popup = new r.ui.Popup({
+        className: 'lang-modal',
+        content: content,
+    });
 
-function hidecover(where) {
-    $(where).parents(".cover-overlay").hide();
+    popup.show();
+
     return false;
 };
 
@@ -186,20 +172,12 @@ function change_state(elem, op, callback, keep, post_callback) {
     return false;
 };
 
-function alterUnreadCount(num) {
-  var msgCount = $('.message-count');
-  if (msgCount.length > 0) {
-    msgCount.text(parseInt(msgCount.text(), 10) + num);
-  }
-}
-
 function unread_thing(elem) {
     var t = $(elem);
     if (!t.hasClass("thing")) {
         t = t.thing();
     }
 
-    alterUnreadCount(1);
     $(t).addClass("new unread");
 }
 
@@ -214,16 +192,7 @@ function read_thing(elem) {
         $(t).removeClass("unread");
     }
 
-    alterUnreadCount(-1);
     $.request("read_message", {"id": $(t).thing_id()});
-}
-
-function save_thing(elem) {
-    $(elem).thing().addClass("saved");
-}
-
-function unsave_thing(elem) {
-    $(elem).thing().removeClass("saved");
 }
 
 function click_thing(elem) {
@@ -241,11 +210,34 @@ function click_thing(elem) {
 }
 
 function hide_thing(elem) {
-    $(elem).thing().fadeOut(function() {
-            $(this).toggleClass("hidden");
-            unexpando_child(elem);
-    });
-};
+    if ($('body').hasClass('comments-page')) {
+        return;
+    }
+
+    var $thing = $(elem).thing();
+
+    if ($thing.is('.comment') && $thing.has('.child:not(:empty)').length) {
+        var deleted = '[' + _.escape(r._('deleted')) + ']';
+        var $entry = $thing.addClass('deleted').find('.entry:first');
+
+        $entry.find('.usertext')
+            .addClass('grayed')
+            .find('.md')
+                .html('<p>' + deleted + '</p>');
+
+        $entry.find('.author')
+            .replaceWith('<em>' + deleted + '</em>')  ;  
+        
+        $entry.find('.userattrs, .score, .buttons')
+            .remove();
+    } else {
+        $thing.fadeOut(function() {
+            $(this).toggleClass('hidden');
+            var thing_id = $(this).thing_id();
+            $(document).trigger('hide_thing_' + thing_id);
+        });
+    }
+}
 
 function toggle_label (elem, callback, cancelback) {
   $(elem).parent().find(".option").toggle();
@@ -328,6 +320,15 @@ function unsubscribe(reddit_name) {
     };
 };
 
+function quarantine_optout(subreddit_name) {
+    return function() {
+        if (reddit.logged) {
+            $.request("quarantine_optout", {sr: subreddit_name});
+            $.redirect("/");
+        }
+    };
+};
+
 function friend(user_name, container_name, type) {
     return function() {
         if (reddit.logged) {
@@ -345,24 +346,6 @@ function unfriend(user_name, container_name, type) {
     }
 };
 
-function share(elem) {
-  var thingId = $(elem).thing_id();
-  r.analytics.fireGAEvent('share', 'shareOpen', thingId);
-
-  $.request("new_captcha");
-  $(elem).new_thing_child($(".sharelink:first").clone(true)
-                          .attr("id", "sharelink_" + thingId),
-                           false);
-  $.request("new_captcha");
-};
-
-function cancelShare(elem) {
-  var thingId = $(elem).thing_id();
-  r.analytics.fireGAEvent('share', 'shareClose', thingId);
-
-  return cancelToggleForm(elem, ".sharelink", ".share-button");
-};
-
 function reject_promo(elem) {
     $(elem).thing().find(".rejection-form").show().find("textare").focus();
 }
@@ -372,8 +355,14 @@ function cancel_reject_promo(elem) {
 }
 
 function complete_reject_promo(elem) {
-    $(elem).thing().removeClass("accepted").addClass("rejected")
+    var $el = $(elem);
+
+    $el.thing().removeClass("accepted").addClass("rejected")
         .find(".reject_promo").remove();
+
+    if ($el.data('hide-after-seen')) {
+        hide_thing(elem);
+    }
 }
 
 /* Comment generation */
@@ -460,14 +449,21 @@ function togglemessage(elem) {
   }
 }
 
-function morechildren(form, link_id, sort, children, depth, pv_hex) {
+function morechildren(form, link_id, sort, children, depth) {
     $(form).html(reddit.status_msg.loading)
         .css("color", "red");
     var id = $(form).parents(".thing.morechildren:first").thing_id();
-    $.request('morechildren', {link_id: link_id, sort: sort,
-              children: children, depth: depth, id: id, pv_hex: pv_hex});
+    var child_params = {
+        link_id: link_id,
+        sort: sort,
+        children: children,
+        depth: depth,
+        id: id,
+    };
+    $.request('morechildren', child_params, undefined, undefined,
+              undefined, true);
     return false;
-};
+}
 
 function moremessages(elem) {
     $(elem).html(reddit.status_msg.loading).css("color", "red");
@@ -761,57 +757,6 @@ function select_form_tab(elem, to_show, to_hide) {
         .find(":input").attr("disabled", true);
 }
 
-/**** expando stuff ********/
-function expando_cache() {
-    if (!$.defined(reddit.thing_child_cache)) {
-        reddit.thing_child_cache = new Array();
-    }
-    return reddit.thing_child_cache;
-}
-
-function expando_child(elem) {
-    var child_cache = expando_cache();
-    var thing = $(elem).thing();
-
-    //swap button
-    var button = thing.find(".expando-button");
-    button
-        .addClass("expanded")
-        .removeClass("collapsed")
-        .get(0).onclick = function() {unexpando_child(elem)};
-
-    //load content
-    var expando = thing.find(".expando");
-    var key = thing.thing_id() + "_cache";
-    if (!child_cache[key]) {
-        $.request("expando",
-                  {"link_id":thing.thing_id()},
-                  function(r) {
-                      child_cache[key] = r;
-                      expando.html($.unsafe(r));
-                      $(document).trigger('expando_thing', thing)
-                  },
-                  false, "html");
-    }
-    else {
-        expando.html($.unsafe(child_cache[key]));
-        $(document).trigger('expando_thing', thing)
-    }
-    expando.show();
-    return false;
-}
-
-function unexpando_child(elem) {
-    var thing = $(elem).thing();
-    var button = thing.find(".expando-button");
-    button
-        .addClass("collapsed")
-        .removeClass("expanded")
-        .get(0).onclick = function() {expando_child(elem)};
-
-    thing.find(".expando").hide().empty();
-}
-
 /******* editting comments *********/
 function show_edit_usertext(form) {
     var edit = form.find(".usertext-edit");
@@ -886,11 +831,6 @@ function cancel_usertext(elem) {
     hide_edit_usertext(t.closest(".usertext"));
 }
 
-function save_usertext(elem) {
-    var t = $(elem).thing();
-    t.find(".edit-usertext:first").parent("li").addBack().show(); 
-}
-
 function reply(elem) {
     var form = comment_reply_for_elem(elem);
 
@@ -932,6 +872,18 @@ function set_distinguish(elem, value) {
   $(elem).children().toggle();
 }
 
+function toggle_clear_suggested_sort(elem) {
+  var form = $(elem).parents("form")[0];
+  $(form).children().toggle();
+}
+
+function set_suggested_sort(elem, value) {
+  $(elem).parents('form').first().find('input[name="sort"]').val(value);
+  change_state(elem, "set_suggested_sort");
+  $(elem).children().toggle();
+}
+
+
 function populate_click_gadget() {
     /* if we can find the click-gadget, populate it */
     if($('.click-gadget').length) {
@@ -945,127 +897,6 @@ function populate_click_gadget() {
                       undefined, "json", true);
         }
     }
-}
-
-var toolbar_p = function(expanded_size, collapsed_size) {
-    /* namespace for functions related to the reddit toolbar frame */
-
-    this.toggle_linktitle = function(s) {
-        $('.title, .submit, .url, .linkicon').toggle();
-        if($(s).is('.pushed-button')) {
-            $(s).parents('.middle-side').removeClass('clickable');
-        } else {
-            $(s).parents('.middle-side').addClass('clickable');
-            $('.url').children('form').children('input').focus().select();
-        }
-        return this.toggle_pushed(s);
-    };
-
-    this.toggle_pushed = function(s) {
-        s = $(s);
-        if(s.is('.pushed-button')) {
-            s.removeClass('pushed-button').addClass('popped-button');
-        } else {
-            s.removeClass('popped-button').addClass('pushed-button');
-        }
-        return false;
-    };
-
-    this.push_button = function(s) {
-        $(s).removeClass("popped-button").addClass("pushed-button");
-    };
-
-    this.pop_button = function(s) {
-        $(s).removeClass("pushed-button").addClass("popped-button");
-    };
-    
-    this.serendipity = function() {
-        this.push_button('.serendipity');
-        return true;
-    };
-    
-    this.show_panel = function() {
-        $('body', parent.inner_toolbar.document).addClass('expanded')
-    };
-        
-    this.hide_panel = function() {
-        $('body', parent.inner_toolbar.document).removeClass('expanded')
-    };
-        
-    this.resize_toolbar = function() {
-        var height = $("body").height();
-        parent.document.body.rows = height + "px, 100%";
-    };
-        
-    this.login_msg = function() {
-        $(".toolbar-status-bar").show();
-        $(".login-arrow").show();
-        this.resize_toolbar();
-        return false;
-    };
-        
-    this.top_window = function() {
-        var w = window;
-        while(w != w.parent) {
-            w = w.parent;
-        }
-        return w.parent;
-    };
-        
-    var pop_obj = null;
-    this.panel_loadurl = function(url) {
-        try {
-            var cur = window.parent.inner_toolbar.reddit_panel.location;
-            if (cur == url) {
-                return false;
-            } else {
-                if (pop_obj != null) {
-                    this.pop_button(pop_obj);
-                    pop_obj = null;
-                }
-                return true;
-            }
-        } catch (e) {
-            return true;
-        }
-    };
-        
-    var comments_on = 0;
-    this.comments_pushed = function(ctl) {
-        comments_on = ! comments_on;
-        
-        if (comments_on) {
-            this.push_button(ctl);
-            this.show_panel();
-        } else {
-            this.pop_button(ctl);
-            this.hide_panel();
-        }
-    };
-    
-    this.gourl = function(form, base_url) {
-        var url = $(form).find('input[type="text"]').val();
-        var newurl = base_url + escape(url);
-        
-        this.top_window().location.href = newurl;
-        
-        return false;
-    };
-
-    this.pref_commentspanel_hide = function() {
-        $.request('tb_commentspanel_hide');
-    };
-    this.pref_commentspanel_show = function() {
-        $.request('tb_commentspanel_show');
-    };
-};
-
-function clear_all_langs(elem) {
-    $(elem).parents("td").find('input[type="checkbox"]').prop("checked", false);
-}
-
-function check_some_langs(elem) {
-    $(elem).parents("td").find("#some-langs").prop("checked", true);
 }
 
 function fetch_parent(elem, parent_permalink, parent_id) {
@@ -1186,6 +1017,14 @@ $(function() {
             $("#searchexpando").slideDown();
         });
 
+        // Store the user's choice for restrict_sr
+        $('#search input[name="restrict_sr"]')
+          .change(function() {
+            store.set('search.restrict_sr.checked', this.checked)
+          });
+        $('#searchexpando input[name="restrict_sr"]')
+          .prop("checked", !!store.get('search.restrict_sr.checked'));
+
         $("#search_showmore").click(function(event) {
             $("#search_showmore").parent().hide();
             $("#moresearchinfo").slideDown();
@@ -1200,10 +1039,43 @@ $(function() {
             $("#moresearchinfo").slideUp();
             event.preventDefault();
         });
+
+        var query = $('#search input[name="q"]').val();
+        $('.search-result-listing')
+          .find('.search-title, .search-link, .search-subreddit-link, .search-result-body')
+          .highlight(query);
         
+        // add new search page links to the 'recently viewed' links...
+        $(".search-result-link").find("a.search-title, a.thumbnail").mousedown(function() {
+            var fullname = $(this).closest('[data-fullname]').data('fullname');
+            if (fullname) {
+                add_thing_id_to_cookie(fullname, "recentclicks2");
+            }
+        });
+
         /* Select shortlink text on click */
         $("#shortlink-text").click(function() {
             $(this).select();
+        });
+
+        $(".sr_style_toggle").change(function() {
+            $('#sr_style_throbber')
+            .html('<img src="' + r.utils.staticURL('throbber.gif') + '" />')
+            .css("display", "inline-block");
+            return post_form($(this).parent(), "set_sr_style_enabled");
+        });
+
+        $(".reddit-themes .theme").click(function() {
+          $("div.theme.selected").removeClass("selected");
+          $("input[name='enable_default_themes']").prop("checked", true);
+          // if other is selected
+          if ($(this).hasClass("select-custom-theme")) {
+            $("#other_theme_selector").prop("checked", true);
+          } else {
+            $("input[name='theme_selector'][value='" + $(this).attr("id") + "']")
+              .prop("checked", true);
+          }
+          $(this).addClass("selected");
         });
 
         /* ajax ynbutton */
@@ -1232,72 +1104,4 @@ function show_friend(account_fullname) {
                     $(this).find("a:first").debug().before(label+',');
                 }
             });
-}
-
-function show_unfriend(account_fullname) {
-    var ua = $(".author.id-" + account_fullname).removeClass("friend")
-        .next(".userattrs");
-    ua.each(function() {
-            $(this).find("a.friend").remove();
-            if ($(this).find("a").length == 0) {
-                $(this).html("");
-            }
-        });
-}
-
-function search_feedback(elem, approval) {
-  f = $("form#search");
-  var q    = f.find('input[name="q"]').val();
-  var sort = f.find('input[name="sort"]').val();
-  var t    = f.find('input[name="t"]').val();
-  var d = {
-    q: q,
-    sort: sort,
-    t: t,
-    approval: approval
-  };
-  $.request("searchfeedback", d, null, true);
-  elem.siblings(".pretty-button").removeClass("pressed");
-  elem.siblings(".thanks").show();
-  elem.addClass("pressed");
-  return false;
-}
-
-function highlight_new_comments(period) {
-  var i;
-  for (i = 0 ; i <= 9; i++) {
-    items = $(".comment-period-" + i);
-    if (period >= 0 && i >= period) {
-      items.addClass("new-comment");
-    } else {
-      items.removeClass("new-comment");
-    }
-  }
-}
-
-function save_href(link) {
-  if (!link.attr("srcurl")){
-    link.attr("srcurl", link.attr("href"));
-  }
-  return link;
-}
-
-function pure_domain(url) {
-    var domain = url.match(/:\/\/([^/]+)/)
-    if (domain) {
-        domain = domain[1].replace(/^www\./, '');
-    }
-    return domain;
-}
-
-function parse_domain(url) {
-    var domain = pure_domain(url);
-    if (!domain) {
-        /* Internal link? Get the SR name, if there is one */
-        var reddit = url.match(/\/r\/([^/]+)/)
-        if (reddit) {
-            domain = "self." + reddit[1].toLowerCase();
-        }
-    }
-    return domain;
 }

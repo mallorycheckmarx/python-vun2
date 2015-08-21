@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -34,8 +34,7 @@
 
     <div class="dropdown ${css_class}"
          ${"id='%s'" % thing._id if thing._id else ""}
-         onclick="open_menu(this)"
-         onmouseover="hover_open_menu(this)">
+         onclick="open_menu(this)">
  
       %if thing.selected:
           <span class="selected">${thing.selected.selected_title()}</span>
@@ -46,7 +45,9 @@
 
     <div class="drop-choices ${css_class}">
       %for option in thing:
-        ${option}
+        %if option != thing.selected:
+          ${option}
+        %endif
       %endfor
     </div>
 

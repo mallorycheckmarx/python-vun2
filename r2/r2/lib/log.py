@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -88,12 +88,14 @@ class LogQueueErrorReporter(Reporter):
         import pycassa.pool
         import r2.lib.db.thing
         import r2.lib.lock
+        import r2.lib.cache
 
         return (
             SystemExit,  # gunicorn is shutting us down
             _pylibmc.MemcachedError,
             r2.lib.db.thing.NotFound,
             r2.lib.lock.TimeoutExpired,
+            r2.lib.cache.MemcachedMaximumRetryException,
             sqlalchemy.exc.OperationalError,
             sqlalchemy.exc.IntegrityError,
             pycassa.pool.AllServersUnavailable,

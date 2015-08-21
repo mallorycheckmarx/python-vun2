@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,30 +29,76 @@ class World(object):
     Proxying through World allows for easy testing and caching if needed.
     """
 
+    @staticmethod
+    def stacked_proxy_safe_get(stacked_proxy, key, default=None):
+        """Get a field from a StackedObjectProxy
+
+        Always succeeds, even if the proxy has not yet been initialized.
+        Normally, if the proxy hasn't been initialized, a `TypeError` is
+        raised to indicate a programming error. To avoid crashing on feature
+        checks that are done too early (e.g., during initial DB set-up of
+        the pylons environment), this function will instead return `default`
+        for an uninitialized proxy.
+
+        (Initialized proxies ALWAYS return a value, either a set value
+        or an empty string)
+
+        """
+        try:
+            return getattr(stacked_proxy, key)
+        except TypeError:
+            return default
+
     def current_user(self):
-        return c.user
+        if c.user_is_loggedin:
+            return self.stacked_proxy_safe_get(c, 'user')
 
     def current_subreddit(self):
-        if not c.site:
+        site = self.stacked_proxy_safe_get(c, 'site')
+        if not site:
             # In non-request code (eg queued jobs), there isn't necessarily a
             # site name (or other request-type data).  In those cases, we don't
             # want to trigger any subreddit-specific code.
             return ''
-        return c.site.name
+        return site.name
+
+    def current_subdomain(self):
+        return self.stacked_proxy_safe_get(c, 'subdomain')
+
+    def current_oauth_client(self):
+        client = self.stacked_proxy_safe_get(c, 'oauth2_client', None)
+        return getattr(client, '_id', None)
 
     def is_admin(self, user):
         if not user or not hasattr(user, 'name'):
             return False
 
-        return user.name in g.admins
+        return user.name in self.stacked_proxy_safe_get(g, 'admins', [])
 
     def is_employee(self, user):
         if not user:
             return False
         return user.employee
 
+    def user_has_beta_enabled(self, user):
+        if not user:
+            return False
+        return user.pref_beta
+
+    def has_gold(self, user):
+        if not user:
+            return False
+
+        return user.gold
+
+    def is_user_loggedin(self):
+        if self.current_user():
+            return True
+        return False
+
     def url_features(self):
         return set(request.GET.getall('feature'))
 
     def live_config(self, name):
-        return g.live_config.get(name)
+        live = self.stacked_proxy_safe_get(g, 'live_config', {})
+        return live.get(name)

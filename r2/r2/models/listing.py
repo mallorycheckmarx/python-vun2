@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,30 +25,32 @@ from link import *
 from vote import *
 from report import *
 from subreddit import DefaultSR, AllSR, Frontpage
-
 from pylons import i18n, request, g
 from pylons.i18n import _
 
+from r2.config import feature
 from r2.lib.wrapped import Wrapped, CachedVariable
 from r2.lib import utils
 from r2.lib.db import operators
-from r2.lib.cache import sgm
 
 from collections import namedtuple
 from copy import deepcopy, copy
+import time
+
 
 class Listing(object):
     # class used in Javascript to manage these objects
     _js_cls = "Listing"
 
     def __init__(self, builder, nextprev = True, next_link = True,
-                 prev_link = True, **kw):
+                 prev_link = True, params = None, **kw):
         self.builder = builder
         self.nextprev = nextprev
         self.next_link = True
         self.prev_link = True
         self.next = None
         self.prev = None
+        self.params = params or request.GET.copy()
         self._max_num = 1
 
     @property
@@ -66,7 +68,7 @@ class Listing(object):
         builder_items = self.builder.get_items(*a, **kw)
         for item in self.builder.item_iter(builder_items):
             # rewrite the render method
-            if not hasattr(item, "render_replaced"):
+            if c.render_style != "api" and not hasattr(item, "render_replaced"):
                 item.render = replace_render(self, item, item.render)
                 item.render_replaced = True
         return builder_items
@@ -80,15 +82,15 @@ class Listing(object):
         self.before = None
 
         if self.nextprev and self.prev_link and prev and bcount > 1:
-            p = request.GET.copy()
+            p = self.params.copy()
             p.update({'after':None, 'before':prev._fullname, 'count':bcount})
             self.before = prev._fullname
             self.prev = (request.path + utils.query_string(p))
-            p_first = request.GET.copy()
+            p_first = self.params.copy()
             p_first.update({'after':None, 'before':None, 'count':None})
             self.first = (request.path + utils.query_string(p_first))
         if self.nextprev and self.next_link and next:
-            p = request.GET.copy()
+            p = self.params.copy()
             p.update({'after':next._fullname, 'before':None, 'count':acount})
             self.after = next._fullname
             self.next = (request.path + utils.query_string(p))
@@ -289,6 +291,29 @@ class LinkListing(Listing):
         self.rank_width = len(str(self.max_num)) * 1.1
         self.midcol_width = max(len(str(self.max_score)), 2) + 1.1
         return wrapped
+
+
+class SearchListing(LinkListing):
+    def __init__(self, *a, **kw):
+        LinkListing.__init__(self, *a, **kw)
+        self.heading = kw.get('heading', None)
+        self.nav_menus = kw.get('nav_menus', None)
+
+    def listing(self, legacy_render_class=False, *args, **kwargs):
+        wrapped = LinkListing.listing(self, *args, **kwargs)
+        if hasattr(self.builder, 'subreddit_facets'):
+            self.subreddit_facets = self.builder.subreddit_facets
+        if hasattr(self.builder, 'start_time'):
+            self.timing = time.time() - self.builder.start_time
+
+        if legacy_render_class:
+            wrapped.render_class = LinkListing
+
+        return wrapped
+
+
+class ReadNextListing(Listing):
+    pass
 
 
 class NestedListing(Listing):

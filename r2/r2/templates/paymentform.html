@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -94,7 +94,15 @@
        if (val == "" || inputs.find("[name=edit]").val() == "on") 
             enable_all(inputs);
     }
-    
+
+    (function($) {
+      $.payment_redirect = function(url, isNewCard, amount) {
+        r.analytics.fireFunnelEvent('ads', isNewCard ? 'checkout-new' : 'checkout-existing');
+        r.analytics.fireFunnelEvent('ads', 'checkout-pay', {value: amount}, function() {
+          window.location.href = url;
+        });
+      };
+    })(window.jQuery);
   </script>
 </div>
 
@@ -139,6 +147,20 @@
            <textarea ${disabled} id="input-${field}-${prof_id}" name="${field}">
              ${getattr(data, field, '')}
            </textarea>
+         %elif field == "country":
+           <%
+            selected_country = getattr(data, field, thing.default_country)
+            selected_insensitive = selected_country.lower()
+           %>
+           %if any(map(lambda country: country.lower() == selected_insensitive, thing.countries)):
+            <select ${disabled} id="input-${field}-${prof_id}" name="${field}">
+              %for country in thing.countries:
+                <option ${"selected" if selected_insensitive == country.lower() else ""}>${country}</option>
+              %endfor
+            </select>
+           %else:
+            <input type="text" ${disabled} id="input-${field}-${prof_id}" name="${field}" value="${selected_country}">
+           %endif
          %else:
            <input ${disabled}
                   id="input-${field}-${prof_id}" type="text" name="${field}" 

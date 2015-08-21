@@ -16,12 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
-   from r2.lib.strings import strings
+   from r2.lib.filters import websafe
+   from r2.lib.strings import Score
    from r2.lib.template_helpers import format_number, format_percent, html_datetime
  %>
 
@@ -43,9 +44,9 @@
   </div>
 
   <div class="score">
-    ${unsafe(strings.person_label % dict(num = format_number(thing.a.score),
-                                         persons = ungettext("point", "points", 
-                                         thing.a.score)))}
+    ${unsafe(Score.PERSON_LABEL % dict(num = format_number(thing.a.score),
+                                       persons = websafe(ungettext("point", "points",
+                                                                   thing.a.score))))}
     &#32;(${_("%(percent)s upvoted") % dict(percent=format_percent(thing.a.upvote_ratio))})
   </div>
 
@@ -53,7 +54,7 @@
   <div class="shortlink">
     shortlink:
     &#32;
-    <input type="text" value="http://${thing.a.shortlink}" readonly="readonly" id="shortlink-text" />
+    <input type="text" value="https://${thing.a.shortlink}" readonly="readonly" id="shortlink-text" />
   </div>
 %endif
 

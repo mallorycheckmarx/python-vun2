@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -40,8 +40,16 @@
     data-cpm="${getattr(thing.campaign, 'cpm', g.cpm_selfserve.pennies)}"
     data-campaign_id36="${thing.campaign._id36}"
     data-campaign_name="${thing.campaign._fullname}"
+    data-frequency_cap="${thing.campaign.frequency_cap}"
+    data-frequency_cap_duration="${thing.campaign.frequency_cap_duration}"
     data-priority="${thing.campaign.priority.name}"
     data-override="${json.dumps(thing.campaign.priority.inventory_override)}"
+    data-platform="${thing.platform}"
+    data-mobile_os="${json.dumps(thing.mobile_os)}"
+    data-ios_devices="${json.dumps(thing.ios_devices) if thing.ios_devices else ''}"
+    data-ios_versions="${json.dumps(thing.ios_versions) if thing.ios_versions else ''}"
+    data-android_devices="${json.dumps(thing.android_devices) if thing.android_devices else ''}"
+    data-android_versions="${json.dumps(thing.android_versions) if thing.android_versions else ''}"
     data-paid="${json.dumps(thing.paid)}">
   <td class="campaign-start-date">
     ${thing.campaign.start_date.strftime("%m/%d/%Y")}
@@ -114,6 +122,18 @@
   <td class="campaign-location" title="${thing.location_str}">
     ${thing.location_str}
   </td>
+
+  %if c.user_is_sponsor:
+    <td>
+      %if thing.campaign.trans_country_match is None:
+        N/A
+      %elif thing.campaign.trans_country_match:
+        no
+      %else:
+        <span title="${thing.campaign.trans_billing_country} vs. ${thing.campaign.trans_ip_country}">yes</span>
+      %endif
+    </td>
+  %endif
 
   <td class="campaign-buttons">
     %if thing.is_complete:

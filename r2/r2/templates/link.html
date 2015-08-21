@@ -16,22 +16,27 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
    from pylons import g
 
-   from r2.lib.template_helpers import get_domain
-   from r2.lib.template_helpers import make_url_protocol_relative
+   from r2.config import feature
+   from r2.lib.filters import conditional_websafe
+   from r2.lib.template_helpers import (
+       get_domain,
+       get_linkflair_css_classes,
+       make_url_protocol_relative,
+   )
    from r2.lib.pages.things import LinkButtons
    from r2.lib.pages import WrappedUser
    from r2.lib.strings import Score, strings
 %>
  
 <%inherit  file="printable.html"/>
-<%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp" />
+<%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp, quarantine_stamp, thumbnail_img" />
 <%namespace file="printablebuttons.html" import="toggle_button" />
  
 <%def name="numcol()">
@@ -41,7 +46,11 @@
 </%def>
 
 <%def name="make_link(name, css_class, tabindex=0)">
-  <a class="${css_class} may-blank ${ c.user_is_loggedin and 'loggedin' or ''}"
+  <%
+    media_override = thing.link_child and getattr(thing, 'media_override', False)
+  %>
+  <a class="${css_class} may-blank ${ c.user_is_loggedin and 'loggedin' or ''}
+            ${ media_override and 'open-expando' or '' }"
      href="${thing.href_url}"
      %if tabindex:
        tabindex="${tabindex}"
@@ -52,12 +61,6 @@
      %if c.cname:
        target="_top"
      %endif
-     %if thing.mousedown_url:
-       onmousedown="save_href($(this));this.href='${thing.mousedown_url}'"
-     %endif
-     %if thing.link_child and getattr(thing, "media_override", False):
-       onclick="return expando_child(this)"
-     %endif
      >
      ${caller.body()}
   </a>
@@ -65,9 +68,14 @@
 
 <%def name="bottom_buttons()">
   <ul class="flat-list buttons">
+    %if thing.quarantine:
+      <li>
+        <span class="quarantine-stamp stamp">${quarantine_stamp()}</span>
+      </li>
+    %endif
     %if thing.nsfw:
-     <li class="rounded nsfw-stamp stamp">
-      ${nsfw_stamp()}
+     <li>
+       <span class="nsfw-stamp stamp">${nsfw_stamp()}</span>
      </li>
     %endif
     ${self.buttons()}
@@ -108,8 +116,7 @@
   <% selftext_hide = thing.is_self and not thing.selftext %>
   %if thing.link_child and not thing.link_child.expand and not selftext_hide:
     <div class="expando-button collapsed
-                ${thing.link_child.css_style}"
-         onclick="expando_child(this)"></div>
+                ${thing.link_child.css_style}"></div>
   %endif
 
   <p class="tagline">
@@ -132,7 +139,11 @@
   <div class="unvotable-message">${strings.unvotable_message}</div>
 %endif
 
-  <div class="expando" ${"style='display: none'" if not expand else ""}>
+  <div class="expando" ${"style='display: none'" if not expand else ""}
+    %if not expand and child_content:
+      data-cachedhtml="${websafe(child_content)}"
+    %endif
+  >
     %if expand:
       ${child_content}
     %else:
@@ -144,22 +155,11 @@
   %if expand:
     ${bottom_buttons()}
   %endif
-
- ##populate the expando cache if we have something
-  %if not expand and child_content:
-    <script type="text/javascript">
-      var cache = expando_cache();
-      cache["${thing._fullname}_cache"] = "${websafe(child_content)}";
-    </script>
-  %endif
 </%def>
 
 <%def name="thing_css_class(what)" buffered="True">
-${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.visited and 'visited' or ''}
-%if c.user.pref_show_link_flair and (thing.flair_text or thing.flair_css_class):
-  <% css = thing.flair_css_class or '' %>
-  linkflair ${' '.join('linkflair-' + c for c in css.split())}
-%endif
+  ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.visited and 'visited' or ''}
+  ${get_linkflair_css_classes(thing, on_class="linkflair", off_class="")}
 </%def>
 
 <%def name="subreddit()" buffered="True">
@@ -178,7 +178,7 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
       <div class="score unvoted">&bull;</div> 
       <div class="score dislikes">&bull;</div> 
     %else:
-      ${self.score(thing, thing.likes, tag='div')}
+      ${self.score(thing, tag='div')}
     %endif
     ${self.arrow(thing, 0, thing.likes == False)}
   </div>
@@ -186,9 +186,13 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
 </%def>
 
 
-<%def name="domain()">
+<%def name="domain(link=True)">
   <span class="domain">
-    (<a href="${thing.domain_path}">${thing.domain_str}</a>)
+    %if link:
+      (<a href="${thing.domain_path}">${thing.domain_str}</a>)
+    %else:
+      (${thing.domain_str})
+    %endif
     %if c.user_is_admin:
       &#32;
       <a class="adminbox" href="/admin/domain/${thing.domain}">d</a>
@@ -198,10 +202,10 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
 
 <%def name="tagline()">
   <%
-    taglinetext = thing.taglinetext.replace(" ", "&#32;")
+    taglinetext = conditional_websafe(thing.taglinetext).replace(" ", "&#32;")
   %>
   ${unsafe(taglinetext % dict(reddit=self.subreddit(),
-                              score=capture(self.score, thing, thing.likes, tag='span'),
+                              score=capture(self.score, thing, tag='span'),
                               when=capture(thing_timestamp, thing, thing.timesince, live=True, include_tense=True),
                               author=WrappedUser(thing.author, thing.attribs, thing).render(),
                               lastedited=capture(edited, thing, thing.lastedited)
@@ -231,22 +235,7 @@ ${parent.thing_css_class(what)} ${"over18" if thing.over_18 else ""} ${thing.vis
 <%def name="thumbnail()">
   %if thing.thumbnail:
   <%call expr="make_link('thumbnail', 'thumbnail ' + (thing.thumbnail if thing.thumbnail_sprited else ''))">
-    % if not thing.thumbnail_sprited:
-        <%
-            if hasattr(thing, 'thumbnail_size'):
-                scaling_factor = 1
-                if thing.thumbnail_size[0] > g.thumbnail_size[0]:
-                  # hidpi scaling, calculate in case hidpi changes definition in the future and
-                  # we have multiple sets of image dimensions. Currently should always be 1 or 2.
-                  # Width is always the maximum allowed, so we don't need to check height.
-                  scaling_factor = thing.thumbnail_size[0] // g.thumbnail_size[0]
-
-                size_str = "width='%d' height='%d'" % (thing.thumbnail_size[0] // scaling_factor, thing.thumbnail_size[1] // scaling_factor)
-            else:
-                size_str = ""
-        %>
-        <img src="${make_url_protocol_relative(thing.thumbnail)}" ${size_str} alt="">
-    % endif
+    ${thumbnail_img(thing)}
   </%call>
   %endif
 </%def>

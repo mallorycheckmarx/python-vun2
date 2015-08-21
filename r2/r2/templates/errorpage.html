@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -40,6 +40,12 @@ from r2.lib.filters import unsafe, safemarkdown
   <div class="errorpage-message sr-description">
       <h2>${_("a message from the moderators of /r/%s") % c.site.name}</h2>
       ${unsafe(safemarkdown(thing.sr_description, wrap=False))}
+  </div>
+  % endif
+
+  % if thing.include_message_mods_link:
+  <div id="private-subreddit-message-link" class="errorpage-message">
+    <a href="/message/compose/?to=/r/${c.site.name}">${_("send a message to the moderators")}</a>
   </div>
   % endif
 </div>

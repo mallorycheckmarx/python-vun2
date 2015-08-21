@@ -16,11 +16,16 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.pages.pages import Reddit, SubredditStylesheetSource
+from r2.lib.pages.pages import (
+    AutoModeratorConfig,
+    RawCode,
+    Reddit,
+    SubredditStylesheetSource,
+)
 from pylons import c
 from r2.lib.wrapped import Templated
 from r2.lib.menus import PageNameNav
@@ -38,6 +43,11 @@ class WikiView(Templated):
             self.page_content = safemarkdown(content)
         elif renderer == 'stylesheet':
             self.page_content = SubredditStylesheetSource(content).render()
+        elif renderer == "automoderator":
+            self.page_content = AutoModeratorConfig(content).render()
+        elif renderer == "rawcode":
+            self.page_content = RawCode(content).render()
+
         self.renderer = renderer
         self.page = page
         self.diff = diff

@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -85,7 +85,15 @@ setup(
         "stripe",
         "requests<1.0.0",
         "tinycss2",
+        "unidecode",
+        "PyYAML",
     ],
+    # Extra dependencies that aren't needed for running the app.
+    # * https://pythonhosted.org/setuptools/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
+    # * https://github.com/pypa/sampleproject/blob/300f04dc44df51492deb859ac98ba521d2c7a17a/setup.py#L71-L77
+    extras_require={
+        'test': ['mock', 'nose'],
+    },
     dependency_links=[
         "https://github.com/reddit/snudown/archive/v1.1.3.tar.gz#egg=snudown-1.1.3",
         "https://s3.amazonaws.com/code.reddit.com/pycaptcha-0.4.tar.gz#egg=pycaptcha-0.4",
@@ -111,5 +119,20 @@ setup(
     [r2.provider.media]
     s3 = r2.lib.providers.media.s3:S3MediaProvider
     filesystem = r2.lib.providers.media.filesystem:FileSystemMediaProvider
+    [r2.provider.cdn]
+    cloudflare = r2.lib.providers.cdn.cloudflare:CloudFlareCdnProvider
+    null = r2.lib.providers.cdn.null:NullCdnProvider
+    [r2.provider.auth]
+    cookie = r2.lib.providers.auth.cookie:CookieAuthenticationProvider
+    http = r2.lib.providers.auth.http:HttpAuthenticationProvider
+    [r2.provider.support]
+    zendesk = r2.lib.providers.support.zendesk:ZenDeskProvider
+    [r2.provider.search]
+    cloudsearch = r2.lib.providers.search.cloudsearch:CloudSearchProvider
+    solr = r2.lib.providers.search.solr:SolrSearchProvider
+    [r2.provider.image_resizing]
+    imgix = r2.lib.providers.image_resizing.imgix:ImgixImageResizingProvider
+    no_op = r2.lib.providers.image_resizing.no_op:NoOpImageResizingProvider
+    unsplashit = r2.lib.providers.image_resizing.unsplashit:UnsplashitImageResizingProvider
     """,
 )

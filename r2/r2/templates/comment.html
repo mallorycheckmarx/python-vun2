@@ -16,17 +16,18 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from r2.config import feature
    from r2.lib.filters import unsafe
    from r2.lib.pages.things import CommentButtons
    from r2.lib.pages import WrappedUser
 %>
 
-<%namespace file="utils.html" import="plain_link, thing_timestamp, edited" />
+<%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp, quarantine_stamp" />
 <%inherit file="comment_skeleton.html"/>
 
 #####################
@@ -37,33 +38,34 @@
 ${parent.midcol(cls = cls)}
 </%def>
 
+<%def name="subreddit()" buffered="True">
+  ${plain_link(thing.subreddit.name, thing.subreddit_path, sr_path=False,
+               cname=False, _class="subreddit hover")}
+</%def>
+
+<%def name="link()" buffered="True">
+  <a href="${thing.link.url}" class="title"
+     %if thing.nofollow:
+       rel="nofollow"
+     %endif
+     >
+    ${thing.link.title}
+  </a>
+</%def>
+
 <%def name="ParentDiv()">
   ${parent.ParentDiv()}
   %if not thing.deleted:
     <a name="${thing._id36}"></a>
   %endif
   %if c.profilepage:
-    %if thing.link: 
-      %if thing.link.title:
-        <a href="${thing.link.url}" class="title"
-           %if thing.nofollow:
-             rel="nofollow"
-           %endif
-           >
-          ${thing.link.title}
-        </a>
-      %else:
-          ${thing.link.url}
-      %endif
-    %endif
-    &#32;
-    ${_("by")}
-    &#32;
-    ${thing.link_author}
-    ${_("in")}
-    &#32;
-    ${plain_link(thing.subreddit.name, thing.subreddit_path, sr_path = False,
-                 cname = False, _class = "subreddit hover")}
+    <%
+      tagline_text = conditional_websafe(thing.taglinetext).replace(" ", "&#32;")
+      tagline_attrs = dict(link=self.link(),
+                   subreddit=self.subreddit(),
+                   author=thing.link_author.render())
+    %>
+    ${unsafe(tagline_text % tagline_attrs)}
   %endif
 </%def>
 
@@ -89,7 +91,7 @@ ${parent.midcol(cls = cls)}
      <em>${_("[deleted]")}</em>&#32;
   %endif
 
-  %if thing.collapsed and show:
+  %if thing.collapsed and show and hasattr(thing, "collapsed_reason"):
     <span class="collapsed-reason">${thing.collapsed_reason}</span>
   %endif
 
@@ -98,7 +100,7 @@ ${parent.midcol(cls = cls)}
       [${_("score hidden")}]
     </span>&#32;
   %elif show and not thing.score_hidden:
-    ${unsafe(self.score(thing, likes = thing.likes))}&#32;
+    ${unsafe(self.score(thing))}&#32;
   %endif
 
   ${thing_timestamp(thing, thing.timesince, live=True, include_tense=True)}
@@ -129,7 +131,9 @@ ${parent.midcol(cls = cls)}
 %else:
   <div class="child">
 %endif
+  %if thing.childlisting:
     ${thing.childlisting}
+  %endif
   </div>
 </%def>
 
@@ -142,6 +146,18 @@ ${parent.midcol(cls = cls)}
 </%def>
 
 <%def name="buttons()">
+  %if c.profilepage:
+    %if thing.subreddit.quarantine:
+      <li>
+        <span class="quarantine-stamp stamp">${quarantine_stamp()}</span>
+      </li>
+    %endif
+    %if thing.nsfw:
+      <li>
+        <span class="nsfw-stamp stamp">${nsfw_stamp()}</span>
+      </li>
+    %endif
+  %endif
   ${CommentButtons(thing)}
   ${self.admintagline()}
 </%def>

@@ -16,20 +16,27 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 from pylons import g, c
 
 from r2.lib.db import queries
+from r2.lib.db.tdb_sql import CreationError
 from r2.lib import amqp
 from r2.lib.utils import extract_user_mentions
 from r2.models import query_cache, Thing, Comment, Account, Inbox, NotFound
 
 
 def notify_mention(user, thing):
-    inbox_rel = Inbox._add(user, thing, "mention")
+    try:
+        inbox_rel = Inbox._add(user, thing, "mention")
+    except CreationError:
+        # this mention was already inserted, ignore it
+        g.log.error("duplicate mention for (%s, %s)", user, thing)
+        return
+
     with query_cache.CachedQueryMutator() as m:
         m.insert(queries.get_inbox_comment_mentions(user), [inbox_rel])
         queries.set_unread(thing, user, unread=True, mutator=m)
@@ -43,10 +50,17 @@ def remove_mention_notification(mention):
         queries.set_unread(thing, inbox_owner, unread=False, mutator=m)
 
 
-def monitor_mentions(comment):
-    if not isinstance(comment, Comment):
-        return
+def readd_mention_notification(mention):
+    """Reinsert into inbox after a comment has been unspammed"""
+    inbox_owner = mention._thing1
+    thing = mention._thing2
+    with query_cache.CachedQueryMutator() as m:
+        m.insert(queries.get_inbox_comment_mentions(inbox_owner), [mention])
+        unread = getattr(mention, 'unread_preremoval', True)
+        queries.set_unread(thing, inbox_owner, unread=unread, mutator=m)
 
+
+def monitor_mentions(comment):
     if comment._spam or comment._deleted:
         return
 
@@ -57,7 +71,7 @@ def monitor_mentions(comment):
         return
 
     subreddit = comment.subreddit_slow
-    usernames = list(extract_user_mentions(comment.body, num=g.butler_max_mentions + 1))
+    usernames = extract_user_mentions(comment.body)
     inbox_class = Inbox.rel(Account, Comment)
 
     # If more than our allowed number of mentions were passed, don't highlight
@@ -78,8 +92,8 @@ def monitor_mentions(comment):
         if account == sender:
             continue
 
-        # bail out if that user doesn't have gold or has the feature turned off
-        if not account.gold or not account.pref_monitor_mentions:
+        # bail out if that user has the feature turned off
+        if not account.pref_monitor_mentions:
             continue
 
         # don't notify users of things they can't see

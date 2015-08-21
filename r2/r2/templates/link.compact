@@ -16,11 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
+   from r2.config import feature
    from r2.lib.template_helpers import add_sr
    from r2.lib.template_helpers import make_url_protocol_relative
    import urllib
@@ -29,7 +30,7 @@
 <%namespace file="printable.compact" import="delete_report_buttons"/>
 <%namespace file="printable.html" import="arrow, score"/>
 <%namespace file="link.html" import="tagline, thumbnail"/>
-<%namespace file="utils.html" import="plain_link" />
+<%namespace file="utils.html" import="plain_link, nsfw_stamp, quarantine_stamp" />
 <%namespace file="utils.compact" import="icon_button, toggle_button" />
 <%namespace file="printablebuttons.html" import="state_button" />
 
@@ -68,8 +69,6 @@
   <%
     if thing.is_self:
         url = add_sr(thing.href_url)
-    elif thing.pref_frame:
-        url = thing.tblink + '.compact'
     else:
         url = thing.url
   %>
@@ -78,7 +77,7 @@
   %endif
     ${thumbnail()}
     <p class="title">
-    <a href="${url}">${thing.title}</a>
+    <a href="${url}" class="may-blank">${thing.title}</a>
     %if c.site.link_flair_position == 'right' and thing.flair_text:
       ${flair()}
     %endif
@@ -89,11 +88,14 @@
         (<a href="${thing.domain_path}.compact">${thing.domain_str}</a>)
     %endif
     </span>
+    %if thing.quarantine:
+      <span class="quarantine-warning">
+        ${quarantine_stamp()}
+      </span>
+    %endif
     %if thing.nsfw:
       <span class="nsfw-warning">
-        <acronym title="${_('Adult content: Not Safe For Work')}">
-          ${_("NSFW")}
-        </acronym>
+        ${nsfw_stamp()}
       </span>
     %endif
     </p>

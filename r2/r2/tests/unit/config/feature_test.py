@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,9 +29,13 @@ import mock
 from r2.config.feature.state import FeatureState
 from r2.config.feature.world import World
 
-MockAccount = collections.namedtuple('Account', 'name')
-gary = MockAccount(name='gary')
-all_uppercase = MockAccount(name='ALL_UPPERCASE')
+
+class MockAccount(object):
+    def __init__(self, name, _fullname):
+        self.name = name
+        self._fullname = _fullname
+gary = MockAccount(name='gary', _fullname='t2_beef')
+all_uppercase = MockAccount(name='ALL_UPPERCASE', _fullname='t2_f00d')
 
 
 class TestFeature(unittest.TestCase):
@@ -95,6 +99,88 @@ class TestFeature(unittest.TestCase):
         mock_world.is_employee = mock.Mock(return_value=False)
         feature_state = self._make_state(cfg, mock_world)
         self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_beta_enabled(self):
+        cfg = {'beta': True}
+        mock_world = self.world()
+        mock_world.user_has_beta_enabled = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_beta_disabled(self):
+        cfg = {'beta': True}
+        mock_world = self.world()
+        mock_world.user_has_beta_enabled = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_gold_enabled(self):
+        cfg = {'gold': True}
+        mock_world = self.world()
+        mock_world.has_gold = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_gold_disabled(self):
+        cfg = {'gold': True}
+        mock_world = self.world()
+        mock_world.has_gold = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_loggedin_enabled(self):
+        cfg = {'loggedin': True}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_loggedin_disabled(self):
+        cfg = {'loggedin': False}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_loggedout_enabled(self):
+        cfg = {'loggedout': True}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_loggedout_disabled(self):
+        cfg = {'loggedout': False}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_percent_loggedin(self):
+        num_users = 2000
+        users = []
+        for i in xrange(num_users):
+            users.append(MockAccount(name=str(i), _fullname="t2_%s" % str(i)))
+
+        def simulate_percent_loggedin(wanted_percent):
+            cfg = {'percent_loggedin': wanted_percent}
+            mock_world = self.world()
+            mock_world.is_user_loggedin = mock.Mock(return_value=True)
+            feature_state = self._make_state(cfg, mock_world)
+            return (feature_state.is_enabled(x) for x in users)
+
+        def assert_fuzzy_percent_true(results, percent):
+            stats = collections.Counter(results)
+            # _roughly_ `percent` should have been `True`
+            diff = abs((float(stats[True]) / num_users) - (percent / 100.0))
+            self.assertTrue(diff < 0.1)
+
+        self.assertFalse(any(simulate_percent_loggedin(0)))
+        self.assertTrue(all(simulate_percent_loggedin(100)))
+        assert_fuzzy_percent_true(simulate_percent_loggedin(25), 25)
+        assert_fuzzy_percent_true(simulate_percent_loggedin(10), 10)
+        assert_fuzzy_percent_true(simulate_percent_loggedin(50), 50)
+        assert_fuzzy_percent_true(simulate_percent_loggedin(99), 99)
 
     def test_url_enabled(self):
         mock_world = self.world()
@@ -169,6 +255,29 @@ class TestFeature(unittest.TestCase):
         cfg = {'subreddits': ['aww', 'wtfoobar']}
         feature_state = self._make_state(cfg)
         self.assertFalse(feature_state.is_enabled(subreddit='wtf'))
+
+    def test_subdomain_in(self):
+        cfg = {'subdomains': ['BETA']}
+        feature_state = self._make_state(cfg)
+        self.assertTrue(feature_state.is_enabled(subdomain='beta'))
+
+        cfg = {'subdomains': ['beta']}
+        feature_state = self._make_state(cfg)
+        self.assertTrue(feature_state.is_enabled(subdomain='BETA'))
+
+        cfg = {'subdomains': ['www', 'beta']}
+        feature_state = self._make_state(cfg)
+        self.assertTrue(feature_state.is_enabled(subdomain='beta'))
+
+    def test_subdomain_not_in(self):
+        cfg = {'subdomains': []}
+        feature_state = self._make_state(cfg)
+        self.assertFalse(feature_state.is_enabled(subdomain='beta'))
+        self.assertFalse(feature_state.is_enabled(subdomain=''))
+
+        cfg = {'subdomains': ['www', 'betanauts']}
+        feature_state = self._make_state(cfg)
+        self.assertFalse(feature_state.is_enabled(subdomain='beta'))
 
     def test_multiple(self):
         # is_admin, globally off should still be False

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2014
+## All portions of the code written by reddit are Copyright (c) 2006-2015
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -77,9 +77,6 @@
        %elif c.cname:
          target="_top"
        %endif
-       %if thing.mousedown_url:
-         onmousedown="save_href($(this));this.href='${thing.mousedown_url}'"
-       %endif
        >
       ${thing.title}
     </a>
@@ -98,7 +95,10 @@
        >
       %if not expanded:
       <%
-       score_dislikes, score_unvoted, score_likes = thing.display_score
+       if thing.hide_score:
+           score_dislikes = score_unvoted = score_likes = unsafe('&bull; points')
+       else:
+           score_dislikes, score_unvoted, score_likes = thing.display_score
        %>
       <span class="score dislikes" ${hide_if_appropriate('dislikes')}>
          ${score_dislikes}
