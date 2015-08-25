@@ -1037,6 +1037,10 @@ class ApiController(RedditController):
         # had better be the current user.
         if type == "friend" and container != c.user:
             abort(403,'forbidden')
+            
+        # users shouldn't be able to friend themselves.
+        if type == "friend" and c.user == friend:
+            abort(403, 'forbidden')
 
         elif form.has_errors("name", errors.USER_DOESNT_EXIST, errors.NO_USER):
             return
