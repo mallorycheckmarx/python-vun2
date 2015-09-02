@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -38,40 +38,27 @@ class FileSystemMediaProvider(MediaProvider):
     `media_fs_root` is the root directory on the filesystem to write the objects
     into.
 
-    `media_fs_base_url_http` is the base URL on which to find the media
-    objects. It should be an absolute URL to the root directory of the media
-    object server that is accessible via both HTTP and HTTPS.
+    `media_fs_base_url_http` and `media_fs_base_url_https` are the base URLs on
+    which to find the media objects. They should be an absolute URL to the root
+    directory of the media object server.
 
     """
     config = {
         ConfigValue.str: [
             "media_fs_root",
             "media_fs_base_url_http",
+            "media_fs_base_url_https",
         ],
     }
 
-    def make_inaccessible(self, url):
-        # When it comes to file system, there isn't really the concept of
-        # "making a file inaccessible" separate from deletion without
-        # losing track of it. For the sake of not creating orphaned files, 
-        # not implementing this method
-        g.log.warning(
-            'FileSystemMediaProvider.make_inaccessible is consciously '
-            'not implemented and does not raise an error.'
-        )
-        return True
-
-    def put(self, category, name, contents):
+    def put(self, name, contents):
         assert os.path.dirname(name) == ""
         path = os.path.join(g.media_fs_root, name)
         with open(path, "w") as f:
             f.write(contents)
         return urlparse.urljoin(g.media_fs_base_url_http, name)
-        
-    def purge(self, url):
-        """Remove the content from disk. Content can not be recovered."""
 
-        name = url.split('/')[-1]
-        path = os.path.join(g.media_fs_root, name)
-        os.remove(path)
-        return True
+    def convert_to_https(self, http_url):
+        # http://whatever.com/whatever/filename.jpg -> filename.jpg
+        name = http_url[http_url.rfind("/") + 1:]
+        return urlparse.urljoin(g.media_fs_base_url_https, name)

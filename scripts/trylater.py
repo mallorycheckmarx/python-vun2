@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -34,10 +34,10 @@ def run_trylater():
     our_hooks = (key[len(PREFIX):] for key in all_hooks().keys()
                  if key.startswith(PREFIX))
     with TryLater.multi_handle(our_hooks) as handleable:
-        for system, data in handleable.iteritems():
+        for system, mature_items in handleable.iteritems():
             hook_name = "trylater.%s" % system
             g.log.info("Trying %s", system)
 
-            get_hook(hook_name).call(data=data)
+            get_hook(hook_name).call(mature_items=mature_items)
 
     amqp.worker.join()

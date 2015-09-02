@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,29 +28,18 @@ class MediaProvider(object):
     users to be able to view those objects over HTTP.
 
     """
-    def make_inaccessible(self, url):
-        """Make the content unavaiable, but do not remove. Content could
-        be recovered at a later time.
-
-        `url` must be a url linking to the content
-
-        The return value should be a 
-        """
-        raise NotImplementedError
-
-    def put(self, category, name, contents):
+    def put(self, name, contents):
         """Put a media object on the media server and return its HTTP URL.
 
         `name` must be a local filename including an extension.
 
         `contents` is a byte string of the contents of the file.
 
-        The return value should be an absolute URL with the `http` scheme but
-        should also work if accessed with `https`.
+        The return value should be an absolute URL with the `http` scheme.
 
         """
         raise NotImplementedError
 
-    def purge(self, url):
-        """Remove the content. Content can not be recovered."""
+    def convert_to_https(self, http_url):
+        """Return an HTTPS url for a given HTTP media URL."""
         raise NotImplementedError

@@ -16,14 +16,14 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
    from r2.lib.strings import strings
    from r2.lib.pages import SubredditSelector, UserText
-   from r2.lib.template_helpers import add_sr, _wsf, format_html
+   from r2.lib.template_helpers import add_sr
    from r2.lib.filters import safemarkdown
 %>
 
@@ -32,12 +32,12 @@
 
 <%
   if thing.default_sr:
-    sr = format_html("&#32;%s", unsafe(_a_buffered(thing.default_sr.name, href=thing.default_sr.path)))
+    sr = "&#32;" + _a_buffered(thing.default_sr.name, href=thing.default_sr.path)
   else:
     sr = _("reddit")
 %>
 
-<h1>${_wsf("submit to %(sr)s", sr=sr)}</h1>
+<h1>${unsafe(_("submit to %(sr)s") % dict(sr=sr))}</h1>
 
 <%utils:submit_form onsubmit="return post_form(this, 'submit', linkstatus, null, true)" 
                     action=${add_sr("/submit")},
@@ -107,8 +107,8 @@ ${thing.formtabs_menu}
 
 <div class="spacer">
     <div class="submit_text roundfield">
-        <h1>${_wsf('submitting to %(sr)s', sr=unsafe('/r/<span class="sr"></span>'))}</h1>
-        <span class="content md-container">
+        <h1>${unsafe(_('submitting to %(sr)s') % dict(sr='/r/<span class="sr"></span>'))}</h1>
+        <span class="content">
             %if thing.default_sr and thing.default_sr.submit_text:
                 ${unsafe(safemarkdown(thing.default_sr.submit_text))}
             %endif

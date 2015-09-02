@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -157,8 +157,7 @@ class EmrJob(object):
                  ec2_keyname=None, hadoop_version='1.0.3',
                  ami_version='latest', master_instance_type='m1.small',
                  slave_instance_type='m1.small', num_slaves=1,
-                 visible_to_all_users=True, job_flow_role=None,
-                 service_role=None):
+                 visible_to_all_users=True):
 
         self.jobflowid = None
         self.conn = emr_connection
@@ -176,8 +175,6 @@ class EmrJob(object):
         self.slave_instance_type = slave_instance_type
         self.num_instances = num_slaves + 1
         self.visible_to_all_users = visible_to_all_users
-        self.job_flow_role = job_flow_role
-        self.service_role = service_role
 
     def run(self):
         steps = copy(self.setup_steps)
@@ -192,8 +189,7 @@ class EmrJob(object):
             num_instances=self.num_instances,
             enable_debugging=self.enable_debugging,
             log_uri=self.log_uri,
-            visible_to_all_users=self.visible_to_all_users,
-            job_flow_role=self.job_flow_role, service_role=self.service_role)
+            visible_to_all_users=self.visible_to_all_users)
 
         self.jobflowid = self.conn.run_jobflow(**job_flow_args)
         return

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 import re
@@ -84,6 +84,11 @@ def force_html():
     c.extension = None
     c.content_type = 'text/html; charset=UTF-8'
 
+def auto_expand_panel(link):
+    if not link.num_comments or link.is_self:
+        return False
+    else:
+        return c.user.pref_frame_commentspanel
 
 class ToolbarController(RedditController):
 
@@ -100,28 +105,38 @@ class ToolbarController(RedditController):
 
     @validate(link = VLink('id'))
     def GET_tb(self, link):
-        '''/tb/$id36, former toolbar
-        The reddit toolbar is no longer supported, redirect to comments page.
-        The /tb url is still used as redirect from the linkoid short link.
+        '''/tb/$id36, show a given link with the toolbar
+        If the user doesn't have the toolbar enabled, redirect to comments
+        page.
         
         '''
+        from r2.lib.media import thumbnail_url
         if not link:
             return self.abort404()
         elif not link.subreddit_slow.can_view(c.user):
             # don't disclose the subreddit/title of a post via the redirect url
             self.abort403()
         elif link.is_self:
-            redirect_url = link.url
-        else:
-            redirect_url = link.make_permalink_slow(force_domain=True)
+            return self.redirect(link.url)
+        elif not (c.user_is_loggedin and c.user.uses_toolbar):
+            return self.redirect(link.make_permalink_slow(force_domain=True))
         
-        query_params = dict(request.GET)
-        if query_params:
-            url = UrlParser(redirect_url)
-            url.update_query(**query_params)
-            redirect_url = url.unparse()
+        # if the domain is shame-banned, bail out.
+        if is_shamed_domain(link.url)[0]:
+            self.abort404()
 
-        return self.redirect(redirect_url)
+        if link.has_thumbnail:
+            thumbnail = thumbnail_url(link)
+        else:
+            thumbnail = None
+
+        res = Frame(
+            title=link.title,
+            url=match_current_reddit_subdomain(link.url),
+            thumbnail=thumbnail,
+            fullname=link._fullname,
+        )
+        return spaceCompress(res.render())
 
     @validate(urloid=nop('urloid'))
     def GET_s(self, urloid):
@@ -172,8 +187,65 @@ class ToolbarController(RedditController):
             qs = utils.query_string({"url": path})
             return self.redirect(add_sr("/submit" + qs))
 
-    def GET_redirect(self):
-        return self.redirect('/', code=301)
+    @validate(link = VLink('id'))
+    def GET_comments(self, link):
+        if not link:
+            self.abort404()
+        if not link.subreddit_slow.can_view(c.user):
+            abort(403, 'forbidden')
+
+        links = list(wrap_links(link))
+        if not links:
+            # they aren't allowed to see this link
+            return abort(403, 'forbidden')
+        link = links[0]
+
+        wrapper = make_wrapper(render_class = StarkComment,
+                               target = "_top")
+        b = TopCommentBuilder(link, CommentSortMenu.operator('confidence'),
+                              num=10, wrap=wrapper)
+
+        listing = NestedListing(b, parent_name=link._fullname)
+
+        raw_bar = strings.comments_panel_text % dict(
+            fd_link=link.permalink)
+
+        md_bar = safemarkdown(raw_bar, target="_top")
+
+        res = RedditMin(content=CommentsPanel(link=link,
+                                              listing=listing.listing(),
+                                              expanded=auto_expand_panel(link),
+                                              infobar=md_bar))
+
+        return res.render()
+
+    @validate(link = VByName('id'),
+              url = nop('url'))
+    def GET_toolbar(self, link, url):
+        """The visible toolbar, with voting buttons and all"""
+        if url:
+            url = demangle_url(url)
+
+        if link:
+            wrapped = wrap_links(link, wrapper=FrameToolbar, num=1)
+        else:
+            return self.abort404()
+
+        return spaceCompress(wrapped.render())
+
+    @validate(link = VByName('id'))
+    def GET_inner(self, link):
+        """The intermediate frame that displays the comments side-bar
+           on one side and the link on the other"""
+        if not link:
+            return self.abort404()
+
+        res = InnerToolbarFrame(
+            link=link,
+            url=match_current_reddit_subdomain(link.url),
+            expanded=auto_expand_panel(link),
+        )
+        return spaceCompress(res.render())
 
     @validate(link = VLink('linkoid'))
     def GET_linkoid(self, link):

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """Parse and validate a safe subset of CSS.
@@ -83,7 +83,6 @@ SAFE_PROPERTIES = {
     "animation-name",
     "animation-play-state",
     "animation-timing-function",
-    "appearance",
     "backface-visibility",
     "background",
     "background-attachment",
@@ -92,8 +91,6 @@ SAFE_PROPERTIES = {
     "background-image",
     "background-origin",
     "background-position",
-    "background-position-x",
-    "background-position-y",
     "background-repeat",
     "background-size",
     "border",
@@ -139,7 +136,6 @@ SAFE_PROPERTIES = {
     "caption-side",
     "clear",
     "clip",
-    "clip-path",
     "color",
     "content",
     "counter-increment",
@@ -258,9 +254,7 @@ SAFE_PROPERTIES = {
     "text-indent",
     "text-justify",
     "text-overflow",
-    "text-rendering",
     "text-shadow",
-    "text-size-adjust",
     "text-space-collapse",
     "text-transform",
     "text-underline-position",
@@ -293,15 +287,12 @@ assert all(property == property.lower() for property in SAFE_PROPERTIES)
 SAFE_FUNCTIONS = {
     "attr",
     "calc",
-    "circle",
     "counter",
     "counters",
     "cubic-bezier",
-    "ellipse",
     "hsl",
     "hsla",
     "lang",
-    "line",
     "linear-gradient",
     "matrix",
     "matrix3d",
@@ -311,8 +302,6 @@ SAFE_FUNCTIONS = {
     "nth-last-of-type",
     "nth-of-type",
     "perspective",
-    "polygon",
-    "polyline",
     "radial-gradient",
     "rect",
     "repeating-linear-gradient",

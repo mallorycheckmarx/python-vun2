@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -50,13 +50,6 @@ MIN_DAILY_CASS_KEY = 'min_daily_pageviews.GET_listing'
 PAGEVIEWS_REGEXP = re.compile('(.*)-GET_listing')
 INVENTORY_FACTOR = 1.00
 DEFAULT_INVENTORY_FACTOR = 5.00
-# For `PERCENT_MOBILE`:
-# if `0`, 100% of inventory will be displayed no matter the platform;
-# if not `0`:
-# - `all` is 100% of inventory
-# - `mobile` is `all` * (PERCENT_MOBILE / 100)
-# - `desktop` is `all` - `mobile`
-PERCENT_MOBILE = 0
 
 
 def update_prediction_data():
@@ -122,10 +115,7 @@ def get_campaigns_by_date(srs, start, end, ignore=None):
 
     if transaction_ids:
         transactions = Bid.query().filter(Bid.transaction.in_(transaction_ids))
-        # index transactions by transaction and campaign id because freebies
-        # reuse the same transaction id (they always use -link id)
-        transaction_by_id = {
-            (bid.transaction, bid.campaign): bid for bid in transactions}
+        transaction_by_id = {bid.transaction: bid for bid in transactions}
     else:
         transaction_by_id = {}
 
@@ -139,7 +129,7 @@ def get_campaigns_by_date(srs, start, end, ignore=None):
             # pre-CPM campaign
             continue
 
-        transaction = transaction_by_id[(camp.trans_id, camp._id)]
+        transaction = transaction_by_id[camp.trans_id]
         if not (transaction.is_auth() or transaction.is_charged()):
             continue
 
@@ -149,42 +139,22 @@ def get_campaigns_by_date(srs, start, end, ignore=None):
     return ret
 
 
-def get_predicted_pageviews(srs, location=None):
-    """
-    Return predicted number of pageviews for sponsored headlines.
-
-    Predicted geotargeted impressions are estimated as:
-
-    geotargeted impressions = (predicted untargeted impressions) *
-                                 (fp impressions for location / fp impressions)
-
-    """
-
+def get_predicted_pageviews(srs):
     srs, is_single = tup(srs, ret_is_single=True)
     sr_names = [sr.name for sr in srs]
 
     # default subreddits require a different inventory factor
     default_srids = LocalizedDefaultSubreddits.get_global_defaults()
 
-    if location:
-        no_location = Location(None)
-        r = LocationPromoMetrics.get(DefaultSR, [no_location, location])
-        location_pageviews = r[(DefaultSR, location)]
-        all_pageviews = r[(DefaultSR, no_location)]
-        location_factor = float(location_pageviews) / float(all_pageviews)
-    else:
-        location_factor = 1.0
-
     # prediction does not vary by date
     daily_inventory = PromoMetrics.get(MIN_DAILY_CASS_KEY, sr_names=sr_names)
     ret = {}
     for sr in srs:
         if not isinstance(sr, FakeSubreddit) and sr._id in default_srids:
-            default_factor = DEFAULT_INVENTORY_FACTOR
+            factor = DEFAULT_INVENTORY_FACTOR
         else:
-            default_factor = INVENTORY_FACTOR
-        base_pageviews = daily_inventory.get(sr.name, 0)
-        ret[sr.name] = int(base_pageviews * default_factor * location_factor)
+            factor = INVENTORY_FACTOR
+        ret[sr.name] = int(daily_inventory.get(sr.name, 0) * factor)
 
     if is_single:
         return ret[srs[0].name]
@@ -192,43 +162,33 @@ def get_predicted_pageviews(srs, location=None):
         return ret
 
 
-def make_target_name(target):
-    name = ("collection: %s" % target.collection.name if target.is_collection
-                                           else target.subreddit_name)
-    return name
-
-
-def find_campaigns(srs, start, end, ignore):
-    """Get all campaigns in srs and pull in campaigns in other targeted srs."""
-    all_sr_names = set()
-    all_campaigns = set()
-    srs = set(srs)
-
-    while srs:
-        all_sr_names |= {sr.name for sr in srs}
-        new_campaigns_by_date = get_campaigns_by_date(srs, start, end, ignore)
-        new_campaigns = set(chain.from_iterable(
-            new_campaigns_by_date.itervalues()))
-        all_campaigns.update(new_campaigns)
-        new_sr_names = set(chain.from_iterable(
-            campaign.target.subreddit_names for campaign in new_campaigns
-        ))
-        new_sr_names -= all_sr_names
-        srs = set(Subreddit._by_name(new_sr_names).values())
-    return all_campaigns
-
-
-def get_available_pageviews(targets, start, end, location=None, datestr=False,
-                            ignore=None, platform='all'):
+def get_predicted_geotargeted(sr, location):
     """
-    Return the available pageviews by date for the targets and location.
+    Predicted geotargeted impressions are estimated as:
 
-    Available pageviews depends on all equal and higher level locations:
-    A location is: subreddit > country > metro
+    geotargeted impressions = (predicted untargeted impressions) *
+                                 (fp impressions for location / fp impressions)
+
+    """
+
+    predicted_pageviews = get_predicted_pageviews(sr)
+    no_location = Location(None)
+    r = LocationPromoMetrics.get(DefaultSR, [no_location, location])
+    ratio = r[(DefaultSR, location)] / float(r[(DefaultSR, no_location)])
+    return int(predicted_pageviews * ratio)
+
+
+def get_available_pageviews_geotargeted(sr, location, start, end, datestr=False, 
+                                        ignore=None):
+    """
+    Return the available pageviews by date for the subreddit and location.
+
+    Available pageviews depends on all equal and higher level targets:
+    A target is: subreddit > country > metro
 
     e.g. if a campaign is targeting /r/funny in USA/Boston we need to check that
     there's enough inventory in:
-    * /r/funny (all campaigns targeting /r/funny regardless of location)
+    * /r/funny (all campaigns targeting /r/funny regardless of geotargeting)
     * /r/funny + USA (all campaigns targeting /r/funny and USA with or without
       metro level targeting)
     * /r/funny + USA + Boston (all campaigns targeting /r/funny and USA and
@@ -237,75 +197,98 @@ def get_available_pageviews(targets, start, end, location=None, datestr=False,
 
     """
 
-    # assemble levels of location targeting, None means untargeted
-    locations = [None]
-    if location:
-        locations.append(location)
+    predicted_by_location = {
+        None: get_predicted_pageviews(sr),
+        location: get_predicted_geotargeted(sr, location),
+    }
 
-        if location.metro:
-            locations.append(Location(country=location.country))
+    if location.metro:
+        country_location = Location(country=location.country)
+        country_prediction = get_predicted_geotargeted(sr, country_location)
+        predicted_by_location[country_location] = country_prediction
+    locations = predicted_by_location.keys()
 
-    # get all the campaigns directly and indirectly involved in our target
+    datekey = lambda dt: dt.strftime('%m/%d/%Y') if datestr else dt
+
+    ret = {}
+    campaigns_by_date = get_campaigns_by_date(sr, start, end, ignore)
+    for date, campaigns in campaigns_by_date.iteritems():
+
+        # calculate sold impressions for each location
+        sold_by_location = dict.fromkeys(locations, 0)
+        for camp in campaigns:
+            daily_impressions = camp.impressions / camp.ndays
+            for location in locations:
+                if not location or location.contains(camp.location):
+                    sold_by_location[location] += daily_impressions
+
+        # calculate available impressions for each location
+        available_by_location = dict.fromkeys(locations, 0)
+        for location, predicted in predicted_by_location.iteritems():
+            sold = sold_by_location[location]
+            available_by_location[location] = predicted - sold
+
+        ret[datekey(date)] = max(0, min(available_by_location.values()))
+    return ret
+
+
+
+def make_target_name(target):
+    name = ("collection: %s" % target.collection.name if target.is_collection
+                                           else target.subreddit_name)
+    return name
+
+
+def get_available_pageviews(targets, start, end, datestr=False, ignore=None):
+    pageviews_by_sr_name = {}
+    all_campaigns = set()
+
     targets, is_single = tup(targets, ret_is_single=True)
-    target_srs = list(chain.from_iterable(
-        target.subreddits_slow for target in targets))
-    all_campaigns = find_campaigns(target_srs, start, end, ignore)
+    target_srs = chain.from_iterable(
+        target.subreddits_slow for target in targets)
+    all_sr_names = set()
+    srs = set(target_srs)
 
-    # get predicted pageviews for each subreddit and location
-    all_sr_names = set(sr.name for sr in target_srs)
-    all_sr_names |= set(chain.from_iterable(
-        campaign.target.subreddit_names for campaign in all_campaigns
-    ))
-    all_srs = Subreddit._by_name(all_sr_names).values()
-    pageviews_dict = {location: get_predicted_pageviews(all_srs, location)
-                          for location in locations}
+    # get all campaigns in target_srs and pull in campaigns from other
+    # subreddits that are targeted
+    while srs:
+        all_sr_names |= {sr.name for sr in srs}
+        new_pageviews_by_sr_name = get_predicted_pageviews(srs)
+        pageviews_by_sr_name.update(new_pageviews_by_sr_name)
 
-    # determine booked impressions by target and location for each day
+        new_campaigns_by_date = get_campaigns_by_date(srs, start, end, ignore)
+        new_campaigns = set(chain.from_iterable(
+            new_campaigns_by_date.itervalues()))
+        all_campaigns.update(new_campaigns)
+
+        new_sr_names = set(chain.from_iterable(
+            campaign.target.subreddit_names for campaign in new_campaigns
+        ))
+        new_sr_names -= all_sr_names
+        srs = set(Subreddit._by_name(new_sr_names).values())
+
+    # determine booked impressions by target for each day
     dates = set(get_date_range(start, end))
-    booked_dict = {}
-    for date in dates:
-        booked_dict[date] = {}
-        for location in locations:
-            booked_dict[date][location] = defaultdict(int)
-
+    booked_by_target_by_date = {date: defaultdict(int) for date in dates}
     for campaign in all_campaigns:
         camp_dates = set(get_date_range(campaign.start_date, campaign.end_date))
         sr_names = tuple(sorted(campaign.target.subreddit_names))
         daily_impressions = campaign.impressions / campaign.ndays
 
-        for location in locations:
-            if location and not location.contains(campaign.location):
-                # campaign's location is less specific than location
-                continue
+        for date in camp_dates.intersection(dates):
+            booked_by_target_by_date[date][sr_names] += daily_impressions
 
-            for date in camp_dates.intersection(dates):
-                booked_dict[date][location][sr_names] += daily_impressions
-
-    # calculate inventory for each target and location on each date
     datekey = lambda dt: dt.strftime('%m/%d/%Y') if datestr else dt
 
     ret = {}
     for target in targets:
         name = make_target_name(target)
-        subreddit_names = target.subreddit_names
         ret[name] = {}
         for date in dates:
-            pageviews_by_location = {}
-            for location in locations:
-                # calculate available impressions for each location
-                booked_by_target = booked_dict[date][location]
-                pageviews_by_sr_name = pageviews_dict[location]
-                pageviews_by_location[location] = get_maximized_pageviews(
-                    subreddit_names, booked_by_target, pageviews_by_sr_name)
-            # available pageviews is the minimum from all locations
-            min_pageviews = min(pageviews_by_location.values())
-            if PERCENT_MOBILE != 0:
-                mobile_pageviews = min_pageviews * (float(PERCENT_MOBILE) / 100)
-                if platform == 'mobile':
-                    min_pageviews = mobile_pageviews
-                if platform == 'desktop':
-                    min_pageviews = min_pageviews - mobile_pageviews
-            ret[name][datekey(date)] = max(0, min_pageviews)
+            booked_by_target = booked_by_target_by_date[date]
+            pageviews = get_maximized_pageviews(
+                target.subreddit_names, booked_by_target, pageviews_by_sr_name)
+            ret[name][datekey(date)] = max(0, pageviews)
 
     if is_single:
         name = make_target_name(targets[0])
@@ -315,8 +298,15 @@ def get_available_pageviews(targets, start, end, location=None, datestr=False,
 
 
 def get_oversold(target, start, end, daily_request, ignore=None, location=None):
-    available_by_date = get_available_pageviews(target, start, end, location,
-                                                datestr=True, ignore=ignore)
+    if location:
+        srs = target.subreddits_slow
+        assert len(srs) == 1, "can't check inventory for multiple subreddits"
+        sr = srs[0]
+        available_by_date = get_available_pageviews_geotargeted(sr, location,
+                                start, end, datestr=True, ignore=ignore)
+    else:
+        available_by_date = get_available_pageviews(target, start, end,
+                                                    datestr=True, ignore=ignore)
     oversold = {}
     for datestr, available in available_by_date.iteritems():
         if available < daily_request:

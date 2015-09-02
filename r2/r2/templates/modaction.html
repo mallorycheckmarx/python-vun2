@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -32,7 +32,7 @@
 
 <tr class="modactions" style="background-color: ${thing.bgcolor}" data-fullname="${thing.fullname}">
   <td class="timestamp whitespace:nowrap">${timestamp(thing.date, live=True, include_tense=True)}</td>
-  %if thing.is_multi:
+  %if is_multi:
     <td class="subreddit">${plain_link('/r/' + thing.subreddit.name, thing.subreddit.path + 'about/log', title=thing.subreddit.name)}</td>
   %endif
   <td class="whitespace:nowrap">${thing.mod_button}</td>
@@ -73,8 +73,8 @@
     ${thing.wrapped_user_target}&#32;
   %endif
 
-  %if thing.details_text:
-    <em>(${thing.details_text})</em>
+  %if hasattr(thing, 'details') and thing.details:
+    <em>(${thing.details})</em>
   %endif
   </td>
 </tr>

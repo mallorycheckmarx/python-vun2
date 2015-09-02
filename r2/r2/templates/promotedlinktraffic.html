@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -26,7 +26,7 @@
 <%!
     from r2.lib.strings import strings
     from r2.lib.filters import safemarkdown
-    from r2.lib.template_helpers import format_number, js_timestamp, format_html
+    from r2.lib.template_helpers import format_number, js_timestamp
 %>
 
 <%def name="make_traffic_table()">
@@ -83,13 +83,13 @@
   %if thing.prev or thing.next:
     <p class="nextprev"> ${_("view more:")}&#32;
     %if thing.prev:
-      ${plain_link(format_html("&lsaquo; %s", _("prev")), thing.prev, _sr_path=False, rel="nofollow prev")}
+      ${plain_link(unsafe("&lsaquo; " + _("prev")), thing.prev, _sr_path=False, rel="nofollow prev")}  
     %endif
     %if thing.prev and thing.next:
       <span class="separator"></span>
     %endif
     %if thing.next:
-      ${plain_link(format_html("%s &rsaquo;", _("next")), thing.next,  _sr_path=False, rel="nofollow next")}
+      ${plain_link(unsafe(_("next") + " &rsaquo;"), thing.next,  _sr_path=False, rel="nofollow next")}  
     %endif
     </p>
   %endif
@@ -115,8 +115,7 @@
         <th>${_("location")}</th>
         <th>${_("budget")}</th>
         <th>${_("spent")}</th>
-        <th>${_("imps purchased")}</th>
-        <th>${_("imps delivered")}</th>
+        <th>${_("impressions")}</th>
         <th>${_("cpm")}</th>
         <th>${_("clicks")}</th>
         <th>${_("ctr")}</th>
@@ -126,16 +125,15 @@
       %for camp in thing.campaign_table:
           <tr class="${'promo-traffic-live' if camp['live'] else ''} ${'active' if camp['active'] else ''} ${'total' if camp['total'] else ''}">
               <td>${camp['id']}</td>
-              <td>${plain_link(_("detail"), camp['url'])}</td>
-              <td>${plain_link(_("csv"), camp['csv'])}</td>
+              <td>${plain_link(unsafe(_("detail")), camp['url'])}</td>
+              <td>${plain_link(unsafe(_("csv")), camp['csv'])}</td>
               <td>${camp['start']}</td>
               <td>${camp['end']}</td>
               <td>${camp['target']}</td>
               <td title="${camp['location']}">${camp['location']}</td>
               <td>${camp['budget']}</td>
               <td>${camp['spent']}</td>
-              <td>${camp['impressions_purchased']}</td>
-              <td>${camp['impressions_delivered']}</td>
+              <td>${camp['impressions']}</td>
               <td>${camp['cpm']}</td>
               <td>${camp['clicks']}</td>
               <td>${camp['ctr']}</td>

@@ -16,15 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
-    from r2.lib.pages import WrappedUser
-    from r2.lib.filters import safemarkdown, websafe, conditional_websafe
-    from r2.models import Account
-    from r2.lib.template_helpers import format_html
+    from r2.lib.pages import WrappedUser 
+    from r2.lib.filters import safemarkdown
 %>
 <%namespace file="printable.html" import="arrow, score"/>
 <%namespace file="utils.html" import="plain_link" />
@@ -43,7 +41,7 @@
        %else:
          <span class="correspondent rounded">
            <%
-              corr = thing.author if thing.user_is_recipient else thing.to
+              corr = thing.author if thing.recipient else thing.to
             %>
            ${WrappedUser(corr)}
          </span>
@@ -57,26 +55,21 @@
 
   <div class="entry">
   <%
-    substitutions = {}
-
-    if thing.sr_id:
-        substitutions['subreddit'] = format_html(u'<b>&nbsp;<a href="%(path)s.compact">%(path)s</a>&nbsp;</b>', path=thing.subreddit.path)
-
-    substitutions['author'] = format_html(u"<b>%s</b>", WrappedUser(thing.author, thing.attribs, thing))
-
-    if isinstance(thing.to, Account):
-        substitutions['dest'] = format_html(u"<b>%s</b>", WrappedUser(thing.to, [], thing))
-    elif thing.sr_id:
-        substitutions['dest'] = substitutions['subreddit']
-
-    substitutions['when'] = thing.timesince
-
-    taglinetext = conditional_websafe(thing.taglinetext).replace(' ', '&nbsp;')
-    taglinetext = format_html(taglinetext, **substitutions)
+   author = WrappedUser(thing.author, thing.attribs, thing).render()
+   if thing.sr_id:
+     subreddit = '&nbsp;<a href="%s.compact">%s</a>&nbsp;' % \
+                   (thing.subreddit.path, thing.subreddit.path)
+     if not thing.dest:
+       thing.dest = subreddit
+     author = thing.updated_author % dict(author=author, subreddit=subreddit)
+   
+   taglinetext = thing.taglinetext.replace(' ', '&nbsp;')
+   taglinetext = taglinetext % dict(when=thing.timesince,
+                                    author=u"<b>%s</b>" % author,
+                                    dest=u"<b>%s</b>" % thing.dest)
   %>
-
     <div class="tagline">
-      ${taglinetext}
+      ${unsafe(taglinetext)}
     </div>
     <a href="javascript:void(0)" class="options_link"></a>
     ${unsafe(safemarkdown(thing.body))}
@@ -96,9 +89,7 @@
   </div>
   <div style="clear: both;"></div>
   <div class="child">
-    %if thing.childlisting:
-      ${thing.childlisting}
-    %endif
+    ${thing.childlisting}
   </div>
 </div>
 

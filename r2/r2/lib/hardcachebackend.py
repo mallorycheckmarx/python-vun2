@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -323,28 +323,25 @@ class HardCacheBackend(object):
 
 
 def delete_expired(expiration="now", limit=5000):
-    # the following depends on the structure of g.hardcache not changing
-    backend = g.hardcache.caches[2].backend
-    memcache = g.hardcache.caches[1]
-    # localcache = g.hardcache.caches[0]
+    hcb = HardCacheBackend(g)
 
     masters = set()
 
-    for engines in backend.mapping.values():
+    for engines in hcb.mapping.values():
         masters.add(engines[0])
 
     for engine in masters:
-        expiration_clause = backend.clause_from_expiration(engine, expiration)
+        expiration_clause = hcb.clause_from_expiration(engine, expiration)
 
         # Get all the expired keys
-        rows = backend.expired(engine, expiration_clause, limit)
+        rows = hcb.expired(engine, expiration_clause, limit)
 
         if len(rows) == 0:
             continue
 
         # Delete them from memcache
         mc_keys = [ "%s-%s" % (c, i) for e, c, i in rows ]
-        memcache.delete_multi(mc_keys)
+        g.memcache.delete_multi(mc_keys)
 
         # Now delete them from the backend.
         engine.delete(expiration_clause).execute()

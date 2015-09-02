@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -38,6 +38,9 @@ from r2.lib.validator import validate, VOneOf
 section_info = {
     'account': {
         'title': 'account',
+    },
+    'apps': {
+        'title': 'apps',
     },
     'flair': {
         'title': 'flair',
@@ -126,7 +129,7 @@ class ApidocsController(RedditController):
         - `doc`: Markdown-formatted docstring.
         - `uri`: Manually-specified URI to list the API method as
         - `uri_variants`: Alternate URIs to access the API method from
-        - `supports_rss`: Indicates the URI also supports rss consumption
+        - `extensions`: URI extensions the API method supports
         - `parameters`: Dictionary of possible parameter names and descriptions.
         - `extends`: API method from which to inherit documentation
         - `json_model`: The JSON model used instead of normal POST parameters
@@ -150,10 +153,6 @@ class ApidocsController(RedditController):
                     docs['parameters'] = {}
                 docs.update(api_doc)
 
-                # hide quarantine as a parameter
-                if 'parameters' in api_doc:
-                    docs['parameters'].pop('quarantine', None)
-
                 # append a message to the docstring if supplied
                 notes = docs.get("notes")
                 if notes:
@@ -164,10 +163,12 @@ class ApidocsController(RedditController):
                         docs["doc"] = notes
 
                 uri = docs.get('uri') or '/'.join((url_prefix, action))
+                if 'extensions' in docs:
+                    # if only one extension was specified, add it to the URI.
+                    if len(docs['extensions']) == 1:
+                        uri += '.' + docs['extensions'][0]
+                        del docs['extensions']
                 docs['uri'] = uri
-
-                if 'supports_rss' not in docs:
-                    docs['supports_rss'] = False
 
                 if api_doc['uses_site']:
                     docs["in-subreddit"] = True
@@ -205,7 +206,6 @@ class ApidocsController(RedditController):
         from r2.controllers.api import ApiController, ApiminimalController
         from r2.controllers.apiv1.user import APIv1UserController
         from r2.controllers.apiv1.gold import APIv1GoldController
-        from r2.controllers.apiv1.scopes import APIv1ScopesController
         from r2.controllers.captcha import CaptchaController
         from r2.controllers.front import FrontController
         from r2.controllers.wiki import WikiApiController, WikiController
@@ -215,7 +215,6 @@ class ApidocsController(RedditController):
         api_controllers = [
             (APIv1UserController, '/api/v1'),
             (APIv1GoldController, '/api/v1'),
-            (APIv1ScopesController, '/api/v1'),
             (ApiController, '/api'),
             (ApiminimalController, '/api'),
             (WikiApiController, '/api/wiki'),

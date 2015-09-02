@@ -90,6 +90,8 @@
             var endTime = new Date()
             this._totalTime += endTime - startTime
 
+            r.debug('scrollupdater queued', count, 'in', endTime - startTime, 'ms')
+
             this._doUpdates()
         },
 
@@ -114,6 +116,8 @@
             }
 
             this._totalTime += endTime - startTime
+            r.debug('scrollupdater updated', count, 'in', endTime - startTime, 'ms')
+            r.debug('scrollupdater total', this._totalTime, 'ms')
 
             if (this._toUpdate.length) {
                 _.defer($.proxy(this, '_doUpdates'))

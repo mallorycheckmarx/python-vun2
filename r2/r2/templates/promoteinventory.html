@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -80,12 +80,6 @@ ${unsafe(js.use('sponsored'))}
         %endfor
     </tbody>
 </table>
-
-%if thing.csv_url:
-<div class="promote-report-csv">
-  ${plain_link(_("download as csv"), thing.csv_url)}
-</div>
-%endif
 
 <script type="text/javascript">
     r.sponsored.set_form_render_fnc(r.sponsored.fill_inventory_form);

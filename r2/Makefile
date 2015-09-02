@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -86,7 +86,7 @@ clean_ini:
 
 #################### CSS file lists
 SPRITED_STYLESHEETS += reddit.less compact.css
-LESS_STYLESHEETS := wiki.less adminbar.less policies.less reddit-embed.less
+LESS_STYLESHEETS := wiki.less adminbar.less policies.less
 OTHER_STYLESHEETS := mobile.css highlight.css
 
 #################### Static Files

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -78,30 +78,21 @@ from r2.lib.utils import timesince
 from r2.config import extensions
 from r2.lib.base import abort
 from r2.lib.errors import reddit_http_error
-from r2.lib.automoderator import Ruleset
 
 import json
 
-page_descriptions = {
-    "config/stylesheet": _("This page is the subreddit stylesheet, changes here apply to the subreddit css"),
-    "config/submit_text": _("The contents of this page appear on the submit page"),
-    "config/sidebar": _("The contents of this page appear on the subreddit sidebar"),
-    "config/description": _("The contents of this page appear in the public subreddit description and when the user does not have access to the subreddit"),
-    "config/automoderator": _("This page is used to configure AutoModerator for the subreddit, please see [the full documentation](/wiki/automoderator/full-documentation) for information"),
-}
+page_descriptions = {'config/stylesheet':_("This page is the subreddit stylesheet, changes here apply to the subreddit css"),
+                     'config/submit_text':_("The contents of this page appear on the submit page"),
+                     'config/sidebar':_("The contents of this page appear on the subreddit sidebar"),
+                     'config/description':_("The contents of this page appear in the public subreddit description")}
 
 ATTRIBUTE_BY_PAGE = {"config/sidebar": "description",
                      "config/submit_text": "submit_text",
                      "config/description": "public_description"}
-RENDERERS_BY_PAGE = {
-    "config/automoderator": "automoderator",
-    "config/description": "reddit",
-    "config/sidebar": "reddit",
-    "config/stylesheet": "stylesheet",
-    "config/submit_text": "reddit",
-    "toolbox": "rawcode",
-    "usernotes": "rawcode",
-}
+RENDERERS_BY_PAGE = {"config/sidebar": "reddit",
+                     "config/submit_text": "reddit",
+                     "config/description": "reddit",
+                     "config/stylesheet": "stylesheet"}
 
 class WikiController(RedditController):
     allow_stylesheets = True
@@ -379,7 +370,6 @@ class WikiApiController(WikiController):
         # In order to avoid breaking functionality, this was done instead.
         previous = previous._id if previous else request.POST.get('previous')
         try:
-            # special validation methods
             if page.name == 'config/stylesheet':
                 css_errors, parsed = c.site.parse_css(content, verify=False)
                 if g.css_killswitch:
@@ -387,15 +377,6 @@ class WikiApiController(WikiController):
                 if css_errors:
                     error_items = [CssError(x).message for x in css_errors]
                     self.handle_error(415, 'SPECIAL_ERRORS', special_errors=error_items)
-            elif page.name == "config/automoderator":
-                try:
-                    rules = Ruleset(content)
-                except ValueError as e:
-                    error_items = [e.message]
-                    self.handle_error(415, "SPECIAL_ERRORS", special_errors=error_items)
-
-            # special saving methods
-            if page.name == "config/stylesheet":
                 c.site.change_css(content, parsed, previous, reason=reason)
             else:
                 try:
@@ -405,14 +386,13 @@ class WikiApiController(WikiController):
 
                 # continue storing the special pages as data attributes on the subreddit
                 # object. TODO: change this to minimize subreddit get sizes.
-                if page.special and page.name in ATTRIBUTE_BY_PAGE:
+                if page.special:
                     setattr(c.site, ATTRIBUTE_BY_PAGE[page.name], content)
                     c.site._commit()
 
                 if page.special or c.is_wiki_mod:
                     description = modactions.get(page.name, 'Page %s edited' % page.name)
-                    ModAction.create(c.site, c.user, "wikirevise",
-                        details=description, description=reason)
+                    ModAction.create(c.site, c.user, 'wikirevise', details=description)
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         return json.dumps({})

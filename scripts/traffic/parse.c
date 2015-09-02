@@ -21,7 +21,7 @@
 #define RE  "(?:[0-9.]+,\\ )*([0-9.]+)"\
             "[^\"]+"\
             "\"GET\\s([^\\s?]+)\\?([^\\s]+)\\s[^\"]+\""\
-            "\\s([^\\s]+)[^\"]+"\
+            "[^\"]+"\
             "\"[^\"]+\""\
             "[^\"]+"\
             "\"([^\"]+)\""
@@ -29,8 +29,7 @@
 #define GROUP_IP    1
 #define GROUP_PATH  2
 #define GROUP_QUERY 3
-#define GROUP_CODE  4
-#define GROUP_UA    5
+#define GROUP_UA    4
 
 int main(int argc, char** argv) 
 {
@@ -57,10 +56,6 @@ int main(int argc, char** argv)
     pcre_fullinfo(re, extra, PCRE_INFO_CAPTURECOUNT, &group_count);
     int match_vector_size = (group_count + 1) * 3;
     int *matches = malloc(sizeof(int) * match_vector_size);
-    if (matches == NULL) {
-        fprintf(stderr, "Couldn't allocate memory for regex groups!\n");
-        return 1;
-    }
 
     /* iterate through the input */
     char input_line[MAX_LINE];
@@ -115,7 +110,6 @@ int main(int argc, char** argv)
 
                 /* fall through so it gets written out as well */
             case GROUP_PATH:
-            case GROUP_CODE:
             case GROUP_QUERY:
                 /* write them out verbatim */
                 (void)fwrite(

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -37,7 +37,39 @@ USER_FLAIR = 'USER_FLAIR'
 LINK_FLAIR = 'LINK_FLAIR'
 
 class Flair(Relation(Subreddit, Account)):
-    pass
+    @classmethod
+    def store(cls, sr, account, text = None, css_class = None):
+        flair = cls(sr, account, 'flair', text = text, css_class = css_class)
+        flair._commit()
+
+        setattr(account, 'flair_%s_text' % sr._id, text)
+        setattr(account, 'flair_%s_css_class' % sr._id, css_class)
+        account._commit()
+
+    @classmethod
+    @memoize('flair.all_flair_by_sr')
+    def all_flair_by_sr_cache(cls, sr_id):
+        q = cls._query(cls.c._thing1_id == sr_id)
+        return [t._id for t in q]
+
+    @classmethod
+    def all_flair_by_sr(cls, sr_id, _update=False):
+        relids = cls.all_flair_by_sr_cache(sr_id, _update=_update)
+        return cls._byID(relids).itervalues()
+
+    @classmethod
+    def flair_id_query(cls, sr, limit, after, reverse=False):
+        extra_rules = [
+            cls.c._thing1_id == sr._id,
+            cls.c._name == 'flair',
+          ]
+        if after:
+            if reverse:
+                extra_rules.append(cls.c._thing2_id < after._id)
+            else:
+                extra_rules.append(cls.c._thing2_id > after._id)
+        sort = (desc if reverse else asc)('_thing2_id')
+        return cls._query(*extra_rules, sort=sort, limit=limit)
 
 Subreddit.__bases__ += (UserRel('flair', Flair,
                                 disable_ids_fn = True,

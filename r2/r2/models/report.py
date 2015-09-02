@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -26,6 +26,7 @@ from r2.lib.db.thing import Thing, Relation, MultiRelation, thing_prefix
 from r2.lib.utils import tup
 from r2.lib.memoize import memoize
 from r2.models import Link, Comment, Message, Subreddit, Account
+from r2.models.vote import score_changes
 from datetime import datetime
 
 from pylons import g, c
@@ -136,20 +137,12 @@ class Report(MultiRelation('report',
                                     SRMember.c._name == "moderator")
             mod_dates = {rel._thing2_id: rel._date for rel in query}
 
-            if g.automoderator_account:
-                automoderator = Account._by_name(g.automoderator_account)
-            else:
-                automoderator = None
-
             mod_reports = []
             user_reports = []
 
             for report in reports:
-                # always include AutoModerator reports
-                if automoderator and report._thing1_id == automoderator._id:
-                    mod_reports.append(report)
                 # include in mod reports if made after the user became a mod
-                elif (report._thing1_id in mod_dates and
+                if (report._thing1_id in mod_dates and
                         report._date >= mod_dates[report._thing1_id]):
                     mod_reports.append(report)
                 else:

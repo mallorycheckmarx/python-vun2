@@ -1,490 +1,4 @@
-!function(r) {
-
-var UseDefaultClassName = (function() {
-  var camelCaseRegex = /([a-z])([A-Z])/g;
-  function hyphenate(match, $1, $2) {
-    return $1 + '-' + $2;
-  }
-
-  return {
-    /**
-     * derive a className automatically from the displayName property
-     * e.g. MyDisplayName => my-display-name
-     * if a className state or prop is passed in, add that
-     * if values are passed into the function, add those in as well
-     * @param {string} arguments optionally pass in any number of
-     *                           classNames to to add to the list
-     * @return {string} css class name
-     */
-    getClassName: function(/* classNames */) {
-      var classNames = [];
-
-      if (this.constructor.displayName) {
-        classNames.push(
-          this.constructor.displayName.replace(camelCaseRegex, hyphenate)
-                                      .toLowerCase()
-          );
-      }
-
-      if (this.state && this.state.className) {
-        classNames.push(this.state.className);
-      }
-      else if (this.props.className) {
-        classNames.push(this.props.className);
-      }
-
-      if (arguments.length) {
-        classNames.push.apply(classNames, arguments);
-      }
-
-      return classNames.join(' ');
-    }
-  };
-})();
-
-
-var CampaignFormattedProps = {
-  componentWillMount: function() {
-    this.formattedProps = this.getFormattedProps(_.clone(this.props), this.props);
-  },
-
-  componentWillUpdate: function(nextProps) {
-    this.formattedProps = this.getFormattedProps(_.clone(nextProps), nextProps);
-  },
-
-  getFormattedProps: function(formattedProps, props) {
-    if (props.impressions) {
-      formattedProps.impressions = r.utils.prettyNumber(props.impressions);
-    }
-    if (props.bid === null) {
-      formattedProps.bid = 'N/A';
-    } else if (props.bid) {
-      formattedProps.bid = props.bid.toFixed(2);
-    }
-    return formattedProps;
-  },
-};
-
-
-var CampaignButton = React.createClass({
-  displayName: 'CampaignButton',
-
-  mixins: [UseDefaultClassName],
-
-  getDefaultProps: function() {
-    return {
-      isNew: true,
-    };
-  },
-
-  render: function() {
-    if (this.props.isNew) {
-      return React.DOM.div({ className: 'button-group' },
-        React.DOM.button(
-          { ref: 'keepOpen', className: 'campaign-button', onClick: this.handleClick },
-          r._('create')
-        ),
-        React.DOM.button(
-          { className: this.getClassName(), onClick: this.handleClick },
-          r._('+ close')
-        ) 
-      );
-    }
-    return React.DOM.button(
-      { className: this.getClassName(), onClick: this.handleClick },
-      this.props.isNew ? r._('create') : r._('save')
-    );
-  },
-
-  handleClick: function(e) {
-    var close = true;
-    if (this.refs.keepOpen) {
-      close = !(e.target === this.refs.keepOpen.getDOMNode());
-    }
-    if (typeof this.props.onClick === 'function') {
-      this.props.onClick(close);
-    }
-  },
-});
-
-
-var InfoText = React.createClass({
-  displayName: 'InfoText',
-
-  mixins: [UseDefaultClassName, CampaignFormattedProps],
-
-  render: function() {
-    var text = Array.isArray(this.props.children)
-             ? this.props.children.join('\n')
-             : this.props.children;
-    return React.DOM.span({ className: this.getClassName() },
-      text.format(this.formattedProps)
-    );
-  },
-
-});
-
-var CampaignOptionTable = React.createClass({
-  displayName: 'CampaignOptionTable',
-
-  mixins: [UseDefaultClassName],
-
-  render: function() {
-    return React.DOM.table({ className: this.getClassName() },
-      React.DOM.tbody(null, this.props.children)
-    );
-  }
-})
-
-var CampaignOption = React.createClass({
-  displayName: 'CampaignOption',
-
-  mixins: [UseDefaultClassName, CampaignFormattedProps],
-
-  getDefaultProps: function() {
-    return {
-      primary: false,
-      start: '',
-      end: '',
-      bid: '',
-      impressions: '',
-      isNew: true,
-    };
-  },
-
-  render: function() {
-    return React.DOM.tr({ className: this.getClassName() },
-      React.DOM.td({ className: 'date start-date' }, this.props.start),
-      React.DOM.td({ className: 'date end-date' }, this.props.end),
-      React.DOM.td({ className: 'bid' }, '$', this.formattedProps.bid),
-      React.DOM.td({ className: 'impressions' },
-        this.formattedProps.impressions, ' impressions'
-      ),
-      React.DOM.td({ className: 'buttons' },
-        CampaignButton({
-          className: this.props.primary ? 'primary-button' : '',
-          isNew: this.props.isNew,
-          onClick: this.handleClick,
-        })
-      )
-    );
-  },
-
-  handleClick: function(close) {
-    var $startdate = $('#startdate');
-    var $enddate = $('#enddate');
-    var $bid = $('#bid');
-    var userStartdate = $startdate.val();
-    var userEnddate = $enddate.val();
-    var userBid = $bid.val();
-    $('#startdate').val(this.props.start);
-    $('#enddate').val(this.props.end);
-    $('#bid').val(this.props.bid);
-    setTimeout(function(){
-      send_campaign(close);
-      // hack, needed because post_pseudo_form hides any element in the form
-      // with an `error` class, which might be one of our InfoText components
-      // but we want react to manage that
-      $('.campaign-creator .info-text').removeAttr('style');
-      // reset the form with the user's original values
-      $startdate.val(userStartdate);
-      $enddate.val(userEnddate);
-      $bid.val(userBid);
-    }, 0);
-  },
-});
-
-
-var CampaignSet = React.createClass({
-  displayName: 'CampaignSet',
-
-  mixins: [UseDefaultClassName],
-
-  render: function() {
-    return React.DOM.div({ className: this.getClassName() },
-      this.props.children
-    );
-  },
-});
-
-var CampaignCreator = React.createClass({
-  displayName: 'CampaignCreator',
-
-  mixins: [UseDefaultClassName],
-
-  getDefaultProps: function() {
-    return {
-      bid: 0,
-      targetName: '',
-      cpm: 0,
-      maxValidBid: 0,
-      minValidBid: 0,
-      dates: [],
-      inventory: [],
-      requested: 0,
-      override: false,
-      isNew: true,
-    };
-  },
-
-  getInitialState: function() {
-    var totalAvailable = this.getAvailable(this.props);
-    var available = totalAvailable;
-    if (this.props.maxValidBid) {
-      available = Math.min(available, this.getImpressions(this.props.maxValidBid));
-    }
-    return {
-      totalAvailable: totalAvailable,
-      available: available,
-      maxTime: 0,
-    };
-  },
-
-  componentWillMount: function() {
-    this.setState({
-      maxTime: dateFromInput('#date-start-max').getTime(),
-    });
-  },
-
-  componentWillReceiveProps: function(nextProps) {
-    var totalAvailable = this.getAvailable(nextProps);
-    var available = totalAvailable;
-    if (this.props.maxValidBid) {
-      available = Math.min(available, this.getImpressions(this.props.maxValidBid));
-    }
-    this.setState({
-      totalAvailable: totalAvailable,
-      available: available,
-    });
-  },
-
-  getAvailable: function(props) {
-    if (props.override) {
-      return _.reduce(props.inventory, sum, 0);
-    }
-    else {
-      return _.min(props.inventory) * props.dates.length;
-    }
-  },
-
-  render: function() {
-    return React.DOM.div({
-        className: this.getClassName(),
-      },
-      this.getCampaignSets()
-    );
-  },
-
-  getCampaignSets: function() {
-    var requested = this.getRequestedOption();
-    requested.primary = true;
-    var maximized = this.getMaximizedOption();
-    if (this.props.override) {
-      if (requested.impressions <= this.state.available) {
-        return [CampaignSet(null,
-            InfoText(null, r._('the campaign you requested is available!')),
-            CampaignOptionTable(null, CampaignOption(requested))
-          ),
-          InfoText(maximized,
-              r._('the maximum budget available is $%(bid)s (%(impressions)s impressions)')
-          )
-        ];
-      }
-      else {
-        return CampaignSet(null,
-          InfoText({
-              className: 'error',
-              available: this.state.available,
-              target: this.props.targetName
-            },
-            r._('we expect to only have %(available)s impressions on %(target)s. ' +
-                 'we may not fully deliver.')
-          ),
-          CampaignOptionTable(null, CampaignOption(requested))
-        );
-      }
-    }
-    else if (requested.bid >= this.props.minValidBid &&
-             requested.impressions <= this.state.available) {
-      var result = CampaignSet(null,
-        InfoText(null, r._('the campaign you requested is available!')),
-        CampaignOptionTable(null, CampaignOption(requested))
-      );
-      if (maximized.bid > requested.bid &&
-          requested.bid * 1.2 >= maximized.bid &&
-          this.state.available === this.state.totalAvailable) {
-        var difference = maximized.bid - requested.bid;
-        result = [result, CampaignSet(null,
-          InfoText({ difference: difference.toFixed(2) },
-            r._('want to maximize your campaign? for only $%(difference)s more ' +
-                 'you can buy all available inventory for your selected dates!')
-          ),
-          CampaignOptionTable(null, CampaignOption(maximized))
-        )];
-      }
-      else {
-        result = [result, InfoText(maximized,
-          r._('the maximum budget available is $%(bid)s (%(impressions)s impressions)')
-        )];
-      }
-      return result;
-    }
-    else if (requested.bid < this.props.minValidBid) {
-      var minimal = this.getMinimizedOption();
-      if (minimal.impressions <= this.state.available) {
-        if (r.sponsored.userIsSponsor) {
-          return CampaignSet(null,
-            InfoText(null, r._('the campaign you requested is available!')),
-            CampaignOptionTable(null, CampaignOption(requested))
-          );
-        } else {
-          return CampaignSet(null,
-            InfoText({ className: 'error' },
-              r._('the campaign you requested is too small! this campaign is available:')
-            ),
-            CampaignOptionTable(null, CampaignOption(minimal))
-          );
-        }
-      }
-      else {
-        return InfoText({ className: 'error' },
-          r._('the campaign you requested is too small!')
-        );
-      }
-    }
-    else if (requested.impressions > this.state.available &&
-             this.state.totalAvailable > this.state.available &&
-             maximized.bid > this.props.minValidBid) {
-      return CampaignSet(null,
-        InfoText(null, 
-          r._('the campaign you requested is too big! the largest campaign ' +
-               'available is:')
-        ),
-        CampaignOptionTable(null, CampaignOption(maximized))
-      );
-    }
-    else if (requested.impressions > this.state.available) {
-
-      var options = [];
-      if (maximized.bid >= this.props.minValidBid) {
-        options.push(CampaignOption(maximized));
-      }
-      var reduced = this.getReducedWindowOption();
-      if (reduced && reduced.bid >= this.props.minValidBid) {
-        if (reduced.impressions > requested.impressions) {
-          reduced.impressions = requested.impressions;
-          reduced.bid = requested.bid;
-        }
-        options.push(CampaignOption(reduced));
-      }
-      if (options.length) {
-        return CampaignSet(null,
-          InfoText({
-              className: 'error',
-              target: this.props.targetName,
-            },
-            r._('we have insufficient available inventory in %(target)s to fulfill ' +
-                 'your requested dates. the following campaigns are available:')
-          ),
-          CampaignOptionTable(null, options)
-        );
-      }
-      else {
-        r.analytics.fireFunnelEvent('ads', 'inventory-error');
-
-        return InfoText({
-            className: 'error',
-            target: this.props.targetName
-          },
-          r._('inventory for %(target)s is sold out for your requested dates. ' +
-               'please try a different target or different dates.')
-        );
-      }
-    }
-    return null;
-  },
-
-  formatDate: function(date) {
-    return $.datepicker.formatDate('mm/dd/yy', date);
-  },
-
-  getBid: function(impressions, requestedBid) {
-    if (this.getImpressions(requestedBid) === impressions) {
-      return requestedBid; 
-    } else {
-      return Math.floor((impressions / 1000) * this.props.cpm) / 100;
-    }
-  },
-
-  getImpressions: function(bid) {
-    return Math.floor(bid / this.props.cpm * 1000 * 100);
-  },
-
-  getOptionData: function(startDate, duration, impressions, requestedBid) {
-    var endDate = new Date();
-    endDate.setTime(startDate.getTime());
-    endDate.setDate(startDate.getDate() + duration);
-    return {
-      start: this.formatDate(startDate),
-      end: this.formatDate(endDate),
-      bid: this.getBid(impressions, requestedBid),
-      impressions: Math.floor(impressions),
-      isNew: this.props.isNew,
-    };
-  },
-
-  getRequestedOption: function() {
-    return this.getOptionData(
-      this.props.dates[0],
-      this.props.dates.length,
-      this.props.requested,
-      this.props.bid
-    );
-  },
-
-  getMaximizedOption: function() {
-    return this.getOptionData(
-      this.props.dates[0],
-      this.props.dates.length,
-      this.state.available,
-      this.props.bid
-    );
-  },
-
-  getMinimizedOption: function() {
-    return this.getOptionData(
-      this.props.dates[0],
-      this.props.dates.length,
-      this.getImpressions(this.props.minValidBid),
-      this.props.minValidBid
-    );
-  },
-
-  getReducedWindowOption: function() {
-    var days = (1000 * 60 * 60 * 24);
-    var maxOffset = (this.state.maxTime - this.props.dates[0].getTime()) / days | 0;
-    var res =  r.sponsored.getMaximumRequest(
-      this.props.inventory,
-      this.getImpressions(this.props.minValidBid),
-      this.props.requested,
-      maxOffset
-    );
-    if (res && res.days.length < this.props.dates.length) {
-      return this.getOptionData(
-        this.props.dates[res.offset],
-        res.days.length,
-        res.maxRequest,
-        this.props.bid
-      );
-    }
-    else {
-      return null;
-    }
-  },
-});
-
-
-var exports = r.sponsored = {
+r.sponsored = {
     set_form_render_fnc: function(render) {
         this.render = render;
     },
@@ -495,51 +9,15 @@ var exports = r.sponsored = {
         $("#sr-autocomplete").on("sr-changed blur", function() {
             r.sponsored.render()
         })
-        this.targetValid = true;
-        this.bidValid = true;
         this.inventory = {}
         this.campaignListColumns = $('.existing-campaigns thead th').length
-        $("input[name='media_url_type']").on("change", this.mediaInputChange)
-
-        $('input[type=file]').on('change', this._checkFilesize);
-    },
-
-    _checkFilesize: function(e) {
-      var el = e.target;
-      var $el = $(el);
-      var files = el.files;
-
-      if (files && files[0].size > 1024 * 500) {
-        $el
-          .wrap('<form>')
-          .closest('form')
-          .get(0).reset();
-        $el.unwrap();
-        alert(r._('too big. keep it under 500 KiB'));
-      }
     },
 
     setup: function(inventory_by_sr, priceDict, isEmpty, userIsSponsor) {
         this.inventory = inventory_by_sr
         this.priceDict = priceDict
-
-        var $platformField = $('.platform-field');
-        this.$platformInputs = $platformField.find('input[name=platform]');
-        this.$mobileOSInputs = $platformField.find('.mobile-os-group input');
-        this.$iOSDeviceInputs = $platformField.find('.ios-device input');
-        this.$iOSMinSelect = $platformField.find('#ios_min');
-        this.$iOSMaxSelect = $platformField.find('#ios_max');
-        this.$androidDeviceInputs = $platformField.find('.android-device input');
-        this.$androidMinSelect = $platformField.find('#android_min');
-        this.$androidMaxSelect = $platformField.find('#android_max');
-        this.$deviceAndVersionInputs = $platformField.find('input[name="os_versions"]');
-
-        var render = this.render.bind(this);
-
-        $('.platform-field input, .platform-field select').on('change', render);
-
         if (isEmpty) {
-            this.render();
+            this.render()
             init_startdate()
             init_enddate()
             $("#campaign").find("button[name=create]").show().end()
@@ -628,28 +106,6 @@ var exports = r.sponsored = {
         collapse();
     },
 
-    toggleFrequency: function() {
-        var prevChecked = this.frequency_capped;
-        var currentlyChecked = ($('input[name="frequency_capped"]:checked').val() === 'true');
-        if (prevChecked != currentlyChecked) {
-            $('.frequency-cap-field').toggle('slow');
-            this.frequency_capped = currentlyChecked;
-        }
-    },
-
-    setup_frequency_cap: function(frequency_capped) {
-        this.frequency_capped = !!frequency_capped;
-    },
-
-    setup_mobile_targeting: function(mobileOS, iOSDevices, iOSVersions, 
-                                     androidDevices, androidVersions) {
-      this.mobileOS = mobileOS;
-      this.iOSDevices = iOSDevices;
-      this.iOSVersions = iOSVersions;
-      this.androidDevices = androidDevices;
-      this.androidVersions = androidVersions;
-    },
-
     setup_geotargeting: function(regions, metros) {
         this.regions = regions
         this.metros = metros
@@ -692,7 +148,7 @@ var exports = r.sponsored = {
     get_dates: function(startdate, enddate) {
         var start = $.datepicker.parseDate('mm/dd/yy', startdate),
             end = $.datepicker.parseDate('mm/dd/yy', enddate),
-            ndays = Math.round((end - start) / (1000 * 60 * 60 * 24)),
+            ndays = (end - start) / (1000 * 60 * 60 * 24),
             dates = []
 
         for (var i=0; i < ndays; i++) {
@@ -703,9 +159,8 @@ var exports = r.sponsored = {
         return dates
     },
 
-    get_inventory_key: function(srname, collection, geotarget, platform) {
+    get_inventory_key: function(srname, collection, geotarget) {
         var inventoryKey = collection ? '#' + collection : srname
-        inventoryKey += "/" + platform
         if (geotarget.country != "") {
             inventoryKey += "/" + geotarget.country
         }
@@ -734,10 +189,8 @@ var exports = r.sponsored = {
         var srname = targeting.sr,
             collection = targeting.collection,
             geotarget = targeting.geotarget, 
-            platform = targeting.platform,
             inventoryKey = targeting.inventoryKey,
             dates = timing.dates;
-
         dates.sort(function(d1,d2){return d1 - d2})
         var end = new Date(dates[dates.length-1].getTime())
         end.setDate(end.getDate() + 5)
@@ -751,8 +204,7 @@ var exports = r.sponsored = {
                 region: geotarget.region,
                 metro: geotarget.metro,
                 startdate: $.datepicker.formatDate('mm/dd/yy', dates[0]),
-                enddate: $.datepicker.formatDate('mm/dd/yy', end),
-                platform: platform
+                enddate: $.datepicker.formatDate('mm/dd/yy', end)
             },
         });
     },
@@ -830,14 +282,6 @@ var exports = r.sponsored = {
 
     },
 
-    getAvailableImpsByDay: function(dates, booked, inventoryKey) {
-        return _.map(dates, function(date) {
-            var datestr = $.datepicker.formatDate('mm/dd/yy', date);
-            var daily_booked = booked[datestr] || 0;
-            return r.sponsored.inventory[inventoryKey][datestr] + daily_booked;
-        });
-    },
-
     check_inventory: function($form, targeting, timing, budget, isOverride) {
         var bid = budget.bid,
             cpm = budget.cpm,
@@ -847,39 +291,69 @@ var exports = r.sponsored = {
             booked = this.get_booked_inventory($form, targeting.sr, 
                     targeting.geotarget, isOverride);
 
-        var minbid_amt = r.sponsored.get_real_min_bid();
-        var maxbid_amt = r.sponsored.get_max_bid();
-
         $.when(r.sponsored.get_check_inventory(targeting, timing)).then(
             function() {
-                var dates = timing.dates;
-                var availableByDay = this.getAvailableImpsByDay(dates, booked, inventoryKey)
-                React.renderComponent(
-                  CampaignCreator({
-                    bid: bid,
-                    cpm: cpm,
-                    dates: dates,
-                    inventory: availableByDay,
-                    isNew: !$("#campaign").parents('tr:first').length,
-                    maxValidBid: parseFloat(maxbid_amt),
-                    minValidBid: parseFloat(minbid_amt),
-                    override: isOverride,
-                    requested: requested,
-                    targetName: targeting.displayName,
-                  }),
-                  document.getElementById('campaign-creator')
-                );
-            }.bind(this),
+                if (isOverride) {
+                    // do a simple sum of available inventory for override
+                    var available = _.reduce(_.map(timing.dates, function(date){
+                        var datestr = $.datepicker.formatDate('mm/dd/yy', date),
+                            daily_booked = booked[datestr] || 0
+                        return r.sponsored.inventory[inventoryKey][datestr] + daily_booked
+                    }), function(memo, num){ return memo + num; }, 0)
+                } else {
+                    // calculate conservative inventory estimate
+                    var minDaily = _.min(_.map(timing.dates, function(date) {
+                        var datestr = $.datepicker.formatDate('mm/dd/yy', date),
+                            daily_booked = booked[datestr] || 0
+                        return r.sponsored.inventory[inventoryKey][datestr] + daily_booked
+                    }))
+                    var available = minDaily * timing.duration
+                }
+
+                var maxbid = r.sponsored.calc_bid(available, cpm)
+
+                if (available < requested) {
+                    if (isOverride) {
+                        var message = r._("We expect to only have %(available)s " + 
+                                          "impressions on %(target)s from %(start)s " +
+                                          "to %(end)s. We may not fully deliver."
+                                      ).format({
+                                          available: r.utils.prettyNumber(available),
+                                          target: targeting.displayName,
+                                          start: timing.startdate,
+                                          end: timing.enddate
+                                      })
+                        $(".available-info").text('')
+                        $(".OVERSOLD_DETAIL").text(message).show()
+                    } else {
+                        var message = r._("We have insufficient inventory to fulfill" +
+                                          " your requested budget, target, and dates." +
+                                          " Only %(available)s impressions available" +
+                                          " on %(target)s from %(start)s to %(end)s. " +
+                                          "Maximum budget is $%(max)s."
+                                      ).format({
+                                          available: r.utils.prettyNumber(available),
+                                          target: targeting.displayName,
+                                          start: timing.startdate,
+                                          end: timing.enddate,
+                                          max: maxbid
+                                      })
+
+                        $(".available-info").text('')
+                        $(".OVERSOLD_DETAIL").text(message).show()
+                        r.sponsored.disable_form($form)
+                    }
+                } else {
+                    $(".available-info").text(r._("%(num)s available (maximum budget is $%(max)s)").format({num: r.utils.prettyNumber(available), max: maxbid}))
+                    $(".OVERSOLD_DETAIL").hide()
+                }
+            },
             function () {
-                React.renderComponent(
-                  CampaignSet(null,
-                    InfoText(null,
-                      r._('sorry, there was an error retrieving available impressions. ' +
-                           'please try again later.')
-                    )
-                  ),
-                  document.getElementById('campaign-creator')
-                );
+                var message = r._("sorry, there was an error retrieving available" +
+                                  " impressions. please try again later.")
+                $(".available-info").addClass('error').text(message)
+                $(".OVERSOLD_DETAIL").hide()
+                r.sponsored.disable_form($("#campaign"))
             }
         )
     },
@@ -893,86 +367,23 @@ var exports = r.sponsored = {
     },
 
     get_cpm: function($form) {
-        var isMetroGeotarget = $('#metro').val() !== null && !$('#metro').is(':disabled');
-        var metro = $('#metro').val();
-        var country = $('#country').val();
-        var isGeotarget = country !== '' && !$('#country').is(':disabled');
-        var isSubreddit = $form.find('input[name="targeting"][value="one"]').is(':checked');
-        var collectionVal = $form.find('input[name="collection"]:checked').val();
-        var isFrontpage = !isSubreddit && collectionVal === 'none';
-        var isCollection = !isSubreddit && !isFrontpage;
-        var sr = isSubreddit ? $form.find('*[name="sr"]').val() : '';
-        var collection = isCollection ? collectionVal : null;
-        var prices = [];
+        var isMetroGeotarget = $('#metro').val() !== null && !$('#metro').is(':disabled'),
+            isSubreddit = $form.find('input[name="targeting"][value="one"]').is(':checked'),
+            collectionVal = $form.find('input[name="collection"]:checked').val(),
+            isFrontpage = !isSubreddit && collectionVal === 'none',
+            isCollection = !isSubreddit && !isFrontpage,
+            sr = isSubreddit ? $form.find('*[name="sr"]').val() : '',
+            collection = isCollection ? collectionVal : null
 
         if (isMetroGeotarget) {
-            var metroKey = metro + country;
-            prices.push(this.priceDict.METRO[metro] || this.priceDict.METRO_DEFAULT);
-        } else if (isGeotarget) {
-            prices.push(this.priceDict.COUNTRY[country] || this.priceDict.COUNTRY_DEFAULT);
-        }
-
-        if (isFrontpage) {
-            prices.push(this.priceDict.COLLECTION_DEFAULT);
+            return this.priceDict.METRO
+        } else if (isFrontpage) {
+            return this.priceDict.COLLECTION_DEFAULT
         } else if (isCollection) {
-            prices.push(this.priceDict.COLLECTION[collectionVal] || this.priceDict.COLLECTION_DEFAULT);
+            return this.priceDict.COLLECTION[collection] || this.priceDict.COLLECTION_DEFAULT
         } else {
-            prices.push(this.priceDict.SUBREDDIT[sr] || this.priceDict.SUBREDDIT_DEFAULT);
+            return this.priceDict.SUBREDDIT[sr] || this.priceDict.SUBREDDIT_DEFAULT
         }
-
-        return _.max(prices);
-    },
-
-    getPlatformTargeting: function() {
-      var platform = this.$platformInputs.filter(':checked').val();
-      var isMobile = platform === 'mobile' || platform === 'all';
-
-      function mapTargets(target) {
-        targets = target.filter(':checked').map(function() {
-          return $(this).attr('value');
-        }).toArray().join(',');
-        return targets.length === 1 ? targets[0] : targets
-      }
-
-      function getSelect(target) {
-        return target.find(':selected').val();
-      }
-
-      var targets;
-      if (isMobile) {
-        targets = {
-          os: mapTargets(this.$mobileOSInputs),
-          deviceAndVersion: mapTargets(this.$deviceAndVersionInputs),
-          iOSDevices: mapTargets(this.$iOSDeviceInputs),
-          iOSVersionRange: (getSelect(this.$iOSMinSelect) + ','
-            + getSelect(this.$iOSMaxSelect)),
-          iOSMinVersion: getSelect(this.$iOSMinSelect),
-          iOSMaxVersion: getSelect(this.$iOSMaxSelect),
-          androidDevices: mapTargets(this.$androidDeviceInputs),
-          androidVersionRange: (getSelect(this.$androidMinSelect) + ','
-            + getSelect(this.$androidMaxSelect)),
-          androidMinVersion: getSelect(this.$androidMinSelect),
-          androidMaxVersion: getSelect(this.$androidMaxSelect),
-        };
-      } else {
-        targets = {
-          os: null,
-          deviceAndVersion: null,
-          iOSDevices: null,
-          iOSVersionRange: null,
-          iOSMinVersion: null,
-          iOSMaxVersion: null,
-          androidDevices: null,
-          androidVersionRange: null,
-          androidMinVersion: null,
-          androidMaxVersion: null,
-        };
-      }
-
-      return $.extend({
-        platform: platform,
-        isMobile: isMobile,
-      }, targets);
     },
 
     get_targeting: function($form) {
@@ -984,15 +395,16 @@ var exports = r.sponsored = {
             sr = isSubreddit ? $form.find('*[name="sr"]').val() : '',
             collection = isCollection ? collectionVal : null,
             displayName = isFrontpage ? 'the frontpage' : isCollection ? collection : sr,
-            canGeotarget = isFrontpage || this.userIsSponsor,
+            priority = this.get_priority($form),
+            canGeotarget = isFrontpage || this.userIsSponsor && (isSubreddit || !priority.isCpm),
             country = canGeotarget && $('#country').val() || '',
             region = canGeotarget && $('#region').val() || '',
             metro = canGeotarget && $('#metro').val() || '',
             geotarget = {'country': country, 'region': region, 'metro': metro},
-            inventoryKey = this.get_inventory_key(sr, collection, geotarget, platform),
+            inventoryKey = this.get_inventory_key(sr, collection, geotarget),
             isValid = isFrontpage || (isSubreddit && sr) || (isCollection && collection);
 
-        var targets = {
+        return {
             'type': type,
             'displayName': displayName,
             'isValid': isValid,
@@ -1000,34 +412,8 @@ var exports = r.sponsored = {
             'collection': collection,
             'canGeotarget': canGeotarget,
             'geotarget': geotarget,
+            'inventoryKey': inventoryKey,
         };
-
-        if (this.$platformInputs) {
-            var platformTargets = this.getPlatformTargeting();
-
-            var os = platformTargets.os;
-            var platform = platformTargets.platform;
-            var iOSDevices = platformTargets.iOSDevices;
-            var iOSVersionRange = platformTargets.iOSVersionRange;
-            var androidDevices = platformTargets.androidDevices;
-            var androidVersionRange = platformTargets.androidVersionRange;
-            
-            platformTargetsList = ['platform',
-                                   'iOSDevices',
-                                   'iOSVersionRange',
-                                   'androidDevices',
-                                   'androidVersionRange',];
-
-            platformTargetsList.forEach(function(platformStr) {
-              targets[platformStr] = eval(platformStr)
-            });
-
-            targets['inventoryKey'] = this.get_inventory_key(sr, collection, geotarget, platform);
-        } else {
-            targets['inventoryKey'] = this.get_inventory_key(sr, collection, geotarget);
-        }
-
-        return targets;
     },
 
     get_timing: function($form) {
@@ -1094,10 +480,10 @@ var exports = r.sponsored = {
                 isCollection = (data.targetingCollection === 'True'),
                 mappingFunction = isCollection ? mapCollection : mapSubreddit;
             mappingFunction(data.targeting);
-            var bid = parseFloat(data.bid, 10);
+            var bid = parseInt(data.bid, 10);
             var cpm = parseInt(data.cpm, 10);
             var impressions = bid / cpm * 1000 * 100;
-            totalBid += bid;
+            totalBid += parseInt(data.bid, 10);
             totalImpressions += impressions;
         });
 
@@ -1105,7 +491,7 @@ var exports = r.sponsored = {
             count: campaignRows.length,
             subreddits: _.keys(subreddits),
             totalBid: totalBid,
-            totalImpressions: totalImpressions | 0,
+            totalImpressions: totalImpressions,
             prettyBid: '$' + totalBid.toFixed(2),
             prettyImpressions: r.utils.prettyNumber(totalImpressions),
         };
@@ -1160,165 +546,25 @@ var exports = r.sponsored = {
         $bid.trigger("change")
     },
 
-    validateDeviceAndVersion: function(os, generalData, osData) {
-      var deviceError = false;
-      var versionError = false;
-      /* if OS is selected to target, populate hidden inputs */
-      if (generalData.platformTargetingOS.indexOf(os) !== -1) {
-        osData.deviceHiddenInput.val(osData.platformTargetingDevices);
-        osData.versionHiddenInput.val(osData.platformTargetingVersions);
-        osData.group.show();
-
-        if (generalData.deviceAndVersion == 'filter') {
-          /* check that at least one devices is selected */
-          if (!osData.deviceHiddenInput.val()) {
-            deviceError = true;
-          }
-
-          /* check that min version is less-or-equal-to max */
-          var versions = osData.versionHiddenInput.val().split(',');
-          if ((versions[1] !== '') && (versions[0] > versions[1])) {
-            versionError = true;
-          }
-        }
-      } else {
-        osData.deviceHiddenInput.val('');
-        osData.versionHiddenInput.val('');
-        osData.group.hide();
-      }
-      return {'deviceError': deviceError,
-              'versionError': versionError}
-    },
-
     fill_campaign_editor: function() {
-
-        var $form = $("#campaign");
-        var platformTargeting = this.getPlatformTargeting();
-        var platformOverride = platformTargeting.isMobile && platformTargeting.platform === 'mobile';
-
-        var $priorities = $form.find('*[name="priority"]');
-        if (platformOverride && this.currentPlatform != 'mobile') {
-          $priorities.filter('[value="house"]').prop('checked', 'checked');
-        } else {
-          if (!platformOverride && this.currentPlatform === 'mobile') {
-            $priorities.filter('[value="standard"]').prop('checked', 'checked');
-          }
-          $priorities.prop('disabled', false);
-        }
-        this.currentPlatform = platformTargeting.platform;
-
-        var priority = this.get_priority($form),
+        var $form = $("#campaign"),
+            priority = this.get_priority($form),
             targeting = this.get_targeting($form),
             timing = this.get_timing($form),
             ndays = timing.duration,
             budget = this.get_budget($form),
             cpm = budget.cpm,
             impressions = budget.impressions,
-            checkInventory = targeting.isValid;
+            checkInventory = targeting.isValid && priority.isCpm;
 
         $(".duration").text(ndays + " " + ((ndays > 1) ? r._("days") : r._("day")))
         $(".price-info").text(r._("$%(cpm)s per 1,000 impressions").format({cpm: (cpm/100).toFixed(2)}))
         $form.find('*[name="impressions"]').val(r.utils.prettyNumber(impressions))
         $(".OVERSOLD").hide()
 
-        var $mobileOSGroup = $('.mobile-os-group');
-        var $mobileOSHiddenInput = $('#mobile_os');
-
-        var $OSDeviceGroup = $('.os-device-group');
-        var $iOSDeviceHiddenInput = $('#ios_device');
-        var $iOSVersionHiddenInput = $('#ios_version_range');
-        var $androidDeviceHiddenInput = $('#android_device');
-        var $androidVersionHiddenInput = $('#android_version_range');
-
-        if (platformTargeting.isMobile) {
-          var $mobileOSError = $mobileOSGroup.find('.error');
-          var $OSDeviceError = $OSDeviceGroup.find('.error.device-error');
-          var $OSVersionError = $OSDeviceGroup.find('.error.version-error');
-
-          $mobileOSGroup.show();
-          $mobileOSHiddenInput.val(platformTargeting.os || '');
-
-          $OSDeviceGroup.show();
-
-          if (!platformTargeting.os) {
-            $mobileOSError.show();
-          } else {
-            $mobileOSError.hide();
-          }
-
-          var $deviceVersionGroup = $('.device-version-group');
-          var $deviceAndVersion = (platformTargeting.deviceAndVersion || 'all')
-
-          if ($deviceAndVersion === 'all') {
-            $deviceVersionGroup.hide();
-            $OSDeviceError.hide();
-            $OSVersionError.hide();
-            $iOSDeviceHiddenInput.val('');
-            $iOSVersionHiddenInput.val('');
-            $androidDeviceHiddenInput.val('');
-            $androidVersionHiddenInput.val('');
-          } else {
-            $deviceVersionGroup.show();
-
-            $iOSGroup = $('.ios-group');
-            $androidGroup = $('.android-group');
-
-            var generalData = {
-              platformTargetingOS: platformTargeting.os,
-              deviceAndVersion: $deviceAndVersion,
-            }
-
-            var iOSData = {
-              deviceHiddenInput: $iOSDeviceHiddenInput,
-              versionHiddenInput: $iOSVersionHiddenInput,
-              platformTargetingDevices: platformTargeting.iOSDevices,
-              platformTargetingVersions: platformTargeting.iOSVersionRange,
-              group: $iOSGroup,
-            }
-
-            var androidData = {
-              deviceHiddenInput: $androidDeviceHiddenInput,
-              versionHiddenInput: $androidVersionHiddenInput,
-              platformTargetingDevices: platformTargeting.androidDevices,
-              platformTargetingVersions: platformTargeting.androidVersionRange,
-              group: $androidGroup,
-            }
-
-            var iOSErrors = this.validateDeviceAndVersion('iOS', generalData, iOSData);
-            var androidErrors = this.validateDeviceAndVersion('Android', generalData, androidData);
-            var iOSDeviceError = iOSErrors['deviceError']
-            var iOSVersionError = iOSErrors['versionError'];
-            var androidDeviceError = androidErrors['deviceError'];
-            var androidVersionError = androidErrors['versionError'];
-
-            if (iOSDeviceError || androidDeviceError) {
-              $OSDeviceError.show();
-            } else {
-              $OSDeviceError.hide();
-            }
-
-            if (iOSVersionError || androidVersionError) {
-              $OSVersionError.show();
-            } else {
-              $OSVersionError.hide();
-            }
-          }
-        } else {
-          $mobileOSHiddenInput.val('');
-          $iOSDeviceHiddenInput.val('');
-          $iOSVersionHiddenInput.val('');
-          $androidDeviceHiddenInput.val('');
-          $androidVersionHiddenInput.val('');
-          $mobileOSGroup.hide();
-          $OSDeviceGroup.hide();
-        }
 
         if (targeting.isValid) {
-            this.targetValid = true;
-            this.enable_form($form);
-        } else {
-            this.targetValid = false;
-            this.disable_form($form);
+            this.enable_form($form)
         }
 
         if (priority.isCpm) {
@@ -1328,39 +574,7 @@ var exports = r.sponsored = {
             this.hide_cpm()
         }
 
-        if (!priority.isCpm && checkInventory) {
-          $.when(r.sponsored.get_check_inventory(targeting, timing)).then(
-            function() {
-              var booked = this.get_booked_inventory($form, targeting.sr,
-                                                     targeting.geotarget, priority.isOverride);
-              var availableByDate = this.getAvailableImpsByDay(timing.dates, booked,
-                                                               targeting.inventoryKey);
-              var totalImpsAvailable = _.reduce(availableByDate, sum, 0);
-
-              React.renderComponent(
-                React.DOM.div(null,
-                  CampaignSet(null,
-                    InfoText(null, r._('house campaigns, man.')),
-                    CampaignOptionTable(null,
-                      CampaignOption({
-                        bid: null,
-                        end: timing.enddate,
-                        impressions: 'unsold ',
-                        isNew: !$("#campaign").parents('tr:first').length,
-                        primary: true,
-                        start: timing.startdate,
-                      })
-                    )
-                  ),
-                  InfoText({impressions: totalImpsAvailable},
-                      r._('maximum possible impressions: %(impressions)s')
-                  )
-                ),
-                document.getElementById('campaign-creator')
-              );
-            }.bind(this)
-          );
-        } else if (checkInventory) {
+        if (checkInventory) {
             this.check_inventory($form, targeting, timing, budget, priority.isOverride)
         }
             
@@ -1382,17 +596,15 @@ var exports = r.sponsored = {
     },
 
     disable_form: function($form) {
-        $form.find('button[class*="campaign-button"]')
+        $form.find('button[name="create"], button[name="save"]')
             .prop("disabled", true)
             .addClass("disabled");
     },
 
     enable_form: function($form) {
-        if (this.bidValid && this.targetValid) {
-            $form.find('button[class*="campaign-button"]')
-                .prop("disabled", false)
-                .removeClass("disabled");
-        }
+        $form.find('button[name="create"], button[name="save"]')
+            .prop("disabled", false)
+            .removeClass("disabled");
     },
 
     hide_cpm: function() {
@@ -1474,21 +686,9 @@ var exports = r.sponsored = {
         this.render()
     },
 
-    get_min_bid: function() {
-        return $('#bid').data('min_bid');
-    },
-
-    get_real_min_bid: function() {
-        return $('#bid').data('real_min_bid');
-    },
-
-    get_max_bid: function() {
-        return $('#bid').data('max_bid');
-    },
-
     check_bid: function($form) {
         var bid = this.get_bid($form),
-            minimum_bid = this.get_min_bid(),
+            minimum_bid = $("#bid").data("min_bid"),
             campaignName = $form.find('*[name=campaign_name]').val()
 
         $('.budget-change-warning').hide()
@@ -1503,20 +703,14 @@ var exports = r.sponsored = {
         }
 
         $(".minimum-spend").removeClass("error");
-
         if (bid < minimum_bid) {
-            this.bidValid = false;
-            this.disable_form($form);
             $(".minimum-spend").addClass("error");
-        } else {
-            this.bidValid = true;
-            this.enable_form($form);
-            $(".minimum-spend").removeClass("error");
+            this.disable_form($form)
         }
     },
 
     calc_impressions: function(bid, cpm_pennies) {
-        return Math.floor(bid / cpm_pennies * 1000 * 100);
+        return bid / cpm_pennies * 1000 * 100
     },
 
     calc_bid: function(impressions, cpm_pennies) {
@@ -1566,15 +760,13 @@ var exports = r.sponsored = {
     submit_reporting_form: function() {
         var $form = $('.reporting-dashboard'),
             timing = this.get_timing($form),
-            reporting = this.get_reporting($form),
-            grouping = $form.find("[name='grouping']").val();
+            reporting = this.get_reporting($form);
 
         var data = {
             startdate: timing.startdate,
             enddate: timing.enddate,
             link_text: reporting.link_text,
             owner: reporting.owner,
-            grouping: grouping,
         };
 
         this.reload_with_params(data);
@@ -1592,20 +784,7 @@ var exports = r.sponsored = {
         var location = window.location;
         window.location = location.origin + location.pathname + queryString;
     },
-
-    mediaInputChange: function() {
-        var $scraperInputWrapper = $('#scraper_input');
-        var $rgInputWrapper = $('#rg_input');
-        var isScraper = $(this).val() === 'scrape';
-
-        $scraperInputWrapper.toggle(isScraper);
-        $scraperInputWrapper.find('input').prop('disabled', !isScraper);
-        $rgInputWrapper.toggle(!isScraper);
-        $rgInputWrapper.find('input').prop('disabled', isScraper);
-    },
-};
-
-}(r);
+}
 
 var dateFromInput = function(selector, offset) {
    if(selector) {
@@ -1654,11 +833,6 @@ function attach_calendar(where, min_date_src, max_date_src, callback, min_date_o
      }).click(function() {
         $(this).siblings(".datepicker.inuse").addClass("active");
      });
-}
-
-function sum(a, b) {
-    // for things like _.reduce(list, sum);
-    return a + b;
 }
 
 function check_enddate(startdate, enddate) {
@@ -1713,14 +887,11 @@ function detach_campaign_form() {
 }
 
 function cancel_edit(callback) {
-    var $campaign = $('#campaign');
-    var isEditingExistingCampaign = !!$campaign.parents('tr:first').length;
-
-    if (isEditingExistingCampaign) {
-        var tr = $campaign.parents("tr:first").prev();
+    if($("#campaign").parents('tr:first').length) {
+        var tr = $("#campaign").parents("tr:first").prev();
         /* copy the campaign element */
         /* delete the original */
-        $campaign.slideUp(function() {
+        $("#campaign").slideUp(function() {
                 $(this).parent('tr').prev().fadeIn();
                 var td = $(this).parent();
                 var campaign = detach_campaign_form();
@@ -1733,33 +904,16 @@ function cancel_edit(callback) {
                     });
             });
     } else {
-        var keep_open = $campaign.hasClass('keep-open');
-        
-        if ($campaign.is(':visible') && !keep_open) {
-            $campaign.slideUp(callback);
-        } else if (callback) {
+        if ($("#campaign:visible").length) {
+            $("#campaign").slideUp(function() {
+                    if (callback) {
+                        callback();
+                    }});
+        }
+        else if (callback) {
             callback();
         }
-
-        if (keep_open) {
-            $campaign.removeClass('keep-open');
-            $campaign.find('.status')
-                .text(r._('Created new campaign!'))
-                .show()
-                .delay(1000)
-                .fadeOut();
-
-            r.sponsored.render();
-        }
     }
-}
-
-function send_campaign(close) {
-    if (!close) {
-        $('#campaign').addClass('keep-open');
-    }
-
-    post_pseudo_form('.campaign', 'edit_campaign');
 }
 
 function del_campaign($campaign_row) {
@@ -1788,79 +942,12 @@ function edit_campaign($campaign_row) {
         $editRow.append($editCell)
         $campaign_row.fadeOut(function() {
             /* fill inputs from data in campaign row */
-            _.each(['startdate', 'enddate', 'bid', 'campaign_id36', 'campaign_name',
-                    'frequency_cap', 'frequency_cap_duration'],
+            _.each(['startdate', 'enddate', 'bid', 'campaign_id36', 'campaign_name'],
                 function(input) {
                     var val = $campaign_row.data(input),
                         $input = campaign.find('*[name="' + input + '"]')
                     $input.val(val)
             })
-
-            var platform = $campaign_row.data('platform');
-            campaign.find('*[name="platform"][value="' + platform + '"]').prop("checked", "checked");
-
-            /* set mobile targeting */
-            r.sponsored.setup_mobile_targeting(
-              $campaign_row.data('mobile_os'),
-              $campaign_row.data('ios_devices'),
-              $campaign_row.data('ios_versions'),
-              $campaign_row.data('android_devices'),
-              $campaign_row.data('android_versions')
-            );
-
-            /* pre-select mobile OS checkboxes if current platform is not mobile */
-            campaign.find('.mobile-os-group input').prop("checked", !r.sponsored.mobileOS);
-
-            /* logic if filtering by device and OS */
-            if (r.sponsored.iOSDevices || r.sponsored.androidDevices) {
-              /* pre-select the device and OS version radio button */
-              campaign.find('#filter_os_devices').prop('checked', 'checked');
-
-              /* first, clear all checked devices (they're checked by default),
-                 but only if the campaign has devices for the OS */
-              if (r.sponsored.iOSDevices) {
-                campaign.find('.ios-device input[type="checkbox"]').prop('checked', false);
-              }
-              if (r.sponsored.androidDevices) {
-                campaign.find('.android-device input[type="checkbox"]').prop('checked', false);
-              }
-
-              /* then, pre-select all appropriate devices */
-              var allDevices = [].concat(r.sponsored.iOSDevices, r.sponsored.androidDevices);
-              allDevices.forEach(function(device) {
-                if (device) {
-                  campaign.find('#'+device.toLowerCase()).prop('checked', true);
-                }
-              });
-
-              /* pre-select iOS versions */
-              if (r.sponsored.iOSVersions) {
-                campaign.find('#ios_min').val(r.sponsored.iOSVersions[0]);
-                campaign.find('#ios_max').val(r.sponsored.iOSVersions[1]);
-              }
-
-              /* pre-select Android versions */
-              if (r.sponsored.androidVersions) {
-                campaign.find('#android_min').val(r.sponsored.androidVersions[0]);
-                campaign.find('#android_max').val(r.sponsored.androidVersions[1]);
-              }
-            } else {
-              campaign.find('#all_os_devices').prop('checked', true);
-            }
-
-            var mobile_os_names = $campaign_row.data('mobile_os');
-            if (mobile_os_names) {
-              mobile_os_names.forEach(function(name) {
-                campaign.find('#mobile_os_' + name).prop("checked", "checked");
-              });
-            }
-
-            r.sponsored.setup_frequency_cap($campaign_row.data('frequency_cap'));
-            /* show frequency inputs */
-            if ($campaign_row.data('frequency_cap')) {
-              $('.frequency-cap-field').show();
-              $('#frequency_capped_true').prop('checked', 'checked');
-            }
 
             /* set priority */
             var priorities = campaign.find('*[name="priority"]'),
@@ -1912,7 +999,7 @@ function edit_campaign($campaign_row) {
             init_enddate();
 
             campaign.find('button[name="save"]').show().end()
-                .find('.create').hide().end();
+                .find('button[name="create"]').hide().end();
             campaign.slideDown();
             r.sponsored.render();
         })
@@ -1935,9 +1022,6 @@ function create_campaign() {
     if (check_number_of_campaigns()){
         return;
     }
-
-    r.analytics.fireFunnelEvent('ads', 'new-campaign');
-
     cancel_edit(function() {
             cancel_edit_promotion();
             var defaultBid = $("#bid").data("default_bid");
@@ -1955,7 +1039,7 @@ function create_campaign() {
 
             $("#campaign")
                 .find('button[name="save"]').hide().end()
-                .find('.create').show().end()
+                .find('button[name="create"]').show().end()
                 .find('input[name="campaign_id36"]').val('').end()
                 .find('input[name="campaign_name"]').val('').end()
                 .find('input[name="sr"]').val('').prop("disabled", true).end()
@@ -1966,10 +1050,6 @@ function create_campaign() {
                 .find('select[name="country"]').val('').end()
                 .find('select[name="region"]').hide().end()
                 .find('select[name="metro"]').hide().end()
-                .find('input[name="frequency_cap"]').val('').end()
-                .find('input[name="frequency_cap_duration"]').val('').end()
-                .find('#frequency_capped_false').prop('checked', 'checked').end()
-                .find('.frequency-cap-field').hide().end()
                 .slideDown();
             r.sponsored.render();
         });
@@ -1993,7 +1073,6 @@ function terminate_campaign($campaign_row) {
 }
 
 function edit_promotion() {
-    $("button.new-campaign").prop("disabled", false);
     cancel_edit(function() {
         $('.promotelink-editor')
             .find('.collapsed-display').slideUp().end()
@@ -2015,137 +1094,3 @@ function cancel_edit_campaign() {
     return cancel_edit()
 }
 
-!function(exports) {
-    /*
-     * @param {number[]} days An array of inventory for the campaign's timing
-     * @param {number} minValidRequest The minimum request a campaign is allowed
-     *                                 to have, should be in the same units as `days`
-     * @param {number} requested The campaign's requested inventory, in the same
-     *                           units as `days` and `minValidRequest`.
-     * @param {number} maxOffset maximum valid start index
-     * @returns {{days: number[], maxRequest: number, offset:number}|null}
-     *                            The sub-array, maximum request for it, and
-     *                            its offset from the original `days` array.
-     */
-    exports.getMaximumRequest = _.memoize(
-      function getMaximumRequest(days, minValidRequest, requested, maxOffset) {
-        return check(days, 0);
-
-        /**
-         * check if a set of days is valid, then compare to results of this 
-         * function called on subsets of that date range
-         * @param  {Number[]} days inventory values
-         * @param  {Number} offset offset from the original days array we are
-         *                         working on
-         * @return {Object|null}  object describing the best range found,
-         *                        or null if no valid range was found
-         */
-        function check(days, offset) {
-          var bestOption = null;
-          if (days.length > 0 && offset <= maxOffset) {
-            // check the validity of the days array.
-            var minValue = min(days);
-            var maxRequest = minValue * days.length;
-            if (maxRequest >= minValidRequest) {
-              bestOption = {days: days, maxRequest: maxRequest, offset: offset};
-            }
-          }
-          if (bestOption === null || bestOption.maxRequest < requested) {
-            // if bestOptions does not hit our target, check sub-arrays.  start
-            // by splitting on values that invalidate the date range (anything
-            // with inventory below the minimum daily amount).
-            // subtract 0.1 because the comparison used to filter is > (not >=)
-            var minDaily = days.length / minValidRequest - 0.1;
-            return split(days, offset, bestOption, minDaily, check, true)
-          }
-          else {
-            return bestOption;
-          }
-        }
-      },
-      function hashFunction(days, minValidRequest, requested) {
-        return [days.join(','), minValidRequest, requested].join('|');
-      }
-    );
-
-    /**
-     * compare two date range options, returning the better
-     * options are compared on their maximum request first, then their duration
-     * @param  {Object|null} a
-     * @param  {Object|null} b
-     * @return {Object|null}
-     */
-    function compare(a, b) {
-      if (!b) {
-        return a;
-      }
-      else if (!a) {
-        return b;
-      }
-      if (b.maxRequest > a.maxRequest ||
-          (b.maxRequest === a.maxRequest && b.days.length > a.days.length)) {
-        return b;
-      }
-      else {
-        return a;
-      }
-    }
-
-    function min(arr) {
-      return Math.min.apply(Math, arr);
-    }
-
-    /**
-     * split an array of inventory into sub-arrays, checking each
-     * @param  {number[]} days - inventory data for a range of contiguous dates
-     * @param  {number} offset - index offset from original array
-     * @param  {Object|null} bestOption - current best option
-     * @param  {number} minValue - value used to split the days array on; values
-     *                             below this are excluded
-     * @param  {function} check - function to call on sub-arrays
-     * @param  {boolean} recurse - whether or not to call this function again if
-     *                             unable to split array (more on this below)
-     * @return {Object|null} - best option found
-     */
-    function split(days, offset, bestOption, minValue, check, recurse) {
-      var sub = [];
-      var subOffset = 0;
-      for (var i = 0, l = days.length; i < l; i++) {
-        if (days[i] > minValue) {
-          if (sub.length === 0) {
-            subOffset = offset + i;
-          }
-          sub.push(days[i])
-        }
-        else {
-          // whenever we hit the end of a contiguous set of days above the 
-          // minValue threshold, compare that sub-array to our current bestOption
-          if (sub.length) {
-            bestOption = compare(bestOption, check(sub, subOffset))
-            sub = [];
-          }
-        }
-      }
-      if (sub.length === days.length) {
-        // if the array was not split at all:
-        if (recurse) {
-          // if we were previously splitting on the minimum valid value, try
-          // splitting on the smallest value in the array.  The `recurse` value
-          // prevents this from looping infinitely
-          return compare(bestOption, split(days, offset, null, min(days), check, false));
-        }
-        else {
-          // otherwise, just return the current best
-          return bestOption;
-        }
-      }
-      else if (sub.length) {
-        // need to compare the last sub array, as it won't checked in the for loop
-        return compare(bestOption, check(sub, subOffset));
-      }
-      else {
-        // if _no_ values were found above the minValue threshold
-        return bestOption;
-      }
-    }
-}(r.sponsored);
