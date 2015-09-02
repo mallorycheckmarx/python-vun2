@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -30,7 +30,6 @@ from r2.models import *
 from r2.models.query_cache import CachedQuery, MergedCachedQuery
 from r2.config.extensions import is_api
 from r2.lib.filters import _force_unicode
-from r2.lib.jsontemplates import get_usertrophies
 from r2.lib.pages import *
 from r2.lib.pages.things import wrap_links
 from r2.lib.menus import TimeMenu, SortMenu, RecSortMenu, ProfileSortMenu
@@ -41,6 +40,7 @@ from r2.lib.normalized_hot import normalized_hot
 from r2.lib.db.thing import Query, Merge, Relations
 from r2.lib.db import queries
 from r2.lib.strings import Score
+import r2.lib.search as search
 from r2.lib.template_helpers import add_sr
 from r2.lib.admin_utils import check_cheating
 from r2.lib.csrf import csrf_exempt
@@ -48,18 +48,16 @@ from r2.lib.utils import (
     extract_user_mentions,
     iters,
     timeago,
-    to36,
     trunc_string,
     precise_format_timedelta,
 )
-from r2.lib import hooks, organic, sup, trending
+from r2.lib import organic, sup, trending
 from r2.lib.memoize import memoize
 from r2.lib.validator import *
 import socket
 
 from api_docs import api_doc, api_section
 
-from pylons import g
 from pylons.i18n import _
 
 from datetime import timedelta
@@ -68,7 +66,6 @@ from functools import partial
 
 class ListingController(RedditController):
     """Generalized controller for pages with lists of links."""
-
 
     # toggle skipping of links based on the users' save/hide/vote preferences
     skip = True
@@ -96,7 +93,6 @@ class ListingController(RedditController):
     # login box, subreddit box, submit box, etc, visible
     show_sidebar = True
     show_chooser = False
-    suppress_reply_buttons = False
 
     # class (probably a subclass of Reddit) to use to render the page.
     render_cls = Reddit
@@ -120,7 +116,7 @@ class ListingController(RedditController):
             return c.site.allows_referrers
         return False
 
-    def build_listing(self, num, after, reverse, count, sr_detail=None, **kwargs):
+    def build_listing(self, num, after, reverse, count, **kwargs):
         """uses the query() method to define the contents of the
         listing and renders the page self.render_cls(..).render() with
         the listing as contents"""
@@ -128,7 +124,6 @@ class ListingController(RedditController):
         self.count = count
         self.after = after
         self.reverse = reverse
-        self.sr_detail = sr_detail
 
         self.query_obj = self.query()
         self.builder_obj = self.builder()
@@ -167,7 +162,7 @@ class ListingController(RedditController):
             builder_cls = self.builder_cls
         elif isinstance(self.query_obj, Query):
             builder_cls = QueryBuilder
-        elif isinstance(self.query_obj, g.search.SearchQuery):
+        elif isinstance(self.query_obj, search.SearchQuery):
             builder_cls = SearchBuilder
         elif isinstance(self.query_obj, iters):
             builder_cls = IDBuilder
@@ -176,25 +171,22 @@ class ListingController(RedditController):
         elif isinstance(self.query_obj, (CachedQuery, MergedCachedQuery)):
             builder_cls = IDBuilder
 
-        builder = builder_cls(
-            self.query_obj,
-            num=self.num,
-            skip=self.skip,
-            after=self.after,
-            count=self.count,
-            reverse=self.reverse,
-            keep_fn=self.keep_fn(),
-            sr_detail=self.sr_detail,
-            wrap=self.builder_wrapper,
-            prewrap_fn=self.prewrap_fn(),
-        )
-        return builder
+        b = builder_cls(self.query_obj,
+                        num = self.num,
+                        skip = self.skip,
+                        after = self.after,
+                        count = self.count,
+                        reverse = self.reverse,
+                        keep_fn = self.keep_fn(),
+                        wrap = self.builder_wrapper)
+
+        return b
 
     def keep_fn(self):
         def keep(item):
             wouldkeep = item.keep_item(item)
             if isinstance(c.site, AllSR):
-                if not item.subreddit.discoverable:
+                if not item.subreddit.allow_top:
                     return False
             if getattr(item, "promoted", None) is not None:
                 return False
@@ -202,9 +194,6 @@ class ListingController(RedditController):
                 return False
             return wouldkeep
         return keep
-
-    def prewrap_fn(self):
-        return
 
     def listing(self):
         """Listing to generate from the builder"""
@@ -220,7 +209,6 @@ class ListingController(RedditController):
         for i in pane:
             if hasattr(i, 'full_comment_path'):
                 i.child = None
-            i.suppress_reply_buttons = self.suppress_reply_buttons
         return pane
 
     def title(self):
@@ -246,7 +234,7 @@ listing_api_doc = partial(
     section=api_section.listings,
     extends=ListingController.GET_listing,
     notes=[paginated_listing.doc_note],
-    supports_rss=True,
+    extensions=["json", "xml"],
 )
 
 
@@ -286,25 +274,21 @@ class SubredditListingController(ListingController):
         else:
             if not c.user_is_loggedin:
                 # This data is only for scrapers, which shouldn't be logged in.
-                twitter_card = {
-                    "site": "reddit",
-                    "card": "summary",
-                    "title": self._build_og_title(max_length=70),
-                    # Twitter will fall back to any defined OpenGraph
-                    # attributes, so we don't need to define
-                    # 'twitter:image' or 'twitter:description'.
-                }
-                hook = hooks.get_hook('subreddit_listing.twitter_card')
-                hook.call(tags=twitter_card, sr_name=c.site.name)
-
                 return {
                     "og_data": {
                         "site_name": "reddit",
                         "title": self._build_og_title(),
-                        "image": static('icon.png', absolute=True),
+                        "image": static('icon.png'),
                         "description": self._build_og_description(),
                     },
-                    "twitter_card": twitter_card,
+                    "twitter_card": {
+                        "site": "reddit",
+                        "card": "summary",
+                        "title": self._build_og_title(max_length=70),
+                        # Twitter will fall back to any defined OpenGraph
+                        # attributes, so we don't need to define
+                        # 'twitter:image' or 'twitter:description'.
+                    },
                 }
 
             return {}
@@ -349,7 +333,7 @@ class ListingWithPromos(SubredditListingController):
 
         show_promo = False
         srnames = []
-        can_show_promo = not c.user.pref_hide_ads or not c.user.gold
+        can_show_promo = c.user.pref_show_sponsors or not c.user.gold
         try_show_promo = ((c.user_is_loggedin and random.random() > 0.5) or
                           not c.user_is_loggedin)
 
@@ -390,7 +374,7 @@ class ListingWithPromos(SubredditListingController):
         # only send a spotlight listing for HTML rendering
         if c.render_style == "html":
             spotlight = None
-            show_sponsors = not c.user.pref_hide_ads or not c.user.gold
+            show_sponsors = not (not c.user.pref_show_sponsors and c.user.gold)
             show_organic = self.show_organic and c.user.pref_organic
             on_frontpage = isinstance(c.site, DefaultSR)
             requested_ad = request.GET.get('ad')
@@ -427,17 +411,10 @@ class HotController(ListingWithPromos):
             sr_ids = Subreddit.user_subreddits(c.user)
             return normalized_hot(sr_ids)
         elif isinstance(c.site, MultiReddit):
-            return normalized_hot(c.site.kept_sr_ids, obey_age_limit=False,
-                                  ageweight=c.site.ageweight)
+            return normalized_hot(c.site.kept_sr_ids, obey_age_limit=False)
         else:
-            sticky_fullnames = c.site.get_sticky_fullnames()
-            if sticky_fullnames:
-                # need to use a copy of the list because we add all the other
-                # links into this below, so get_sticky_fullnames() will start
-                # returning a list of all the hot links after this if we
-                # modify it directly
-                link_list = sticky_fullnames[:]
-                
+            if c.site.sticky_fullname:
+                link_list = [c.site.sticky_fullname]
                 wrapped = wrap_links(link_list,
                                      wrapper=self.builder_wrapper,
                                      keep_fn=self.keep_fn(),
@@ -445,10 +422,10 @@ class HotController(ListingWithPromos):
                 # add all other items and decrement count if sticky is visible
                 if wrapped.things:
                     link_list += [l for l in c.site.get_links('hot', 'all')
-                                    if l not in sticky_fullnames]
+                                    if l != c.site.sticky_fullname]
                     if not self.after:
-                        self.count -= len(sticky_fullnames)
-                        self.num += len(sticky_fullnames)
+                        self.count -= 1
+                        self.num += 1
                     return link_list
             
             # no sticky or sticky hidden
@@ -473,32 +450,17 @@ class HotController(ListingWithPromos):
 
     def content(self):
         content = super(HotController, self).content()
-
-        if c.render_style == "html":
-            stack = None
-
-            hot_hook = hooks.get_hook("hot.get_content")
-            hot_pane = hot_hook.call_until_return(controller=self)
-
-            if hot_pane:
-                stack = [
+        if (c.render_style == "html" and isinstance(c.site, DefaultSR) and
+                not self.listing_obj.prev):
+            trending_info = self.trending_info()
+            if trending_info:
+                return PaneStack(filter(None, [
                     self.spotlight,
-                    hot_pane,
-                    self.listing_obj
-                ]
-            elif isinstance(c.site, DefaultSR) and not self.listing_obj.prev:
-                trending_info = self.trending_info()
-                if trending_info:
-                    stack = [
-                        self.spotlight,
-                        TrendingSubredditsBar(**trending_info),
-                        self.listing_obj,
-                    ]
-
-            if stack:
-                return PaneStack(filter(None, stack), css_class='spacer')
-
+                    TrendingSubredditsBar(**trending_info),
+                    self.listing_obj,
+                ]), css_class='spacer')
         return content
+
 
     def title(self):
         return c.site.title
@@ -566,7 +528,7 @@ class BrowseController(ListingWithPromos):
             oldest = timeago('1 %s' % (str(self.time),))
             def keep(item):
                 if isinstance(c.site, AllSR):
-                    if not item.subreddit.discoverable:
+                    if not item.subreddit.allow_top:
                         return False
                 return item._date > oldest and item.keep_item(item)
             return keep
@@ -624,12 +586,7 @@ class AdsController(SubredditListingController):
 
     def keep_fn(self):
         def keep(item):
-            if item._fullname in self.promos:
-                return False
-            if item.promoted and not item._deleted:
-                self.promos.add(item._fullname)
-                return True
-            return False
+            return item.promoted and not item._deleted
         return keep
 
     def query(self):
@@ -640,13 +597,8 @@ class AdsController(SubredditListingController):
 
     def listing(self):
         listing = ListingController.listing(self)
+        promote.add_trackers(listing.things, c.site)
         return listing
-
-    def GET_listing(self, *a, **kw):
-        self.promos = set()
-        if not c.site.allow_ads:
-            self.abort404()
-        return SubredditListingController.GET_listing(self, *a, **kw)
 
 
 class RandomrisingController(ListingWithPromos):
@@ -752,8 +704,8 @@ class UserController(ListingController):
                   'comments': _("comments by %(user)s"),
                   'submitted': _("submitted by %(user)s"),
                   'gilded': _("gilded by %(user)s"),
-                  'upvoted': _("upvoted by %(user)s"),
-                  'downvoted': _("downvoted by %(user)s"),
+                  'liked': _("liked by %(user)s"),
+                  'disliked': _("disliked by %(user)s"),
                   'saved': _("saved by %(user)s"),
                   'hidden': _("hidden by %(user)s"),
                   'promoted': _("promoted by %(user)s")}
@@ -773,11 +725,9 @@ class UserController(ListingController):
                 return False
 
             if c.user == self.vuser:
-                if not item.likes and self.where == 'upvoted':
-                    g.stats.simple_event("vote.missing_votes_by_account")
+                if not item.likes and self.where == 'liked':
                     return False
-                if item.likes is not False and self.where == 'downvoted':
-                    g.stats.simple_event("vote.missing_votes_by_account")
+                if item.likes is not False and self.where == 'disliked':
                     return False
                 if self.where == 'saved' and not item.saved:
                     return False
@@ -823,10 +773,10 @@ class UserController(ListingController):
             else:
                 q = queries.get_gilded_user(self.vuser)
 
-        elif self.where in ('upvoted', 'downvoted'):
+        elif self.where in ('liked', 'disliked'):
             sup.set_sup_header(self.vuser, self.where)
             self.check_modified(self.vuser, self.where)
-            if self.where == 'upvoted':
+            if self.where == 'liked':
                 q = queries.get_liked(self.vuser)
             else:
                 q = queries.get_disliked(self.vuser)
@@ -840,14 +790,6 @@ class UserController(ListingController):
             sr_id = self.savedsr._id if self.savedsr else None
             q = queries.get_saved(self.vuser, sr_id,
                                   category=self.savedcategory)
-        elif self.where == 'actions':
-            self.check_modified(self.vuser, 'actions')
-            if not votes_visible(self.vuser):
-                q = queries.get_overview(self.vuser, self.sort, self.time)
-            else:
-                q = queries.get_user_actions(self.vuser, 'new', 'all')
-                self.builder_cls = ActionBuilder
-
         elif c.user_is_sponsor and self.where == 'promoted':
             q = queries.get_promoted_links(self.vuser._id)
 
@@ -857,47 +799,31 @@ class UserController(ListingController):
         return q
 
     @require_oauth2_scope("history")
-    @validate(vuser = VExistingUname('username', allow_deleted=True),
+    @validate(vuser = VExistingUname('username'),
               sort = VMenu('sort', ProfileSortMenu, remember = False),
               time = VMenu('t', TimeMenu, remember = False),
               show=VOneOf('show', ('given',)))
     @listing_api_doc(section=api_section.users, uri='/user/{username}/{where}',
                      uri_variants=['/user/{username}/' + where for where in [
                                        'overview', 'submitted', 'comments',
-                                       'upvoted', 'downvoted', 'hidden',
-                                       'saved', 'gilded']])
+                                       'liked', 'disliked', 'hidden', 'saved',
+                                       'gilded']])
     def GET_listing(self, where, vuser, sort, time, show, **env):
-        # the validator will ensure that vuser is a valid account
-        if not vuser:
-            return self.abort404()
-
-        # continue supporting /liked and /disliked paths for API clients
-        # but 301 redirect non-API users to the new location
-        changed_wheres = {"liked": "upvoted", "disliked": "downvoted"}
-        new_where = changed_wheres.get(where)
-        if new_where:
-            where = new_where
-            if not is_api():
-                path = "/".join(("/user", vuser.name, where))
-                query_string = request.environ.get('QUERY_STRING')
-                if query_string:
-                    path += "?" + query_string
-                return self.redirect(path, code=301)
-        
         self.where = where
         self.sort = sort
         self.time = time
         self.show = show
 
-        # only allow admins to view deleted users
-        if vuser._deleted and not c.user_is_admin:
+        # the validator will ensure that vuser is a valid account
+        if not vuser:
             return self.abort404()
 
         if c.user_is_admin:
             c.referrer_policy = "always"
 
-        if self.sort in ('hot', 'new'):
+        if self.sort in  ('hot', 'new'):
             self.time = 'all'
+
 
         # hide spammers profile pages
         if vuser._spam and not vuser.banned_profile_visible:
@@ -907,10 +833,10 @@ class UserController(ListingController):
                          c.user_is_sponsor and where == "promoted")):
                 return self.abort404()
 
-        if where in ('upvoted', 'downvoted') and not votes_visible(vuser):
+        if where in ('liked', 'disliked') and not votes_visible(vuser):
             return self.abort403()
 
-        if ((where in ('saved', 'hidden') or
+        if ((where in ('saved', 'hidden') or 
                 (where == 'gilded' and show == 'given')) and
                 not (c.user_is_loggedin and c.user._id == vuser._id) and
                 not c.user_is_admin):
@@ -937,7 +863,6 @@ class UserController(ListingController):
         self.vuser = vuser
         self.render_params = {'user' : vuser}
         c.profilepage = True
-        self.suppress_reply_buttons = True
 
         if vuser.pref_hide_from_robots:
             self.robots = 'noindex,nofollow'
@@ -946,7 +871,8 @@ class UserController(ListingController):
 
     @require_oauth2_scope("read")
     @validate(vuser = VExistingUname('username'))
-    @api_doc(section=api_section.users, uri='/user/{username}/about')
+    @api_doc(section=api_section.users, uri='/user/{username}/about',
+             extensions=['json'])
     def GET_about(self, vuser):
         """Return information about the user, including karma and gold status."""
         if (not is_api() or
@@ -967,23 +893,6 @@ class UserController(ListingController):
         if query_string:
             dest += "?" + query_string
         return self.redirect(dest)
-
-    @validate(VUser())
-    def GET_rel_user_redirect(self, rest=""):
-        url = "/user/%s/%s" % (c.user.name, rest)
-        if request.query_string:
-            url += "?" + request.query_string
-        return self.redirect(url, code=302)
-
-    @validate(
-        user=VAccountByName('username'),
-    )
-    def GET_trophies(self, user):
-        """Return a list of trophies for the a given user."""
-        if not is_api():
-            return self.abort404()
-        return self.api_wrapper(get_usertrophies(user))
-
 
 class MessageController(ListingController):
     show_nums = False
@@ -1008,9 +917,12 @@ class MessageController(ListingController):
                        NavButton(_("unread"), "unread"),
                        NavButton(plurals.messages, "messages"),
                        NavButton(_("comment replies"), 'comments'),
-                       NavButton(_("post replies"), 'selfreply'),
-                       NavButton(_("username mentions"), "mentions"),
-            ]
+                       NavButton(_("post replies"), 'selfreply')]
+
+            if c.user.gold:
+                buttons += [NavButton(_("username mentions"),
+                                      "mentions",
+                                      css_class="gold")]
 
             return [NavMenu(buttons, base_path = '/message/',
                             default = 'inbox', type = "flatlist")]
@@ -1043,7 +955,7 @@ class MessageController(ListingController):
                 and (item.author_id == c.user._id or not item.new)):
                 return False
 
-            if (item.is_mention and
+            if (item.message_style == "mention" and
                 c.user.name.lower() not in extract_user_mentions(item.body)):
                 return False
 
@@ -1105,23 +1017,14 @@ class MessageController(ListingController):
                 root = Subreddit._byID(parent.sr_id)
                 message_cls = SrMessageBuilder
 
-            enable_threaded = (
-                (self.where == "moderator" or
-                    parent and parent.sr_id) and
-                c.user.pref_threaded_modmail
-            )
-
-            return message_cls(
-                root,
-                wrap=self.builder_wrapper,
-                parent=parent,
-                skip=skip,
-                num=self.num,
-                after=self.after,
-                keep_fn=self.keep_fn(),
-                reverse=self.reverse,
-                threaded=enable_threaded,
-            )
+            return message_cls(root,
+                               wrap = self.builder_wrapper,
+                               parent = parent,
+                               skip = skip,
+                               num = self.num,
+                               after = self.after,
+                               keep_fn = self.keep_fn(),
+                               reverse = self.reverse)
         return ListingController.builder(self)
 
     def _verify_inbox_count(self, kept_msgs):
@@ -1252,7 +1155,6 @@ class MessageController(ListingController):
         mod_srs = []
         subreddit_message = False
         from_user = True
-        self.where = "compose"
 
         if isinstance(c.site, MultiReddit):
             mod_srs = c.site.srs_with_perms(c.user, "mail")
@@ -1279,15 +1181,10 @@ class MessageController(ListingController):
             content = MessageCompose(to=to, subject=subject, captcha=captcha,
                                      message=message)
 
-        return MessagePage(content=content, 
-            title=self.title(), 
-            page_classes=self.extra_page_classes + ['compose-page'],
-        ).render()
-
+        return MessagePage(content=content).render()
 
 class RedditsController(ListingController):
     render_cls = SubredditsPage
-    extra_page_classes = ListingController.extra_page_classes + ['subreddits-page']
 
     def title(self):
         return _('subreddits')
@@ -1304,66 +1201,23 @@ class RedditsController(ListingController):
                                        sort = desc('_date'),
                                        write_cache = True,
                                        read_cache = True,
-                                       cache_time = 5 * 60,
-                                       stale = True)
+                                       cache_time = 5 * 60)
         else:
             reddits = None
             if self.where == 'new':
                 reddits = Subreddit._query( write_cache = True,
                                             read_cache = True,
-                                            cache_time = 5 * 60,
-                                            stale = True)
+                                            cache_time = 5 * 60)
                 reddits._sort = desc('_date')
-            elif self.where == 'employee':
-                if c.user_is_loggedin and c.user.employee:
-                    reddits = Subreddit._query(
-                        Subreddit.c.type=='employees_only',
-                        write_cache=True,
-                        read_cache=True,
-                        cache_time=5 * 60,
-                        stale=True,
-                    )
-                    reddits._sort = desc('_downs')
-                else:
-                    abort(404)
-            elif self.where == 'quarantine':
-                if c.user_is_admin:
-                    reddits = Subreddit._query(
-                        Subreddit.c.quarantine==True,
-                        write_cache=True,
-                        read_cache=True,
-                        cache_time=5 * 60,
-                        stale=True,
-                    )
-                    reddits._sort = desc('_downs')
-                else:
-                    abort(404)
-            elif self.where == 'gold':
-                reddits = Subreddit._query(
-                    Subreddit.c.type=='gold_only',
-                    write_cache=True,
-                    read_cache=True,
-                    cache_time=5 * 60,
-                    stale=True,
-                )
-                reddits._sort = desc('_downs')
-            elif self.where == 'default':
-                return [
-                    sr._fullname
-                    for sr in Subreddit.default_subreddits(ids=False)
-                ]
             else:
                 reddits = Subreddit._query( write_cache = True,
                                             read_cache = True,
-                                            cache_time = 60 * 60,
-                                            stale = True)
+                                            cache_time = 60 * 60)
                 reddits._sort = desc('_downs')
 
             if g.domain != 'reddit.com':
-                # don't try to render /r/promos on opensource installations
-                promo_sr_id = Subreddit.get_promote_srid()
-                if promo_sr_id:
-                    reddits._filter(Subreddit.c._id != promo_sr_id)
+                # don't try to render special subreddits (like promos)
+                reddits._filter(Subreddit.c.author_id != -1)
 
         if self.where == 'popular':
             self.render_params = {"show_interestbar": True}
@@ -1373,12 +1227,7 @@ class RedditsController(ListingController):
     @require_oauth2_scope("read")
     @listing_api_doc(section=api_section.subreddits,
                      uri='/subreddits/{where}',
-                     uri_variants=[
-                         '/subreddits/popular',
-                         '/subreddits/new',
-                         '/subreddits/gold',
-                         '/subreddits/default',
-                     ])
+                     uri_variants=['/subreddits/popular', '/subreddits/new'])
     def GET_listing(self, where, **env):
         """Get all subreddits.
 
@@ -1393,7 +1242,6 @@ class RedditsController(ListingController):
 
 class MyredditsController(ListingController):
     render_cls = MySubredditsPage
-    extra_page_classes = ListingController.extra_page_classes + ['subreddits-page']
 
     @property
     def menus(self):
@@ -1418,34 +1266,19 @@ class MyredditsController(ListingController):
     def query(self):
         if self.where == 'moderator' and not c.user.is_moderator_somewhere:
             return []
-        elif self.where == "subscriber":
-            sr_ids = Subreddit.subscribed_ids_by_user(c.user)
-            sr_fullnames = [
-                Subreddit._fullname_from_id36(to36(sr_id)) for sr_id in sr_ids]
-            return sr_fullnames
-        else:
-            q = SRMember._query(
-                SRMember.c._name == self.where,
-                SRMember.c._thing2_id == c.user._id,
-                #hack to prevent the query from
-                #adding it's own date
-                sort=(desc('_t1_ups'), desc('_t1_date')),
-                eager_load=True,
-                thing_data=True,
-                thing_stale=True,
-            )
-            return q
-
-    def prewrap_fn(self):
-        if self.where != "subscriber":
-            def sr_from_srmember(srmember):
-                sr = srmember._thing1
-                return sr
-            return sr_from_srmember
+        reddits = SRMember._query(SRMember.c._name == self.where,
+                                  SRMember.c._thing2_id == c.user._id,
+                                  #hack to prevent the query from
+                                  #adding it's own date
+                                  sort = (desc('_t1_ups'), desc('_t1_date')),
+                                  eager_load = True,
+                                  thing_data = True)
+        reddits.prewrap_fn = lambda x: x._thing1
+        return reddits
 
     def content(self):
         user = c.user if c.user_is_loggedin else None
-        num_subscriptions = len(Subreddit.subscribed_ids_by_user(user))
+        num_subscriptions = len(Subreddit.reverse_subscriber_ids(user))
         if self.where == 'subscriber' and num_subscriptions == 0:
             message = strings.sr_messages['empty']
         else:
@@ -1461,13 +1294,11 @@ class MyredditsController(ListingController):
         return stack
 
     def build_listing(self, after=None, **kwargs):
-        if after:
-            if self.where == "subscriber":
-                if not isinstance(after, Subreddit):
-                    abort(400, 'gimme a subreddit')
-            else:
-                after = SRMember._fast_query(
-                    after, c.user, self.where, data=False).values()[0]
+        if after and isinstance(after, Subreddit):
+            after = SRMember._fast_query(after, c.user, self.where,
+                                         data=False).values()[0]
+        if after and not isinstance(after, SRMember):
+            abort(400, 'gimme a srmember')
 
         return ListingController.build_listing(self, after=after, **kwargs)
 
@@ -1516,7 +1347,6 @@ class CommentsController(SubredditListingController):
     @require_oauth2_scope("read")
     def GET_listing(self, **env):
         c.profilepage = True
-        self.suppress_reply_buttons = True
         return ListingController.GET_listing(self, **env)
 
 
@@ -1571,18 +1401,7 @@ class UserListListingController(ListingController):
         return lambda rel : cls(rel, editable=self.editable)
 
     def title(self):
-        section_title = menu[self.where]
-
-        # We'll probably want to slowly start opting more and more things into
-        # having this suffix, to make similar tabs on different subreddits
-        # distinct.
-        if self.where == 'moderators':
-            return '%(section)s - /r/%(subreddit)s' % {
-                'section': section_title,
-                'subreddit': c.site.name,
-            }
-
-        return section_title
+        return menu[self.where]
 
     def rel(self):
         if self.where in ['friends', 'blocked']:
@@ -1733,9 +1552,6 @@ class UserListListingController(ListingController):
             # Used for subreddits like /r/lounge
             if c.site.hide_subscribers:
                 abort(403)
-            # used for subreddits that don't allow access to approved submitters
-            if c.site.hide_contributors:
-                abort(403)
             self.listing_cls = ContributorListing
             self.editable = has_mod_access
 
@@ -1811,7 +1627,4 @@ class GildedController(SubredditListingController):
     @require_oauth2_scope("read")
     def GET_listing(self, **env):
         c.profilepage = True
-        self.suppress_reply_buttons = True
-        if not c.site.allow_gilding:
-            self.abort404()
         return ListingController.GET_listing(self, **env)

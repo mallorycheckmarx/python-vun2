@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,8 +31,6 @@ import time
 from pylons import c, g, request
 from pylons.i18n import _
 
-from r2.config import feature
-from r2.config.extensions import API_TYPES, RSS_TYPES
 from r2.lib.comment_tree import (
     conversation,
     link_comments_and_sort,
@@ -45,7 +43,7 @@ from r2.lib.comment_tree import (
 from r2.lib.wrapped import Wrapped
 from r2.lib.db import operators, tdb_cassandra
 from r2.lib.filters import _force_unicode
-from r2.lib.utils import Storage, timesince, tup, to36
+from r2.lib.utils import Storage, timesince, tup
 from r2.lib.utils.comment_tree_utils import get_num_children
 
 from r2.models import (
@@ -63,7 +61,6 @@ from r2.models import (
     wiki,
 )
 from r2.models.admintools import compute_votes, ip_span
-from r2.models.flair import Flair
 from r2.models.listing import Listing
 
 
@@ -71,12 +68,11 @@ EXTRA_FACTOR = 1.5
 MAX_RECURSION = 10
 
 class Builder(object):
-    def __init__(self, wrap=Wrapped, prewrap_fn=None, keep_fn=None, stale=True,
+    def __init__(self, wrap=Wrapped, keep_fn=None, stale=True,
                  spam_listing=False):
-        self.wrap = wrap
-        self.prewrap_fn = prewrap_fn
-        self.keep_fn = keep_fn
         self.stale = stale
+        self.wrap = wrap
+        self.keep_fn = keep_fn
         self.spam_listing = spam_listing
 
     def keep_item(self, item):
@@ -148,20 +144,14 @@ class Builder(object):
 
             try:
                 w.author = authors.get(item.author_id)
-                author_id = item.author_id
-
-                # if display_author exists, then author_id is unknown to the
-                # receiver, so don't display friend relationship details
-                if hasattr(item, 'display_author') and item.display_author:
-                    author_id = item.display_author
-                if user and author_id in user.friends:
+                if user and item.author_id in user.friends:
                     # deprecated old way:
                     w.friend = True
 
                     # new way:
                     label = None
                     if friend_rels:
-                        rel = friend_rels[author_id]
+                        rel = friend_rels[item.author_id]
                         note = getattr(rel, "note", None)
                         if note:
                             label = u"%s (%s)" % (_("friend"), 
@@ -185,10 +175,7 @@ class Builder(object):
                     args['kind'] = 'special'
                 add_attr(w.attribs, **args)
 
-            # if display_author exists, then author_id is unknown to the
-            # receiver, so don't display the cake day
-            if (not hasattr(item, 'display_author') and
-                    w.author and w.author._id in cakes and not c.profilepage):
+            if w.author and w.author._id in cakes and not c.profilepage:
                 add_attr(
                     w.attribs,
                     kind="cake",
@@ -314,15 +301,13 @@ class Builder(object):
 
     def convert_items(self, items):
         """Convert a list of items to the desired output format"""
-        if self.prewrap_fn:
-            items = [self.prewrap_fn(i) for i in items]
-
         if self.wrap:
             items = self.wrap_items(items)
         else:
             # make a copy of items so the converted items can be mutated without
             # changing the original items
             items = items[:]
+
         return items
 
     def valid_after(self, after):
@@ -361,16 +346,17 @@ class Builder(object):
             return True
 
 class QueryBuilder(Builder):
-    def __init__(self, query, skip=False, num=None, sr_detail=None, count=0,
-                 after=None, reverse=False, **kw):
+    def __init__(self, query, wrap=Wrapped, keep_fn=None, skip=False,
+                 spam_listing=False, **kw):
+        Builder.__init__(self, wrap=wrap, keep_fn=keep_fn,
+                         spam_listing=spam_listing)
         self.query = query
         self.skip = skip
-        self.num = num
-        self.sr_detail = sr_detail
-        self.start_count = count or 0
-        self.after = after
-        self.reverse = reverse
-        Builder.__init__(self, **kw)
+        self.num = kw.get('num')
+        self.start_count = kw.get('count', 0) or 0
+        self.after = kw.get('after')
+        self.reverse = kw.get('reverse')
+        self.prewrap_fn = getattr(query, 'prewrap_fn', None)
 
     def __repr__(self):
         return "<%s(%r)>" % (self.__class__.__name__, self.query)
@@ -379,6 +365,11 @@ class QueryBuilder(Builder):
         """Iterates over the items returned by get_items"""
         for i in a[0]:
             yield i
+
+    def convert_items(self, items):
+        if self.prewrap_fn:
+            items = [self.prewrap_fn(i) for i in items]
+        return Builder.convert_items(self, items)
 
     def init_query(self):
         q = self.query
@@ -419,6 +410,7 @@ class QueryBuilder(Builder):
         num_have = 0
         done = False
         items = []
+        orig_items = {}
         count = self.start_count
         fetch_after = None
         loopcount = 0
@@ -444,6 +436,9 @@ class QueryBuilder(Builder):
             # Wrap the fetched items if necessary
             new_items = self.convert_items(fetched_items)
 
+            # For wrapped -> unwrapped lookups
+            orig_items.update((a._id, b) for a, b in izip(new_items, fetched_items))
+
             #skip and count
             while new_items and (not self.num or num_have < self.num):
                 i = new_items.pop(0)
@@ -463,10 +458,6 @@ class QueryBuilder(Builder):
         if self.num and num_have < self.num and not stopped_early:
             have_next = False
 
-        if getattr(self, 'sr_detail', False):
-            for item in items:
-                item.sr_detail = True
-
         # Make sure first_item and last_item refer to things in items
         # NOTE: could retrieve incorrect item if there were items with
         # duplicate _id
@@ -474,8 +465,9 @@ class QueryBuilder(Builder):
         last_item = None
         if items:
             if self.start_count > 0:
-                first_item = items[0]
-            last_item = items[-1]
+                # Make sure the item is the unwrapped version
+                first_item = orig_items[items[0]._id]
+            last_item = orig_items[items[-1]._id]
 
         if self.reverse:
             items.reverse()
@@ -545,28 +537,20 @@ class IDBuilder(QueryBuilder):
         return done, new_items
 
 
-class ActionBuilder(IDBuilder):
-    def init_query(self):
-        self.actions = {}
-        ids = []
-        for id, date, action in self.query:
-            ids.append(id)
-            self.actions[id] = action
-        self.query = ids
-
-        super(ActionBuilder, self).init_query()
-
-    def thing_lookup(self, names):
-        items = super(ActionBuilder, self).thing_lookup(names)
-
-        for item in items:
-            if item._fullname in self.actions:
-                item.action_type = self.actions[item._fullname]
-        return items
-
-
 class CampaignBuilder(IDBuilder):
     """Build on a list of PromoTuples."""
+
+    def __init__(self, query, wrap=Wrapped, keep_fn=None, prewrap_fn=None,
+                 skip=False, num=None, after=None, reverse=False, count=0):
+        Builder.__init__(self, wrap=wrap, keep_fn=keep_fn)
+        self.query = query
+        self.skip = skip
+        self.num = num
+        self.start_count = count
+        self.after = after
+        self.reverse = reverse
+        self.prewrap_fn = prewrap_fn
+
     @staticmethod
     def _get_after(promo_tuples, after, reverse):
         promo_tuples = list(promo_tuples)
@@ -614,13 +598,14 @@ class CampaignBuilder(IDBuilder):
         return ret
 
     def valid_after(self, after):
-        # CampaignBuilder has special wrapping logic to operate on
-        # PromoTuples and PromoCampaigns. `after` is just a Link, so bypass
-        # the special wrapping logic and use the base class.
+        # CampaignBuilder's wrapping logic only applies to Campaigns, so it
+        # needs its own version of valid_after to just use the base class'
+        # wrapping logic for security checks.
         if self.prewrap_fn:
             after = self.prewrap_fn(after)
         if self.wrap:
             after = Builder.wrap_items(self, (after,))[0]
+
         return not self.must_skip(after)
 
 
@@ -669,9 +654,10 @@ class SimpleBuilder(IDBuilder):
 
 
 class SearchBuilder(IDBuilder):
-    def __init__(self, query, skip_deleted_authors=True, **kw):
+    def __init__(self, query, wrap=Wrapped, keep_fn=None, skip=False,
+                 skip_deleted_authors=True, **kw):
+        IDBuilder.__init__(self, query, wrap, keep_fn, skip, **kw)
         self.skip_deleted_authors = skip_deleted_authors
-        IDBuilder.__init__(self, query, **kw)
 
     def init_query(self):
         self.skip = True
@@ -681,7 +667,6 @@ class SearchBuilder(IDBuilder):
         self.results = self.query.run()
         names = list(self.results.docs)
         self.total_num = self.results.hits
-        self.subreddit_facets = self.results.subreddit_facets
 
         after = self.after._fullname if self.after else None
 
@@ -693,50 +678,26 @@ class SearchBuilder(IDBuilder):
         # doesn't use the default keep_item because we want to keep
         # things that were voted on, even if they've chosen to hide
         # them in normal listings
-        user = c.user if c.user_is_loggedin else None
-
         if item._spam or item._deleted:
             return False
         # If checking (wrapped) links, filter out banned subreddits
         elif hasattr(item, 'subreddit') and item.subreddit.spammy():
             return False
-        elif (hasattr(item, 'subreddit') and
-              not c.user_is_admin and
-              not item.subreddit.is_exposed(user)):
-            return False
         elif (self.skip_deleted_authors and
               getattr(item, "author", None) and item.author._deleted):
             return False
-        elif isinstance(item.lookups[0], Subreddit) and not item.is_exposed(user):
-            return False
-
-        # show NSFW to API and RSS users unless obey_over18=true
-        is_api_or_rss = (c.render_style in API_TYPES
-                         or c.render_style in RSS_TYPES)
-        if is_api_or_rss:
-            include_over18 = not c.obey_over18 or c.over18
-        elif feature.is_enabled('safe_search'):
-            include_over18 = c.over18
         else:
-            include_over18 = True
-
-        is_nsfw = (item.over_18 or
-            (hasattr(item, 'subreddit') and item.subreddit.over_18))
-        if is_nsfw and not include_over18:
-            return False
-
-        return True
-
+            return True
 
 class WikiRevisionBuilder(QueryBuilder):
     show_extended = True
-
-    def __init__(self, revisions, user=None, sr=None, page=None, **kw):
-        self.user = user
-        self.sr = sr
+    
+    def __init__(self, revisions, page=None, **kw):
+        self.user = kw.pop('user', None)
+        self.sr = kw.pop('sr', None)
         self.page = page
         QueryBuilder.__init__(self, revisions, **kw)
-
+    
     def wrap_items(self, items):
         from r2.lib.validator.wiki import this_may_revise
         types = {}
@@ -749,7 +710,7 @@ class WikiRevisionBuilder(QueryBuilder):
             w.show_compare = self.show_extended
             types.setdefault(w.render_class, []).append(w)
             wrapped.append(w)
-
+        
         user = c.user
         for cls in types.keys():
             cls.add_props(user, types[cls])
@@ -794,22 +755,18 @@ def make_wrapper(parent_wrapper = Wrapped, **params):
 class CommentBuilder(Builder):
     def __init__(self, link, sort, comment=None, children=None, context=None,
                  load_more=True, continue_this_thread=True,
-                 max_depth=MAX_RECURSION, edits_visible=True, num=None,
-                 show_deleted=False, **kw):
+                 max_depth=MAX_RECURSION, num=None, **kw):
+        Builder.__init__(self, **kw)
         self.link = link
         self.comment = comment
         self.children = children
         self.context = context or 0
         self.load_more = load_more
         self.max_depth = max_depth
-        self.show_deleted = show_deleted or c.user_is_admin
-        self.edits_visible = edits_visible
         self.num = num
         self.continue_this_thread = continue_this_thread
         self.sort = sort
         self.rev_sort = isinstance(sort, operators.desc)
-        self.comments = None
-        Builder.__init__(self, **kw)
 
     def update_candidates(self, candidates, sorter, to_add=None):
         for comment in (comment for comment in tup(to_add)
@@ -818,11 +775,6 @@ class CommentBuilder(Builder):
             heapq.heappush(candidates, (sort_val, comment))
 
     def get_items(self):
-        if self.comments is None:
-            self._get_comments()
-        return self._make_wrapped_tree()
-
-    def _get_comments(self):
         timer = g.stats.get_timer("CommentBuilder.get_items")
         timer.start()
         r = link_comments_and_sort(self.link, self.sort.col)
@@ -877,6 +829,10 @@ class CommentBuilder(Builder):
 
         timer.intermediate("pick_candidates")
 
+        if not candidates:
+            timer.stop()
+            return []
+
         # choose which comments to show
         items = []
         while (self.num is None or len(items) < self.num) and candidates:
@@ -908,140 +864,31 @@ class CommentBuilder(Builder):
 
         timer.intermediate("pick_comments")
 
-        self.top_level_candidates = [comment for sort_val, comment in candidates
-            if depth.get(comment, 0) == 0]
-        self.comments = Comment._byID(
-            items, data=True, return_dict=False, stale=self.stale)
-        timer.intermediate("lookup_comments")
-
-        self.timer = timer
-        self.cid_tree = cid_tree
-        self.depth = depth
-        self.more_recursions = more_recursions
-        self.offset_depth = offset_depth
-        self.dont_collapse = dont_collapse
-
-    def _make_wrapped_tree(self):
-        timer = self.timer
-        comments = self.comments
-        cid_tree = self.cid_tree
-        top_level_candidates = self.top_level_candidates
-        depth = self.depth
-        more_recursions = self.more_recursions
-        offset_depth = self.offset_depth
-        dont_collapse = self.dont_collapse
-        timer.intermediate("waiting")
-
-        if not comments and not top_level_candidates:
-            timer.stop()
-            return []
-
         # retrieve num_children for the visible comments
-        needs_num_children = [c._id for c in comments] + top_level_candidates
+        top_level_candidates = [comment for sort_val, comment in candidates
+                                        if depth.get(comment, 0) == 0]
+        needs_num_children = items + top_level_candidates
         num_children = get_num_children(needs_num_children, cid_tree)
         timer.intermediate("calc_num_children")
 
+        comments = Comment._byID(items, data=True, return_dict=False,
+                                 stale=self.stale)
+        timer.intermediate("lookup_comments")
         wrapped = self.wrap_items(comments)
         timer.intermediate("wrap_comments")
         wrapped_by_id = {comment._id: comment for comment in wrapped}
-
-        if self.children:
-            # rewrite the parent links to use anchor tags
-            for comment_id in self.children:
-                if comment_id in wrapped_by_id:
-                    item = wrapped_by_id[comment_id]
-                    if item.parent_id:
-                        item.parent_permalink = '#' + to36(item.parent_id)
-
         final = []
 
-        # We have some special collapsing rules for the Q&A sort type.
-        # However, we want to show everything when we're building a specific
-        # set of children (like from "load more" links) or when viewing a
-        # comment permalink.
-        qa_sort_hiding = ((self.sort.col == '_qa') and not self.children and
-                          self.comment is None)
-        if qa_sort_hiding:
-            special_responder_ids = self.link.responder_ids
-        else:
-            special_responder_ids = ()
-
-        max_relation_walks = g.max_comment_parent_walk
         for comment in wrapped:
             # skip deleted comments with no children
             if (comment.deleted and not cid_tree.has_key(comment._id)
-                and not self.show_deleted):
-                comment.hidden_completely = True
+                and not c.user_is_admin):
                 continue
 
             comment.num_children = num_children[comment._id]
-            comment.edits_visible = self.edits_visible
 
-            parent = wrapped_by_id.get(comment.parent_id)
-            if qa_sort_hiding:
-                author_is_special = comment.author_id in special_responder_ids
-            else:
-                author_is_special = False
-
-            # In the Q&A sort type, we want to collapse all comments other than
-            # those that are:
-            #
-            # 1. Top-level comments,
-            # 2. Responses from the OP(s),
-            # 3. Responded to by the OP(s) (dealt with below),
-            # 4. Within one level of an OP reply, or
-            # 5. Otherwise normally prevented from collapse (eg distinguished
-            #    comments).
-            if (qa_sort_hiding and
-                    depth[comment._id] != 0 and  # (1)
-                    not author_is_special and  # (2)
-                    not (parent and
-                         parent.author_id in special_responder_ids and
-                         feature.is_enabled('qa_show_replies')) and  # (4)
-                    not comment.prevent_collapse):  # (5)
-                comment.hidden = True
-
-            if comment.collapsed:
-                if comment._id in dont_collapse or author_is_special:
-                    comment.collapsed = False
-                    comment.hidden = False
-
-            if parent:
-                if author_is_special:
-                    # Un-collapse parents as necessary.  It's a lot easier to
-                    # do this here, upwards, than to check through all the
-                    # children when we were iterating at the parent.
-                    ancestor = parent
-                    counter = 0
-                    while (ancestor and
-                            not getattr(ancestor, 'walked', False) and
-                            counter < max_relation_walks):
-                        ancestor.hidden = False
-                        # In case we haven't processed this comment yet.
-                        ancestor.prevent_collapse = True
-                        # This allows us to short-circuit when the rest of the
-                        # tree has already been uncollapsed.
-                        ancestor.walked = True
-
-                        ancestor = wrapped_by_id.get(ancestor.parent_id)
-                        counter += 1
-
-        # One more time through to actually add things to the final list.  We
-        # couldn't do that the first time because in the Q&A sort we don't know
-        # if a comment should be visible until after we've processed all its
-        # children.
-        for comment in wrapped:
-            if getattr(comment, 'hidden_completely', False):
-                # Don't add it to the tree, don't put it in "load more", don't
-                # acknowledge its existence at all.
-                continue
-
-            if getattr(comment, 'hidden', False):
-                # Remove it from the list of visible comments so it'll
-                # automatically be a candidate for the "load more" links.
-                del wrapped_by_id[comment._id]
-                # And don't add it to the tree.
-                continue
+            if comment.collapsed and comment._id in dont_collapse:
+                comment.collapsed = False
 
             # add the comment as a child of its parent or to the top level of
             # the tree if it has no parent
@@ -1128,14 +975,17 @@ class CommentBuilder(Builder):
 
 
 class MessageBuilder(Builder):
-    def __init__(self, skip=True, num=None, parent=None, after=None,
-                 reverse=False, threaded=False, **kw):
-        self.skip = skip
-        self.num = num
+    def __init__(self, parent = None, focal = None,
+                 skip = True, **kw):
+
+        self.num = kw.pop('num', None)
+        self.focal = focal
         self.parent = parent
-        self.after = after
-        self.reverse = reverse
-        self.threaded = threaded
+        self.skip = skip
+
+        self.after = kw.pop('after', None)
+        self.reverse = kw.pop('reverse', None)
+
         Builder.__init__(self, **kw)
 
     def get_tree(self):
@@ -1144,6 +994,12 @@ class MessageBuilder(Builder):
     def valid_after(self, after):
         w = self.convert_items((after,))[0]
         return self._viewable_message(w)
+
+    def _tree_filter_reverse(self, x):
+        return tree_sort_fn(x) >= self.after._id
+
+    def _tree_filter(self, x):
+        return tree_sort_fn(x) < self.after._id
 
     def _viewable_message(self, m):
         if (c.user_is_admin or
@@ -1158,67 +1014,41 @@ class MessageBuilder(Builder):
 
         return False
 
-    def _apply_pagination(self, tree):
-        if self.parent or self.num is None:
-            return tree, None, None
-
-        prev_item = None
-        next_item = None
-
-        if self.after:
-            # truncate the tree to only show before/after requested message
-            if self.reverse:
-                next_item = self.after._id
-                tree = [
-                    (parent_id, child_ids) for parent_id, child_ids in tree
-                    if tree_sort_fn((parent_id, child_ids)) >= next_item
-                ]
-
-                # special handling for after+reverse (before link): truncate
-                # the tree so it has num messages before the requested one
-                if len(tree) > self.num:
-                    first_id, first_children = tree[-(self.num + 1)]
-                    prev_item = tree_sort_fn((first_id, first_children))
-                    tree = tree[-self.num:]
-            else:
-                prev_item = self.after._id
-                tree = [
-                    (parent_id, child_ids) for parent_id, child_ids in tree
-                    if tree_sort_fn((parent_id, child_ids)) < prev_item
-                ]
-
-        if len(tree) > self.num:
-            # truncate the tree to show only num conversations
-            tree = tree[:self.num]
-            last_id, last_children = tree[-1]
-            next_item = tree_sort_fn((last_id, last_children))
-        return tree, prev_item, next_item
-
-    @classmethod
-    def should_collapse(cls, message):
-        # don't collapse this message if it has a new direct child
-        if hasattr(message, "child"):
-            has_new_child = any(child.new for child in message.child.things)
-        else:
-            has_new_child = False
-
-        return (message.is_collapsed and
-            not message.new and
-            not has_new_child)
-
     def get_items(self):
         tree = self.get_tree()
-        tree, prev_item, next_item = self._apply_pagination(tree)
 
+        prev_item = next_item = None
+        if not self.parent:
+            if self.num is not None:
+                if self.after:
+                    if self.reverse:
+                        tree = filter(
+                            self._tree_filter_reverse,
+                            tree)
+                        next_item = self.after._id
+                        if len(tree) > self.num:
+                            first = tree[-(self.num+1)]
+                            prev_item = first[1][-1] if first[1] else first[0]
+                            tree = tree[-self.num:]
+                    else:
+                        prev_item = self.after._id
+                        tree = filter(
+                            self._tree_filter,
+                            tree)
+                if len(tree) > self.num:
+                    tree = tree[:self.num]
+                    last = tree[-1]
+                    next_item = last[1][-1] if last[1] else last[0]
+
+        # generate the set of ids to look up and look them up
         message_ids = []
-        for parent_id, child_ids in tree:
-            message_ids.append(parent_id)
-            message_ids.extend(child_ids)
-
+        for root, thread in tree:
+            message_ids.append(root)
+            message_ids.extend(thread)
         if prev_item:
             message_ids.append(prev_item)
 
-        messages = Message._byID(message_ids, data=True, return_dict=False)
+        messages = Message._byID(message_ids, data = True, return_dict = False)
         wrapped = {m._id: m for m in self.wrap_items(messages)}
 
         if prev_item:
@@ -1227,96 +1057,65 @@ class MessageBuilder(Builder):
             next_item = wrapped[next_item]
 
         final = []
-        for parent_id, child_ids in tree:
-            if parent_id not in wrapped:
+        for parent, children in tree:
+            if parent not in wrapped:
                 continue
 
-            parent = wrapped[parent_id]
+            parent = wrapped[parent]
 
             if not self._viewable_message(parent):
                 continue
 
-            children = [
-                wrapped[child_id] for child_id in child_ids
-                if child_id in wrapped
-            ]
-
-            depth = {parent_id: 0}
-            substitute_parents = {}
-
-            if (children and self.skip and not self.threaded and
-                    not self.parent and not parent.new and parent.is_collapsed):
-                for i, child in enumerate(children):
-                    if child.new or not child.is_collapsed:
-                        break
-                else:
-                    i = -1
-                # in flat view replace collapsed chain with MoreMessages
+            if children:
+                # if no parent is specified, check if any of the messages are
+                # uncollapsed, and truncate the thread
+                children = [wrapped[child] for child in children
+                                           if child in wrapped]
                 add_child_listing(parent)
-                parent = Wrapped(MoreMessages(parent, parent.child))
-                children = children[i:]
+                # if the parent is new, uncollapsed, or focal we don't
+                # want it to become a moremessages wrapper.
+                if (self.skip and 
+                    not self.parent and not parent.new and parent.is_collapsed 
+                    and not (self.focal and self.focal._id == parent._id)):
+                    for i, child in enumerate(children):
+                        if (child.new or not child.is_collapsed or
+                            (self.focal and self.focal._id == child._id)):
+                            break
+                    else:
+                        i = -1
+                    parent = Wrapped(MoreMessages(parent, parent.child))
+                    children = children[i:]
 
-            for child in sorted(children, key=lambda child: child._id):
-                # iterate from the root outwards so we can check the depth
-                if self.threaded:
-                    try:
-                        child_parent = wrapped[child.parent_id]
-                    except KeyError:
-                        # the stored comment tree was missing this message's
-                        # parent, treat it as a top level reply
-                        child_parent = parent
-                else:
-                    # for flat view all messages are decendants of the
-                    # parent message
-                    child_parent = parent
-                parent_depth = depth[child_parent._id]
-                child_depth = parent_depth + 1
-                depth[child._id] = child_depth
+                parent.child.parent_name = parent._fullname
+                parent.child.things = []
 
-                if child_depth == MAX_RECURSION:
-                    # current message is at maximum depth level, all its
-                    # children will be displayed as children of its parent
-                    substitute_parents[child._id] = child_parent._id
+                for child in children:
+                    child.is_child = True
+                    if self.focal and child._id == self.focal._id:
+                        # focal message is never collapsed
+                        child.collapsed = False
+                        child.focal = True
+                    else:
+                        child.collapsed = child.is_collapsed
 
-                if child_depth > MAX_RECURSION:
-                    child_parent_id = substitute_parents[child.parent_id]
-                    substitute_parents[child._id] = child_parent_id
-                    child_parent = wrapped[child_parent_id]
-
-                if not hasattr(child_parent, "child"):
-                    add_child_listing(child_parent)
-                child.is_child = True
-                child_parent.child.things.append(child)
-
-            for child in children:
-                # look over the children again to decide whether they can be
-                # collapsed
-                child.threaded = self.threaded
-                child.collapsed = self.should_collapse(child)
-
-            if self.threaded and children:
-                most_recent_child_id = max(child._id for child in children)
-                most_recent_child = wrapped[most_recent_child_id]
-                most_recent_child.most_recent = True
-
+                    parent.child.things.append(child)
             parent.is_parent = True
-            parent.threaded = self.threaded
-            parent.collapsed = self.should_collapse(parent)
+            # the parent might be the focal message on a permalink page
+            if self.focal and parent._id == self.focal._id:
+                parent.collapsed = False
+                parent.focal = True
+            else:
+                parent.collapsed = parent.is_collapsed
             final.append(parent)
 
         return (final, prev_item, next_item, len(final), len(final))
 
-    def item_iter(self, builder_items):
-        items = builder_items[0]
-
-        def _item_iter(_items):
-            for i in _items:
-                yield i
-                if hasattr(i, "child"):
-                    for j in _item_iter(i.child.things):
-                        yield j
-
-        return _item_iter(items)
+    def item_iter(self, a):
+        for i in a[0]:
+            yield i
+            if hasattr(i, 'child'):
+                for j in i.child.things:
+                    yield j
 
 
 class ModeratorMessageBuilder(MessageBuilder):
@@ -1331,7 +1130,6 @@ class ModeratorMessageBuilder(MessageBuilder):
         sr_ids = Subreddit.reverse_moderator_ids(self.user)
         return moderator_messages(sr_ids)
 
-
 class MultiredditMessageBuilder(MessageBuilder):
     def __init__(self, sr, **kw):
         self.sr = sr
@@ -1343,18 +1141,18 @@ class MultiredditMessageBuilder(MessageBuilder):
             return sr_conversation(sr, self.parent)
         return moderator_messages(self.sr.sr_ids)
 
-
 class TopCommentBuilder(CommentBuilder):
     """A comment builder to fetch only the top-level, non-spam,
        non-deleted comments"""
     def __init__(self, link, sort, num=None, wrap=Wrapped):
-        CommentBuilder.__init__(self, link, sort, load_more=False,
-            continue_this_thread=False, max_depth=1, wrap=wrap, num=num)
+        CommentBuilder.__init__(self, link, sort,
+                                load_more = False,
+                                continue_this_thread = False,
+                                max_depth=1, wrap=wrap, num=num)
 
     def get_items(self):
         final = CommentBuilder.get_items(self)
         return [ cm for cm in final if not cm.deleted ]
-
 
 class SrMessageBuilder(MessageBuilder):
     def __init__(self, sr, **kw):
@@ -1365,7 +1163,6 @@ class SrMessageBuilder(MessageBuilder):
         if self.parent:
             return sr_conversation(self.sr, self.parent)
         return subreddit_messages(self.sr)
-
 
 class UserMessageBuilder(MessageBuilder):
     def __init__(self, user, **kw):
@@ -1388,7 +1185,6 @@ class UserMessageBuilder(MessageBuilder):
         # Messages that have been spammed are still valid afters
         w = self.convert_items((after,))[0]
         return MessageBuilder._viewable_message(self, w)
-
 
 class UserListBuilder(QueryBuilder):
     def thing_lookup(self, rels):
@@ -1418,20 +1214,3 @@ class SavedBuilder(IDBuilder):
             category = categories.get(w._id, '')
             w.savedcategory = category
         return wrapped
-
-
-class FlairListBuilder(UserListBuilder):
-    def init_query(self):
-        q = self.query
-
-        if self.reverse:
-            q._reverse()
-
-        q._data = True
-        self.orig_rules = deepcopy(q._rules)
-        # FlairLists use Accounts for afters
-        if self.after:
-            if self.reverse:
-                q._filter(Flair.c._thing2_id < self.after._id)
-            else:
-                q._filter(Flair.c._thing2_id > self.after._id)

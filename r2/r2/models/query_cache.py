@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """
@@ -218,44 +218,25 @@ class CachedQuery(_CachedQueryBase):
         self.model.remove(mutator, self.key, fullnames)
 
     def _prune(self, mutator):
-        to_keep = [t[0] for t in self.data[:MAX_CACHED_ITEMS]]
-        to_prune = [t[0] for t in self.data[MAX_CACHED_ITEMS:]]
+        extraneous_ids = [t[0] for t in self.data[MAX_CACHED_ITEMS:]]
 
-        if to_prune:
-            oldest_keep = min(self.timestamps[_id] for _id in to_keep)
-            fast_prunable = [_id for _id in to_prune
-                if self.timestamps[_id] < oldest_keep]
+        if extraneous_ids:
+            # if something has gone wrong with previous prunings, there may be
+            # a lot of extraneous items.  we'll limit this pruning to the
+            # oldest N items to avoid a dangerously large operation.
+            # N = the average number of items to prune (doubled for safety)
+            prune_size = int(MAX_CACHED_ITEMS * PRUNE_CHANCE) * 2
+            extraneous_ids = extraneous_ids[-prune_size:]
 
-            num_to_prune = len(to_prune)
-            num_fast_prunable = len(fast_prunable)
-            num_unpruned_if_fast = num_to_prune - num_fast_prunable
-            if (num_fast_prunable > num_to_prune * 0.5 and
-                    num_unpruned_if_fast < MAX_CACHED_ITEMS * 0.5):
-                # do a fast prune if we can remove a good number of items but
-                # don't let the cached query grow too large
-                newest_prune = max(self.timestamps[_id] for _id in fast_prunable)
-                self.model.remove_older_than(mutator, self.key, newest_prune)
-                event_name = 'fast_pruned'
-                num_pruned = num_fast_prunable
-            else:
-                # if something has gone wrong with previous prunings, there may
-                # be a lot of items to prune.  we'll limit this pruning to the
-                # oldest N items to avoid a dangerously large operation.
-                # N = the average number of items to prune (doubled for safety)
-                prune_size = int(MAX_CACHED_ITEMS * PRUNE_CHANCE) * 2
-                to_prune = to_prune[-prune_size:]
-
-                self.model.remove_if_unchanged(mutator, self.key,
-                                               to_prune, self.timestamps)
-                event_name = 'pruned'
-                num_pruned = len(to_prune)
+            self.model.remove_if_unchanged(mutator, self.key,
+                                           extraneous_ids, self.timestamps)
 
             cf_name = self.model.__name__
             query_name = self.key.split('.')[0]
             counter_key = "cache.%s.%s" % (cf_name, query_name)
             counter = g.stats.get_counter(counter_key)
             if counter:
-                counter.increment(event_name, delta=num_pruned)
+                counter.increment('pruned', delta=len(extraneous_ids))
 
     @classmethod
     def _prune_multi(cls, queries):
@@ -614,22 +595,6 @@ class _BaseQueryCache(object):
         for col in columns:
             mutator.remove(cls._cf, key, columns=[col],
                            timestamp=timestamps.get(col))
-
-    @classmethod
-    @tdb_cassandra.will_write
-    def remove_older_than(cls, mutator, key, removal_timestamp):
-        """Remove things older than the specified timestamp.
-
-        Removing specific columns can cause tombstones to build up. When a row
-        has tons of tombstones fetching that row gets slow because Cassandra
-        must retrieve all the tombstones as well. Issuing a row remove with
-        the timestamp specified clears out all the columns modified before
-        that timestamp and somehow doesn't result in tombstones being left
-        behind. This behavior was verified via request tracing.
-
-        """
-
-        mutator.remove(cls._cf, key, timestamp=removal_timestamp)
 
 
 class UserQueryCache(_BaseQueryCache):

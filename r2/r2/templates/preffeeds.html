@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -61,11 +61,11 @@ ${unsafe(safemarkdown(_("All feeds are invalidated if you change your password, 
   <tr>
     <th>private profile pages</th>
     <td class="prefright">
-      <%self:feedbuttons path="/user/${c.user.name}/upvoted"></%self:feedbuttons>
-      ${_("links you've upvoted")}
+      <%self:feedbuttons path="/user/${c.user.name}/liked"></%self:feedbuttons>
+      ${_("links you've liked")}
       <br/>
-      <%self:feedbuttons path="/user/${c.user.name}/downvoted"></%self:feedbuttons>
-      ${_("links you've downvoted")}
+      <%self:feedbuttons path="/user/${c.user.name}/disliked"></%self:feedbuttons>
+      ${_("links you've disliked")}
       <br/>
       <%self:feedbuttons path="/user/${c.user.name}/hidden"></%self:feedbuttons>
       ${_("links you've hidden")}
@@ -88,9 +88,11 @@ ${unsafe(safemarkdown(_("All feeds are invalidated if you change your password, 
       <br/>
       <%self:feedbuttons path="/message/selfreply"></%self:feedbuttons>
       ${_("self-post replies only")}
+      % if c.user.gold:
       <br>
       <%self:feedbuttons path="/message/mentions"></%self:feedbuttons>
       ${_("mentions of your username only")}
+      % endif
     </td>
    </tr>
    %if c.user.is_moderator_somewhere:

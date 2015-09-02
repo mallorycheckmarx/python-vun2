@@ -16,15 +16,15 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
    import json
    from r2.models import FakeSubreddit
-   from r2.lib.filters import spaceCompress, unsafe, safemarkdown, jssafe
-   from r2.lib.template_helpers import add_sr, js_config, static, html_datetime, simplified_timesince, make_url_protocol_relative
+   from r2.lib.filters import spaceCompress, unsafe, safemarkdown
+   from r2.lib.template_helpers import add_sr, js_config, static, html_datetime, simplified_timesince
    from r2.lib.utils import cols, long_datetime
    from r2.lib import tracking
    from datetime import datetime
@@ -32,11 +32,7 @@
 <%def name="tags(**kw)">
 %for k, v in kw.iteritems():
   %if v:
-    %if k == "data":
-      ${data(**v)}
-    %else:
-      ${k.strip('_')}="${v}" \
-    %endif
+    ${k.strip('_')}="${v}" \
   %endif
 %endfor
 </%def>
@@ -90,20 +86,6 @@ ${first_defined(kw[1:])}
 %endif
 </%def>
 
-<%def name="form_group(field_name, *args, **kwargs)">
-  <% error = c.errors.get_first(field_name, *args) %>
-  <div class="c-form-group ${'c-has-feedback c-has-error' if (error and kwargs['show_errors']) else ''}">
-    ${caller.body()}
-    %if kwargs['show_errors']:
-      <div class="c-form-control-feedback-wrapper ${'inside-input' if kwargs.get('feedback_inside_input') else ''}">
-        <span class="c-form-control-feedback c-form-control-feedback-throbber"></span>
-        <span class="c-form-control-feedback c-form-control-feedback-error" title="${_(error.message) if error else ''}"></span>
-        <span class="c-form-control-feedback c-form-control-feedback-success"></span>
-      </div>
-    %endif
-  </div>
-</%def>
-
 <%def name="error_field(error_name, field_name, kind='span')">
   <% error_key = (error_name, field_name) %>
   <${kind} class="error ${error_name} field-${field_name}" 
@@ -112,6 +94,22 @@ ${first_defined(kw[1:])}
      ${c.errors[error_key].message}
    %endif
   </${kind}>
+</%def>
+
+<%def name="success_field(success_str, kind='p', successful=False, hide='')">
+<${kind} class="error success">
+  %if successful:
+  ${success_str}
+  %endif
+</${kind}>
+<script type="text/javascript">
+  function fire_success() {
+  $('success').innerHTML = "${success_str}";
+  %if hide:
+  hide(document.getElementById('${hide}'));
+  %endif
+  }
+</script>
 </%def>
 
 <%def name="img_link(link_text, img, path, _id='', target='', img_id=None, size=None, **kw)">
@@ -183,12 +181,12 @@ ${first_defined(kw[1:])}
 
 <%def name="text_with_links(txt, _sr_path = False, nocname=False, **kw)">
 <%
-   from r2.lib.filters import conditional_websafe
+   from r2.lib.filters import _force_unicode
    for key, link_args in kw.iteritems():
       link_args.setdefault("_sr_path", _sr_path)
       link_args.setdefault("nocname", nocname)
       kw[key]=spaceCompress(capture(plain_link, **link_args))
-   txt = conditional_websafe(txt) % kw
+   txt = _force_unicode(txt) % kw
    txt = txt.replace(" <", "&#32;<").replace("> ", ">&#32;")
 
 %>
@@ -254,7 +252,6 @@ ${unsafe(txt)}
     <script type="text/javascript">
       function completedUploadImage (status, img_src, name, errors, form_id) {
         /* should only be called when the uploaded file is too large */
-        form_id = $.with_default(form_id, "${form_id}");
         if (status == "failed") {
           $("#${form_id}").find(".status").html("");
           for (var i in errors) {
@@ -269,28 +266,6 @@ ${unsafe(txt)}
   </form>
 </%def>
 
-
-<%def name="image_upload_inline(form_id='file', field_id='inline-file')">
-  <div id="${field_id}">
-    <input type="file" name="${form_id}" id="${form_id}">
-    ${error_field("IMAGE_ERROR", "span")}
-    <script>
-      function completedUploadImage (status, img_src, name, errors, form_id) {
-        if (status == 'failed') {
-          var $form = $('#${field_id}');
-          $form.find('.status').html('');
-          for (var i in errors) {
-            $form.find('.error.' + errors[i][0])
-                .show().text(errors[i][1]);
-          }
-          var top = $form.position().top;
-          $(window).scrollTop(top);
-        }
-      }
-    </script>
-  </div>
-</%def>
-
 <%def name="image_upload(post_target, current_image = None, onsubmit = '', 
                          onchange = '', label = '', form_id = 'image-upload',
                          ask_type = False, hidden_data=None)">
@@ -303,7 +278,6 @@ ${unsafe(txt)}
         action="${post_target}" method="post">
       %if label:
          <label for="file">${label}</label>
-         <br>
       %endif
           <input type="hidden" name="uh" value="${c.modhash}" />
           %if not c.default_sr:
@@ -315,6 +289,7 @@ ${unsafe(txt)}
               <input type="hidden" name="${name}" value="${value}" />
             %endfor
           %endif
+          <br/>
           %if ask_type:
             <label for="img_type">${_("Type: ")}</label>
             <label><input type="radio" name="img_type" value="jpg" />JPEG</label>
@@ -326,7 +301,7 @@ ${unsafe(txt)}
                  onchange="$(this).next().prop('disabled', false); ${onchange}"/>
           <button id="submit-img" class="submit-img primary-button"
                   type="submit" name="upload" 
-                  onclick="$(this).parent().addClass('uploading').find('.img-status').show().text('${jssafe(_('uploading'))}'); return true;"
+                  onclick="$(this).siblings('.img-status').show().html('${_('uploading')}'); return true;"
                   disabled>
             ${_('upload')}
           </button>
@@ -338,9 +313,8 @@ ${unsafe(txt)}
        function create_new_image(name) {}
 
        function completedUploadImage(status, img_src, name, errors, form_id) {
-           var form = form_id ? $("#" + form_id) : $('form.image-upload.uploading');
-           form.removeClass('uploading');
-
+           form_id = $.with_default(form_id, "${form_id}");
+           var form = $("#" + form_id);
            if (status) 
                form.find(".img-status").show().html(status);
            else
@@ -375,7 +349,7 @@ ${unsafe(txt)}
             <img id="img-preview-upload" alt="header preview" 
                  class="img-preview"
                  %if current_image:
-                   src="${make_url_protocol_relative(current_image)}"
+                   src="${current_image}"
                  %else:
                    src="${static('kill.png')}"
                  %endif
@@ -405,31 +379,19 @@ ${unsafe(txt)}
   </script>
 </%def>
 
-<%def name="googleanalytics(uitype, is_gold_page=False)">
-  %if (g.googleanalytics or g.googleanalytics_gold) and thing.site_tracking:
-    <script type="text/javascript">
-      window.user_type = '${"guest" if not c.user_is_loggedin else "goldloggedin" if c.user.gold else "loggedin"}';
-      window.is_gold_page = '${is_gold_page}'.toLowerCase() === 'true';
-    </script>
-  %endif
-
+<%def name="googleanalytics(uitype)">
   %if g.googleanalytics and thing.site_tracking:
-  ## it uses old ga.js
   <script type="text/javascript">
 
+    var user_type = '${"guest" if not c.user_is_loggedin else "goldloggedin" if c.user.gold else "loggedin"}';
     var _gaq = _gaq || [];
     _gaq.push(
-        ['_require', 'inpage_linkid', '//www.google-analytics.com/plugins/ga/inpage_linkid.js'],
         ['_setAccount', '${g.googleanalytics}'],
         ['_setDomainName', '${g.domain}'],
         ['_setCustomVar', 1, 'site', '${tracking.get_site()}', 3],
         ['_setCustomVar', 2, 'srpath', '${tracking.get_srpath()}', 3],
         ['_setCustomVar', 3, 'usertype', user_type, 2],
         ['_setCustomVar', 4, 'uitype', '${uitype}', 3],
-        ['_setCustomVar', 5, 'style_override', '${jssafe(c.user.pref_default_theme_sr)}', 2],
-        %if g.googleanalytics_sample_rate:
-        ['_setSampleRate', '${g.googleanalytics_sample_rate}'],
-        %endif
         ['_trackPageview']
     );
 
@@ -438,32 +400,6 @@ ${unsafe(txt)}
       ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
       var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
     })();
-
-  </script>
-  %endif
-
-  %if g.googleanalytics_gold and thing.site_tracking:
-  ## it uses new analytics.js
-  <script type="text/javascript">
-
-    (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-    })(window,document,'script','//www.google-analytics.com/analytics.js','_ga');
-
-    window._ga('create', '${g.googleanalytics_gold}', {
-      'name': 'goldTracker',
-      'cookieDomain': '${g.domain}',
-      '1': '${tracking.get_site()}',
-      '2': '${tracking.get_srpath()}',
-      '3': window.user_type,
-      '4': '${uitype}',
-      'sampleRate': ${g.googleanalytics_sample_rate_gold}
-    });
-
-    if (window.is_gold_page) {
-      window._ga('goldTracker.send', 'pageview');
-    }
 
   </script>
   %endif
@@ -537,7 +473,7 @@ ${unsafe(txt)}
   </%call>
 </%def>
 
-<%def name="radio_type(field_name, val_name, title, text=None, checked=False, disabled=False, hover_title='[?]', hover_text=None)">
+<%def name="radio_type(field_name, val_name, title, text=None, checked=False)">
   <% full_name = field_name + "_" + val_name %>
   <tr>
     <td class="nowrap nopadding">
@@ -546,19 +482,8 @@ ${unsafe(txt)}
              %if checked:
                checked="checked"
              %endif
-             %if disabled:
-               disabled="disabled"
-             %endif
              />
       <label for="${full_name}">${title}</label>
-    %if hover_text:
-      <span class="help help-hoverable">
-        <sup>${hover_title}</sup>
-        <div class="hover-bubble help-bubble anchor-top-left">
-          <p>${hover_text}</p>
-        </div>
-      </span>
-    %endif
     </td>
     %if text:
       <td class="leftpad"><span class="gray">${text}</span></td>
@@ -588,7 +513,7 @@ ${unsafe(txt)}
     timestamp_class = unsafe(' class="live-timestamp"') if live else ''
   %>
   <time title="${long_datetime(date)}" datetime="${html_datetime(date)}"${timestamp_class}>
-    ${(since or simplified_timesince(date, include_tense))}
+    ${unsafe(since or simplified_timesince(date, include_tense))}
   </time>
 </%def>
 
@@ -644,29 +569,4 @@ ${unsafe(txt)}
   <acronym title="${_('Adult content: Not Safe For Work')}">
     ${_("NSFW")}
   </acronym>
-</%def>
-
-<%def name="quarantine_stamp()">
-  <span title="${_('Quarantined content: Content may be highly offensive')}">
-    ${_("Quarantined")}
-  </span>
-</%def>
-
-<%def name="thumbnail_img(thing)">
-  %if thing.thumbnail and not thing.thumbnail_sprited:
-    <%
-        if hasattr(thing, 'thumbnail_size'):
-            scaling_factor = 1
-            if thing.thumbnail_size[0] > g.thumbnail_size[0]:
-              # hidpi scaling, calculate in case hidpi changes definition in the future and
-              # we have multiple sets of image dimensions. Currently should always be 1 or 2.
-              # Width is always the maximum allowed, so we don't need to check height.
-              scaling_factor = thing.thumbnail_size[0] // g.thumbnail_size[0]
-
-            size_str = "width='%d' height='%d'" % (thing.thumbnail_size[0] // scaling_factor, thing.thumbnail_size[1] // scaling_factor)
-        else:
-            size_str = ""
-    %>
-    <img src="${make_url_protocol_relative(thing.thumbnail)}" ${size_str} alt="">
-  %endif
 </%def>

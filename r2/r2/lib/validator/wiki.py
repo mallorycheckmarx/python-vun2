@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -145,9 +145,11 @@ def may_view(sr, user, page):
         return True
     
     if page.special:
-        level = WikiPage.get_special_view_permlevel(page.name)
-    else:
-        level = page.permlevel
+        # Special pages may always be viewed
+        # (Permission level ignored)
+        return True
+    
+    level = page.permlevel
     
     if level < 2:
         # Everyone may view in levels below 2
@@ -316,13 +318,8 @@ class VWikiPageRevise(VWikiPage):
         
         page = normalize_page(page)
         
-        if WikiPage.is_automatically_created(page):
+        if c.is_wiki_mod and WikiPage.is_special(page):
             return {'reason': 'PAGE_CREATED_ELSEWHERE'}
-        elif WikiPage.is_special(page):
-            if not (c.user_is_admin or
-                    c.site.is_moderator_with_perms(c.user, 'config')):
-                self.set_error('RESTRICTED_PAGE', code=403)
-                return
         elif (not c.user_is_admin) and WikiPage.is_restricted(page):
             self.set_error('RESTRICTED_PAGE', code=403)
             return

@@ -16,13 +16,12 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import calendar
 from collections import namedtuple
-import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
 import hashlib
 import hmac
@@ -35,7 +34,6 @@ import urlparse
 
 from pylons import g, c
 from pylons.i18n import ungettext
-from pytz import timezone
 
 from r2.lib import (
     authorize,
@@ -43,10 +41,12 @@ from r2.lib import (
     hooks,
 )
 from r2.lib.db.operators import not_
-from r2.lib.db import queries
+from r2.lib.db.queries import (
+    set_promote_status,
+    set_underdelivered_campaigns,
+    unset_underdelivered_campaigns,
+)
 from r2.lib.cache import sgm
-from r2.lib.filters import _force_utf8
-from r2.lib.geoip import location_by_ips
 from r2.lib.memoize import memoize
 from r2.lib.strings import strings
 from r2.lib.utils import to_date, weighted_lottery
@@ -137,9 +137,6 @@ def refund_url(link, campaign):
 
 # booleans
 
-def is_awaiting_fraud_review(link):
-    return link.payment_flagged_reason and link.fraud == None
-
 def is_promo(link):
     return (link and not link._deleted and link.promoted is not None
             and hasattr(link, "promote_status"))
@@ -176,9 +173,8 @@ def update_query(base_url, query_updates):
     return urlparse.urlunparse((scheme, netloc, path, params, query, fragment))
 
 
-def add_trackers(items, sr, adserver_click_urls=None):
+def add_trackers(items, sr):
     """Add tracking names and hashes to a list of wrapped promoted links."""
-    adserver_click_urls = adserver_click_urls or {}
     for item in items:
         if not item.promoted:
             continue
@@ -198,15 +194,9 @@ def add_trackers(items, sr, adserver_click_urls=None):
             "r": random.randint(0, 2147483647), # cachebuster
         }
         item.imp_pixel = update_query(g.adtracker_url, pixel_query)
-        
-        if item.third_party_tracking:
-            item.third_party_tracking_url = item.third_party_tracking
-        if item.third_party_tracking_2:
-            item.third_party_tracking_url_2 = item.third_party_tracking_2
 
         # construct the click redirect url
-        item_url = adserver_click_urls.get(item.campaign, item.url)
-        url = urllib.unquote(_force_utf8(item_url))
+        url = urllib.unquote(item.url.encode("utf-8"))
         hashable = ''.join((url, tracking_name.encode("utf-8")))
         click_mac = hmac.new(
             g.tracking_secret, hashable, hashlib.sha1).hexdigest()
@@ -226,7 +216,7 @@ def add_trackers(items, sr, adserver_click_urls=None):
 
 
 def update_promote_status(link, status):
-    queries.set_promote_status(link, status)
+    set_promote_status(link, status)
     hooks.get_hook('promote.edit_promotion').call(link=link)
 
 
@@ -281,15 +271,11 @@ def get_transactions(link, campaigns):
     bids_by_campaign = {c._id: bid_dict[(c._id, c.trans_id)] for c in campaigns}
     return bids_by_campaign
 
-def new_campaign(link, dates, bid, cpm, target, frequency_cap, frequency_cap_duration,
-                 priority, location, platform, mobile_os, ios_devices,
-                 ios_version_range, android_devices, android_version_range):
+def new_campaign(link, dates, bid, cpm, target, priority, location):
     campaign = PromoCampaign.create(link, target, bid, cpm, dates[0], dates[1],
-                                    frequency_cap, frequency_cap_duration, priority,
-                                    location, platform, mobile_os, ios_devices,
-                                    ios_version_range, android_devices,
-                                    android_version_range)
-    PromotionWeights.add(link, campaign)
+                                    priority, location)
+    PromotionWeights.add(link, campaign._id, target.subreddit_names, dates[0],
+                         dates[1], bid)
     PromotionLog.add(link, 'campaign %s created' % campaign._id)
 
     if campaign.priority.cpm:
@@ -304,17 +290,12 @@ def new_campaign(link, dates, bid, cpm, target, frequency_cap, frequency_cap_dur
 def free_campaign(link, campaign, user):
     auth_campaign(link, campaign, user, -1)
 
-def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
-                  frequency_cap_duration, priority, location, platform='desktop',
-                  mobile_os=None, ios_devices=None, ios_version_range=None,
-                  android_devices=None, android_version_range=None):
+def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location):
     changed = {}
     if bid != campaign.bid:
          # if the bid amount changed, cancel any pending transactions
         void_campaign(link, campaign, reason='changed_bid')
         changed['bid'] = ("$%0.2f" % campaign.bid, "$%0.2f" % bid)
-        hooks.get_hook('promote.edit_bid').call(
-            link=link,campaign=campaign, previous=campaign.bid, current=bid)
         campaign.bid = bid
     if dates[0] != campaign.start_date or dates[1] != campaign.end_date:
         original = '%s to %s' % (campaign.start_date, campaign.end_date)
@@ -328,39 +309,12 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
     if target != campaign.target:
         changed['target'] = (campaign.target, target)
         campaign.target = target
-    if frequency_cap != campaign.frequency_cap:
-        changed['frequency_cap'] = (campaign.frequency_cap, frequency_cap)
-        campaign.frequency_cap = frequency_cap
-    if frequency_cap_duration != campaign.frequency_cap_duration:
-        changed['frequency_cap_duration'] = (campaign.frequency_cap_duration,
-                                             frequency_cap_duration)
-        campaign.frequency_cap_duration = frequency_cap_duration
     if priority != campaign.priority:
         changed['priority'] = (campaign.priority.name, priority.name)
         campaign.priority = priority
     if location != campaign.location:
         changed['location'] = (campaign.location, location)
         campaign.location = location
-    if platform != campaign.platform:
-        changed["platform"] = (campaign.platform, platform)
-        campaign.platform = platform
-    if mobile_os != campaign.mobile_os:
-        changed["mobile_os"] = (campaign.mobile_os, mobile_os)
-        campaign.mobile_os = mobile_os
-    if ios_devices != campaign.ios_devices:
-        changed['ios_devices'] = (campaign.ios_devices, ios_devices)
-        campaign.ios_devices = ios_devices
-    if android_devices != campaign.android_devices:
-        changed['android_devices'] = (campaign.android_devices, android_devices)
-        campaign.android_devices = android_devices
-    if ios_version_range != campaign.ios_version_range:
-        changed['ios_version_range'] = (campaign.ios_version_range,
-                                        ios_version_range)
-        campaign.ios_version_range = ios_version_range
-    if android_version_range != campaign.android_version_range:
-        changed['android_version_range'] = (campaign.android_version_range,
-                                            android_version_range)
-        campaign.android_version_range = android_version_range
 
     change_strs = map(lambda t: '%s: %s -> %s' % (t[0], t[1][0], t[1][1]),
                       changed.iteritems())
@@ -368,7 +322,9 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
     campaign._commit()
 
     # update the index
-    PromotionWeights.reschedule(link, campaign)
+    PromotionWeights.reschedule(link, campaign._id,
+                                campaign.target.subreddit_names, dates[0],
+                                dates[1], bid)
 
     if campaign.priority.cpm:
         # make it a freebie, if applicable
@@ -408,7 +364,7 @@ def terminate_campaign(link, campaign):
 
 
 def delete_campaign(link, campaign):
-    PromotionWeights.delete(link, campaign)
+    PromotionWeights.delete_unfinished(link, campaign._id)
     void_campaign(link, campaign, reason='deleted_campaign')
     campaign.delete()
     PromotionLog.add(link, 'deleted campaign %s' % campaign._id)
@@ -490,65 +446,19 @@ def auth_campaign(link, campaign, user, pay_id):
 # midnight eastern-US.
 # TODO: make this a config parameter
 timezone_offset = -5 # hours
-timezone_offset = datetime.timedelta(0, timezone_offset * 3600)
+timezone_offset = timedelta(0, timezone_offset * 3600)
 def promo_datetime_now(offset=None):
-    now = datetime.datetime.now(g.tz) + timezone_offset
+    now = datetime.now(g.tz) + timezone_offset
     if offset is not None:
-        now += datetime.timedelta(offset)
+        now += timedelta(offset)
     return now
 
 
-# campaigns can launch the following day if they're created before 17:00 PDT
-DAILY_CUTOFF = datetime.time(17, tzinfo=timezone("US/Pacific"))
-
-def get_date_limits(link, is_sponsor=False):
-    promo_today = promo_datetime_now().date()
-
-    if is_sponsor:
-        min_start = promo_today
-    elif is_accepted(link):
-        # link is already accepted--let user create a campaign starting
-        # tomorrow because it doesn't need to be re-reviewed
-        min_start = promo_today + datetime.timedelta(days=1)
-    else:
-        # campaign and link will need to be reviewed before they can launch.
-        # review can happen until DAILY_CUTOFF PDT Monday through Friday and
-        # Sunday. Any campaign created after DAILY_CUTOFF is treated as if it
-        # were created the following day.
-        now = datetime.datetime.now(tz=timezone("US/Pacific"))
-        now_today = now.date()
-        too_late_for_review = now.time() > DAILY_CUTOFF
-
-        if too_late_for_review and now_today.weekday() == calendar.FRIDAY:
-            # no review late on Friday--earliest review is Sunday to launch
-            # on Monday
-            min_start = now_today + datetime.timedelta(days=3)
-        elif now_today.weekday() == calendar.SATURDAY:
-            # no review any time on Saturday--earliest review is Sunday to
-            # launch on Monday
-            min_start = now_today + datetime.timedelta(days=2)
-        elif too_late_for_review:
-            # no review late in the day--earliest review is tomorrow to
-            # launch the following day
-            min_start = now_today + datetime.timedelta(days=2)
-        else:
-            # review will happen today so can launch tomorrow
-            min_start = now_today + datetime.timedelta(days=1)
-
-    if is_sponsor:
-        max_end = promo_today + datetime.timedelta(days=366)
-    else:
-        max_end = promo_today + datetime.timedelta(days=93)
-
-    if is_sponsor:
-        max_start = max_end - datetime.timedelta(days=1)
-    else:
-        # authorization hold happens now but expires after 30 days. charge
-        # happens 1 day before the campaign launches. the latest a campaign
-        # can start is 30 days from now (it will get charged in 29 days).
-        max_start = promo_today + datetime.timedelta(days=30)
-
-    return min_start, max_start, max_end
+def get_max_startdate():
+    # authorization hold happens now but expires after 30 days. charge
+    # happens 1 day before the campaign launches. the latest a campaign
+    # can start is 30 days from now (it will get charged in 29 days).
+    return promo_datetime_now() + timedelta(days=30)
 
 
 def accept_promotion(link):
@@ -573,32 +483,6 @@ def accept_promotion(link):
 
     if is_live:
         all_live_promo_srnames(_update=True)
-
-
-def flag_payment(link, reason):
-    # already determined to be fraud or already flagged for that reason.
-    if link.fraud or reason in link.payment_flagged_reason:
-        return
-
-    if link.payment_flagged_reason:
-        link.payment_flagged_reason += (", %s" % reason)
-    else:
-        link.payment_flagged_reason = reason
-
-    link._commit()
-    PromotionLog.add(link, "payment flagged: %s" % reason)
-    queries.set_payment_flagged_link(link)
-
-
-def review_fraud(link, is_fraud):
-    link.fraud = is_fraud
-    link._commit()
-    PromotionLog.add(link, "marked as fraud" if is_fraud else "resolved as not fraud")
-    queries.unset_payment_flagged_link(link)
-
-    if is_fraud:
-        reject_promotion(link, "fraud")
-        hooks.get_hook("promote.fraud_identified").call(link=link, sponsor=c.user)
 
 
 def reject_promotion(link, reason=None):
@@ -784,8 +668,8 @@ def make_daily_promotions():
 
 def finalize_completed_campaigns(daysago=1):
     # PromoCampaign.end_date is utc datetime with year, month, day only
-    now = datetime.datetime.now(g.tz)
-    date = now - datetime.timedelta(days=daysago)
+    now = datetime.now(g.tz)
+    date = now - timedelta(days=daysago)
     date = date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     q = PromoCampaign._query(PromoCampaign.c.end_date == date,
@@ -832,7 +716,7 @@ def finalize_completed_campaigns(daysago=1):
             underdelivered_campaigns.append(camp)
 
         if underdelivered_campaigns:
-            queries.set_underdelivered_campaigns(underdelivered_campaigns)
+            set_underdelivered_campaigns(underdelivered_campaigns)
 
 
 def get_refund_amount(camp, billable):
@@ -866,7 +750,7 @@ def refund_campaign(link, camp, billable_amount, billable_impressions):
     PromotionLog.add(link, text)
     camp.refund_amount = refund_amount
     camp._commit()
-    queries.unset_underdelivered_campaigns(camp)
+    unset_underdelivered_campaigns(camp)
     emailer.refunded_promo(link)
 
 
@@ -903,15 +787,9 @@ def srnames_with_live_promos(user, site):
     return promo_srnames.intersection(site_srnames)
 
 
-# special handling for memcache ascii protocol
-SPECIAL_NAMES = {" reddit.com": "_reddit.com"}
-REVERSED_NAMES = {v: k for k, v in SPECIAL_NAMES.iteritems()}
-
-
-def _get_live_promotions(sanitized_names):
+def _get_live_promotions(sr_names):
     now = promo_datetime_now()
-    sr_names = [REVERSED_NAMES.get(name, name) for name in sanitized_names]
-    ret = {sr_name: [] for sr_name in sanitized_names}
+    ret = {sr_name: [] for sr_name in sr_names}
     for camp, link in get_promos(now, sr_names=sr_names):
         if is_live_promo(link, camp):
             weight = (camp.bid / camp.ndays)
@@ -919,20 +797,13 @@ def _get_live_promotions(sanitized_names):
                             campaign=camp._fullname)
             for sr_name in camp.target.subreddit_names:
                 if sr_name in sr_names:
-                    sanitized_name = SPECIAL_NAMES.get(sr_name, sr_name)
-                    ret[sanitized_name].append(pt)
+                    ret[sr_name].append(pt)
     return ret
 
 
 def get_live_promotions(sr_names):
-    sanitized_names = [SPECIAL_NAMES.get(name, name) for name in sr_names]
-    promos_by_sanitized_name = sgm(
-        g.cache, sanitized_names, miss_fn=_get_live_promotions,
-        prefix='live_promotions', time=60, stale=True)
-    promos_by_srname = {
-        REVERSED_NAMES.get(name, name): val
-        for name, val in promos_by_sanitized_name.iteritems()
-    }
+    promos_by_srname = sgm(g.cache, sr_names, miss_fn=_get_live_promotions,
+                           prefix='live_promotions', time=60)
     return itertools.chain.from_iterable(promos_by_srname.itervalues())
 
 
@@ -978,8 +849,8 @@ def get_total_run(thing):
 
     # a manually launched promo (e.g., sr discovery) might not have campaigns.
     if not earliest or not latest:
-        latest = datetime.datetime.utcnow()
-        earliest = latest - datetime.timedelta(days=30)  # last month
+        latest = datetime.utcnow()
+        earliest = latest - timedelta(days=30)  # last month
 
     # ugh this stuff is a mess. they're stored as "UTC" but actually mean UTC-5.
     earliest = earliest.replace(tzinfo=g.tz) - timezone_offset
@@ -990,7 +861,7 @@ def get_total_run(thing):
 
 def get_traffic_dates(thing):
     """Retrieve the start and end of a Promoted Link or PromoCampaign."""
-    now = datetime.datetime.now(g.tz).replace(minute=0, second=0, microsecond=0)
+    now = datetime.now(g.tz).replace(minute=0, second=0, microsecond=0)
     start, end = get_total_run(thing)
     end = min(now, end)
     return start, end
@@ -998,7 +869,7 @@ def get_traffic_dates(thing):
 
 def get_billable_impressions(campaign):
     start, end = get_traffic_dates(campaign)
-    if start > datetime.datetime.now(g.tz):
+    if start > datetime.now(g.tz):
         return 0
 
     traffic_lookup = traffic.TargetedImpressionsByCodename.promotion_history
@@ -1034,35 +905,6 @@ def get_spent_amount(campaign):
     return spent
 
 
-def successful_payment(link, campaign, ip, address):
-    if not address:
-        return
-
-    campaign.trans_ip = ip
-    campaign.trans_billing_country = address.country
-
-    location = location_by_ips(ip)
-
-    if location:
-        campaign.trans_ip_country = location.get("country_name")
-
-        countries_match = (campaign.trans_billing_country.lower() ==
-            campaign.trans_ip_country.lower())
-        campaign.trans_country_match = countries_match
-
-    campaign._commit()
-
-
-def new_payment_method(user, ip, address, link):
-    user._incr('num_payment_methods')
-    hooks.get_hook('promote.new_payment_method').call(user=user, ip=ip, address=address, link=link)
-
-
-def failed_payment_method(user, link):
-    user._incr('num_failed_payments')
-    hooks.get_hook('promote.failed_payment').call(user=user, link=link)
-
-
 def Run(verbose=True):
     """reddit-job-update_promos: Intended to be run hourly to pull in
     scheduled changes to ads
@@ -1070,9 +912,9 @@ def Run(verbose=True):
     """
 
     if verbose:
-        print "%s promote.py:Run() - make_daily_promotions()" % datetime.datetime.now(g.tz)
+        print "promote.py:Run() - make_daily_promotions()"
 
     make_daily_promotions()
 
     if verbose:
-        print "%s promote.py:Run() - finished" % datetime.datetime.now(g.tz)
+        print "promote.py:Run() - finished"

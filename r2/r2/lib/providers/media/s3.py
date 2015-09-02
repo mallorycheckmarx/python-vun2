@@ -16,13 +16,12 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 import mimetypes
 import os
-import re
 
 import boto
 
@@ -64,65 +63,21 @@ class S3MediaProvider(MediaProvider):
         ],
         ConfigValue.tuple: [
             "s3_media_buckets",
-            "s3_image_buckets",
         ],
     }
 
-    buckets = {
-        'thumbs': 's3_media_buckets',
-        'stylesheets': 's3_media_buckets',
-        'icons': 's3_media_buckets',
-        'previews': 's3_image_buckets',
-    }
- 
-    def _get_bucket(self, bucket_name, validate=False):
-     
-        s3 = boto.connect_s3(g.S3KEY_ID or None, g.S3SECRET_KEY or None)
-        bucket = s3.get_bucket(bucket_name, validate=validate)
-
-        return bucket
-
-    def _get_bucket_key_from_url(self, url):
-        if g.s3_media_domain in url:
-            r_bucket = re.compile('.*\://(?:%s.)?([^\/]+)' % g.s3_media_domain)
-        else:
-            r_bucket = re.compile('.*\://?([^\/]+)')
-
-        bucket_name = r_bucket.findall(url)[0]
-        key_name = url.split('/')[-1]
-
-        return bucket_name, key_name
-     
-    def make_inaccessible(self, url):
-        """Make the content unavailable, but do not remove."""
-        bucket_name, key_name = self._get_bucket_key_from_url(url)
-
-        timer = g.stats.get_timer("providers.s3.key_set_private")
-        timer.start()
-
-        bucket = self._get_bucket(bucket_name, validate=False)
-
-        key = bucket.get_key(key_name)
-        if key:
-            # set the file as private, but don't delete it, if it exists
-            key.set_acl('private')
-
-        timer.stop()
-
-        return True
-
-    def put(self, category, name, contents):
-        buckets = getattr(g, self.buckets[category])
+    def put(self, name, contents):
         # choose a bucket based on the filename
         name_without_extension = os.path.splitext(name)[0]
-        index = ord(name_without_extension[-1]) % len(buckets)
-        bucket_name = buckets[index]
+        index = ord(name_without_extension[-1]) % len(g.s3_media_buckets)
+        bucket_name = g.s3_media_buckets[index]
 
         # guess the mime type
         mime_type, encoding = mimetypes.guess_type(name)
 
         # send the key
-        bucket = self._get_bucket(bucket_name, validate=False)
+        s3 = boto.connect_s3(g.S3KEY_ID or None, g.S3SECRET_KEY or None)
+        bucket = s3.get_bucket(bucket_name, validate=False)
         key = bucket.new_key(name)
         key.set_contents_from_string(
             contents,
@@ -140,21 +95,16 @@ class S3MediaProvider(MediaProvider):
         else:
             return "http://%s/%s" % (bucket_name, name)
 
-    def purge(self, url):
-        """Deletes the key as specified by the url"""
-        bucket_name, key_name = self._get_bucket_key_from_url(url)
+    def convert_to_https(self, http_url):
+        """Convert an HTTP URL on S3 to an HTTPS URL.
 
-        timer = g.stats.get_timer("providers.s3.key_set_private")
-        timer.start()
+        This currently assumes that no HTTPS-configured CDN is present, so
+        HTTPS URLs must be direct-S3 URLs so that we can use Amazon's certs.
 
-        bucket = self._get_bucket(bucket_name, validate=False)
-
-        key_name = url.split('/')[-1]
-        key = bucket.get_key(key_name)
-        if key:
-            # delete the key if it exists
-            key.delete()
-
-        timer.stop()
-
-        return True
+        """
+        if http_url.startswith("http://%s" % g.s3_media_domain):
+            # it's already a direct url, just change scheme
+            return http_url.replace("http://", "https://")
+        else:
+            # an indirect url, put the s3 domain in there too
+            return http_url.replace("http://", "https://%s/" % g.s3_media_domain)

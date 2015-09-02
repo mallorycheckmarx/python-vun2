@@ -11,6 +11,27 @@ var buttonEmbed = (function() {
     return document.querySelector(s)
   }
 
+  function xhr(type, url, data, success, error) {
+    var XHR = XMLHttpRequest || ActiveXObject
+    var request = new XHR('MSXML2.XMLHTTP.3.0')
+    request.open(type, url, true)
+    request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
+    request.onreadystatechange = function () {
+      if (request.readyState === 4) {
+        if (Math.floor(request.status / 100) === 2) {
+          if (success) {
+            success(JSON.parse(request.responseText))
+          }
+        } else {
+          if(error) {
+            error(JSON.parse(request.responseText))
+          }
+        }
+      }
+    }
+    request.send(data)
+  }
+
   function getQueryParams() {
     var params = {}
     var segments = window.location.search.substring(1).split('&')
@@ -44,24 +65,20 @@ var buttonEmbed = (function() {
     return url
   }
 
-  function parseSubmission(response) {
-    if (response.data && response.data.children.length > 0) {
-      var child = response.data.children[0];
-
-      submission.href = baseUrl + child.data.permalink;
-      submission.innerHTML = pointLabel(child.data.score);
-      submission.className += ' has-points';
-      logo.href = up.href = down.href = submission.href;
-    } else {
-      submission.innerHTML = 'submit';
-    }
-  }
-
   function loadSubmission() {
-    var script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.src = apiUrl + '/button_info.json?jsonp=buttonEmbed.parseSubmission&url=' + encodeURIComponent(query.url);
-    document.body.appendChild(script);
+    xhr('GET', apiUrl + "/button_info.json?url=" + encodeURIComponent(query.url), '', function (response) {
+      if (response.data && response.data.children.length > 0) {
+        var child = response.data.children[0]
+
+        logo.href = child.data.permalink
+        submission.href = baseUrl + child.data.permalink
+        submission.innerHTML = pointLabel(child.data.score)
+        submission.className += " has-points"
+        up.href = down.href = submission.href
+      } else {
+        submission.innerHTML = 'submit'
+      }
+    })
   }
 
   function safeColor(colorString) {
@@ -94,8 +111,7 @@ var buttonEmbed = (function() {
   }
 
   return {
-    init: init,
-    parseSubmission: parseSubmission
+    "init": init
   }
 }())
 

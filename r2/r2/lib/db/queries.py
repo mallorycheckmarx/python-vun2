@@ -16,23 +16,19 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-import json
 
-from r2.models import Account, Link, Comment, Report, LinksByAccount
-from r2.models.vote import cast_vote, get_votes, VotesByAccount
+from r2.models import Account, Link, Comment, Vote, Report
 from r2.models import Message, Inbox, Subreddit, ModContribSR, ModeratorInbox, MultiReddit
 from r2.lib.db.thing import Thing, Merge
 from r2.lib.db.operators import asc, desc, timeago
 from r2.lib.db.sorts import epoch_seconds
-from r2.lib.db import tdb_cassandra
 from r2.lib.utils import fetch_things2, tup, UniqueIterator, set_last_modified
 from r2.lib import utils
 from r2.lib import amqp, sup, filters
 from r2.lib.comment_tree import add_comments, update_comment_votes
-from r2.lib.eventcollector import EventV2
 from r2.models.promo import PROMOTE_STATUS, PromotionLog
 from r2.models.query_cache import (
     cached_query,
@@ -47,7 +43,7 @@ from r2.models.query_cache import (
     UserQueryCache,
 )
 from r2.models.last_modified import LastModified
-from r2.lib.utils import in_chunks, is_subdomain, SimpleSillyStub
+from r2.lib.utils import in_chunks, SimpleSillyStub
 
 import cPickle as pickle
 
@@ -59,7 +55,7 @@ import collections
 from copy import deepcopy
 from r2.lib.db.operators import and_, or_
 
-from pylons import g, c, request
+from pylons import g
 query_cache = g.permacache
 log = g.log
 make_lock = g.make_lock
@@ -115,18 +111,18 @@ class CachedResults(object):
     def sort(self):
         return self.query._sort
 
-    def fetch(self, force=False, stale=False):
+    def fetch(self, force=False):
         """Loads the query from the cache."""
-        self.fetch_multi([self], force=force, stale=stale)
+        self.fetch_multi([self], force=force)
 
     @classmethod
-    def fetch_multi(cls, crs, force=False, stale=False):
+    def fetch_multi(cls, crs, force=False):
         unfetched = filter(lambda cr: force or not cr._fetched, crs)
         if not unfetched:
             return
 
-        keys = [cr.iden for cr in unfetched]
-        cached = query_cache.get_multi(keys, allow_local=not force, stale=stale)
+        cached = query_cache.get_multi([cr.iden for cr in unfetched],
+                                       allow_local = not force)
         for cr in unfetched:
             cr.data = cached.get(cr.iden) or []
             cr._fetched = True
@@ -530,27 +526,6 @@ def _get_submitted(user_id, sort, time):
 def get_submitted(user, sort, time):
     return _get_submitted(user._id, sort, time)
 
-
-def get_user_actions(user, sort, time):
-    results = []
-    unique_ids = set()
-
-    # Order is important as a listing will only have the action_type of the
-    # first occurrance (aka: posts trump comments which trump likes)
-    actions_by_type = ((get_submitted(user, sort, time), 'submit'),
-                       (get_comments(user, sort, time), 'comment'),
-                       (get_liked(user), 'like'))
-
-    for cached_result, action_type in actions_by_type:
-        cached_result.fetch()
-        for thing in cached_result.data:
-            if thing[0] not in unique_ids:
-                results.append(thing + (action_type,))
-                unique_ids.add(thing[0])
-
-    return sorted(results, key=lambda x: x[1], reverse=True)
-
-
 def get_overview(user, sort, time):
     return merge_results(get_comments(user, sort, time),
                          get_submitted(user, sort, time))
@@ -569,16 +544,18 @@ def rel_query(rel, thing_id, name, filters = []):
 
     return q
 
+vote_rel = Vote.rel(Account, Link)
+
 cached_userrel_query = cached_query(UserQueryCache, filter_thing2)
 cached_srrel_query = cached_query(SubredditQueryCache, filter_thing2)
 
 @cached_userrel_query
 def get_liked(user):
-    return FakeQuery(sort=[desc("_date")])
+    return rel_query(vote_rel, user, '1')
 
 @cached_userrel_query
 def get_disliked(user):
-    return FakeQuery(sort=[desc("_date")])
+    return rel_query(vote_rel, user, '-1')
 
 @cached_query(UserQueryCache)
 def get_hidden_links(user_id):
@@ -818,23 +795,6 @@ def get_all_accepted_links():
 
 
 @cached_query(UserQueryCache)
-def get_payment_flagged_links():
-    return FakeQuery(sort=[desc("_date")])
-
-
-def set_payment_flagged_link(link):
-    with CachedQueryMutator() as m:
-        q = get_payment_flagged_links()
-        m.insert(q, [link])
-
-
-def unset_payment_flagged_link(link):
-    with CachedQueryMutator() as m:
-        q = get_payment_flagged_links()
-        m.delete(q, [link])
-
-
-@cached_query(UserQueryCache)
 def get_underdelivered_campaigns():
     return FakeQuery(sort=[desc("_date")])
 
@@ -995,7 +955,7 @@ def new_link(link):
         results.append(get_domain_links(domain, 'new', "all"))
 
     with CachedQueryMutator() as m:
-        if link._spam:
+        if link._spam:    
             m.insert(get_spam_links(sr), [link])
         if not (sr.exclude_banned_modqueue and author._spam):
             m.insert(get_unmoderated_links(sr), [link])
@@ -1019,9 +979,6 @@ def update_comment_notifications(comment, inbox_rels, mutator):
 
     for inbox_rel in tup(inbox_rels):
         inbox_owner = inbox_rel._thing1
-        unread = (is_visible and
-            getattr(inbox_rel, 'unread_preremoval', True))
-
         if inbox_rel._name == "inbox":
             query = get_inbox_comments(inbox_owner)
         elif inbox_rel._name == "selfreply":
@@ -1036,7 +993,7 @@ def update_comment_notifications(comment, inbox_rels, mutator):
         else:
             mutator.delete(query, [inbox_rel])
 
-        set_unread(comment, inbox_owner, unread=unread, mutator=mutator)
+        set_unread(comment, inbox_owner, unread=is_visible, mutator=mutator)
 
 
 def new_comment(comment, inbox_rels):
@@ -1110,7 +1067,7 @@ def new_vote(vote, foreground=False, timer=None):
                             ])
 
             parsed = utils.UrlParser(item.url)
-            if not is_subdomain(parsed.hostname, 'imgur.com'):
+            if parsed.hostname and not parsed.hostname.endswith('imgur.com'):
                 for domain in parsed.domain_permutations():
                     for sort in ("hot", "top", "controversial"):
                         results.append(get_domain_links(domain, sort, "all"))
@@ -1143,10 +1100,6 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
     if not from_user.update_sent_messages:
         add_to_sent = False
 
-    if message.display_author:
-        add_to_sent = False
-
-    modmail_rel_included = False
     update_recipient = False
     add_to_user = None
 
@@ -1159,7 +1112,7 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
 
             if isinstance(inbox_rel, ModeratorInbox):
                 m.insert(get_subreddit_messages(to), [inbox_rel])
-                modmail_rel_included = True
+                update_modmail &= True
             else:
                 m.insert(get_inbox_messages(to), [inbox_rel])
                 update_recipient = True
@@ -1168,23 +1121,9 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
 
             set_unread(message, to, unread=True, mutator=m)
 
-    update_modmail = update_modmail and modmail_rel_included
-
     amqp.add_item('new_message', message._fullname)
     add_message(message, update_recipient=update_recipient,
                 update_modmail=update_modmail, add_to_user=add_to_user)
-    
-    # light up the modmail icon for all other mods with mail access
-    if update_modmail:
-        mod_perms = message.subreddit_slow.moderators_with_perms()
-        mod_ids = [mod_id for mod_id, perms in mod_perms.iteritems()
-            if mod_id != from_user._id and perms.get('mail', False)]
-        moderators = Account._byID(mod_ids, data=True, return_dict=False)
-        for mod in moderators:
-            if not mod.modmsgtime:
-                mod.modmsgtime = message._date
-                mod._commit()
-
 
 def set_unread(messages, to, unread, mutator=None):
     # Maintain backwards compatability
@@ -1264,38 +1203,13 @@ def unread_handler(things, user, unread):
 
 
 def unnotify(thing, possible_recipients=None):
-    """Given a Thing, remove any notifications to its possible recipients.
+    """Given a Thing, remove any notifications to possible recipients for it.
 
     `possible_recipients` is a list of account IDs to unnotify. If not passed,
     deduce all possible recipients and remove their notifications.
     """
     from r2.lib import butler
-    error_message = ("Unable to unnotify thing of type: %r" % thing)
-    notification_handler(thing,
-        notify_function=butler.remove_mention_notification,
-        error_message=error_message,
-        possible_recipients=possible_recipients,
-    )
 
-
-def renotify(thing, possible_recipients=None):
-    """Given a Thing, reactivate notifications for possible recipients.
-
-    `possible_recipients` is a list of account IDs to renotify. If not passed,
-    deduce all possible recipients and add their notifications.
-    This is used when unspamming comments.
-    """
-    from r2.lib import butler
-    error_message = ("Unable to renotify thing of type: %r" % thing)
-    notification_handler(thing,
-        notify_function=butler.readd_mention_notification,
-        error_message=error_message,
-        possible_recipients=possible_recipients,
-    )
-
-
-def notification_handler(thing, notify_function,
-        error_message, possible_recipients=None):
     if not possible_recipients:
         possible_recipients = Inbox.possible_recipients(thing)
 
@@ -1315,29 +1229,32 @@ def notification_handler(thing, notify_function,
             ("inbox", "selfreply", "mention"),
         )
 
-        # if the comment has been spammed, remember the previous
-        # new value in case it becomes unspammed
-        if thing._spam:
-            for (tupl, rel) in rels.iteritems():
-                if rel:
-                    rel.unread_preremoval = rel.new
-                    rel._commit()
-
         replies, mentions = utils.partition(
             lambda r: r._name == "mention",
             filter(None, rels.values()),
         )
 
         for mention in mentions:
-            notify_function(mention)
+            butler.remove_mention_notification(mention)
 
         replies = list(replies)
         if replies:
             with CachedQueryMutator() as m:
                 update_comment_notifications(thing, replies, mutator=m)
     else:
-        raise ValueError(error_message)
+        raise ValueError("Unable to unnotify thing of type: %r" % thing)
 
+
+def changed(things, boost_only=False):
+    """Indicate to search that a given item should be updated in the index"""
+    for thing in tup(things):
+        msg = {'fullname': thing._fullname}
+        if boost_only:
+            msg['boost_only'] = True
+
+        amqp.add_item('search_changes', pickle.dumps(msg),
+                      message_id = thing._fullname,
+                      delivery_mode = amqp.DELIVERY_TRANSIENT)
 
 def _by_srid(things, srs=True):
     """Takes a list of things and returns them in a dict separated by
@@ -1434,9 +1351,7 @@ def delete(things):
             m.insert(q, inserts)
         for q, deletes in query_cache_deletes:
             m.delete(q, deletes)
-
-    for thing in tup(things):
-        thing.update_search_index()
+    changed(things)
 
 
 def edit(thing):
@@ -1501,9 +1416,7 @@ def ban(things, filtered=True):
             m.insert(q, inserts)
         for q, deletes in query_cache_deletes:
             m.delete(q, deletes)
-
-    for thing in tup(things):
-        thing.update_search_index()
+    changed(things)
 
 
 def _common_del_ban(things):
@@ -1582,8 +1495,7 @@ def unban(things, insert=True):
         for q, deletes in query_cache_deletes:
             m.delete(q, deletes)
 
-    for thing in tup(things):
-        thing.update_search_index()
+    changed(things)
 
 def new_report(thing, report_rel):
     reporter_id = report_rel._thing1_id
@@ -1597,8 +1509,6 @@ def new_report(thing, report_rel):
             m.insert(get_user_reported_comments(reporter_id), [report_rel])
         elif isinstance(thing, Message):
             m.insert(get_user_reported_messages(reporter_id), [report_rel])
-
-    amqp.add_item("new_report", thing._fullname)
 
 
 def clear_reports(things, rels):
@@ -1726,20 +1636,11 @@ vote_link_q = 'vote_link_q'
 vote_comment_q = 'vote_comment_q'
 vote_fastlane_q = 'vote_fastlane_q'
 
-vote_names_by_dir = {True: "1", None: "0", False: "-1"}
-vote_dirs_by_name = {v: k for k, v in vote_names_by_dir.iteritems()}
-
-def queue_vote(user, thing, dir, ip, vote_info=None, cheater=False, store=True,
-        send_event=True):
+def queue_vote(user, thing, dir, ip, vote_info=None,
+               cheater = False, store = True):
     # set the vote in memcached so the UI gets updated immediately
     key = prequeued_vote_key(user, thing)
-    grace_period = int(g.vote_queue_grace_period.total_seconds())
-    g.cache.set(key, vote_names_by_dir[dir], time=grace_period+1)
-
-    # update LastModified immediately to help us cull prequeued_vote lookups
-    rel_cls = VotesByAccount.rel(user.__class__, thing.__class__)
-    LastModified.touch(user._fullname, rel_cls._last_modified_name)
-
+    g.cache.set(key, '1' if dir is True else '0' if dir is None else '-1')
     # queue the vote to be stored unless told not to
     if store:
         if isinstance(thing, Link):
@@ -1761,106 +1662,51 @@ def queue_vote(user, thing, dir, ip, vote_info=None, cheater=False, store=True,
                         user, thing)
             return
 
-        vote = {
-            "uid": user._id,
-            "tid": thing._fullname,
-            "dir": dir,
-            "ip": ip,
-            "info": vote_info,
-            "cheater": cheater,
-        }
-
-        if send_event:
-            # the vote event will actually be sent from an async queue
-            # processor, so we need to pull out the context data at this point
-            vote["event_data"] = {
-                "context": EventV2.get_context_data(request, c),
-                "sensitive": EventV2.get_sensitive_context_data(request, c),
-            }
-
-        amqp.add_item(qname, json.dumps(vote))
+        amqp.add_item(qname,
+                      pickle.dumps((user._id, thing._fullname,
+                                    dir, ip, vote_info, cheater)))
 
 def prequeued_vote_key(user, item):
     return 'registered_vote_%s_%s' % (user._id, item._fullname)
 
-
-def _by_type(items):
-    by_type = collections.defaultdict(list)
-    for item in items:
-        by_type[item.__class__].append(item)
-    return by_type
-
-
-def get_likes(user, requested_items):
-    if not user or not requested_items:
+def get_likes(user, items):
+    if not user or not items:
         return {}
 
     res = {}
 
-    try:
-        last_modified = LastModified._byID(user._fullname)
-    except tdb_cassandra.NotFound:
-        last_modified = None
-
-    items_in_grace_period = {}
-    items_by_type = _by_type(requested_items)
-    for type_, items in items_by_type.iteritems():
-        try:
-            rel_cls = VotesByAccount.rel(user.__class__, type_)
-        except tdb_cassandra.TdbException:
-            # these items can't be voted on. just mark 'em as None and skip.
-            for item in items:
-                res[(user, item)] = None
-            continue
-
-        last_vote = getattr(last_modified, rel_cls._last_modified_name, None)
-        if last_vote:
-            time_since_last_vote = datetime.now(pytz.UTC) - last_vote
-
-        # only do prequeued_vote lookups if we've voted within the grace period
-        # and therefore might have votes in flight in the queues.
-        if last_vote and time_since_last_vote < g.vote_queue_grace_period:
-            too_new = 0
-
-            for item in items:
-                if item._age > time_since_last_vote:
-                    key = prequeued_vote_key(user, item)
-                    items_in_grace_period[key] = (user, item)
-                else:
-                    # the item is newer than our last vote, we can't have
-                    # possibly voted on it.
-                    res[(user, item)] = None
-                    too_new += 1
-
-            if too_new:
-                g.stats.simple_event("vote.prequeued.too-new", delta=too_new)
+    # check the prequeued_vote_keys
+    keys = {}
+    for item in items:
+        # we can only vote on links and comments
+        if isinstance(item, (Comment, Link)):
+            key = prequeued_vote_key(user, item)
+            keys[key] = (user, item)
         else:
-            g.stats.simple_event("vote.prequeued.graceless", delta=len(items))
-
-    # look up votes in memcache for items that could have been voted on
-    # but not processed by a queue processor yet.
-    if items_in_grace_period:
-        g.stats.simple_event(
-            "vote.prequeued.fetch", delta=len(items_in_grace_period))
-        r = g.cache.get_multi(items_in_grace_period.keys())
+            res[(user, item)] = None
+    if keys:
+        r = g.cache.get_multi(keys.keys())
         for key, v in r.iteritems():
-            res[items_in_grace_period[key]] = vote_dirs_by_name[v]
+            res[keys[key]] = (True if v == '1'
+                              else False if v == '-1'
+                              else None)
 
-    cassavotes = get_votes(
-        user, [i for i in requested_items if (user, i) not in res])
-    res.update(cassavotes)
+    likes = Vote.likes(user, [i for i in items if (user, i) not in res])
+
+    res.update(likes)
 
     return res
 
-
-def handle_vote(user, thing, vote, foreground=False, timer=None, date=None):
+def handle_vote(user, thing, dir, ip, vote_info,
+                cheater=False, foreground=False, timer=None, date=None):
     if timer is None:
         timer = SimpleSillyStub()
 
     from r2.lib.db import tdb_sql
     from sqlalchemy.exc import IntegrityError
     try:
-        v = cast_vote(user, thing, vote, timer=timer, date=date)
+        v = Vote.vote(user, thing, dir, ip, vote_info=vote_info,
+                      cheater=cheater, timer=timer, date=date)
     except (tdb_sql.CreationError, IntegrityError):
         g.log.error("duplicate vote for: %s" % str((user, thing, dir)))
         return
@@ -1913,10 +1759,12 @@ def process_votes(qname, limit=0):
         timer = stats.get_timer("service_time." + stats_qname)
         timer.start()
 
-        vote = json.loads(msg.body)
+        #assert(len(msgs) == 1)
+        r = pickle.loads(msg.body)
 
-        voter = Account._byID(vote["uid"], data=True)
-        votee = Thing._by_fullname(vote["tid"], data=True)
+        uid, tid, dir, ip, vote_info, cheater = r
+        voter = Account._byID(uid, data=True)
+        votee = Thing._by_fullname(tid, data = True)
         timer.intermediate("preamble")
 
         # Convert the naive timestamp we got from amqplib to a
@@ -1927,9 +1775,9 @@ def process_votes(qname, limit=0):
         # I don't know how, but somebody is sneaking in votes
         # for subreddits
         if isinstance(votee, (Link, Comment)):
-            print (voter, votee, vote["dir"], vote["ip"], vote["info"],
-                   vote["cheater"])
-            handle_vote(voter, votee, vote, foreground=True, timer=timer,
+            print (voter, votee, dir, ip, vote_info, cheater)
+            handle_vote(voter, votee, dir, ip, vote_info,
+                        cheater = cheater, foreground=True, timer=timer,
                         date=date)
 
         if isinstance(votee, Comment):
@@ -1937,7 +1785,7 @@ def process_votes(qname, limit=0):
             timer.intermediate("update_comment_votes")
 
         stats.simple_event('vote.total')
-        if vote["cheater"]:
+        if cheater:
             stats.simple_event('vote.cheater')
         timer.flush()
 
@@ -1954,24 +1802,3 @@ def consume_mark_all_read():
             unread_handler(things, user, unread=False)
 
     amqp.consume_items('markread_q', process_mark_all_read)
-
-
-def consume_deleted_accounts():
-    @g.stats.amqp_processor('del_account_q')
-    def process_deleted_accounts(msg):
-        account = Thing._by_fullname(msg.body)
-        assert isinstance(account, Account)
-
-        if account.has_stripe_subscription:
-            from r2.controllers.ipn import cancel_stripe_subscription
-            cancel_stripe_subscription(account.gold_subscr_id)
-
-        # Mark their link submissions for updating on cloudsearch
-        query = LinksByAccount._cf.xget(account._id36)
-        for link_id36, unused in query:
-            fullname = Link._fullname_from_id36(link_id36)
-            msg = pickle.dumps({"fullname": fullname})
-            amqp.add_item("search_changes", msg, message_id=fullname,
-                delivery_mode=amqp.DELIVERY_TRANSIENT)
-
-    amqp.consume_items('del_account_q', process_deleted_accounts)

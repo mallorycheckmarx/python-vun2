@@ -16,14 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%namespace file="utils.html" import="plain_link, pretty_button, data, error_field" />
 
 <%!
-   from r2.lib.filters import conditional_websafe, jssafe
    from r2.lib.strings import strings
    from r2.models.promo import PROMOTE_STATUS
  %>
@@ -56,9 +55,13 @@
 
   %if thing.show_report:
     <li class="report-button">
-      <a href="javascript:void(0)" class="action-thing" data-action-form="#report-action-form">
-        ${_("report")}
-      </a>
+      %if thing.style in ("linkbuttons", "commentbuttons"):
+        <a href="javascript:void(0)" class="report-thing">
+          ${_("report")}
+        </a>
+      %else:
+        ${ynbutton(_("report"), _("reported"), "report", "hide_thing")}
+      %endif
     </li>
   %endif
   %if thing.show_marknsfw:
@@ -74,20 +77,19 @@
     </li>
   %endif
   %if thing.show_rescrape:
-    <li>${ynbutton(_("retry thumb"), _("check back in a few minutes"), "rescrape")}</li>
+    <li>${ynbutton(_("retry thumb"), _("retrying"), "rescrape")}</li>
   %endif
 </%def>
 
 <%def name="distinguish_setter(name, value=None)">
   <a href="javascript:void(0)"
-     onclick="return set_distinguish(this, '${jssafe(value or name)}')">${_(name)}</a>
+     onclick="return set_distinguish(this, '${value or name}')">${_(name)}</a>
 </%def>
 
 <%def name="distinguish()">
   %if thing.show_distinguish:
   <li class="toggle">
     <form method="post" action="/post/distinguish">
-      <input type="hidden" value="${c.profilepage}" name="profilepage">
       <input type="hidden" value="${_('distinguishing...')}" name="executed"/>
       <a href="javascript:void(0)"
          onclick="return toggle_distinguish_span(this)">${_("distinguish")}</a>
@@ -130,7 +132,7 @@
 
 <%def name="give_gold()">
   % if thing.show_givegold:
-    <li class="give-gold-button">
+    <li>
     <a href="/gold?goldtype=gift&months=1&thing=${thing.thing._fullname}"
         title="${_("give reddit gold in appreciation of this post.")}"
         class="give-gold login-required"
@@ -151,7 +153,7 @@
 <%def name="big_modbuttons(thing)">
   <span class="big-mod-buttons">
     <span role="radiogroup">
-      %if not getattr(thing, "moderator_banned", None) or getattr(thing, "autobanned", False):
+      %if not getattr(thing, "moderator_banned", None):
         ${pretty_button(_("spam"), "big_mod_action", -2, "negative")}
         ${pretty_button(_("remove"), "big_mod_action", -1, "neutral")}
       %endif
@@ -198,7 +200,7 @@
   %if thing.mod_reports:
     <li class="report-reason-title">${_("moderator reports:")}</li>
     %for reason, user in thing.mod_reports:
-      <li class="report-reason mod-report" title="${reason}">${user}:
+      <li class="report-reason mod-report" title="${_(reason)}">${user}:
       %if reason:
         ${reason}
       %else:
@@ -236,10 +238,11 @@
       ${self.simple_button(_("edit"), "edit_usertext", css_class="edit-usertext")}
     </li>
   %endif
-  % if thing.show_share:
-    <li class="share">
-      <a class="post-sharing-button" href="javascript: void 0;">${_("share")}</a>
-    </li>
+  % if c.user_is_loggedin or not g.read_only_mode:
+  <li class="share">
+    ${self.toggle_button("share-button", _("share"), _("cancel"),
+                         "share", "cancelShare", login_required = True)}
+  </li>
   % endif
   %if thing.is_loggedin:
     %if thing.saved:
@@ -271,16 +274,13 @@
        <li>
          <form action="/post/reject" class="rejection-form"
                style="display:none"
-               %if getattr(thing, "hide_after_seen", False):
-                 data-hide-after-seen="true"
-               %endif
                method="post" onsubmit="reject post_form(this, 'unpromote')">
            <br/>
            <input type="hidden" name="executed" value="rejected" />
            <label>Reason:</label><br/>
            <textarea name="reason" value="" ></textarea>
            <br/>
-           <a href="#"
+           <a href="#" 
               onclick="change_state(this, 'unpromote', complete_reject_promo)">
              submit
            </a>/
@@ -291,16 +291,7 @@
        </li>
       %if thing.promote_status in (PROMOTE_STATUS.unpaid, PROMOTE_STATUS.unseen, PROMOTE_STATUS.rejected):
         <li>
-          ${ynbutton(_("accept"), \
-                     _("accepted"), "promote", \
-                     callback="hide_thing" if getattr(thing, "hide_after_seen", False) else "null")}
-        </li>
-      %endif
-      %if thing.is_awaiting_fraud_review:
-        <li class="fraud-button">
-          <a href="javascript:void(0)" class="action-thing" data-action-form="#fraud-action-form" title="${thing.payment_flagged_reason}">
-            ${_("fraud")}
-          </a>
+          ${ynbutton(_("accept"), _("accepted"), "promote")}
         </li>
       %endif
     %endif
@@ -332,20 +323,16 @@
     <li class="first">
       ${self.bylink_button(_("permalink"), thing.permalink)}
     </li>
-    %if thing.embed_button:
-      <li>
-        ${thing.embed_button.render()}
-      </li>
-    %endif
-
-    %if thing.saved:
-      <li class="comment-unsave-button save-button">
-        <a href="javascript:void(0)">${_("unsave")}</a>
-      </li>
-    %else:
-      <li class="comment-save-button save-button">
-        <a href="javascript:void(0)">${_("save")}</a>
-      </li>
+    %if thing.can_save:
+        %if thing.saved:
+          <li class="comment-unsave-button save-button">
+            <a href="javascript:void(0)">${_("unsave")}</a>
+          </li>
+        %else:
+          <li class="comment-save-button save-button">
+            <a href="javascript:void(0)">${_("save")}</a>
+          </li>
+        %endif
     %endif
 
     %if c.profilepage:
@@ -361,41 +348,31 @@
       </li>
     %endif
 
-    %if thing.parent_permalink and not thing.profilepage:
-      <li>
-        ${self.bylink_button(_("parent"), thing.parent_permalink)}
-      </li>
-    %endif
-
-    %if thing.is_author:
-      %if thing.editable:
+    %if not thing.profilepage:
+      %if thing.parent_permalink:
+        <li>
+          ${self.bylink_button(_("parent"), thing.parent_permalink)}
+        </li>
+      %endif
+      %if thing.is_author:
         <li>
           ${self.simple_button(_("edit"), "edit_usertext", css_class="edit-usertext")}
         </li>
       %endif
-      <li>
-        %if thing.thing.inbox_replies_enabled:
-          ${ynbutton(_("disable inbox replies"), _("inbox replies disabled"), "sendreplies",
-            hidden_data=dict(id=thing.thing._fullname, state=False))}
-        %else:
-          ${ynbutton(_("enable inbox replies"), _("inbox replies enabled"), "sendreplies",
-            hidden_data=dict(id=thing.thing._fullname, state=True))}
-        %endif
-      </li>
     %endif
 
     ${self.banbuttons()}
     ${self.distinguish()}
     ${self.give_gold()}
 
-    %if not getattr(thing, "suppress_reply_buttons", False) and thing.can_reply:
-      <li class="reply-button">
+    %if not thing.profilepage and thing.can_reply:
+      <li>
         ${self.simple_button(_("reply {verb}"), "reply")}
       </li>
     %endif
 
     %if thing.show_reports and not thing.show_spam:
-      ${reports_button()}
+     ${reports_button()}
     %endif
 
     %if getattr(thing.thing, "use_big_modbuttons", False):
@@ -417,33 +394,25 @@
     <li>
       ${self.bylink_button(_("context"), thing.permalink + "?context=3")}
     </li>
-    <li>
-      ${self.comment_button("comment",
-                            _("full comments") + " (%d)" % thing.full_comment_count,
-                            thing.full_comment_path,
-                            a_class="may-blank full-comments")}
-    </li>
   %else:
     <li class="first">
       ${self.bylink_button(_("permalink"), thing.permalink, sr_path=False)}
     </li>
   %endif
-  %if thing.user_is_recipient:
-    %if thing.can_block:
-      ${self.banbuttons()}
-        %if (not thing.was_comment or thing.thing.is_mention) and thing.thing.author_id != c.user._id and thing.thing.author_id not in c.user.enemies:
-          <li>
-            %if getattr(thing.thing, "from_sr", False):
-              %if getattr(thing.thing, "sr_blocked", False):
-                ${ynbutton(_("unblock subreddit"), _("unblocked"), "unblock_subreddit")}
-              %else:
-                ${ynbutton(_("block subreddit"), _("blocked"), "block", "hide_thing")}
-              %endif
+  %if thing.recipient:
+    ${self.banbuttons()}
+      %if (not thing.was_comment or thing.thing.message_style == "mention") and thing.thing.author_id != c.user._id and thing.thing.author_id not in c.user.enemies:
+        <li>
+          %if getattr(thing.thing, "from_sr", False):
+            %if getattr(thing.thing, "sr_blocked", False):
+              ${ynbutton(_("unblock subreddit"), _("unblocked"), "unblock_subreddit")}
             %else:
-              ${ynbutton(_("block user"), _("blocked"), "block", "hide_thing")}
+              ${ynbutton(_("block subreddit"), _("blocked"), "block", "hide_thing")}
             %endif
-          </li>
-        %endif
+          %else:
+            ${ynbutton(_("block user"), _("blocked"), "block", "hide_thing")}
+          %endif
+        </li>
       %endif
     <li class="unread">
      ${self.state_button("unread", _("mark unread"), \
@@ -471,7 +440,7 @@
   <%
      link = _link()
      if fmt:
-         link = conditional_websafe(fmt) % {fmt_param: link}
+         link = fmt % {fmt_param: link}
          ## preserve spaces before and after < & > for space compression
          link = link.replace(" <", "&#32;<").replace("> ", ">&#32;")
    %>   
@@ -524,8 +493,8 @@
      if question is None:
          question = _("are you sure?")
      link = ('<a href="#" class="togglebutton" onclick="return toggle(this)">'
-             + conditional_websafe(title) + '</a>')
-     link = conditional_websafe(format) % {format_arg : link}
+             + title + '</a>')
+     link = format % {format_arg : link}
      link = unsafe(link.replace(" <", "&#32;<").replace("> ", ">&#32;"))
    %>
   <form class="toggle ${op}-button ${_class}" action="#" method="get">

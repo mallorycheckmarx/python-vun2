@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -30,10 +30,10 @@ from r2.lib.admin_utils  import modhash, valid_hash
 from r2.lib.utils        import randstr, timefromnow
 from r2.lib.utils        import UrlParser
 from r2.lib.utils        import constant_time_compare, canonicalize_email
-from r2.lib import amqp, filters, hooks
+from r2.lib.cache        import sgm
+from r2.lib import filters, hooks
 from r2.lib.log import log_text
 from r2.models.last_modified import LastModified
-from r2.models.modaction import ModAction
 from r2.models.trylater import TryLater
 
 from pylons import c, g, request
@@ -62,14 +62,12 @@ class Account(Thing):
                                                'report_ignored', 'spammer',
                                                'reported', 'gold_creddits',
                                                'inbox_count',
-                                               'num_payment_methods',
-                                               'num_failed_payments',
-                                               'num_gildings',
-                                               'admin_takedown_strikes',
                                               )
     _int_prop_suffix = '_karma'
     _essentials = ('name', )
     _defaults = dict(pref_numsites = 25,
+                     pref_frame = False,
+                     pref_frame_commentspanel = False,
                      pref_newwindow = False,
                      pref_clickgadget = 5,
                      pref_store_visits = False,
@@ -82,7 +80,6 @@ class Account(Thing):
                      pref_min_comment_score = -4,
                      pref_num_comments = g.num_comments,
                      pref_highlight_controversial=False,
-                     pref_default_comment_sort = 'confidence',
                      pref_lang = g.lang,
                      pref_content_langs = (g.lang,),
                      pref_over_18 = False,
@@ -92,25 +89,22 @@ class Account(Thing):
                      pref_no_profanity = True,
                      pref_label_nsfw = True,
                      pref_show_stylesheets = True,
-                     pref_enable_default_themes=False,
-                     pref_default_theme_sr=None,
                      pref_show_flair = True,
                      pref_show_link_flair = True,
                      pref_mark_messages_read = True,
                      pref_threaded_messages = True,
                      pref_collapse_read_messages = False,
-                     pref_email_messages = False,
                      pref_private_feeds = True,
+                     pref_local_js = False,
                      pref_force_https = False,
-                     pref_hide_ads = False,
+                     pref_show_adbox = True,
+                     pref_show_sponsors = True, # sponsored links
+                     pref_show_sponsorships = True,
                      pref_show_trending=True,
                      pref_highlight_new_comments = True,
                      pref_monitor_mentions=True,
                      pref_collapse_left_bar=False,
                      pref_public_server_seconds=False,
-                     pref_ignore_suggested_sort=False,
-                     pref_beta=False,
-                     pref_legacy_search=False,
                      mobile_compress = False,
                      mobile_thumbnail = True,
                      reported = 0,
@@ -121,6 +115,7 @@ class Account(Thing):
                      sort_options = {},
                      has_subscribed = False,
                      pref_media = 'subreddit',
+                     share = {},
                      wiki_override = None,
                      email = "",
                      email_verified = False,
@@ -129,7 +124,6 @@ class Account(Thing):
                      gold = False,
                      gold_charter = False,
                      gold_creddits = 0,
-                     num_gildings=0,
                      cake_expiration=None,
                      otp_secret=None,
                      state=0,
@@ -140,14 +134,6 @@ class Account(Thing):
                      pref_hide_locationbar=False,
                      pref_creddit_autorenew=False,
                      update_sent_messages=True,
-                     num_payment_methods=0,
-                     num_failed_payments=0,
-                     pref_show_snoovatar=False,
-                     gild_reveal_username=False,
-                     selfserve_cpm_override_pennies=None,
-                     pref_show_gold_expiration=False,
-                     admin_takedown_strikes=0,
-                     pref_threaded_modmail=False,
                      )
     _preference_attrs = tuple(k for k in _defaults.keys()
                               if k.startswith("pref_"))
@@ -165,12 +151,17 @@ class Account(Thing):
         return not self.__eq__(other)
 
     def has_interacted_with(self, sr):
-        try:
-            r = SubredditParticipationByAccount.fast_query(self, [sr])
-        except tdb_cassandra.NotFound:
+        if not sr:
             return False
 
-        return (self, sr) in r
+        for type in ('link', 'comment'):
+            if hasattr(self, "%s_%s_karma" % (sr.name, type)):
+                return True
+
+        if sr.is_subscriber(self):
+            return True
+
+        return False
 
     def karma(self, kind, sr = None):
         suffix = '_' + kind + '_karma'
@@ -298,38 +289,7 @@ class Account(Thing):
         return ",".join((timestamp, signature))
 
     def needs_captcha(self):
-        if g.disable_captcha:
-            return False
-
-        hook = hooks.get_hook("account.is_captcha_exempt")
-        captcha_exempt = hook.call_until_return(account=self)
-        if captcha_exempt:
-            return False
-
-        if self.link_karma >= g.live_config["captcha_exempt_link_karma"]:
-            return False
-
-        if self.comment_karma >= g.live_config["captcha_exempt_comment_karma"]:
-            return False
-
-        return True
-
-    @property
-    def can_create_subreddit(self):
-        hook = hooks.get_hook("account.can_create_subreddit")
-        can_create = hook.call_until_return(account=self)
-        if can_create is not None:
-            return can_create
-
-        min_age = timedelta(days=g.live_config["create_sr_account_age_days"])
-        if self._age < min_age:
-            return False
-
-        if (self.link_karma < g.live_config["create_sr_link_karma"] and
-                self.comment_karma < g.live_config["create_sr_comment_karma"]):
-            return False
-
-        return True
+        return not g.disable_captcha and self.link_karma < 1
 
     def modhash(self, rand=None, test=False):
         if c.oauth_user:
@@ -460,10 +420,7 @@ class Account(Thing):
             Account._by_name(self.name, _update = True)
         except NotFound:
             pass
-
-        # Mark this account for scrubbing
-        amqp.add_item('account_deleted', self._fullname)
-
+        
         #remove from friends lists
         q = Friend._query(Friend.c._thing2_id == self._id,
                           Friend.c._name == 'friend',
@@ -524,6 +481,27 @@ class Account(Thing):
     def subreddits(self):
         from subreddit import Subreddit
         return Subreddit.user_subreddits(self)
+
+    def recent_share_emails(self):
+        return self.share.get('recent', set([]))
+
+    def add_share_emails(self, emails):
+        if not emails:
+            return
+        
+        if not isinstance(emails, set):
+            emails = set(emails)
+
+        self.share.setdefault('emails', {})
+        share = self.share.copy()
+
+        share_emails = share['emails']
+        for e in emails:
+            share_emails[e] = share_emails.get(e, 0) +1
+
+        share['recent'] = emails
+
+        self.share = share
 
     def special_distinguish(self):
         if self._t.get("special_distinguish_name"):
@@ -595,12 +573,6 @@ class Account(Thing):
 
         return rv
 
-    def set_email(self, email):
-        old_email = self.email
-        self.email = email
-        self._commit()
-        AccountsByCanonicalEmail.update_email(self, old_email, email)
-
     def has_banned_email(self):
         canon = self.canonical_email()
         which = self.which_emails_are_banned((canon,))
@@ -654,60 +626,14 @@ class Account(Thing):
         except (NotFound, AttributeError):
             return None
 
-    def use_subreddit_style(self, sr):
-        """Return whether to show subreddit stylesheet depending on
-        individual selection if available, else use pref_show_stylesheets"""
-        # if FakeSubreddit, there is no stylesheet
-        if not hasattr(sr, '_id'):
-            return False
-        if not feature.is_enabled('stylesheets_everywhere'):
-            return self.pref_show_stylesheets
-        # if stylesheet isn't individually enabled/disabled, use global pref
-        return bool(getattr(self, "sr_style_%s_enabled" % sr._id,
-            self.pref_show_stylesheets))
-
-    def set_subreddit_style(self, sr, use_style):
-        if hasattr(sr, '_id'):
-            setattr(self, "sr_style_%s_enabled" % sr._id, use_style)
-            self._commit()
-
     def flair_enabled_in_sr(self, sr_id):
         return getattr(self, 'flair_%s_enabled' % sr_id, True)
 
-    def flair_text(self, sr_id, obey_disabled=False):
-        if obey_disabled and not self.flair_enabled_in_sr(sr_id):
-            return None
+    def flair_text(self, sr_id):
         return getattr(self, 'flair_%s_text' % sr_id, None)
 
-    def flair_css_class(self, sr_id, obey_disabled=False):
-        if obey_disabled and not self.flair_enabled_in_sr(sr_id):
-            return None
+    def flair_css_class(self, sr_id):
         return getattr(self, 'flair_%s_css_class' % sr_id, None)
-
-    def can_flair_in_sr(self, user, sr):
-        """Return whether a user can set this one's flair in a subreddit."""
-        can_assign_own = self._id == user._id and sr.flair_self_assign_enabled
-
-        return can_assign_own or sr.is_moderator_with_perms(user, "flair")
-
-    def set_flair(self, subreddit, text=None, css_class=None, set_by=None,
-            log_details="edit"):
-        log_details = "flair_%s" % log_details
-        if not text and not css_class:
-            # set to None instead of potentially empty strings
-            text = css_class = None
-            subreddit.remove_flair(self)
-            log_details = "flair_delete"
-        elif not subreddit.is_flair(self):
-            subreddit.add_flair(self)
-
-        setattr(self, 'flair_%s_text' % subreddit._id, text)
-        setattr(self, 'flair_%s_css_class' % subreddit._id, css_class)
-        self._commit()
-
-        if set_by and set_by != self:
-            ModAction.create(subreddit, set_by, action='editflair',
-                target=self, details=log_details)
 
     def update_sr_activity(self, sr):
         if not self._spam:
@@ -745,9 +671,13 @@ class Account(Thing):
     @property
     def https_forced(self):
         """Return whether this account may only be used via HTTPS."""
-        if feature.is_enabled("require_https", user=self):
+        if feature.is_enabled_for("require_https", self):
             return True
         return self.pref_force_https
+
+    @property
+    def uses_toolbar(self):
+        return not self.https_forced and self.pref_frame
 
     @property
     def has_gold_subscription(self):
@@ -767,9 +697,6 @@ class Account(Thing):
     def gold_will_autorenew(self):
         return (self.has_gold_subscription or
                 (self.pref_creddit_autorenew and self.gold_creddits > 0))
-
-    def incr_admin_takedown_strikes(self, amt=1):
-        return self._incr('admin_takedown_strikes', amt)
 
 
 class FakeAccount(Account):
@@ -858,6 +785,20 @@ def make_feedurl(user, path, ext = "rss"):
                    feed = make_feedhash(user, path))
     u.set_extension(ext)
     return u.unparse()
+
+def valid_login(name, password):
+    try:
+        a = Account._by_name(name)
+    except NotFound:
+        return False
+
+    if not a._loaded: a._load()
+
+    hooks.get_hook("account.spotcheck").call(account=a)
+
+    if a._banned:
+        return False
+    return valid_password(a, password)
 
 def valid_password(a, password, compare_password=None):
     # bail out early if the account or password's invalid
@@ -1018,8 +959,8 @@ class BlockedSubredditsByAccount(tdb_cassandra.DenormalizedRelation):
 
 
 @trylater_hooks.on("trylater.account_deletion")
-def on_account_deletion(data):
-    for account_id36 in data.itervalues():
+def on_account_deletion(mature_items):
+    for account_id36 in mature_items.itervalues():
         account = Account._byID36(account_id36, data=True)
 
         if not account._deleted:
@@ -1027,88 +968,3 @@ def on_account_deletion(data):
 
         account.password = ""
         account._commit()
-
-
-class AccountsByCanonicalEmail(tdb_cassandra.View):
-    __metaclass__ = tdb_cassandra.ThingMeta
-
-    _use_db = True
-    _compare_with = tdb_cassandra.UTF8_TYPE
-    _extra_schema_creation_args = dict(
-        key_validation_class=tdb_cassandra.UTF8_TYPE,
-    )
-
-    @classmethod
-    def update_email(cls, account, old, new):
-        old, new = map(canonicalize_email, (old, new))
-
-        if old == new:
-            return
-
-        with cls._cf.batch() as b:
-            if old:
-                b.remove(old, {account._id36: ""})
-            if new:
-                b.insert(new, {account._id36: ""})
-
-    @classmethod
-    def get_accounts(cls, email_address):
-        canonical = canonicalize_email(email_address)
-        if not canonical:
-            return []
-        account_id36s = cls.get_time_sorted_columns(canonical).keys()
-        return Account._byID36(account_id36s, data=True, return_dict=False)
-    
-
-class SubredditParticipationByAccount(tdb_cassandra.DenormalizedRelation):
-    _use_db = True
-    _write_last_modified = False
-    _views = []
-    _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.DATE_TYPE,
-    }
-
-    @classmethod
-    def value_for(cls, thing1, thing2):
-        return datetime.now(g.tz)
-
-    @classmethod
-    def mark_participated(cls, account, subreddit):
-        cls.create(account, [subreddit])
-
-
-class QuarantinedSubredditOptInsByAccount(tdb_cassandra.DenormalizedRelation):
-    _use_db = True
-    _last_modified_name = 'QuarantineSubredditOptin'
-    _read_consistency_level = tdb_cassandra.CL.QUORUM
-    _write_consistency_level = tdb_cassandra.CL.QUORUM
-    _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.DATE_TYPE,
-    }
-    _connection_pool = 'main'
-    _views = []
-
-    @classmethod
-    def value_for(cls, thing1, thing2):
-        return datetime.now(g.tz)
-
-    @classmethod
-    def opt_in(cls, account, subreddit):
-        if subreddit.quarantine:
-            cls.create(account, subreddit)
-
-    @classmethod
-    def opt_out(cls, account, subreddit):
-        if subreddit.is_subscriber(account):
-            subreddit.remove_subscriber(account)
-        cls.destroy(account, subreddit)
-
-    @classmethod
-    def is_opted_in(cls, user, subreddit):
-        try:
-            r = cls.fast_query(user, [subreddit])
-        except tdb_cassandra.NotFound:
-            return False
-        return (user, subreddit) in r

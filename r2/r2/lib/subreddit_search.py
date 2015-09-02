@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -37,13 +37,10 @@ def load_all_reddits():
     query_cache = {}
 
     q = Subreddit._query(Subreddit.c.type == 'public',
-                         Subreddit.c._spam == False,
                          Subreddit.c._downs > 1,
                          sort = (desc('_downs'), desc('_ups')),
                          data = True)
     for sr in utils.fetch_things2(q):
-        if sr.quarantine:
-            continue
         name = sr.name.lower()
         for i in xrange(len(name)):
             prefix = name[:i + 1]
@@ -72,8 +69,6 @@ def popular_searches(include_over_18=True):
                                    data = True)
     top_searches = {}
     for sr in top_reddits:
-        if sr.quarantine:
-            continue
         if sr.over_18 and not include_over_18:
             continue
         name = sr.name.lower()

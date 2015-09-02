@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -39,21 +39,10 @@ thingcls_by_name = {
     "link": Link,
     "comment": Comment,
 }
-data_fields_by_name = {
-    "link": {
-        "url": str,
-        "sr_id": int,
-        "author_id": int,
-    },
-    "comment": {
-        "sr_id": int,
-        "author_id": int,
-    },
-}
 
 
-def join_things(thing_type):
-    mr_tools.join_things(data_fields_by_name[thing_type].keys())
+def join_things():
+    mr_tools.join_things(('url', 'sr_id', 'author_id'))
 
 
 def _get_cutoffs(intervals):
@@ -67,10 +56,14 @@ def _get_cutoffs(intervals):
     return cutoffs
 
 
-def time_listings(intervals, thing_type):
+def time_listings(intervals):
     cutoff_by_interval = _get_cutoffs(intervals)
 
-    @mr_tools.dataspec_m_thing(*data_fields_by_name[thing_type].items())
+    @mr_tools.dataspec_m_thing(
+        ("url", str),
+        ("sr_id", int),
+        ("author_id", int),
+    )
     def process(thing):
         if thing.deleted:
             return

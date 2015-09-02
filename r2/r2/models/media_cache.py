@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2013-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2013-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -33,11 +33,10 @@ from r2.lib.db import tdb_cassandra
 
 Media = collections.namedtuple('_Media', ("media_object",
                                           "secure_media_object",
-                                          "preview_object",
                                           "thumbnail_url",
                                           "thumbnail_size"))
 
-ERROR_MEDIA = Media(None, None, None, None, None)
+ERROR_MEDIA = Media(None, None, None, None)
 
 
 class MediaByURL(tdb_cassandra.View):
@@ -62,7 +61,6 @@ class MediaByURL(tdb_cassandra.View):
         "thumbnail_height": 0,
         "media_object": "",
         "secure_media_object": "",
-        "preview_object": "",
         "last_modified": datetime.utcfromtimestamp(0),
     }
 
@@ -122,11 +120,6 @@ class MediaByURL(tdb_cassandra.View):
                                         dumps(media.secure_media_object)),
             })
 
-        if media.preview_object:
-            columns.update({
-                "preview_object": json.dumps(media.preview_object),
-            })
-
         cls._set_values(rowkey, columns)
 
     @classmethod
@@ -159,7 +152,7 @@ class MediaByURL(tdb_cassandra.View):
     def media(self):
         if self.state == "processed":
             if not self.error:
-                media_object = secure_media_object = preview_object = None
+                media_object = secure_media_object = None
                 thumbnail_url = thumbnail_size = None
 
                 if (self.thumbnail_width and self.thumbnail_height and
@@ -174,10 +167,7 @@ class MediaByURL(tdb_cassandra.View):
                 if self.secure_media_object:
                     secure_media_object = json.loads(self.secure_media_object)
 
-                if self.preview_object:
-                    preview_object = json.loads(self.preview_object)
-
-                return Media(media_object, secure_media_object, preview_object,
+                return Media(media_object, secure_media_object,
                              thumbnail_url, thumbnail_size)
             else:
                 return ERROR_MEDIA

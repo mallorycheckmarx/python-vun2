@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -62,17 +62,15 @@
           <span class="fancy-toggle-button">
             <span class="active banned">${_("banned")}</span>
           </span>
-        %else:
+          <span class="title banned">${sr.name}</span>
+        %elif is_spam:
           ${SubscribeButton(sr)}
-        %endif
-
-        %if is_spam:
           <span class="title banned">${sr.name}</span>
         %else:
+          ${SubscribeButton(sr)}
           ${plain_link(sr.name, sr.path, _class="title")}
+          ${permission_icons(sr)}
         %endif
-
-        ${permission_icons(sr)}
       </li>
     %endfor
     </ul>

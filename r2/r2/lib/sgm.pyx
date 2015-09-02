@@ -16,15 +16,14 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
 # smart get multi:
 # For any keys not found in the cache, miss_fn() is run and the result is
 # stored in the cache. Then it returns everything, both the hits and misses.
-def sgm(cache, keys, miss_fn, str prefix='', int time=0, stale=False,
-        found_fn=None, _update=False, stat_subname=None):
+def sgm(cache, keys, miss_fn, str prefix='', int time=0, stale=False, found_fn=None, _update=False):
     cdef dict ret
     cdef dict s_keys
     cdef dict cached
@@ -44,14 +43,10 @@ def sgm(cache, keys, miss_fn, str prefix='', int time=0, stale=False,
     if _update:
         cached = {}
     else:
-        kw = {}
         if stale:
-            kw['stale'] = stale
-        if stat_subname:
-            kw['stat_subname'] = stat_subname
-
-        cached = cache.get_multi(s_keys.keys(), prefix=prefix, **kw)
-
+            cached = cache.get_multi(s_keys.keys(), prefix=prefix, stale=stale)
+        else:
+            cached = cache.get_multi(s_keys.keys(), prefix=prefix)
         for k, v in cached.iteritems():
             ret[s_keys[k]] = v
 

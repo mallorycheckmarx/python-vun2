@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -34,8 +34,11 @@ class TimingStatBufferTest(unittest.TestCase):
             for j in xrange(i):
                 tsb.record(str(i), 0, 0.1 * (j + 1))
         self.assertEquals(
-            set([('1', '100.0|ms'),
+            set([('1', '1|c'),
+                 ('1', '100.0|ms'),
+                 ('2', '2|c'),
                  ('2', '150.0|ms'),  # (0.1 + 0.2) / 2
+                 ('3', '3|c'),
                  ('3', '200.0|ms'),  # (0.1 + 0.2 + 0.3) / 3
                 ]), set(tsb.flush()))
 
@@ -138,7 +141,7 @@ class StatsdClientTest(unittest.TestCase):
         client.counting_stats.record('c', 1)
         client.flush()
         self.assertEquals(
-            ['c:1|c\nt:1000.0|ms'],
+            ['c:1|c\nt:1000.0|ms\nt:1|c'],
             client.conn.sock.datagrams)
 
 class CounterAndTimerTest(unittest.TestCase):
@@ -185,10 +188,15 @@ class CounterAndTimerTest(unittest.TestCase):
         t.send('x', 0, 0.5)
 
         self.assertEquals(
-            set([('t.a', '100.0|ms'),
+            set([('t.a', '1|c'),
+                 ('t.a', '100.0|ms'),
+                 ('t.b', '1|c'),
                  ('t.b', '100.0|ms'),
+                 ('t.c', '1|c'),
                  ('t.c', '100.0|ms'),
+                 ('t.t', '1|c'),
                  ('t.t', '400.0|ms'),
+                 ('t.x', '1|c'),
                  ('t.x', '500.0|ms')]),
             set(t.client.timing_stats.flush()))
         self.assertEquals(set(), set(t.client.timing_stats.flush()))

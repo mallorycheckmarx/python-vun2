@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ############################################################################### 
 """
@@ -66,27 +66,32 @@ def json_response(result):
 
 @application.route('/geoip/<ips>')
 def get_record(ips):
+    result = {}
+    ips = ips.split('+')
+
     if gi:
-        result = {ip: gi.record_by_addr(ip) for ip in ips.split('+')}
+        for ip in ips:
+            result[ip] = gi.record_by_addr(ip)
     elif gc:
-        result = {
-            ip : {
+        for ip in ips:
+            result[ip] = {
                 'country_code': gc.country_code_by_addr(ip),
                 'country_name': gc.country_name_by_addr(ip),
-            } for ip in ips.split('+')
-        }
-    else:
-        result = {}
+            }
 
     return json_response(result)
 
 
 @application.route('/org/<ips>')
 def get_organizations(ips):
+    result = {}
+    ips = ips.split('+')
+
     if go:
-        return json_response({ip: go.org_by_addr(ip) for ip in ips.split('+')})
-    else:
-        return json_response({})
+        for ip in ips:
+             result[ip] = go.org_by_addr(ip)
+
+    return json_response(result)
 
 
 if __name__ == "__main__":

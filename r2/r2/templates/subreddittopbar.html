@@ -16,13 +16,10 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%!
-   from r2.lib.template_helpers import format_html
-%>
 <%namespace file="utils.html" import="plain_link"/>
 
 <div id="sr-header-area">
@@ -41,7 +38,7 @@
       %>
     </div>
 
-    ${plain_link(format_html("%s &raquo;", _(editmore)),
+    ${plain_link(unsafe(_(editmore) + " &raquo;"),
                  "/subreddits/", id="sr-more-link")}
   </div>
 </div>

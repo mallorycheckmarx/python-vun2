@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -53,11 +53,11 @@ ${self.Child()}
    domain = get_domain(subreddit=False)
    permalink = "http://%s%s" % (domain, thing.permalink)
    if thing.likes == False:
-      arrow = "https://%s/static/widget_arrows_down.gif"
+      arrow = "http://%s/static/widget_arrows_down.gif"
    elif thing.likes:
-      arrow = "https://%s/static/widget_arrows_up.gif"
+      arrow = "http://%s/static/widget_arrows_up.gif"
    else:
-      arrow = "https://%s/static/widget_arrows.gif"
+      arrow = "http://%s/static/widget_arrows.gif"
    arrow = arrow % domain
    %>
   <a href="${permalink}" class="reddit-voting-arrows" target="_blank"

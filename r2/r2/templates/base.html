@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -35,9 +35,6 @@
     <meta name="description" content="${getattr(thing, 'short_description', None) or g.short_description}" />
     <meta name="referrer" content="${c.referrer_policy}">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    %if hasattr(thing, 'mobile_link'):
-        <link rel="alternate" media="only screen and (max-width: 640px)" href="${thing.mobile_link}" />
-    %endif
     ${self.viewport()}
     ${self.robots()}
     ${self.pagemeta()}
@@ -50,10 +47,7 @@
       ${self.javascript_run()}
     </script>
     <style type="text/css">
-      ## <style>s are treated as RAWTEXT segments, so we can't `websafe()` their contents.
-      ## According to the HTML spec's RAWTEXT parsing rules, this should work for escaping.
-      ## http://www.w3.org/TR/html5/syntax.html#rawtext-less-than-sign-state
-      ${unsafe(_("/* Custom css: use this block to insert special translation-dependent css in the page header */").replace("</", ""))}
+      ${unsafe(_("/* Custom css: use this block to insert special translation-dependent css in the page header */"))}
     </style>
 
     ${self.head()}
@@ -90,7 +84,19 @@ reddit, reddit.com, vote, comment, submit
 </%def>
 
 <%def name="head()">
-${googleanalytics('web', thing.is_gold_page() if hasattr(thing, 'is_gold_page') else False)}
+%if g.tracker_url and thing.site_tracking:
+<script type="text/javascript">
+    (function() {
+        var url = '${tracking.get_pageview_pixel_url()}';
+        var cachebuster = Math.round(Math.random() * 2147483647);
+        var cachebusted_url = url + "&r=" + cachebuster;
+        var img = new Image();
+        img.src = cachebusted_url;
+    })();
+</script>
+%endif
+
+${googleanalytics('web')}
 </%def>
 
 <%def name="pagemeta()">

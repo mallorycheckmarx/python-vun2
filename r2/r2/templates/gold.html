@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2014
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -132,12 +132,7 @@
 
       <section id="onetime" class="tab ${'active' if active_tab == 'onetime' else ''}">
         <h3>${_('How many months?')}</h3>
-        <%
-          append_or_somethings = None
-          if c.user_is_loggedin and c.user.gold_creddits > 0:
-              append_or_somethings = "creddits"
-        %>
-        ${gold_dropdown("months", thing.months, append_or_somethings=append_or_somethings)}
+        ${gold_dropdown("months", thing.months)}
 
         <section id="give-as-gift">
           <ul>
@@ -189,7 +184,7 @@
                       </label>
                     </li>
                     <li>
-                      <textarea rows="5" cols="30" name="giftmessage" id="giftmessage" placeholder="${_('enter your message')}" class="giftmessage" maxlength="500">${thing.giftmessage}</textarea>
+                      <textarea rows="5" cols="30" name="giftmessage" id="giftmessage" placeholder="${_('enter your message')}" class="giftmessage">${thing.giftmessage}</textarea>
                     </li>
                   </ul>
                 </div>

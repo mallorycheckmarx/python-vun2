@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -105,7 +105,6 @@ class TransactionSet(threading.local):
 transactions = TransactionSet()
 
 MAX_THING_ID = 9223372036854775807 # http://www.postgresql.org/docs/8.3/static/datatype-numeric.html
-MIN_THING_ID = 0
 
 def make_metadata(engine):
     metadata = sa.MetaData(engine)
@@ -269,7 +268,7 @@ def check_type(table, name, insert_vals):
     r = table.select(table.c.name == name).execute().fetchone()
     if not r:
         r = table.insert().execute(**insert_vals)
-        type_id = r.inserted_primary_key[0]
+        type_id = r.last_inserted_ids()[0]
     else:
         type_id = r.id
     return type_id
@@ -423,7 +422,7 @@ def make_thing(type_id, ups, downs, date, deleted, spam, id=None):
     def do_insert(t):
         transactions.add_engine(t.bind)
         r = t.insert().execute(**params)
-        new_id = r.inserted_primary_key[0]
+        new_id = r.last_inserted_ids()[0]
         new_r = r.last_inserted_params()
         for k, v in params.iteritems():
             if new_r[k] != v:
@@ -484,7 +483,7 @@ def make_relation(rel_type_id, thing1_id, thing2_id, name, date=None):
                                    name = name, 
                                    date = date)
         g.stats.event_count('rel.create', table.rel_name)
-        return r.inserted_primary_key[0]
+        return r.last_inserted_ids()[0]
     except sa.exc.DBAPIError, e:
         if not 'IntegrityError' in e.message:
             raise

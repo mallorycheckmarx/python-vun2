@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """
@@ -38,12 +38,10 @@ use on Amazon Elastic Beanstalk (and possibly other systems).
 
 
 import cStringIO
-import os
 import hashlib
 import hmac
 import time
 import urllib
-from urlparse import parse_qsl, urlparse, urlunparse
 
 from ConfigParser import RawConfigParser
 from wsgiref.handlers import format_date_time
@@ -66,8 +64,7 @@ class ApplicationConfig(object):
     """
     def __init__(self):
         self.input = RawConfigParser()
-        config_filename = os.environ.get("CONFIG", "production.ini")
-        with open(config_filename) as f:
+        with open("production.ini") as f:
             self.input.readfp(f)
         self.output = RawConfigParser()
 
@@ -90,8 +87,6 @@ class ApplicationConfig(object):
 
 config = ApplicationConfig()
 tracking_secret = config.get('DEFAULT', 'tracking_secret')
-reddit_domain = config.get('DEFAULT', 'domain')
-reddit_domain_prefix = config.get('DEFAULT', 'domain_prefix')
 
 
 @application.route("/")
@@ -101,7 +96,7 @@ def healthcheck():
 
 @application.route('/click')
 def click_redirect():
-    destination = request.args['url'].encode('utf-8')
+    destination = urllib.unquote(request.args['url'].encode('utf-8'))
     fullname = request.args['id'].encode('utf-8')
     observed_mac = request.args['hash']
 
@@ -112,75 +107,6 @@ def click_redirect():
     if not constant_time_compare(expected_mac, observed_mac):
         abort(403)
 
-    # fix encoding in the query string of the destination
-    destination = urllib.unquote(destination)
-    u = urlparse(destination)
-    if u.query:
-        u = _fix_query_encoding(u)
-        destination = u.geturl()
-
-    return _redirect_nocache(destination)
-
-
-@application.route('/event_redirect')
-def event_redirect():
-    destination = request.args['url'].encode('utf-8')
-
-    # Parse and avoid open redirects
-    netloc = "%s.%s" % (reddit_domain_prefix, reddit_domain)
-    u = urlparse(destination)._replace(netloc=netloc, scheme="https")
-
-    if u.query:
-        u = _fix_query_encoding(u)
-        destination = u.geturl()
-
-    return _redirect_nocache(destination)
-
-
-@application.route('/event_click')
-def event_click():
-    """Take in an evented request, append session data to payload, and redirect.
-
-    This is only useful for situations in which we're navigating from a request
-    that does not have session information - i.e. served from redditmedia.com.
-    If we want to track a click and the user that did so from these pages,
-    we need to identify the user before sending the payload.
-
-    Note: If we add hmac validation, this will need verify and resign before
-    redirecting. We can also probably drop a redirect here once we're not
-    relying on log files for event tracking and have a proper events endpoint.
-    """
-    try:
-        session_str = urllib.unquote(request.cookies.get('reddit_session', ''))
-        user_id = int(session_str.split(',')[0])
-    except ValueError:
-        user_id = None
-
-    args = request.args.to_dict()
-    if user_id:
-        payload = args.get('data').encode('utf-8')
-        try:
-            payload_json = json.loads(payload)
-        except ValueError:
-            # if we fail to load the JSON, continue on to the redirect to not
-            # block the user - ETL can deal with/report the malformed data.
-            pass
-        else:
-            payload_json['user_id'] = user_id
-            args['data'] = json.dumps(payload_json)
-
-    return _redirect_nocache('/event_redirect?%s' % urllib.urlencode(args))
-
-
-def _fix_query_encoding(parse_result):
-    "Fix encoding in the query string."
-    query_dict = dict(parse_qsl(parse_result.query))
-
-    # this effectively calls urllib.quote_plus on every query value
-    return parse_result._replace(query=urllib.urlencode(query_dict))
-
-
-def _redirect_nocache(destination):
     now = format_date_time(time.time())
     response = redirect(destination)
     response.headers['Cache-control'] = 'no-cache'

@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2014 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -52,48 +52,6 @@ class UtilsTest(unittest.TestCase):
         expect('y', 4)
         expect('z', 5)
         self.assertRaises(ValueError, expect, None, 6)
-
-    def test_extract_subdomain(self):
-        self.assertEquals(
-            utils.extract_subdomain('beta.reddit.com', 'reddit.com'),
-            'beta')
-
-        self.assertEquals(
-            utils.extract_subdomain('beta.reddit.local:8000', 'reddit.local'),
-            'beta')
-
-        self.assertEquals(
-            utils.extract_subdomain('reddit.com', 'reddit.com'),
-            '')
-
-        self.assertEquals(
-            utils.extract_subdomain('internet-frontpage.com', 'reddit.com'),
-            '')
-
-    def test_coerce_url_to_protocol(self):
-        self.assertEquals(
-            utils.coerce_url_to_protocol('http://example.com/foo'),
-            'http://example.com/foo')
-
-        self.assertEquals(
-            utils.coerce_url_to_protocol('https://example.com/foo'),
-            'http://example.com/foo')
-
-        self.assertEquals(
-            utils.coerce_url_to_protocol('//example.com/foo'),
-            'http://example.com/foo')
-
-        self.assertEquals(
-            utils.coerce_url_to_protocol('http://example.com/foo', 'https'),
-            'https://example.com/foo')
-
-        self.assertEquals(
-            utils.coerce_url_to_protocol('https://example.com/foo', 'https'),
-            'https://example.com/foo')
-
-        self.assertEquals(
-            utils.coerce_url_to_protocol('//example.com/foo', 'https'),
-            'https://example.com/foo')
 
 
 class TestCanonicalizeEmail(unittest.TestCase):
