@@ -313,12 +313,12 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
             secure_media_object = None
 
         # If thumbnail can't be found, attempt again using _ThumbnailOnlyScraper
-        # This should fix bugs that occur when embed.ly caches links before the thumbnail is available
-        if not thumbnail_image:
+        # This should fix bugs that occur when embed.ly caches links before the 
+        # thumbnail is available
+        if type(scraper) is _EmbedlyScraper and not thumbnail_image:
             scraper = _ThumbnailOnlyScraper(url)
             try:
-                thumbnail_image, preview_object, _, _ = (
-                    scraper.scrape())
+                thumbnail_image, preview_object, _, _ = (scraper.scrape())
             except (HTTPError, URLError) as e:
                 use_cache = False
 
