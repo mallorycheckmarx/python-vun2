@@ -1303,6 +1303,10 @@ class Subreddit(Thing, Printable, BaseSite):
             #   saved properly unless we assign a new list to the attr
             sticky_fullnames = self.sticky_fullnames[:]
 
+            # if the link is already stickied, remove it to prevent duplicates
+            if link._fullname in sticky_fullnames:
+                sticky_fullnames.remove(link._fullname)
+
             # if a particular slot was specified and is in use, replace it
             if num and num <= len(sticky_fullnames):
                 unstickied_fullnames.append(sticky_fullnames[num-1])
