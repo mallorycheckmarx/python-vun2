@@ -55,6 +55,10 @@ def this_may_view(page):
     if user and c.user_is_admin:
         return True
     return may_view(c.site, user, page)
+    
+    if sr.is_moderator_with_perms(user, 'wiki'):
+        # Mods with 'wiki' permissions may view config
+        return True
 
 def may_revise(sr, user, page=None):    
     if sr.is_moderator_with_perms(user, 'wiki'):
