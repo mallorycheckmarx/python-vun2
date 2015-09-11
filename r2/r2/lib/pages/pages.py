@@ -501,19 +501,7 @@ class Reddit(Templated):
             if is_moderator_with_perms('flair'):
                 buttons.append(NamedButton("flair", css_class="reddit-flair"))
 
-        if is_single_subreddit and is_moderator_with_perms('wiki'):
-            # append automod button if they have an AutoMod configuration
-            try:
-                WikiPage.get(c.site, "config/automoderator")
-                buttons.append(NamedButton(
-                    "automod",
-                    dest="../wiki/config/automoderator",
-                    css_class="reddit-automod",
-                ))
-            except tdb_cassandra.NotFound:
-                pass
-
-        if is_single_subreddit and is_moderator_with_perms('config'):
+        if is_single_subreddit and is_moderator_with_perms('wiki') or is_moderator_with_perms('config'):
             # append automod button if they have an AutoMod configuration
             try:
                 WikiPage.get(c.site, "config/automoderator")
