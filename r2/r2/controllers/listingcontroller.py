@@ -30,7 +30,7 @@ from r2.models import *
 from r2.models.query_cache import CachedQuery, MergedCachedQuery
 from r2.config.extensions import is_api
 from r2.lib.filters import _force_unicode
-from r2.lib.jsontemplates import get_usertrophies
+from r2.lib.jsontemplates import get_usertrophies, TrimmedSubredditJsonTemplate
 from r2.lib.pages import *
 from r2.lib.pages.things import wrap_links
 from r2.lib.menus import TimeMenu, SortMenu, RecSortMenu, ProfileSortMenu
@@ -976,6 +976,29 @@ class UserController(ListingController):
         if not is_api():
             return self.abort404()
         return self.api_wrapper(get_usertrophies(user))
+
+    @validate(user=VExistingUname('username'))
+    @api_doc(section=api_section.users, uri='/user/{username}/moderated')
+    def GET_moderated_srs(self, user):
+        """Gets a list of subreddits moderated by this user."""
+        if not is_api():
+            return self.abort404()
+
+        if not user:
+            return self.abort404()
+
+        mod_sr_ids = Subreddit.reverse_moderator_ids(user)
+        all_mod_srs = Subreddit._byID(mod_sr_ids, data=True,
+                                      return_dict=False, stale=True)
+        mod_srs = [sr for sr in all_mod_srs if sr.can_view_in_modlist(c.user)]
+
+        if not mod_srs:
+            return self.api_wrapper([])
+
+        templ = TrimmedSubredditJsonTemplate()
+        resp = [templ.render(sr).finalize() for sr in mod_srs]
+
+        return self.api_wrapper(resp)
 
 
 class MessageController(ListingController):

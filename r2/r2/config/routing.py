@@ -143,6 +143,7 @@ def make_map(config):
     mc('/user/:username/about', controller='user', action='about',
        where='overview')
     mc('/user/:username/trophies', controller='user', action='trophies')
+    mc('/user/:username/moderated', controller='user', action='moderated_srs')
     mc('/user/:username/:where', controller='user', action='listing',
        where='overview')
     mc('/user/:username/saved/:category', controller='user', action='listing',
