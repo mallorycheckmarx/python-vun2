@@ -501,6 +501,14 @@ class TrimmedSubredditJsonTemplate(SubredditJsonTemplate):
         else:
             return SubredditJsonTemplate.thing_attr(self, thing, attr)
 
+class SubredditSidebarJsonTemplate(SubredditJsonTemplate):
+    _data_attrs_ = dict(
+        usertext_md="description",
+        usertext_html="description_html",
+    )
+
+    def kind(self, wrapped):
+        return "SubredditSidebar"
 
 class IdentityJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(

@@ -514,7 +514,7 @@ class FrontController(RedditController):
 
     @pagecache_policy(PAGECACHE_POLICY.LOGGEDIN_AND_LOGGEDOUT)
     @require_oauth2_scope("modconfig")
-    @api_doc(api_section.moderation, uses_site=True)
+    @api_doc(api_section.subreddits, uses_site=True)
     def GET_stylesheet(self):
         """Redirect to the subreddit's stylesheet if one exists.
 
@@ -846,7 +846,12 @@ class FrontController(RedditController):
     @validate(location=nop('location'),
               created=VOneOf('created', ('true','false'),
                              default='false'))
-    @api_doc(api_section.subreddits, uri="/r/{subreddit}/about/edit")
+    @api_doc(api_section.subreddits,
+             uses_site=True,
+             uri='/about/{location}',
+             uri_variants=['/about/' + loc for loc in
+                      ('edit', 'stylesheet', 'traffic')]
+             )
     def GET_editreddit(self, location, created):
         """Get the current settings of a subreddit.
 
@@ -874,14 +879,22 @@ class FrontController(RedditController):
         return Reddit(content=item).render()
 
     @require_oauth2_scope("read")
-    @api_doc(api_section.subreddits, uses_site=True)
+    @api_doc(api_section.subreddits, uri='/r/{subreddit}/about/sidebar')
     def GET_sidebar(self):
         """Get the sidebar for the current subreddit"""
-        usertext = UserText(c.site, c.site.description)
-        return Reddit(content=usertext).render()
+        if isinstance(c.site, FakeSubreddit):
+            return self.abort404()
+        if is_api():
+            templ = jsontemplates.SubredditSidebarJsonTemplate()
+            resp = templ.render(c.site).finalize()
+            usertext = self.api_wrapper(resp)
+            return usertext
+        else:
+            usertext = UserText(c.site, c.site.description)
+            return Reddit(content=usertext).render()
 
     @require_oauth2_scope("read")
-    @api_doc(api_section.subreddits, uses_site=True)
+    @api_doc(api_section.subreddits, uri='/r/{subreddit}/about/sticky')
     @validate(
         num=VInt("num",
             min=1, max=Subreddit.MAX_STICKIES, num_default=1, coerce=True),
