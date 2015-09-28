@@ -107,7 +107,7 @@ ${self.RenderPrintable()}
       rowclass += " user-gilded"
     if getattr(what, "stickied", False):
       rowclass += " stickied"
-    if getattr(what, "is_controversial", False) and c.user.pref_highlight_controversial:
+    if getattr(what, "is_controversial", False):
       rowclass += " controversial"
   %>
   ${rowstyle}&#32;${rowclass}
@@ -131,6 +131,14 @@ ${self.RenderPrintable()}
 
     % if hasattr(what, 'adserver_click_url'):
       data-adserver-click-url="${what.adserver_click_url}"
+    % endif
+
+    % if hasattr(what, 'third_party_tracking_url'):
+      data-third-party-tracking-url="${what.third_party_tracking_url}"
+    % endif
+
+    % if hasattr(what, 'third_party_tracking_url_2'):
+      data-third-party-tracking-two-url="${what.third_party_tracking_url_2}"
     % endif
 </%def>
 
@@ -221,12 +229,8 @@ ${self.RenderPrintable()}
   </div>
 </%def>
 
-<%def name="score(this, likes=None, scores = None, tag='span')" >
-  <%
-     if scores is None:
-        scores = this.display_score
-   %>
-  %for cls, score in zip(["dislikes", "unvoted", "likes"], scores):
+<%def name="score(thing, tag='span')" >
+  %for cls, score in zip(["dislikes", "unvoted", "likes"], thing.display_score):
     <${tag} class="score ${cls}">
       ${score}
     </${tag}>

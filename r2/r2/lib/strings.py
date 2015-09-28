@@ -23,21 +23,22 @@
 """
 Module for maintaining long or commonly used translatable strings,
 removing the need to pollute the code with lots of extra _ and
-ungettext calls.  Also provides a capacity for generating a list of
-random strings which can be different in each language, though the
-hooks to the UI are the same.
+ungettext calls.
 """
 
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _, ungettext, get_lang
 import random
 import babel.numbers
 
 from r2.lib.filters import websafe
+from r2.lib.generate_strings import funny_translatable_strings
 from r2.lib.translation import set_lang
 
+
 __all__ = ['StringHandler', 'strings', 'PluralManager', 'plurals',
-           'Score', 'rand_strings']
+           'Score', 'get_funny_translated_string']
 
 # here's where all of the really long site strings (that need to be
 # translated) live so as not to clutter up the rest of the code.  This
@@ -47,6 +48,9 @@ string_dict = dict(
 
     banned_by = "removed by %s",
     banned    = "removed",
+    times_banned="removed %d times",
+    time_banned="removed at %s",
+    time_approved="approved at %s",
     reports   = "reports: %d",
     
     submitting = _("submitting..."),
@@ -69,11 +73,8 @@ string_dict = dict(
 
     user_deleted = _("your account has been deleted, but we won't judge you for it."),
 
-    cover_msg      = _("you'll need to sign in or create an account to do that"),
-    cover_disclaim = _("(don't worry, it only takes a few seconds)"),
-
     oauth_login_msg = _(
-        "Sign in or create an account to connect your reddit account with %(app)s."),
+        "Log in or sign up to connect your reddit account with %(app)s."),
 
     legal = _("I understand and agree that registration on or use of this site constitutes agreement to its %(user_agreement)s and %(privacy_policy)s."),
 
@@ -100,33 +101,23 @@ string_dict = dict(
     link_info_og_description = _("%(score)s points and %(num_comments)s comments so far on reddit"),
 
 
-    banned_subreddit_title = _("this subreddit has been banned"),
-    banned_subreddit_message = _("most likely this was done automatically by our spam filtering program. the program is still learning, and may even have some bugs, so if you feel the ban was a mistake, please submit a link to our [request a subreddit listing](%(link)s) and be sure to include the **exact name of the subreddit**."),
-    gold_only_subreddit_title = _("this subreddit is for gold members"),
-    gold_only_subreddit_message = _("you must have [reddit gold](/gold/about) to view this super secret subreddit ^[beta](/gold/about#gold-only-subreddits)"),
-    private_subreddit_title = _("this subreddit is private"),
-    private_subreddit_message = _("the moderators of this subreddit have set it to private. you must be a moderator or approved submitter to view its contents."),
     comments_panel_text = _("""The following is a sample of what Reddit users had to say about this page. The full discussion is available [here](%(fd_link)s); you can also get there by clicking the link's title (in the middle of the toolbar, to the right of the comments button)."""),
 
     submit_link = _("""You are submitting a link. The key to a successful submission is interesting content and a descriptive title."""),
     submit_text = _("""You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Beginning your title with "vote up if" is violation of intergalactic law."""),
     submit_link_label = _("Submit a new link"),
     submit_text_label = _("Submit a new text post"),
-    compact_suggest = _("Looks like you're browsing on a small screen. Would you like to try [reddit's mobile interface](%(url)s)?"),
     verify_email = _("we're going to need to verify your email address for you to proceed."),
     verify_email_submit = _("you'll be able to submit more frequently once you verify your email address"),
     email_verified =  _("your email address has been verified"),
     email_verify_failed = _("Verification failed.  Please try that again"),
-    email_verify_wrong_user = _("The email verification link you've followed is for a different user. Please sign out and switch to that user or try again below."),
+    email_verify_wrong_user = _("The email verification link you've followed is for a different user. Please log out and switch to that user or try again below."),
     search_failed = _("Our search machines are under too much load to handle your request right now. :( Sorry for the inconvenience. Try again in a little bit -- but please don't mash reload; that only makes the problem worse."),
     invalid_search_query = _("I couldn't understand your query, so I simplified it and searched for \"%(clean_query)s\" instead."),
     completely_invalid_search_query = _("I couldn't understand your search query. Please try again."),
     search_help = _("You may also want to check the [search help page](%(search_help)s) for more information."),
     formatting_help_info = _('reddit uses a slightly-customized version of [Markdown](http://daringfireball.net/projects/markdown/syntax) for formatting. See below for some basics, or check [the commenting wiki page](/wiki/commenting) for more detailed help and solutions to common issues.'),
-    generic_quota_msg = _("You've submitted too many links recently. Please try again in an hour."),
-    verified_quota_msg = _("Looks like you're either a brand new user or your posts have not been doing well recently. You may have to wait a bit to post again. In the meantime feel free to [check out the reddiquette](%(reddiquette)s) or join the conversation in a different thread."),
-    unverified_quota_msg = _("Looks like you're either a brand new user or your posts have not been doing well recently. You may have to wait a bit to post again. In the meantime feel free to [check out the reddiquette](%(reddiquette)s), join the conversation in a different thread, or [verify your email address](%(verify)s)."),
-    read_only_msg = _("reddit is in \"emergency read-only mode\" right now. :( you won't be able to sign in. we're sorry, and are working frantically to fix the problem."),
+    read_only_msg = _("Reddit is in \"emergency read-only mode\" right now. :( You won't be able to log in. We're sorry and are working frantically to fix the problem."),
     heavy_load_msg = _("this page is temporarily in read-only mode due to heavy traffic."),
     gold_benefits_msg = _("reddit gold is reddit's premium membership program. Here are the benefits:\n\n* [Extra site features](/gold/about)\n* [Extra perks](/gold/partners)\n* Discuss and get help on the features and perks at /r/goldbenefits"),
     lounge_msg = _("Grab a drink and join us in /r/lounge, the super-secret members-only community that may or may not exist."),
@@ -153,7 +144,9 @@ string_dict = dict(
     gold_summary_gilding_page_link = _("You're about to give *%(recipient)s* a month of [reddit gold](/gold/about) for this submission:"),
     gold_summary_gilding_page_footer = _("You'll pay a total of %(price)s for this."),
     unvotable_message = _("sorry, this has been archived and can no longer be voted on"),
-    account_activity_blurb = _("This page shows a history of recent activity on your account. If you notice unusual activity, you should change your password immediately. Location information is guessed from your computer's IP address and may be wildly wrong, especially for visits from mobile devices. Note: due to a bug, private-use addresses (starting with 10.) sometimes show up erroneously in this list after regular use of the site."),
+    archived_post_message = _("This is an archived post. You won't be able to vote or comment."),
+    locked_post_message = _("This post is locked. You won't be able to comment."),
+    account_activity_blurb = _("This page shows a history of recent activity on your account. If you notice unusual activity, you should change your password immediately. Location information is guessed from your computer's IP address and may be wildly wrong, especially for visits from mobile devices."),
     your_current_ip_is = _("You are currently accessing reddit from this IP address: %(address)s."),
     account_activity_apps_blurb = _("""
 These apps are authorized to access your account. Signing out of all sessions
@@ -351,93 +344,11 @@ def fallback_trans(x):
             set_lang(l[0])
     return t
 
-class RandomString(object):
-    """class for generating a translatable random string that is one
-    of n choices.  The 'description' field passed to the constructor
-    is only used to generate labels for the translation interface.
 
-    Unlike other translations, this class is accessed directly by the
-    translator classes and side-step babel.extract_messages.
-    Untranslated, the strings return are of the form 'description n+1'
-    for the nth string.  The user-facing versions of these strings are
-    therefore completely determined by their translations."""
-    def __init__(self, description, num):
-        self.desc = description
-        self.num = num
-
-    def get(self, quantity = 0):
-        """Generates a list of 'quantity' random strings.  If quantity
-        < self.num, the entries are guaranteed to be unique."""
-        l = []
-        possible = []
-        for x in range(max(quantity, 1)):
-            if not possible:
-                possible = range(self.num)
-            irand = random.choice(possible)
-            possible.remove(irand)
-            l.append(fallback_trans(self._trans_string(irand)))
-
-        return l if len(l) > 1 else l[0]
-
-    def _trans_string(self, n):
-        """Provides the form of the string that is actually translated by gettext."""
-        return "%s %d" % (self.desc, n+1)
-
-    def __iter__(self):
-        for i in xrange(self.num):
-            yield self._trans_string(i)
-
-
-class RandomStringManager(object):
-    """class for keeping randomized translatable strings organized.
-    New strings are added via add, and accessible by either getattr or
-    getitem using the short name passed to add."""
-    def __init__(self):
-        self.strings = {}
-
-    def __getitem__(self, attr):
-        return self.strings[attr].get()
-
-    def __getattr__(self, attr):
-        try:
-            return self[attr]
-        except KeyError:
-            raise AttributeError
-
-    def get(self, attr, quantity = 0):
-        """Convenience method for getting a list of 'quantity' strings
-        from the RandomString named 'attr'"""
-        return self.strings[attr].get(quantity)
-
-    def add(self, name, description, num):
-        """create a new random string accessible by 'name' in the code
-        and explained in the translation interface with 'description'."""
-        self.strings[name] = RandomString(description, num)
-
-    def __iter__(self):
-        """iterator primarily used by r2.lib.translations to fetch the
-        list of random strings and to iterate over their names to
-        insert them into the resulting .po file for a given language"""
-        return self.strings.iteritems()
-
-rand_strings = RandomStringManager()
-
-rand_strings.add('sadmessages',   "Funny 500 page message", 10)
-rand_strings.add('create_reddit', "Reason to create a reddit", 20)
-
-
-def generate_strings():
-    """Print out automatically generated strings for translation."""
-
-    # used by error pages and in the sidebar for why to create a subreddit
-    for name, rand_string in rand_strings:
-        for string in rand_string:
-            print "# TRANSLATORS: Do not translate literally. Come up with a funny/relevant phrase (see the English version for ideas.) Accepts markdown formatting."
-            print "print _('" + string + "')"
-
-    # these are used in r2.lib.pages.trafficpages
-    INTERVALS = ("hour", "day", "month")
-    TYPES = ("uniques", "pageviews", "traffic", "impressions", "clicks")
-    for interval in INTERVALS:
-        for type in TYPES:
-            print "print _('%s by %s')" % (type, interval)
+def get_funny_translated_string(category, num=1):
+    strings = random.sample(funny_translatable_strings[category], num)
+    ret = [fallback_trans(string) for string in strings]
+    if len(ret) == 1:
+        return ret[0]
+    else:
+        return ret

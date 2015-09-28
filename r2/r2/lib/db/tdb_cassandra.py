@@ -26,7 +26,7 @@ import pytz
 from datetime import datetime
 from socket import gethostbyaddr
 
-from pylons import g
+from pylons import app_globals as g
 
 from pycassa import ColumnFamily
 from pycassa.pool import MaximumRetryException
@@ -34,6 +34,7 @@ from pycassa.cassandra.ttypes import ConsistencyLevel, NotFoundException
 from pycassa.system_manager import (
     ASCII_TYPE,
     COUNTER_COLUMN_TYPE,
+    DATE_TYPE,
     INT_TYPE,
     SystemManager,
     TIME_UUID_TYPE,

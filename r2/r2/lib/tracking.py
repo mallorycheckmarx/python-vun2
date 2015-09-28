@@ -26,7 +26,9 @@ import base64
 import hashlib
 import urllib
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.lib.filters import _force_utf8
 
@@ -149,23 +151,27 @@ def get_srpath():
     return '-'.join((name, action))
 
 
-def get_pageview_pixel_url():
-    """Return a URL to use for tracking pageviews for the current request."""
+def _get_encrypted_user_slug():
+    """Return an encrypted string containing context info."""
     data = [
         c.user._id36 if c.user_is_loggedin else "",
         get_srpath(),
         c.lang or "",
         c.cname,
     ]
-    encrypted = encrypt("|".join(_force_utf8(s) for s in data))
-    return g.tracker_url + "?v=" + encrypted
+    return encrypt("|".join(_force_utf8(s) for s in data))
+
+
+def get_pageview_pixel_url():
+    """Return a URL to use for tracking pageviews for the current request."""
+    return g.tracker_url + "?v=" + _get_encrypted_user_slug()
 
 
 def get_impression_pixel_url(codename):
     """Return a URL to use for tracking impressions of the given advert."""
     # TODO: use HMAC here
     mac = codename + hashlib.sha1(codename + g.tracking_secret).hexdigest()
-    return g.adframetracker_url + "?" + urllib.urlencode({
-        "hash": mac,
-        "id": codename,
-    })
+    v_param = "?v=%s&" % _get_encrypted_user_slug()
+    hash_and_id_params = urllib.urlencode({"hash": mac,
+                                           "id": codename,})
+    return g.adframetracker_url + v_param + hash_and_id_params

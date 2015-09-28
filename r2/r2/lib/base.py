@@ -20,7 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request, session, config, response
+from pylons import request, session, config, response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.controllers import WSGIController
 from pylons.i18n import N_, _, ungettext, get_lang
 from webob.exc import HTTPException, status_map
@@ -29,6 +31,7 @@ from r2.lib.template_helpers import get_domain
 from utils import string2js, read_http_date
 
 import re, hashlib
+from Cookie import CookieError
 from urllib import quote
 import urllib2
 import sys
@@ -69,6 +72,7 @@ class BaseController(WSGIController):
         pass
 
     def __before__(self):
+        self.fix_cookie_header()
         self.pre()
         self.try_pagecache()
 
@@ -85,18 +89,13 @@ class BaseController(WSGIController):
         assert forwarded_proto in ("http", "https")
         request.environ["wsgi.url_scheme"] = forwarded_proto
 
-        true_client_ip = environ.get('HTTP_TRUE_CLIENT_IP')
-        ip_hash = environ.get('HTTP_TRUE_CLIENT_IP_HASH')
         forwarded_for = environ.get('HTTP_X_FORWARDED_FOR', ())
         remote_addr = environ.get('REMOTE_ADDR')
 
         request.via_cdn = False
-        if (g.secrets["true_ip"]
-            and true_client_ip
-            and ip_hash
-            and hashlib.md5(true_client_ip + g.secrets["true_ip"]).hexdigest() \
-            == ip_hash.lower()):
-            request.ip = true_client_ip
+        cdn_ip = g.cdn_provider.get_client_ip(environ)
+        if cdn_ip:
+            request.ip = cdn_ip
             request.via_cdn = True
         elif g.trust_local_proxies and forwarded_for and is_local_address(remote_addr):
             request.ip = forwarded_for.split(',')[-1]
@@ -126,10 +125,11 @@ class BaseController(WSGIController):
             if meth == 'HEAD':
                 meth = 'GET'
 
-            if meth != 'OPTIONS':
-                handler_name = meth + '_' + action
-            else:
+            if (meth == 'OPTIONS' and
+                    self._get_action_handler(action, meth) is None):
                 handler_name = meth
+            else:
+                handler_name = meth + '_' + action
 
             request.environ['pylons.routes_dict']['action_name'] = action
             request.environ['pylons.routes_dict']['action'] = handler_name
@@ -138,6 +138,30 @@ class BaseController(WSGIController):
 
     def pre(self): pass
     def post(self): pass
+
+    def fix_cookie_header(self):
+        """
+        Detect and drop busted `Cookie` headers
+
+        We get all sorts of invalid `Cookie` headers. Just one example:
+
+            Cookie: fo,o=bar; expires=1;
+
+        Normally you'd do this in middleware, but `webob.cookie`'s API
+        is fairly volatile while `webob.request`'s isn't. It's easier to
+        do this once we've got a valid `Request` object.
+        """
+        try:
+            # Just accessing this will cause `webob` to attempt a parse,
+            # telling us if the header's broken.
+            request.cookies
+        except (CookieError, KeyError):
+            # Someone sent a janked up cookie header, and `webob` exploded.
+            # just pretend we didn't receive one at all.
+            cookie_val = request.environ.get('HTTP_COOKIE', '')
+            request.environ['HTTP_COOKIE'] = ''
+            g.log.warning("Cleared bad cookie header: %r" % cookie_val)
+            g.stats.simple_event("cookie.bad_cookie_header")
 
     def _get_action_handler(self, name=None, method=None):
         name = name or request.environ["pylons.routes_dict"]["action_name"]
@@ -179,17 +203,16 @@ class BaseController(WSGIController):
             abort(400)
         return rv
 
-
     @classmethod
-    def intermediate_redirect(cls, form_path, sr_path=True):
+    def intermediate_redirect(cls, form_path, sr_path=True, fullpath=None):
         """
-        Generates a /login or /over18 redirect from the current
+        Generates a /login or /over18 redirect from the specified or current
         fullpath, after having properly reformated the path via
         format_output_url.  The reformatted original url is encoded
         and added as the "dest" parameter of the new url.
         """
         from r2.lib.template_helpers import add_sr
-        params = dict(dest=cls.format_output_url(request.fullurl))
+        params = dict(dest=cls.format_output_url(fullpath or request.fullurl))
         if c.extension == "widget" and request.GET.get("callback"):
             params['callback'] = request.GET.get("callback")
 

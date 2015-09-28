@@ -21,29 +21,43 @@
 ###############################################################################
 
 <%!
+    from r2.config import feature
     from r2.lib.pages import WrappedUser
     from r2.lib.template_helpers import add_sr, _wsf
 %>
 <%namespace file="printable.compact" import="delete_report_buttons"/>
 <%namespace file="printable.html" import="arrow, score, thing_css_rowclass"/>
-<%namespace file="utils.html" import="plain_link" />
+<%namespace file="utils.html" import="plain_link, nsfw_stamp, quarantine_stamp" />
 <%namespace file="utils.compact" import="icon_button" />
 <%namespace file="printablebuttons.html" import="simple_button"/>
 
 <div class="thing comment id-${thing._fullname} ${thing_css_rowclass(thing)}">
+  %if not thing.deleted:
+    <p class="parent"><a name="${thing._id36}"></a></p>
+  %endif
   %if c.profilepage:
     %if thing.link: 
       %if thing.link.title:
            %if thing.link.is_self:
              <a href="${add_sr(thing.link.url)}" class="title">
            %else:
-             <a href="/tb/${thing.link._id36}.compact" class="title">
+             <a href="${thing.link.url}" class="title">
            %endif
           ${thing.link.title}
         </a>
       %else:
           ${thing.link.url}
       %endif
+    %endif
+    %if thing.subreddit.quarantine:
+      <span class="quarantine-warning">
+        ${quarantine_stamp()}
+      </span>
+    %endif
+    %if thing.nsfw:
+      <span class="nsfw-warning">
+        ${nsfw_stamp()}
+      </span>
     %endif
   %endif
   <Div class="midcol">
@@ -63,7 +77,7 @@
      %if thing.score_hidden:
        [${_("score hidden")}]
      %else:
-       ${score(thing, thing.likes, tag='span')}
+       ${score(thing, tag='span')}
      %endif
      &#32;
      ## thing.timesince is a cache stub
@@ -90,7 +104,7 @@
             %if c.profilepage:
                 ${icon_button("Context", "context-icon", thing.permalink + ".compact?context=3")}
             %elif thing.parent_permalink:
-                ${icon_button("Parent", "parent-icon", thing.parent_permalink + ".compact")}
+                ${icon_button("Parent", "parent-icon", thing.parent_permalink)}
             %endif
             %if thing.is_author:
                 ${icon_button("Edit", "edit-icon", onclick="return edit_usertext(this)", outer_class="edit-button")}

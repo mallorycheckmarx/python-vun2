@@ -95,7 +95,7 @@ ${first_defined(kw[1:])}
   <div class="c-form-group ${'c-has-feedback c-has-error' if (error and kwargs['show_errors']) else ''}">
     ${caller.body()}
     %if kwargs['show_errors']:
-      <div class="c-form-control-feedback-wrapper">
+      <div class="c-form-control-feedback-wrapper ${'inside-input' if kwargs.get('feedback_inside_input') else ''}">
         <span class="c-form-control-feedback c-form-control-feedback-throbber"></span>
         <span class="c-form-control-feedback c-form-control-feedback-error" title="${_(error.message) if error else ''}"></span>
         <span class="c-form-control-feedback c-form-control-feedback-success"></span>
@@ -112,22 +112,6 @@ ${first_defined(kw[1:])}
      ${c.errors[error_key].message}
    %endif
   </${kind}>
-</%def>
-
-<%def name="success_field(success_str, kind='p', successful=False, hide='')">
-<${kind} class="error success">
-  %if successful:
-  ${success_str}
-  %endif
-</${kind}>
-<script type="text/javascript">
-  function fire_success() {
-  $('success').innerHTML = "${success_str}";
-  %if hide:
-  hide(document.getElementById('${hide}'));
-  %endif
-  }
-</script>
 </%def>
 
 <%def name="img_link(link_text, img, path, _id='', target='', img_id=None, size=None, **kw)">
@@ -270,6 +254,7 @@ ${unsafe(txt)}
     <script type="text/javascript">
       function completedUploadImage (status, img_src, name, errors, form_id) {
         /* should only be called when the uploaded file is too large */
+        form_id = $.with_default(form_id, "${form_id}");
         if (status == "failed") {
           $("#${form_id}").find(".status").html("");
           for (var i in errors) {
@@ -282,6 +267,28 @@ ${unsafe(txt)}
     <iframe src="about:blank" name="${form_id}-iframe" id="${form_id}-iframe">
     </iframe>
   </form>
+</%def>
+
+
+<%def name="image_upload_inline(form_id='file', field_id='inline-file')">
+  <div id="${field_id}">
+    <input type="file" name="${form_id}" id="${form_id}">
+    ${error_field("IMAGE_ERROR", "span")}
+    <script>
+      function completedUploadImage (status, img_src, name, errors, form_id) {
+        if (status == 'failed') {
+          var $form = $('#${field_id}');
+          $form.find('.status').html('');
+          for (var i in errors) {
+            $form.find('.error.' + errors[i][0])
+                .show().text(errors[i][1]);
+          }
+          var top = $form.position().top;
+          $(window).scrollTop(top);
+        }
+      }
+    </script>
+  </div>
 </%def>
 
 <%def name="image_upload(post_target, current_image = None, onsubmit = '', 
@@ -319,7 +326,7 @@ ${unsafe(txt)}
                  onchange="$(this).next().prop('disabled', false); ${onchange}"/>
           <button id="submit-img" class="submit-img primary-button"
                   type="submit" name="upload" 
-                  onclick="$(this).siblings('.img-status').show().text('${jssafe(_('uploading'))}'); return true;"
+                  onclick="$(this).parent().addClass('uploading').find('.img-status').show().text('${jssafe(_('uploading'))}'); return true;"
                   disabled>
             ${_('upload')}
           </button>
@@ -331,8 +338,9 @@ ${unsafe(txt)}
        function create_new_image(name) {}
 
        function completedUploadImage(status, img_src, name, errors, form_id) {
-           form_id = $.with_default(form_id, "${form_id}");
-           var form = $("#" + form_id);
+           var form = form_id ? $("#" + form_id) : $('form.image-upload.uploading');
+           form.removeClass('uploading');
+
            if (status) 
                form.find(".img-status").show().html(status);
            else
@@ -418,6 +426,7 @@ ${unsafe(txt)}
         ['_setCustomVar', 2, 'srpath', '${tracking.get_srpath()}', 3],
         ['_setCustomVar', 3, 'usertype', user_type, 2],
         ['_setCustomVar', 4, 'uitype', '${uitype}', 3],
+        ['_setCustomVar', 5, 'style_override', '${jssafe(c.user.pref_default_theme_sr)}', 2],
         %if g.googleanalytics_sample_rate:
         ['_setSampleRate', '${g.googleanalytics_sample_rate}'],
         %endif
@@ -482,23 +491,6 @@ ${unsafe(txt)}
   </form>
 </%def>
 
-<%def name="block_field(title, description = '', css_class= '', **kw)">
-  <div class="roundfield ${css_class}"
-       %for k, v in kw.iteritems():
-         ${k}="${v}"
-       %endfor
-       >
-    <span class="title">${title}</span>
-    &#32;
-    %if description:
-      <span class="gray">${description}</span>
-    %endif
-    <div class="roundfield-content">
-      ${caller.body()}
-    </div>
-  </div>
-</%def>
-
 <%def name="block_field(kind, title, description = '', css_class= '', **kw)">
   <div class="${kind} ${css_class}"
        %for k, v in kw.iteritems():
@@ -508,7 +500,7 @@ ${unsafe(txt)}
     <span class="title">${title}</span>
     &#32;
     %if description:
-      <span class="gray">${description}</span>
+      <span class="little gray">${description}</span>
     %endif
     <div class="${kind}-content">
       ${caller.body()}
@@ -583,6 +575,10 @@ ${unsafe(txt)}
   </time>
 </%def>
 
+<%def name="buffered_timestamp(date, since=None, live=False, include_tense=False)" buffered="True">
+  ${timestamp(date, since, live, include_tense)}
+</%def>
+
 <%def name="thing_timestamp(thing, since=None, live=False, include_tense=False)">
   ## todo: use pubdate attribute once things are <article> tags.
   ## note: comment and link templates will pass a CachedVariable stub as since.
@@ -635,4 +631,29 @@ ${unsafe(txt)}
   <acronym title="${_('Adult content: Not Safe For Work')}">
     ${_("NSFW")}
   </acronym>
+</%def>
+
+<%def name="quarantine_stamp()">
+  <span title="${_('Quarantined content: Content may be highly offensive')}">
+    ${_("Quarantined")}
+  </span>
+</%def>
+
+<%def name="thumbnail_img(thing)">
+  %if thing.thumbnail and not thing.thumbnail_sprited:
+    <%
+        if hasattr(thing, 'thumbnail_size'):
+            scaling_factor = 1
+            if thing.thumbnail_size[0] > g.thumbnail_size[0]:
+              # hidpi scaling, calculate in case hidpi changes definition in the future and
+              # we have multiple sets of image dimensions. Currently should always be 1 or 2.
+              # Width is always the maximum allowed, so we don't need to check height.
+              scaling_factor = thing.thumbnail_size[0] // g.thumbnail_size[0]
+
+            size_str = "width='%d' height='%d'" % (thing.thumbnail_size[0] // scaling_factor, thing.thumbnail_size[1] // scaling_factor)
+        else:
+            size_str = ""
+    %>
+    <img src="${make_url_protocol_relative(thing.thumbnail)}" ${size_str} alt="">
+  %endif
 </%def>

@@ -130,8 +130,8 @@ git-core
 
 python-dev
 python-setuptools
-python-routes
-python-pylons
+python-routes=1.12.3-1ubuntu1
+python-pylons=1.0-2
 python-boto
 python-tz
 python-crypto
@@ -155,6 +155,8 @@ python-kazoo
 python-stripe
 python-tinycss2
 python-unidecode
+python-mock
+python-yaml
 
 python-flask
 geoip-bin
@@ -181,6 +183,9 @@ gunicorn
 sutro
 libpcre3-dev
 PACKAGES
+
+# we don't want to upgrade to C* 2.0 yet, so we'll put it on hold
+apt-mark hold cassandra
 
 ###############################################################################
 # Wait for all the services to be up
@@ -311,6 +316,9 @@ if [ ! -f development.update ]; then
 # generate a new development.ini
 
 [DEFAULT]
+# global debug flag -- displays pylons stacktrace rather than 500 page on error when true
+# WARNING: a pylons stacktrace allows remote code execution. Make sure this is false
+# if your server is publicly accessible.
 debug = true
 
 disable_ads = true
@@ -732,7 +740,7 @@ function set_consumer_count {
 }
 
 set_consumer_count log_q 0
-set_consumer_count cloudsearch_q 0
+set_consumer_count search_q 0
 set_consumer_count del_account_q 1
 set_consumer_count scraper_q 1
 set_consumer_count markread_q 1
@@ -740,6 +748,7 @@ set_consumer_count commentstree_q 1
 set_consumer_count newcomments_q 1
 set_consumer_count vote_link_q 1
 set_consumer_count vote_comment_q 1
+set_consumer_count automoderator_q 0
 
 chown -R $REDDIT_USER:$REDDIT_GROUP $CONSUMER_CONFIG_ROOT/
 

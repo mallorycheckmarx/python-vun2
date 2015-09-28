@@ -19,14 +19,14 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import c, g, request
+
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope
-from r2.controllers.reddit_base import (
-    abort_with_error,
-    OAuth2ResourceController,
-)
+from r2.controllers.reddit_base import OAuth2OnlyController
 from r2.controllers.ipn import send_gift
 from r2.lib.errors import RedditError
 from r2.lib.validator import (
@@ -40,23 +40,7 @@ from r2.models.gold import creddits_lock
 from r2.lib.validator import VUser
 
 
-class APIv1GoldController(OAuth2ResourceController):
-    handles_csrf = True
-
-    def pre(self):
-        OAuth2ResourceController.pre(self)
-	if request.method != "OPTIONS":
-            self.authenticate_with_token()
-            self.set_up_user_context()
-        self.run_sitewide_ratelimits()
-
-    def try_pagecache(self):
-        pass
-
-    @staticmethod
-    def on_validation_error(error):
-        abort_with_error(error, error.code or 400)
-
+class APIv1GoldController(OAuth2OnlyController):
     def _gift_using_creddits(self, recipient, months=1, thing_fullname=None,
             proxying_for=None):
         with creddits_lock(c.user):
@@ -101,6 +85,10 @@ class APIv1GoldController(OAuth2ResourceController):
     def POST_gild(self, target):
         if not isinstance(target, (Comment, Link)):
             err = RedditError("NO_THING_ID")
+            self.on_validation_error(err)
+
+        if target.subreddit_slow.quarantine:
+            err = RedditError("GILDING_NOT_ALLOWED")
             self.on_validation_error(err)
 
         self._gift_using_creddits(

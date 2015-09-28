@@ -207,7 +207,6 @@ var CampaignSet = React.createClass({
   },
 });
 
-
 var CampaignCreator = React.createClass({
   displayName: 'CampaignCreator',
 
@@ -333,12 +332,19 @@ var CampaignCreator = React.createClass({
     else if (requested.bid < this.props.minValidBid) {
       var minimal = this.getMinimizedOption();
       if (minimal.impressions <= this.state.available) {
-        return CampaignSet(null,
-          InfoText({ className: 'error' },
-            r._('the campaign you requested is too small! this campaign is available:')
-          ),
-          CampaignOptionTable(null, CampaignOption(minimal))
-        );
+        if (r.sponsored.userIsSponsor) {
+          return CampaignSet(null,
+            InfoText(null, r._('the campaign you requested is available!')),
+            CampaignOptionTable(null, CampaignOption(requested))
+          );
+        } else {
+          return CampaignSet(null,
+            InfoText({ className: 'error' },
+              r._('the campaign you requested is too small! this campaign is available:')
+            ),
+            CampaignOptionTable(null, CampaignOption(minimal))
+          );
+        }
       }
       else {
         return InfoText({ className: 'error' },
@@ -489,16 +495,51 @@ var exports = r.sponsored = {
         $("#sr-autocomplete").on("sr-changed blur", function() {
             r.sponsored.render()
         })
+        this.targetValid = true;
+        this.bidValid = true;
         this.inventory = {}
         this.campaignListColumns = $('.existing-campaigns thead th').length
         $("input[name='media_url_type']").on("change", this.mediaInputChange)
+
+        $('input[type=file]').on('change', this._checkFilesize);
+    },
+
+    _checkFilesize: function(e) {
+      var el = e.target;
+      var $el = $(el);
+      var files = el.files;
+
+      if (files && files[0].size > 1024 * 500) {
+        $el
+          .wrap('<form>')
+          .closest('form')
+          .get(0).reset();
+        $el.unwrap();
+        alert(r._('too big. keep it under 500 KiB'));
+      }
     },
 
     setup: function(inventory_by_sr, priceDict, isEmpty, userIsSponsor) {
         this.inventory = inventory_by_sr
         this.priceDict = priceDict
+
+        var $platformField = $('.platform-field');
+        this.$platformInputs = $platformField.find('input[name=platform]');
+        this.$mobileOSInputs = $platformField.find('.mobile-os-group input');
+        this.$iOSDeviceInputs = $platformField.find('.ios-device input');
+        this.$iOSMinSelect = $platformField.find('#ios_min');
+        this.$iOSMaxSelect = $platformField.find('#ios_max');
+        this.$androidDeviceInputs = $platformField.find('.android-device input');
+        this.$androidMinSelect = $platformField.find('#android_min');
+        this.$androidMaxSelect = $platformField.find('#android_max');
+        this.$deviceAndVersionInputs = $platformField.find('input[name="os_versions"]');
+
+        var render = this.render.bind(this);
+
+        $('.platform-field input, .platform-field select').on('change', render);
+
         if (isEmpty) {
-            this.render()
+            this.render();
             init_startdate()
             init_enddate()
             $("#campaign").find("button[name=create]").show().end()
@@ -587,6 +628,28 @@ var exports = r.sponsored = {
         collapse();
     },
 
+    toggleFrequency: function() {
+        var prevChecked = this.frequency_capped;
+        var currentlyChecked = ($('input[name="frequency_capped"]:checked').val() === 'true');
+        if (prevChecked != currentlyChecked) {
+            $('.frequency-cap-field').toggle('slow');
+            this.frequency_capped = currentlyChecked;
+        }
+    },
+
+    setup_frequency_cap: function(frequency_capped) {
+        this.frequency_capped = !!frequency_capped;
+    },
+
+    setup_mobile_targeting: function(mobileOS, iOSDevices, iOSVersions, 
+                                     androidDevices, androidVersions) {
+      this.mobileOS = mobileOS;
+      this.iOSDevices = iOSDevices;
+      this.iOSVersions = iOSVersions;
+      this.androidDevices = androidDevices;
+      this.androidVersions = androidVersions;
+    },
+
     setup_geotargeting: function(regions, metros) {
         this.regions = regions
         this.metros = metros
@@ -640,8 +703,9 @@ var exports = r.sponsored = {
         return dates
     },
 
-    get_inventory_key: function(srname, collection, geotarget) {
+    get_inventory_key: function(srname, collection, geotarget, platform) {
         var inventoryKey = collection ? '#' + collection : srname
+        inventoryKey += "/" + platform
         if (geotarget.country != "") {
             inventoryKey += "/" + geotarget.country
         }
@@ -670,8 +734,10 @@ var exports = r.sponsored = {
         var srname = targeting.sr,
             collection = targeting.collection,
             geotarget = targeting.geotarget, 
+            platform = targeting.platform,
             inventoryKey = targeting.inventoryKey,
             dates = timing.dates;
+
         dates.sort(function(d1,d2){return d1 - d2})
         var end = new Date(dates[dates.length-1].getTime())
         end.setDate(end.getDate() + 5)
@@ -685,7 +751,8 @@ var exports = r.sponsored = {
                 region: geotarget.region,
                 metro: geotarget.metro,
                 startdate: $.datepicker.formatDate('mm/dd/yy', dates[0]),
-                enddate: $.datepicker.formatDate('mm/dd/yy', end)
+                enddate: $.datepicker.formatDate('mm/dd/yy', end),
+                platform: platform
             },
         });
     },
@@ -764,7 +831,7 @@ var exports = r.sponsored = {
     },
 
     getAvailableImpsByDay: function(dates, booked, inventoryKey) {
-       return _.map(dates, function(date) {
+        return _.map(dates, function(date) {
             var datestr = $.datepicker.formatDate('mm/dd/yy', date);
             var daily_booked = booked[datestr] || 0;
             return r.sponsored.inventory[inventoryKey][datestr] + daily_booked;
@@ -779,7 +846,7 @@ var exports = r.sponsored = {
             inventoryKey = targeting.inventoryKey,
             booked = this.get_booked_inventory($form, targeting.sr, 
                     targeting.geotarget, isOverride);
-        
+
         var minbid_amt = r.sponsored.get_real_min_bid();
         var maxbid_amt = r.sponsored.get_max_bid();
 
@@ -856,6 +923,58 @@ var exports = r.sponsored = {
         return _.max(prices);
     },
 
+    getPlatformTargeting: function() {
+      var platform = this.$platformInputs.filter(':checked').val();
+      var isMobile = platform === 'mobile' || platform === 'all';
+
+      function mapTargets(target) {
+        targets = target.filter(':checked').map(function() {
+          return $(this).attr('value');
+        }).toArray().join(',');
+        return targets.length === 1 ? targets[0] : targets
+      }
+
+      function getSelect(target) {
+        return target.find(':selected').val();
+      }
+
+      var targets;
+      if (isMobile) {
+        targets = {
+          os: mapTargets(this.$mobileOSInputs),
+          deviceAndVersion: mapTargets(this.$deviceAndVersionInputs),
+          iOSDevices: mapTargets(this.$iOSDeviceInputs),
+          iOSVersionRange: (getSelect(this.$iOSMinSelect) + ','
+            + getSelect(this.$iOSMaxSelect)),
+          iOSMinVersion: getSelect(this.$iOSMinSelect),
+          iOSMaxVersion: getSelect(this.$iOSMaxSelect),
+          androidDevices: mapTargets(this.$androidDeviceInputs),
+          androidVersionRange: (getSelect(this.$androidMinSelect) + ','
+            + getSelect(this.$androidMaxSelect)),
+          androidMinVersion: getSelect(this.$androidMinSelect),
+          androidMaxVersion: getSelect(this.$androidMaxSelect),
+        };
+      } else {
+        targets = {
+          os: null,
+          deviceAndVersion: null,
+          iOSDevices: null,
+          iOSVersionRange: null,
+          iOSMinVersion: null,
+          iOSMaxVersion: null,
+          androidDevices: null,
+          androidVersionRange: null,
+          androidMinVersion: null,
+          androidMaxVersion: null,
+        };
+      }
+
+      return $.extend({
+        platform: platform,
+        isMobile: isMobile,
+      }, targets);
+    },
+
     get_targeting: function($form) {
         var isSubreddit = $form.find('input[name="targeting"][value="one"]').is(':checked'),
             collectionVal = $form.find('input[name="collection"]:checked').val(),
@@ -865,16 +984,15 @@ var exports = r.sponsored = {
             sr = isSubreddit ? $form.find('*[name="sr"]').val() : '',
             collection = isCollection ? collectionVal : null,
             displayName = isFrontpage ? 'the frontpage' : isCollection ? collection : sr,
-            priority = this.get_priority($form),
             canGeotarget = isFrontpage || this.userIsSponsor,
             country = canGeotarget && $('#country').val() || '',
             region = canGeotarget && $('#region').val() || '',
             metro = canGeotarget && $('#metro').val() || '',
             geotarget = {'country': country, 'region': region, 'metro': metro},
-            inventoryKey = this.get_inventory_key(sr, collection, geotarget),
+            inventoryKey = this.get_inventory_key(sr, collection, geotarget, platform),
             isValid = isFrontpage || (isSubreddit && sr) || (isCollection && collection);
 
-        return {
+        var targets = {
             'type': type,
             'displayName': displayName,
             'isValid': isValid,
@@ -882,8 +1000,34 @@ var exports = r.sponsored = {
             'collection': collection,
             'canGeotarget': canGeotarget,
             'geotarget': geotarget,
-            'inventoryKey': inventoryKey,
         };
+
+        if (this.$platformInputs) {
+            var platformTargets = this.getPlatformTargeting();
+
+            var os = platformTargets.os;
+            var platform = platformTargets.platform;
+            var iOSDevices = platformTargets.iOSDevices;
+            var iOSVersionRange = platformTargets.iOSVersionRange;
+            var androidDevices = platformTargets.androidDevices;
+            var androidVersionRange = platformTargets.androidVersionRange;
+            
+            platformTargetsList = ['platform',
+                                   'iOSDevices',
+                                   'iOSVersionRange',
+                                   'androidDevices',
+                                   'androidVersionRange',];
+
+            platformTargetsList.forEach(function(platformStr) {
+              targets[platformStr] = eval(platformStr)
+            });
+
+            targets['inventoryKey'] = this.get_inventory_key(sr, collection, geotarget, platform);
+        } else {
+            targets['inventoryKey'] = this.get_inventory_key(sr, collection, geotarget);
+        }
+
+        return targets;
     },
 
     get_timing: function($form) {
@@ -1016,25 +1160,165 @@ var exports = r.sponsored = {
         $bid.trigger("change")
     },
 
+    validateDeviceAndVersion: function(os, generalData, osData) {
+      var deviceError = false;
+      var versionError = false;
+      /* if OS is selected to target, populate hidden inputs */
+      if (generalData.platformTargetingOS.indexOf(os) !== -1) {
+        osData.deviceHiddenInput.val(osData.platformTargetingDevices);
+        osData.versionHiddenInput.val(osData.platformTargetingVersions);
+        osData.group.show();
+
+        if (generalData.deviceAndVersion == 'filter') {
+          /* check that at least one devices is selected */
+          if (!osData.deviceHiddenInput.val()) {
+            deviceError = true;
+          }
+
+          /* check that min version is less-or-equal-to max */
+          var versions = osData.versionHiddenInput.val().split(',');
+          if ((versions[1] !== '') && (versions[0] > versions[1])) {
+            versionError = true;
+          }
+        }
+      } else {
+        osData.deviceHiddenInput.val('');
+        osData.versionHiddenInput.val('');
+        osData.group.hide();
+      }
+      return {'deviceError': deviceError,
+              'versionError': versionError}
+    },
+
     fill_campaign_editor: function() {
-        var $form = $("#campaign"),
-            priority = this.get_priority($form),
+
+        var $form = $("#campaign");
+        var platformTargeting = this.getPlatformTargeting();
+        var platformOverride = platformTargeting.isMobile && platformTargeting.platform === 'mobile';
+
+        var $priorities = $form.find('*[name="priority"]');
+        if (platformOverride && this.currentPlatform != 'mobile') {
+          $priorities.filter('[value="house"]').prop('checked', 'checked');
+        } else {
+          if (!platformOverride && this.currentPlatform === 'mobile') {
+            $priorities.filter('[value="standard"]').prop('checked', 'checked');
+          }
+          $priorities.prop('disabled', false);
+        }
+        this.currentPlatform = platformTargeting.platform;
+
+        var priority = this.get_priority($form),
             targeting = this.get_targeting($form),
             timing = this.get_timing($form),
             ndays = timing.duration,
             budget = this.get_budget($form),
             cpm = budget.cpm,
             impressions = budget.impressions,
-            checkInventory = targeting.isValid && priority.isCpm;
+            checkInventory = targeting.isValid;
 
         $(".duration").text(ndays + " " + ((ndays > 1) ? r._("days") : r._("day")))
         $(".price-info").text(r._("$%(cpm)s per 1,000 impressions").format({cpm: (cpm/100).toFixed(2)}))
         $form.find('*[name="impressions"]').val(r.utils.prettyNumber(impressions))
         $(".OVERSOLD").hide()
 
+        var $mobileOSGroup = $('.mobile-os-group');
+        var $mobileOSHiddenInput = $('#mobile_os');
+
+        var $OSDeviceGroup = $('.os-device-group');
+        var $iOSDeviceHiddenInput = $('#ios_device');
+        var $iOSVersionHiddenInput = $('#ios_version_range');
+        var $androidDeviceHiddenInput = $('#android_device');
+        var $androidVersionHiddenInput = $('#android_version_range');
+
+        if (platformTargeting.isMobile) {
+          var $mobileOSError = $mobileOSGroup.find('.error');
+          var $OSDeviceError = $OSDeviceGroup.find('.error.device-error');
+          var $OSVersionError = $OSDeviceGroup.find('.error.version-error');
+
+          $mobileOSGroup.show();
+          $mobileOSHiddenInput.val(platformTargeting.os || '');
+
+          $OSDeviceGroup.show();
+
+          if (!platformTargeting.os) {
+            $mobileOSError.show();
+          } else {
+            $mobileOSError.hide();
+          }
+
+          var $deviceVersionGroup = $('.device-version-group');
+          var $deviceAndVersion = (platformTargeting.deviceAndVersion || 'all')
+
+          if ($deviceAndVersion === 'all') {
+            $deviceVersionGroup.hide();
+            $OSDeviceError.hide();
+            $OSVersionError.hide();
+            $iOSDeviceHiddenInput.val('');
+            $iOSVersionHiddenInput.val('');
+            $androidDeviceHiddenInput.val('');
+            $androidVersionHiddenInput.val('');
+          } else {
+            $deviceVersionGroup.show();
+
+            $iOSGroup = $('.ios-group');
+            $androidGroup = $('.android-group');
+
+            var generalData = {
+              platformTargetingOS: platformTargeting.os,
+              deviceAndVersion: $deviceAndVersion,
+            }
+
+            var iOSData = {
+              deviceHiddenInput: $iOSDeviceHiddenInput,
+              versionHiddenInput: $iOSVersionHiddenInput,
+              platformTargetingDevices: platformTargeting.iOSDevices,
+              platformTargetingVersions: platformTargeting.iOSVersionRange,
+              group: $iOSGroup,
+            }
+
+            var androidData = {
+              deviceHiddenInput: $androidDeviceHiddenInput,
+              versionHiddenInput: $androidVersionHiddenInput,
+              platformTargetingDevices: platformTargeting.androidDevices,
+              platformTargetingVersions: platformTargeting.androidVersionRange,
+              group: $androidGroup,
+            }
+
+            var iOSErrors = this.validateDeviceAndVersion('iOS', generalData, iOSData);
+            var androidErrors = this.validateDeviceAndVersion('Android', generalData, androidData);
+            var iOSDeviceError = iOSErrors['deviceError']
+            var iOSVersionError = iOSErrors['versionError'];
+            var androidDeviceError = androidErrors['deviceError'];
+            var androidVersionError = androidErrors['versionError'];
+
+            if (iOSDeviceError || androidDeviceError) {
+              $OSDeviceError.show();
+            } else {
+              $OSDeviceError.hide();
+            }
+
+            if (iOSVersionError || androidVersionError) {
+              $OSVersionError.show();
+            } else {
+              $OSVersionError.hide();
+            }
+          }
+        } else {
+          $mobileOSHiddenInput.val('');
+          $iOSDeviceHiddenInput.val('');
+          $iOSVersionHiddenInput.val('');
+          $androidDeviceHiddenInput.val('');
+          $androidVersionHiddenInput.val('');
+          $mobileOSGroup.hide();
+          $OSDeviceGroup.hide();
+        }
 
         if (targeting.isValid) {
-            this.enable_form($form)
+            this.targetValid = true;
+            this.enable_form($form);
+        } else {
+            this.targetValid = false;
+            this.disable_form($form);
         }
 
         if (priority.isCpm) {
@@ -1044,37 +1328,40 @@ var exports = r.sponsored = {
             this.hide_cpm()
         }
 
-        if (checkInventory) {
-            this.check_inventory($form, targeting, timing, budget, priority.isOverride)
-        } else if (!priority.isCpm) {
-          var booked = this.get_booked_inventory($form, targeting.sr, 
-                                                 targeting.geotarget, priority.isOverride);
-          var availableByDate = this.getAvailableImpsByDay(timing.dates, booked,
-                                                           targeting.inventoryKey);
-          var totalImpsAvailable = _.reduce(availableByDate, sum, 0);    
+        if (!priority.isCpm && checkInventory) {
+          $.when(r.sponsored.get_check_inventory(targeting, timing)).then(
+            function() {
+              var booked = this.get_booked_inventory($form, targeting.sr,
+                                                     targeting.geotarget, priority.isOverride);
+              var availableByDate = this.getAvailableImpsByDay(timing.dates, booked,
+                                                               targeting.inventoryKey);
+              var totalImpsAvailable = _.reduce(availableByDate, sum, 0);
 
-
-          React.renderComponent(
-            React.DOM.div(null,
-              CampaignSet(null,
-                InfoText(null, r._('house campaigns, man.')),
-                CampaignOptionTable(null,
-                  CampaignOption({
-                    bid: null,
-                    end: timing.enddate,
-                    impressions: 'unsold ',
-                    isNew: !$("#campaign").parents('tr:first').length,
-                    primary: true,
-                    start: timing.startdate,
-                  })
-                )
-              ),
-              InfoText({impressions: totalImpsAvailable},
-                  r._('maximum possible impressions: %(impressions)s')
-              )
-            ),
-            document.getElementById('campaign-creator')
+              React.renderComponent(
+                React.DOM.div(null,
+                  CampaignSet(null,
+                    InfoText(null, r._('house campaigns, man.')),
+                    CampaignOptionTable(null,
+                      CampaignOption({
+                        bid: null,
+                        end: timing.enddate,
+                        impressions: 'unsold ',
+                        isNew: !$("#campaign").parents('tr:first').length,
+                        primary: true,
+                        start: timing.startdate,
+                      })
+                    )
+                  ),
+                  InfoText({impressions: totalImpsAvailable},
+                      r._('maximum possible impressions: %(impressions)s')
+                  )
+                ),
+                document.getElementById('campaign-creator')
+              );
+            }.bind(this)
           );
+        } else if (checkInventory) {
+            this.check_inventory($form, targeting, timing, budget, priority.isOverride)
         }
             
         if (targeting.canGeotarget) {
@@ -1095,15 +1382,17 @@ var exports = r.sponsored = {
     },
 
     disable_form: function($form) {
-        $form.find('.create, button[name="save"]')
+        $form.find('button[class*="campaign-button"]')
             .prop("disabled", true)
             .addClass("disabled");
     },
 
     enable_form: function($form) {
-        $form.find('.create, button[name="save"]')
-            .prop("disabled", false)
-            .removeClass("disabled");
+        if (this.bidValid && this.targetValid) {
+            $form.find('button[class*="campaign-button"]')
+                .prop("disabled", false)
+                .removeClass("disabled");
+        }
     },
 
     hide_cpm: function() {
@@ -1214,9 +1503,15 @@ var exports = r.sponsored = {
         }
 
         $(".minimum-spend").removeClass("error");
+
         if (bid < minimum_bid) {
+            this.bidValid = false;
+            this.disable_form($form);
             $(".minimum-spend").addClass("error");
-            this.disable_form($form)
+        } else {
+            this.bidValid = true;
+            this.enable_form($form);
+            $(".minimum-spend").removeClass("error");
         }
     },
 
@@ -1493,12 +1788,85 @@ function edit_campaign($campaign_row) {
         $editRow.append($editCell)
         $campaign_row.fadeOut(function() {
             /* fill inputs from data in campaign row */
-            _.each(['startdate', 'enddate', 'bid', 'campaign_id36', 'campaign_name'],
+            _.each(['startdate', 'enddate', 'bid', 'campaign_id36', 'campaign_name',
+                    'frequency_cap', 'frequency_cap_duration'],
                 function(input) {
                     var val = $campaign_row.data(input),
                         $input = campaign.find('*[name="' + input + '"]')
                     $input.val(val)
             })
+
+            if ($campaign_row.data('has-served')) {
+              campaign.find('[name="startdate"]').prop('disabled', true);
+            } else {
+              campaign.find('[name="startdate"]').prop('disabled', false);
+            }
+
+            var platform = $campaign_row.data('platform');
+            campaign.find('*[name="platform"][value="' + platform + '"]').prop("checked", "checked");
+
+            /* set mobile targeting */
+            r.sponsored.setup_mobile_targeting(
+              $campaign_row.data('mobile_os'),
+              $campaign_row.data('ios_devices'),
+              $campaign_row.data('ios_versions'),
+              $campaign_row.data('android_devices'),
+              $campaign_row.data('android_versions')
+            );
+
+            /* pre-select mobile OS checkboxes if current platform is not mobile */
+            campaign.find('.mobile-os-group input').prop("checked", !r.sponsored.mobileOS);
+
+            /* logic if filtering by device and OS */
+            if (r.sponsored.iOSDevices || r.sponsored.androidDevices) {
+              /* pre-select the device and OS version radio button */
+              campaign.find('#filter_os_devices').prop('checked', 'checked');
+
+              /* first, clear all checked devices (they're checked by default),
+                 but only if the campaign has devices for the OS */
+              if (r.sponsored.iOSDevices) {
+                campaign.find('.ios-device input[type="checkbox"]').prop('checked', false);
+              }
+              if (r.sponsored.androidDevices) {
+                campaign.find('.android-device input[type="checkbox"]').prop('checked', false);
+              }
+
+              /* then, pre-select all appropriate devices */
+              var allDevices = [].concat(r.sponsored.iOSDevices, r.sponsored.androidDevices);
+              allDevices.forEach(function(device) {
+                if (device) {
+                  campaign.find('#'+device.toLowerCase()).prop('checked', true);
+                }
+              });
+
+              /* pre-select iOS versions */
+              if (r.sponsored.iOSVersions) {
+                campaign.find('#ios_min').val(r.sponsored.iOSVersions[0]);
+                campaign.find('#ios_max').val(r.sponsored.iOSVersions[1]);
+              }
+
+              /* pre-select Android versions */
+              if (r.sponsored.androidVersions) {
+                campaign.find('#android_min').val(r.sponsored.androidVersions[0]);
+                campaign.find('#android_max').val(r.sponsored.androidVersions[1]);
+              }
+            } else {
+              campaign.find('#all_os_devices').prop('checked', true);
+            }
+
+            var mobile_os_names = $campaign_row.data('mobile_os');
+            if (mobile_os_names) {
+              mobile_os_names.forEach(function(name) {
+                campaign.find('#mobile_os_' + name).prop("checked", "checked");
+              });
+            }
+
+            r.sponsored.setup_frequency_cap($campaign_row.data('frequency_cap'));
+            /* show frequency inputs */
+            if ($campaign_row.data('frequency_cap')) {
+              $('.frequency-cap-field').show();
+              $('#frequency_capped_true').prop('checked', 'checked');
+            }
 
             /* set priority */
             var priorities = campaign.find('*[name="priority"]'),
@@ -1604,6 +1972,11 @@ function create_campaign() {
                 .find('select[name="country"]').val('').end()
                 .find('select[name="region"]').hide().end()
                 .find('select[name="metro"]').hide().end()
+                .find('input[name="frequency_cap"]').val('').end()
+                .find('input[name="startdate"]').prop('disabled', false).end()
+                .find('input[name="frequency_cap_duration"]').val('').end()
+                .find('#frequency_capped_false').prop('checked', 'checked').end()
+                .find('.frequency-cap-field').hide().end()
                 .slideDown();
             r.sponsored.render();
         });

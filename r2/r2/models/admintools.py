@@ -20,6 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from r2.lib import amqp
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import NotFound
 from r2.lib.errors import MessageError
@@ -34,7 +35,9 @@ from r2.models.token import AwardClaimToken
 from r2.models.wiki import WikiPage
 
 from _pylibmc import MemcachedError
-from pylons import g, c, config
+from pylons import config
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from datetime import datetime, timedelta
@@ -87,6 +90,9 @@ class AdminTools(object):
 
             t.ban_info = ban_info
             t._commit()
+
+            if auto:
+                amqp.add_item("auto_removed", t._fullname)
 
         if not auto:
             self.author_spammer(new_things, True)
@@ -353,66 +359,11 @@ def compute_votes(wrapper, item):
     wrapper.downvotes = item._downs
     total_votes = max(item._ups + item._downs, 1)
     wrapper.upvote_ratio = float(item._ups) / total_votes
-    wrapper.is_controversial = (c.user.pref_highlight_controversial and
-                                _is_controversial(wrapper, item))
+    wrapper.is_controversial = _is_controversial(wrapper, item)
 
 def ip_span(ip):
     ip = websafe(ip)
     return '<!-- %s -->' % ip
-
-def filter_quotas(unfiltered):
-    now = datetime.now(g.tz)
-
-    baskets = {
-        'hour':  [],
-        'day':   [],
-        'week':  [],
-        'month': [],
-        }
-
-    new_quotas = []
-    quotas_changed = False
-
-    for item in unfiltered:
-        delta = now - item._date
-
-        age = delta.days * 86400 + delta.seconds
-
-        # First, select a basket or abort if item is too old
-        if age < 3600:
-            basket = 'hour'
-        elif age < 86400:
-            basket = 'day'
-        elif age < 7 * 86400:
-            basket = 'week'
-        elif age < 30 * 86400:
-            basket = 'month'
-        else:
-            quotas_changed = True
-            continue
-
-        verdict = getattr(item, "verdict", None)
-        approved = verdict and verdict in (
-            'admin-approved', 'mod-approved')
-
-        # Then, make sure it's worthy of quota-clogging
-        if item._spam:
-            pass
-        elif item._score <= 0:
-            pass
-        elif age < 86400 and item._score <= g.QUOTA_THRESHOLD and not approved:
-            pass
-        else:
-            quotas_changed = True
-            continue
-
-        baskets[basket].append(item)
-        new_quotas.append(item._fullname)
-
-    if quotas_changed:
-        return baskets, new_quotas
-    else:
-        return baskets, None
 
 
 def wiki_template(template_slug, sr=None):
@@ -448,7 +399,7 @@ def send_welcome_message(user):
 
 def send_system_message(user, subject, body, system_user=None,
                         distinguished='admin', repliable=False,
-                        add_to_sent=True, author=None):
+                        add_to_sent=True, author=None, signed=False):
     from r2.lib.db import queries
 
     if system_user is None:
@@ -465,6 +416,7 @@ def send_system_message(user, subject, body, system_user=None,
     item.distinguished = distinguished
     item.repliable = repliable
     item.display_author = system_user._id
+    item.signed = signed
     item._commit()
 
     try:

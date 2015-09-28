@@ -19,20 +19,27 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import g
+
+from pylons import tmpl_context as c
+from pylons import app_globals as g
+
+from r2.config import feature
+from r2.lib.menus import CommentSortMenu
 from r2.lib.validator.validator import (
     VBoolean,
     VInt,
     VLang,
     VOneOf,
+    VSRByName,
 )
+from r2.lib.errors import errors
+from r2.models import Subreddit, NotFound
 
 # Validators that map directly to Account._preference_attrs
 # The key MUST be the same string as the value in _preference_attrs
 # Non-preference validators should be added to to the controller
 # method directly (see PostController.POST_options)
 PREFS_VALIDATORS = dict(
-    pref_frame=VBoolean('frame'),
     pref_clickgadget=VBoolean('clickgadget'),
     pref_organic=VBoolean('organic'),
     pref_newwindow=VBoolean('newwindow'),
@@ -52,6 +59,9 @@ PREFS_VALIDATORS = dict(
     pref_num_comments=VInt('num_comments', 1, g.max_comments,
                            default=g.num_comments),
     pref_highlight_controversial=VBoolean('highlight_controversial'),
+    pref_default_comment_sort=VOneOf('default_comment_sort',
+                                     CommentSortMenu.visible_options()),
+    pref_ignore_suggested_sort=VBoolean("ignore_suggested_sort"),
     pref_show_stylesheets=VBoolean('show_stylesheets'),
     pref_show_flair=VBoolean('show_flair'),
     pref_show_link_flair=VBoolean('show_link_flair'),
@@ -64,24 +74,45 @@ PREFS_VALIDATORS = dict(
     pref_email_messages=VBoolean("email_messages"),
     pref_private_feeds=VBoolean("private_feeds"),
     pref_store_visits=VBoolean('store_visits'),
-    pref_show_adbox=VBoolean("show_adbox"),
-    pref_show_sponsors=VBoolean("show_sponsors"),
-    pref_show_sponsorships=VBoolean("show_sponsorships"),
+    pref_hide_ads=VBoolean("hide_ads"),
     pref_show_trending=VBoolean("show_trending"),
     pref_highlight_new_comments=VBoolean("highlight_new_comments"),
+    pref_show_gold_expiration=VBoolean("show_gold_expiration"),
     pref_monitor_mentions=VBoolean("monitor_mentions"),
     pref_hide_locationbar=VBoolean("hide_locationbar"),
     pref_use_global_defaults=VBoolean("use_global_defaults"),
     pref_creddit_autorenew=VBoolean("creddit_autorenew"),
+    pref_enable_default_themes=VBoolean("enable_default_themes", False),
+    pref_default_theme_sr=VSRByName("theme_selector", False),
+    pref_other_theme=VSRByName("other_theme", False),
+    pref_beta=VBoolean('beta'),
+    pref_legacy_search=VBoolean('legacy_search'),
+    pref_threaded_modmail=VBoolean('threaded_modmail', False),
 )
 
 
 def set_prefs(user, prefs):
     for k, v in prefs.iteritems():
+        if k == 'pref_beta' and v and not getattr(user, 'pref_beta', False):
+            # If a user newly opted into beta, we want to subscribe them
+            # to the beta subreddit.
+            try:
+                sr = Subreddit._by_name(g.beta_sr)
+                if not sr.is_subscriber(user):
+                    sr.add_subscriber(user)
+            except NotFound:
+                g.log.warning("Could not find beta subreddit '%s'. It may "
+                              "need to be created." % g.beta_sr)
+
         setattr(user, k, v)
 
-
 def filter_prefs(prefs, user):
+    # replace stylesheet_override with other_theme if it doesn't exist
+    if feature.is_enabled('stylesheets_everywhere', user=user):
+        if not prefs["pref_default_theme_sr"]:
+            if prefs.get("pref_other_theme", False):
+                prefs["pref_default_theme_sr"] = prefs["pref_other_theme"]
+
     for pref_key in prefs.keys():
         if pref_key not in user._preference_attrs:
             del prefs[pref_key]
@@ -100,12 +131,25 @@ def filter_prefs(prefs, user):
     if prefs.get("pref_no_profanity") or user.pref_no_profanity:
         prefs['pref_label_nsfw'] = True
 
-    # default all the gold options to on if they don't have gold
+    # don't update the hide_ads pref if they don't have gold
     if not user.gold:
-        for pref in ('pref_show_adbox',
-                     'pref_show_sponsors',
-                     'pref_show_sponsorships',
-                     'pref_highlight_new_comments',
-                     'pref_creddit_autorenew',
-                    ):
-            prefs[pref] = True
+        del prefs['pref_hide_ads']
+        del prefs['pref_show_gold_expiration']
+
+    if not (user.gold or user.is_moderator_somewhere):
+        prefs['pref_highlight_new_comments'] = True
+
+    # check stylesheet override
+    if feature.is_enabled('stylesheets_everywhere', user=user):
+        override_sr = prefs['pref_default_theme_sr']
+        if not override_sr:
+            del prefs['pref_default_theme_sr']
+            if prefs['pref_enable_default_themes']:
+                c.errors.add(c.errors.add(errors.SUBREDDIT_REQUIRED, field="stylesheet_override"))
+        else:
+            if override_sr.can_view(user):
+                prefs['pref_default_theme_sr'] = override_sr.name
+            else:
+                # don't update if they can't view the chosen subreddit
+                c.errors.add(errors.SUBREDDIT_NO_ACCESS, field='stylesheet_override')
+                del prefs['pref_default_theme_sr']

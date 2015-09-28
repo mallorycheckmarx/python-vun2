@@ -27,6 +27,8 @@ Tools to check if arbitrary HTML fragments would be safe to embed inline
 import os
 import re
 import sys
+import urllib
+import urlparse
 
 import lxml.etree
 
@@ -96,6 +98,13 @@ def souptest_sniff_node(node):
                 lv = val.lower()
                 if not lv.startswith(valid_link_schemes):
                     raise SoupUnsupportedSchemeError(val)
+                # work around CRBUG-464270
+                parsed_url = urlparse.urlparse(lv)
+                if parsed_url.hostname and len(parsed_url.hostname) > 255:
+                    raise SoupDetectedCrasherError(parsed_url.hostname)
+                # work around for Chrome crash with "%%30%30" - Sep 2015
+                if "%00" in urllib.unquote(parsed_url.path):
+                    raise SoupDetectedCrasherError(lv)
     else:
         # Processing instructions and friends fall down here.
         raise SoupUnsupportedNodeError(node)
@@ -215,6 +224,10 @@ class SoupUnsupportedAttrError(SoupReprError):
 class SoupUnsupportedTagError(SoupReprError):
     """Found an element that hasn't been explicitly whitelisted"""
     HUMAN_MESSAGE = "Unsupported tag"
+
+
+class SoupDetectedCrasherError(SoupReprError):
+    HUMAN_MESSAGE = "Known crasher posted"
 
 
 class SoupUnsupportedEntityError(SoupReprError):

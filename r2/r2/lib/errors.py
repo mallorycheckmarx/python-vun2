@@ -22,13 +22,14 @@
 
 from webob.exc import HTTPBadRequest, HTTPForbidden, status_map
 from r2.lib.utils import Storage, tup
-from pylons import g, request
+from pylons import request
+from pylons import app_globals as g
 from pylons.i18n import _
 from copy import copy
 
 
 error_list = dict((
-        ('USER_REQUIRED', _("please sign in to do that")),
+        ('USER_REQUIRED', _("Please log in to do that.")),
         ('HTTPS_REQUIRED', _("this page must be accessed using https")),
         ('WRONG_DOMAIN', _("you can't do that on this domain")),
         ('VERIFIED_USER_REQUIRED', _("you need to set a valid email address to do that.")),
@@ -45,9 +46,9 @@ error_list = dict((
         ('NO_THING_ID', _('id not specified')),
         ('TOO_MANY_THING_IDS', _('you provided too many ids')),
         ('NOT_AUTHOR', _("you can't do that")),
-        ('NOT_USER', _("you are not signed in as that user")),
+        ('NOT_USER', _("You are not logged in as that user.")),
         ('NOT_FRIEND', _("you are not friends with that user")),
-        ('LOGGED_IN', _("you are already signed in")),
+        ('LOGGED_IN', _("You are already logged in.")),
         ('DELETED_LINK', _('the link you are commenting on has been deleted')),
         ('DELETED_COMMENT', _('that comment has been deleted')),
         ('DELETED_THING', _('that element has been deleted')),
@@ -73,13 +74,14 @@ error_list = dict((
         ('SUBREDDIT_EXISTS', _('that subreddit already exists')),
         ('SUBREDDIT_NOEXIST', _('that subreddit doesn\'t exist')),
         ('SUBREDDIT_NOTALLOWED', _("you aren't allowed to post there.")),
+        ('SUBREDDIT_NO_ACCESS', _("you aren't allowed access to this subreddit")),
         ('SUBREDDIT_REQUIRED', _('you must specify a subreddit')),
         ('SUBREDDIT_DISABLED_ADS', _('this subreddit has chosen to disable their ads at this time')),
         ('BAD_SR_NAME', _('that name isn\'t going to work')),
         ('COLLECTION_NOEXIST', _('that collection doesn\'t exist')),
         ('INVALID_TARGET', _('that target type is not valid')),
+        ('INVALID_OS_VERSION', _('that version range is not valid')),
         ('RATELIMIT', _('you are doing that too much. try again in %(time)s.')),
-        ('QUOTA_FILLED', _("You've submitted too many links recently. Please try again in an hour.")),
         ('SUBREDDIT_RATELIMIT', _("you are doing that too much. try again later.")),
         ('EXPIRED', _('your session has expired')),
         ('DRACONIAN', _('you must accept the terms first')),
@@ -91,12 +93,16 @@ error_list = dict((
         ('BAD_EMAILS', _('the following emails are invalid: %(emails)s')),
         ('NO_EMAILS', _('please enter at least one email address')),
         ('TOO_MANY_EMAILS', _('please only share to %(num)s emails at a time.')),
+        ('NEWSLETTER_NO_EMAIL', _('where should we send that weekly newsletter?')),
+        ('SPONSOR_NO_EMAIL', _('advertisers are required to supply an email')),
+        ('NEWSLETTER_EMAIL_UNACCEPTABLE', _('That email could not be added. Check your email for an existing confirmation email.')),
         ('OVERSOLD', _('that subreddit has already been oversold on %(start)s to %(end)s. Please pick another subreddit or date.')),
         ('OVERSOLD_DETAIL', _("We have insufficient inventory to fulfill your requested budget, target, and dates. Only %(available)s impressions available on %(target)s from %(start)s to %(end)s.")),
         ('BAD_DATE', _('please provide a date of the form mm/dd/yyyy')),
         ('BAD_DATE_RANGE', _('the dates need to be in order and not identical')),
         ('DATE_TOO_LATE', _('please enter a date %(day)s or earlier')),
         ('DATE_TOO_EARLY', _('please enter a date %(day)s or later')),
+        ('START_DATE_CANNOT_CHANGE', _('start date cannot be changed')),
         ('BAD_ADDRESS', _('address problem: %(message)s')),
         ('BAD_CARD', _('card problem: %(message)s')),
         ('TOO_LONG', _("this is too long (max: %(max_length)s)")),
@@ -107,6 +113,7 @@ error_list = dict((
         ('NO_SELFS', _("that subreddit doesn't allow text posts")),
         ('NO_LINKS', _("that subreddit only allows text posts")),
         ('TOO_OLD', _("that's a piece of history now; it's too late to reply to it")),
+        ('THREAD_LOCKED', _("Comments are locked.")),
         ('BAD_CSS_NAME', _('invalid css name')),
         ('BAD_CSS', _('invalid css')),
         ('BAD_COLOR', _('invalid color')),
@@ -129,6 +136,7 @@ error_list = dict((
         ('TOO_MANY_DEVELOPERS', _('too many developers')),
         ('BAD_HASH', _("i don't believe you.")),
         ('ALREADY_MODERATOR', _('that user is already a moderator')),
+        ('CANT_RESTRICT_MODERATOR', _("You can't perform that action because that user is a moderator.")),
         ('NO_INVITE_FOUND', _('there is no pending invite for that subreddit')),
         ('BID_LIVE', _('you cannot edit the budget of a live ad')),
         ('TOO_MANY_CAMPAIGNS', _('you have too many campaigns for that promotion')),
@@ -148,18 +156,23 @@ error_list = dict((
         ('JSON_MISSING_KEY', _('JSON missing key: "%(key)s"')),
         ('NO_CHANGE_KIND', _("can't change post type")),
         ('INVALID_LOCATION', _("invalid location")),
+        ('INVALID_FREQUENCY_CAP', _("invalid values for frequency cap")),
         ('BANNED_FROM_SUBREDDIT', _('that user is banned from the subreddit')),
         ('GOLD_REQUIRED', _('you must have an active reddit gold subscription to do that')),
         ('INSUFFICIENT_CREDDITS', _("insufficient creddits")),
+        ('GILDING_NOT_ALLOWED', _("gilding is not allowed in this subreddit")),
         ('SCRAPER_ERROR', _("unable to scrape provided url")),
         ('NO_SR_TO_SR_MESSAGE', _("can't send a message from a subreddit to another subreddit")),
         ('USER_BLOCKED_MESSAGE', _("can't send message to that user")),
-        ('USER_BAN_NO_MESSAGE', _("that user will not be sent a ban notification, remove note to be able to ban")),
         ('ADMIN_REQUIRED', _("you must be in admin mode for this")),
         ('CANT_CONVERT_TO_GOLD_ONLY', _("to convert an existing subreddit to gold only, send a message to %(admin_modmail)s") 
             % dict(admin_modmail=g.admin_message_acct)),
         ('GOLD_ONLY_SR_REQUIRED', _("this subreddit must be 'gold only' to select this")),
         ('CANT_CREATE_SR', _("your account is too new to create a subreddit. please contact the admins to request an exemption.")),
+        ('BAD_PROMO_MOBILE_OS', _("you must select at least one mobile OS to target")),
+        ('BAD_PROMO_MOBILE_DEVICE', _("you must select at least one device per OS to target")),
+        ('USER_MUTED', _("You have been muted from this subreddit.")),
+        ('MUTED_FROM_SUBREDDIT', _("This user has been muted from the subreddit.")),
     ))
 
 errors = Storage([(e, e) for e in error_list.keys()])

@@ -20,6 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import random
+
 from r2.config import feature
 from r2.lib.db.thing     import Thing, Relation, NotFound
 from r2.lib.db.operators import lower
@@ -33,9 +35,12 @@ from r2.lib.utils        import constant_time_compare, canonicalize_email
 from r2.lib import amqp, filters, hooks
 from r2.lib.log import log_text
 from r2.models.last_modified import LastModified
+from r2.models.modaction import ModAction
 from r2.models.trylater import TryLater
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 import time
 import hashlib
@@ -45,7 +50,6 @@ from datetime import datetime, timedelta
 import bcrypt
 import hmac
 import hashlib
-import itertools
 from pycassa.system_manager import ASCII_TYPE
 
 
@@ -63,12 +67,12 @@ class Account(Thing):
                                                'inbox_count',
                                                'num_payment_methods',
                                                'num_failed_payments',
+                                               'num_gildings',
+                                               'admin_takedown_strikes',
                                               )
     _int_prop_suffix = '_karma'
     _essentials = ('name', )
     _defaults = dict(pref_numsites = 25,
-                     pref_frame = False,
-                     pref_frame_commentspanel = False,
                      pref_newwindow = False,
                      pref_clickgadget = 5,
                      pref_store_visits = False,
@@ -81,6 +85,7 @@ class Account(Thing):
                      pref_min_comment_score = -4,
                      pref_num_comments = g.num_comments,
                      pref_highlight_controversial=False,
+                     pref_default_comment_sort = 'confidence',
                      pref_lang = g.lang,
                      pref_content_langs = (g.lang,),
                      pref_over_18 = False,
@@ -90,6 +95,8 @@ class Account(Thing):
                      pref_no_profanity = True,
                      pref_label_nsfw = True,
                      pref_show_stylesheets = True,
+                     pref_enable_default_themes=False,
+                     pref_default_theme_sr=None,
                      pref_show_flair = True,
                      pref_show_link_flair = True,
                      pref_mark_messages_read = True,
@@ -98,14 +105,15 @@ class Account(Thing):
                      pref_email_messages = False,
                      pref_private_feeds = True,
                      pref_force_https = False,
-                     pref_show_adbox = True,
-                     pref_show_sponsors = True, # sponsored links
-                     pref_show_sponsorships = True,
+                     pref_hide_ads = False,
                      pref_show_trending=True,
                      pref_highlight_new_comments = True,
                      pref_monitor_mentions=True,
                      pref_collapse_left_bar=False,
                      pref_public_server_seconds=False,
+                     pref_ignore_suggested_sort=False,
+                     pref_beta=False,
+                     pref_legacy_search=False,
                      mobile_compress = False,
                      mobile_thumbnail = True,
                      reported = 0,
@@ -124,6 +132,7 @@ class Account(Thing):
                      gold = False,
                      gold_charter = False,
                      gold_creddits = 0,
+                     num_gildings=0,
                      cake_expiration=None,
                      otp_secret=None,
                      state=0,
@@ -139,6 +148,9 @@ class Account(Thing):
                      pref_show_snoovatar=False,
                      gild_reveal_username=False,
                      selfserve_cpm_override_pennies=None,
+                     pref_show_gold_expiration=False,
+                     admin_takedown_strikes=0,
+                     pref_threaded_modmail=False,
                      )
     _preference_attrs = tuple(k for k in _defaults.keys()
                               if k.startswith("pref_"))
@@ -156,17 +168,12 @@ class Account(Thing):
         return not self.__eq__(other)
 
     def has_interacted_with(self, sr):
-        if not sr:
+        try:
+            r = SubredditParticipationByAccount.fast_query(self, [sr])
+        except tdb_cassandra.NotFound:
             return False
 
-        for type in ('link', 'comment'):
-            if hasattr(self, "%s_%s_karma" % (sr.name, type)):
-                return True
-
-        if sr.is_subscriber(self):
-            return True
-
-        return False
+        return (self, sr) in r
 
     def karma(self, kind, sr = None):
         suffix = '_' + kind + '_karma'
@@ -442,6 +449,14 @@ class Account(Thing):
         rel.note = note
         rel._commit()
 
+    @memoize("get_random_friends", time=30*60)
+    def get_random_friends(self, limit=100):
+        friends = self.friend_ids()
+        if len(friends) > limit:
+            friends = random.sample(friends, limit)
+
+        return friends
+
     def delete(self, delete_message=None):
         self.delete_message = delete_message
         self.delete_time = datetime.now(g.tz)
@@ -528,120 +543,14 @@ class Account(Thing):
         else:
             return None
 
-    def quota_key(self, kind):
-        return "user_%s_quotas-%s" % (kind, self.name)
-
-    def clog_quota(self, kind, item):
-        key = self.quota_key(kind)
-        fnames = g.hardcache.get(key, [])
-        fnames.append(item._fullname)
-        g.hardcache.set(key, fnames, 86400 * 30)
-
-    def quota_baskets(self, kind):
-        from r2.models.admintools import filter_quotas
-        key = self.quota_key(kind)
-        fnames = g.hardcache.get(key)
-
-        if not fnames:
-            return None
-
-        unfiltered = Thing._by_fullname(fnames, data=True, return_dict=False)
-
-        baskets, new_quotas = filter_quotas(unfiltered)
-
-        if new_quotas is None:
-            pass
-        elif new_quotas == []:
-            g.hardcache.delete(key)
-        else:
-            g.hardcache.set(key, new_quotas, 86400 * 30)
-
-        return baskets
-
-    # Needs to take the *canonicalized* version of each email
-    # When true, returns the reason
-    @classmethod
-    def which_emails_are_banned(cls, canons):
-        banned = hooks.get_hook('email.get_banned').call(canons=canons)
-
-        # Create a dictionary like:
-        # d["abc.def.com"] = [ "bob@abc.def.com", "sue@abc.def.com" ]
-        rv = {}
-        canons_by_domain = {}
-
-        # email.get_banned will return a list of lists (one layer from the
-        # hooks system, the second from the function itself); chain them
-        # together for easy processing
-        for canon in itertools.chain(*banned):
-            rv[canon] = None
-
-            at_sign = canon.find("@")
-            domain = canon[at_sign+1:]
-            canons_by_domain.setdefault(domain, [])
-            canons_by_domain[domain].append(canon)
-
-        # Hand off to the domain ban system; it knows in the case of
-        # abc@foo.bar.com to check foo.bar.com, bar.com, and .com
-        from r2.models.admintools import bans_for_domain_parts
-
-        for domain, canons in canons_by_domain.iteritems():
-            for d in bans_for_domain_parts(domain):
-                if d.no_email:
-                    rv[canon] = "domain"
-
-        return rv
-
     def set_email(self, email):
         old_email = self.email
         self.email = email
         self._commit()
         AccountsByCanonicalEmail.update_email(self, old_email, email)
 
-    def has_banned_email(self):
-        canon = self.canonical_email()
-        which = self.which_emails_are_banned((canon,))
-        return which.get(canon, None)
-
     def canonical_email(self):
         return canonicalize_email(self.email)
-
-    def cromulent(self):
-        """Return whether the user has validated their email address and
-           passes some rudimentary 'not evil' checks."""
-
-        if not self.email_verified:
-            return False
-
-        if self.has_banned_email():
-            return False
-
-        # Otherwise, congratulations; you're cromulent!
-        return True
-
-    def quota_limits(self, kind):
-        if kind != 'link':
-            raise NotImplementedError
-
-        if self.cromulent():
-            return dict(hour=3, day=10, week=50, month=150)
-        else:
-            return dict(hour=1,  day=3,  week=5,   month=5)
-
-    def quota_full(self, kind):
-        limits = self.quota_limits(kind)
-        baskets = self.quota_baskets(kind)
-
-        if baskets is None:
-            return None
-
-        total = 0
-        filled_quota = None
-        for key in ('hour', 'day', 'week', 'month'):
-            total += len(baskets[key])
-            if total >= limits[key]:
-                filled_quota = key
-
-        return filled_quota
 
     @classmethod
     def system_user(cls):
@@ -650,14 +559,60 @@ class Account(Thing):
         except (NotFound, AttributeError):
             return None
 
+    def use_subreddit_style(self, sr):
+        """Return whether to show subreddit stylesheet depending on
+        individual selection if available, else use pref_show_stylesheets"""
+        # if FakeSubreddit, there is no stylesheet
+        if not hasattr(sr, '_id'):
+            return False
+        if not feature.is_enabled('stylesheets_everywhere'):
+            return self.pref_show_stylesheets
+        # if stylesheet isn't individually enabled/disabled, use global pref
+        return bool(getattr(self, "sr_style_%s_enabled" % sr._id,
+            self.pref_show_stylesheets))
+
+    def set_subreddit_style(self, sr, use_style):
+        if hasattr(sr, '_id'):
+            setattr(self, "sr_style_%s_enabled" % sr._id, use_style)
+            self._commit()
+
     def flair_enabled_in_sr(self, sr_id):
         return getattr(self, 'flair_%s_enabled' % sr_id, True)
 
-    def flair_text(self, sr_id):
+    def flair_text(self, sr_id, obey_disabled=False):
+        if obey_disabled and not self.flair_enabled_in_sr(sr_id):
+            return None
         return getattr(self, 'flair_%s_text' % sr_id, None)
 
-    def flair_css_class(self, sr_id):
+    def flair_css_class(self, sr_id, obey_disabled=False):
+        if obey_disabled and not self.flair_enabled_in_sr(sr_id):
+            return None
         return getattr(self, 'flair_%s_css_class' % sr_id, None)
+
+    def can_flair_in_sr(self, user, sr):
+        """Return whether a user can set this one's flair in a subreddit."""
+        can_assign_own = self._id == user._id and sr.flair_self_assign_enabled
+
+        return can_assign_own or sr.is_moderator_with_perms(user, "flair")
+
+    def set_flair(self, subreddit, text=None, css_class=None, set_by=None,
+            log_details="edit"):
+        log_details = "flair_%s" % log_details
+        if not text and not css_class:
+            # set to None instead of potentially empty strings
+            text = css_class = None
+            subreddit.remove_flair(self)
+            log_details = "flair_delete"
+        elif not subreddit.is_flair(self):
+            subreddit.add_flair(self)
+
+        setattr(self, 'flair_%s_text' % subreddit._id, text)
+        setattr(self, 'flair_%s_css_class' % subreddit._id, css_class)
+        self._commit()
+
+        if set_by and set_by != self:
+            ModAction.create(subreddit, set_by, action='editflair',
+                target=self, details=log_details)
 
     def update_sr_activity(self, sr):
         if not self._spam:
@@ -693,17 +648,6 @@ class Account(Thing):
                  self.name in g.employees))
 
     @property
-    def https_forced(self):
-        """Return whether this account may only be used via HTTPS."""
-        if feature.is_enabled_for("require_https", self):
-            return True
-        return self.pref_force_https
-
-    @property
-    def uses_toolbar(self):
-        return not self.https_forced and self.pref_frame
-
-    @property
     def has_gold_subscription(self):
         return bool(getattr(self, 'gold_subscr_id', None))
 
@@ -721,6 +665,9 @@ class Account(Thing):
     def gold_will_autorenew(self):
         return (self.has_gold_subscription or
                 (self.pref_creddit_autorenew and self.gold_creddits > 0))
+
+    def incr_admin_takedown_strikes(self, amt=1):
+        return self._incr('admin_takedown_strikes', amt)
 
 
 class FakeAccount(Account):
@@ -1009,3 +956,57 @@ class AccountsByCanonicalEmail(tdb_cassandra.View):
             return []
         account_id36s = cls.get_time_sorted_columns(canonical).keys()
         return Account._byID36(account_id36s, data=True, return_dict=False)
+    
+
+class SubredditParticipationByAccount(tdb_cassandra.DenormalizedRelation):
+    _use_db = True
+    _write_last_modified = False
+    _views = []
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+        "default_validation_class": tdb_cassandra.DATE_TYPE,
+    }
+
+    @classmethod
+    def value_for(cls, thing1, thing2):
+        return datetime.now(g.tz)
+
+    @classmethod
+    def mark_participated(cls, account, subreddit):
+        cls.create(account, [subreddit])
+
+
+class QuarantinedSubredditOptInsByAccount(tdb_cassandra.DenormalizedRelation):
+    _use_db = True
+    _last_modified_name = 'QuarantineSubredditOptin'
+    _read_consistency_level = tdb_cassandra.CL.QUORUM
+    _write_consistency_level = tdb_cassandra.CL.QUORUM
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+        "default_validation_class": tdb_cassandra.DATE_TYPE,
+    }
+    _connection_pool = 'main'
+    _views = []
+
+    @classmethod
+    def value_for(cls, thing1, thing2):
+        return datetime.now(g.tz)
+
+    @classmethod
+    def opt_in(cls, account, subreddit):
+        if subreddit.quarantine:
+            cls.create(account, subreddit)
+
+    @classmethod
+    def opt_out(cls, account, subreddit):
+        if subreddit.is_subscriber(account):
+            subreddit.remove_subscriber(account)
+        cls.destroy(account, subreddit)
+
+    @classmethod
+    def is_opted_in(cls, user, subreddit):
+        try:
+            r = cls.fast_query(user, [subreddit])
+        except tdb_cassandra.NotFound:
+            return False
+        return (user, subreddit) in r

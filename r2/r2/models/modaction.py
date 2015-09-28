@@ -25,20 +25,13 @@ import itertools
 from uuid import UUID
 
 from pycassa.system_manager import TIME_UUID_TYPE
-from pylons import c, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.lib.db import tdb_cassandra
 from r2.lib.utils import tup
-from r2.models import (
-    Account,
-    Comment,
-    DefaultSR,
-    Link,
-    ModSR,
-    MultiReddit,
-    Subreddit,
-)
 
 
 class ModAction(tdb_cassandra.UuidThing):
@@ -64,11 +57,12 @@ class ModAction(tdb_cassandra.UuidThing):
                'removecomment', 'approvecomment', 'addmoderator',
                'invitemoderator', 'uninvitemoderator', 'acceptmoderatorinvite',
                'removemoderator', 'addcontributor', 'removecontributor',
-               'editsettings', 'editflair', 'distinguish', 'marknsfw', 
+               'editsettings', 'editflair', 'distinguish', 'marknsfw',
                'wikibanned', 'wikicontributor', 'wikiunbanned', 'wikipagelisted',
                'removewikicontributor', 'wikirevise', 'wikipermlevel',
-               'ignorereports', 'unignorereports', 'setpermissions', 'sticky',
-               'unsticky')
+               'ignorereports', 'unignorereports', 'setpermissions',
+               'setsuggestedsort', 'sticky', 'unsticky', 'lock', 'unlock',
+               'muteuser', 'unmuteuser')
 
     _menu = {'banuser': _('ban user'),
              'unbanuser': _('unban user'),
@@ -97,8 +91,13 @@ class ModAction(tdb_cassandra.UuidThing):
              'ignorereports': _('ignore reports'),
              'unignorereports': _('unignore reports'),
              'setpermissions': _('permissions'),
+             'setsuggestedsort': _('set suggested sort'),
              'sticky': _('sticky post'),
              'unsticky': _('unsticky post'),
+             'lock': _('lock post'),
+             'unlock': _('unlock post'),
+             'muteuser': _('mute user'),
+             'unmuteuser': _('unmute user'),
             }
 
     _text = {'banuser': _('banned'),
@@ -128,8 +127,13 @@ class ModAction(tdb_cassandra.UuidThing):
              'ignorereports': _('ignored reports'),
              'unignorereports': _('unignored reports'),
              'setpermissions': _('changed permissions on'),
+             'setsuggestedsort': _('set suggested sort'),
              'sticky': _('stickied'),
              'unsticky': _('unstickied'),
+             'lock': _('locked'),
+             'unlock': _('unlocked'),
+             'muteuser': _('muted'),
+             'unmuteuser': _('unmuted'),
             }
 
     _details_text = {# approve comment/link
@@ -194,6 +198,8 @@ class ModAction(tdb_cassandra.UuidThing):
 
     @classmethod
     def create(cls, sr, mod, action, details=None, target=None, description=None):
+        from r2.models import DefaultSR
+
         # Split this off into separate function to check for valid actions?
         if not action in cls.actions:
             raise ValueError("Invalid ModAction: %s" % action)
@@ -212,6 +218,9 @@ class ModAction(tdb_cassandra.UuidThing):
 
         ma = cls(**kw)
         ma._commit()
+
+        g.events.mod_event(ma, sr, mod, target, request=request, context=c)
+
         return ma
 
     def _on_create(self):
@@ -258,27 +267,29 @@ class ModAction(tdb_cassandra.UuidThing):
 
         return q
 
-    def get_extra_text(self):
-        text = ''
-        if hasattr(self, 'details') and not self.details == None:
+    @property
+    def details_text(self):
+        text = ""
+        if getattr(self, "details", None):
             text += self._details_text.get(self.details, self.details)
-        if hasattr(self, 'description') and not self.description == None:
-            text += ' %s' % self.description
+        if getattr(self, "description", None):
+            if text:
+                text += ": "
+            text += self.description
         return text
-
-    @classmethod
-    def get_rgb(cls, item, fade=0.8):
-        sr_id = item.subreddit._id
-        r = int(256 - (hash(str(sr_id)) % 256)*(1-fade))
-        g = int(256 - (hash(str(sr_id) + ' ') % 256)*(1-fade))
-        b = int(256 - (hash(str(sr_id) + '  ') % 256)*(1-fade))
-        return (r, g, b)
 
     @classmethod
     def add_props(cls, user, wrapped):
         from r2.lib.db.thing import Thing
         from r2.lib.menus import QueryButton
         from r2.lib.pages import WrappedUser
+        from r2.models import (
+            Account,
+            Link,
+            ModSR,
+            MultiReddit,
+            Subreddit,
+        )
 
         target_names = {item.target_fullname for item in wrapped
                             if hasattr(item, "target_fullname")}
@@ -305,7 +316,6 @@ class ModAction(tdb_cassandra.UuidThing):
             item.moderator = moderators[item.mod_id36]
             item.subreddit = srs[item.sr_id36]
             item.text = cls._text.get(item.action, '')
-            item.details = item.get_extra_text()
             item.target = None
             item.target_author = None
 
@@ -319,6 +329,9 @@ class ModAction(tdb_cassandra.UuidThing):
                 if hasattr(item.target, "link_id"):
                     parent_link_name = item.target.link_id
                     item.parent_link = parent_links[parent_link_name]
+
+                if isinstance(item.target, Account):
+                    item.target_author = item.target
 
         if c.render_style == "html":
             request_path = request.path
@@ -346,7 +359,8 @@ class ModAction(tdb_cassandra.UuidThing):
                 item.mod_button = mod_button
 
                 if isinstance(c.site, ModSR) or isinstance(c.site, MultiReddit):
-                    item.bgcolor = 'rgb(%s,%s,%s)' % cls.get_rgb(item)
+                    rgb = item.subreddit.get_rgb()
+                    item.bgcolor = 'rgb(%s,%s,%s)' % rgb
                     item.is_multi = True
                 else:
                     item.bgcolor = "rgb(255,255,255)"

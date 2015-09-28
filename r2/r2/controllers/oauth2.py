@@ -24,13 +24,17 @@ from urllib import urlencode
 import base64
 import simplejson
 
-from pylons import c, g, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
+
 from r2.config.extensions import set_extension
 from r2.lib.base import abort
 from reddit_base import RedditController, MinimalController, require_https
 from r2.lib.db import tdb_cassandra
 from r2.lib.db.thing import NotFound
+from r2.lib.pages import RedditError
 from r2.models import Account
 from r2.models.token import (
     OAuth2Client, OAuth2AuthorizationCode, OAuth2AccessToken,
@@ -97,6 +101,24 @@ class OAuth2FrontendController(RedditController):
         final_redirect = _update_redirect_uri(redirect_uri, resp, as_fragment)
         return self.redirect(final_redirect, code=302)
 
+    def _check_employee_grants(self, client, scope):
+        if not c.user.employee or not client:
+            return
+        if client._id in g.employee_approved_clients:
+            return
+        if client._id in g.mobile_auth_allowed_clients:
+            return
+        # The identity scope doesn't leak much, and we don't mind if employees
+        # prove their identity to some external service
+        if scope.scopes == {"identity"}:
+            return
+        error_page = RedditError(
+            title=_('this app has not been approved for use with employee accounts'),
+            message="",
+        )
+        request.environ["usable_error_content"] = error_page.render()
+        self.abort403()
+
     @validate(VUser(),
               response_type = VOneOf("response_type", ("code", "token")),
               client = VOAuth2ClientID(),
@@ -127,6 +149,8 @@ class OAuth2FrontendController(RedditController):
         **redirect_uri** will be returned, with a **error** parameter
         indicating why the request failed.
         """
+
+        self._check_employee_grants(client, scope)
 
         # Check redirect URI first; it will ensure client exists
         self._check_redirect_uri(client, redirect_uri)
@@ -160,6 +184,8 @@ class OAuth2FrontendController(RedditController):
     def POST_authorize(self, authorize, client, redirect_uri, scope, state,
                        duration, response_type):
         """Endpoint for OAuth2 authorization."""
+
+        self._check_employee_grants(client, scope)
 
         if response_type == "token" and client.is_confidential():
             # Prevent "confidential" clients from distributing tokens
@@ -195,7 +221,8 @@ class OAuth2AccessController(MinimalController):
         set_extension(request.environ, "json")
         MinimalController.pre(self)
         require_https()
-        c.oauth2_client = self._get_client_auth()
+        if request.method != "OPTIONS":
+            c.oauth2_client = self._get_client_auth()
 
     def _get_client_auth(self):
         auth = request.headers.get("Authorization")
@@ -210,6 +237,26 @@ class OAuth2AccessController(MinimalController):
             return client
         except RequirementException:
             abort(401, headers=[("WWW-Authenticate", 'Basic realm="reddit"')])
+
+    def OPTIONS_access_token(self):
+        """Send CORS headers for access token requests
+
+        * Allow all origins
+        * Only POST requests allowed to /api/v1/access_token
+        * No ambient credentials
+        * Authorization header required to identify the client
+        * Expose common reddit headers
+
+        """
+        if "Origin" in request.headers:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = \
+                "POST"
+            response.headers["Access-Control-Allow-Headers"] = \
+                    "Authorization, "
+            response.headers["Access-Control-Allow-Credentials"] = "false"
+            response.headers['Access-Control-Expose-Headers'] = \
+                self.COMMON_REDDIT_HEADERS
 
     @validate(
         grant_type=VOneOf("grant_type",
@@ -255,6 +302,7 @@ class OAuth2AccessController(MinimalController):
         more information.
 
         """
+        self.OPTIONS_access_token()
         if grant_type == "authorization_code":
             return self._access_token_code()
         elif grant_type == "refresh_token":
@@ -427,6 +475,26 @@ class OAuth2AccessController(MinimalController):
         resp = self._make_token_dict(access_token)
         return self.api_wrapper(resp)
 
+    def OPTIONS_revoke_token(self):
+        """Send CORS headers for token revocation requests
+
+        * Allow all origins
+        * Only POST requests allowed to /api/v1/revoke_token
+        * No ambient credentials
+        * Authorization header required to identify the client
+        * Expose common reddit headers
+
+        """
+        if "Origin" in request.headers:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = \
+                "POST"
+            response.headers["Access-Control-Allow-Headers"] = \
+                    "Authorization, "
+            response.headers["Access-Control-Allow-Credentials"] = "false"
+            response.headers['Access-Control-Expose-Headers'] = \
+                self.COMMON_REDDIT_HEADERS
+
     @validate(
         VRatelimit(rate_user=False, rate_ip=True, prefix="rate_revoke_token_"),
         token_id=nop("token"),
@@ -445,6 +513,7 @@ class OAuth2AccessController(MinimalController):
         See [RFC7009](http://tools.ietf.org/html/rfc7009)
 
         '''
+        self.OPTIONS_revoke_token()
         # In success cases, this endpoint returns no data.
         response.status = 204
 

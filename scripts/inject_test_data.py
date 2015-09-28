@@ -31,11 +31,11 @@ import time
 
 import requests
 
-from pylons import g
+from pylons import app_globals as g
 
 from r2.lib.db import queries
 from r2.lib import amqp
-from r2.lib.utils import weighted_lottery
+from r2.lib.utils import weighted_lottery, get_requests_resp_json
 from r2.models import Account, NotFound, register, Subreddit, Link, Comment
 
 
@@ -121,7 +121,7 @@ def fetch_listing(path, limit=1000, batch_size=100):
         response = session.get(base_url, params=params)
         response.raise_for_status()
 
-        listing = response.json["data"]
+        listing = get_requests_resp_json(response)["data"]
         for child in listing["children"]:
             yield child["data"]
             count += 1
@@ -250,8 +250,10 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
 
     print ">>>> Ensuring configured objects exist"
     system_user = ensure_account(g.system_user)
+    ensure_account(g.automoderator_account)
     ensure_subreddit(g.default_sr, system_user)
     ensure_subreddit(g.takedown_sr, system_user)
+    ensure_subreddit(g.beta_sr, system_user)
 
     print
     print
@@ -300,19 +302,17 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
 
         for i in xrange(num_links):
             link_author = random.choice(accounts)
-
+            url = sr_model.generate_link_url()
+            is_self = (url == "self")
+            content = sr_model.generate_selfpost_body() if is_self else url
             link = Link._submit(
+                is_self=is_self,
                 title=sr_model.generate_link_title(),
-                url=sr_model.generate_link_url(),
+                content=content,
                 author=link_author,
                 sr=sr,
                 ip="127.0.0.1",
             )
-            if link.url == "self":
-                link.url = link.make_permalink(sr)
-                link.is_self = True
-                link.selftext = sr_model.generate_selfpost_body()
-                link._commit()
             queries.queue_vote(link_author, link, dir=True, ip="127.0.0.1")
             queries.new_link(link)
             things.append(link)

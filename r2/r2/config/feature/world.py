@@ -20,7 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 
 class World(object):
@@ -66,8 +68,14 @@ class World(object):
         return self.stacked_proxy_safe_get(c, 'subdomain')
 
     def current_oauth_client(self):
-        client = self.stacked_proxy_safe_get(c, 'oauth_client', None)
+        client = self.stacked_proxy_safe_get(c, 'oauth2_client', None)
         return getattr(client, '_id', None)
+
+    def current_loid(self):
+        cookies = self.stacked_proxy_safe_get(request, 'cookies')
+        if not cookies:
+            return None
+        return cookies.get("loid", None)
 
     def is_admin(self, user):
         if not user or not hasattr(user, 'name'):
@@ -80,11 +88,21 @@ class World(object):
             return False
         return user.employee
 
+    def user_has_beta_enabled(self, user):
+        if not user:
+            return False
+        return user.pref_beta
+
     def has_gold(self, user):
         if not user:
             return False
 
         return user.gold
+
+    def is_user_loggedin(self):
+        if self.current_user():
+            return True
+        return False
 
     def url_features(self):
         return set(request.GET.getall('feature'))

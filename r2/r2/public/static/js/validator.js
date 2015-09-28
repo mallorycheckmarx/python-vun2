@@ -8,6 +8,7 @@
   Validator.DEFAULTS = {
     delay: 600,
     loadingTimeout: 250,
+    https: false,
   };
 
   _.extend(Validator.prototype, {
@@ -58,7 +59,7 @@
       }
 
       // Clear validation state on empty values
-      if (/^\s*$/.test(value)) {
+      if (/^\s*$/.test(value) && !$el.data('validate-noclear')) {
         $el.trigger('cleared.validator');
         return;
       }
@@ -67,6 +68,14 @@
       var url = $el.data('validate-url');
       var validateWith = ($el.data('validate-with') || '').split(/,s*/);
       var data = {};
+
+      if (this.options.https) {
+        var parser = document.createElement('a');
+
+        parser.href = url;
+        parser.protocol = 'https:';
+        url = parser.href;
+      }
 
       data[$el.attr('name')] = value;
 

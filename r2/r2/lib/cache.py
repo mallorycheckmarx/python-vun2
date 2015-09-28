@@ -20,17 +20,21 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import sys
 from threading import local
 from hashlib import md5
 import cPickle as pickle
 from copy import copy
 from curses.ascii import isgraph
 import logging
+from time import sleep
 
-from pylons import g
+from pylons import app_globals as g
 
 import pylibmc
 from _pylibmc import MemcachedError
+
+import random
 
 from pycassa import ColumnFamily
 from pycassa.cassandra.ttypes import ConsistencyLevel
@@ -70,8 +74,59 @@ class CacheUtils(object):
 
 class MemcachedMaximumRetryException(Exception): pass
 
+class MemcachedValueSizeException(Exception):
+    def __init__(self, cache_name, caller, prefix, key, size):
+        self.key = key
+        self.size = size
+        self.cache_name = cache_name
+        self.caller = caller
+        self.prefix = prefix
+
+    def __str__(self):
+        return ("Memcached %s %s: The object for key '%s%s' is too big for memcached at %s bytes" %
+            (self.cache_name, self.caller, self.prefix, self.key, self.size))
+
+
+# validation functions to be used by memcached pools
+MEMCACHED_MAX_VALUE_SIZE = 2048 * 1024 # 2MB
+
+def validate_size_warn(**kwargs):
+    if 'value' in kwargs:
+        size = sys.getsizeof(kwargs["value"])
+        if size >= MEMCACHED_MAX_VALUE_SIZE:
+            key = ".".join((
+                "memcached_large_object",
+                kwargs.get("cache_name", "undefined")
+            ))
+            g.stats.simple_event(key)
+            g.log.debug(
+                "Memcached %s: Attempted to cache an object > 1MB at key: '%s%s' of size %s bytes",
+                kwargs.get("caller", "unknown"),
+                kwargs.get("prefix", ""),
+                kwargs.get("key", "undefined"),
+                size
+            )
+            return False
+
+    return True
+
+def validate_size_error(**kwargs):
+    if 'value' in kwargs:
+        size = sys.getsizeof(kwargs["value"])
+        if size >= MEMCACHED_MAX_VALUE_SIZE:
+            raise MemcachedValueSizeException(
+                kwargs.get("cache_name", "unknown"),
+                kwargs.get("caller", "unknown"),
+                kwargs.get("prefix", ""),
+                kwargs.get("key", "undefined"),
+                size
+            )
+
+    return True
+
 class CMemcache(CacheUtils):
     def __init__(self,
+                 name,
                  servers,
                  debug=False,
                  noreply=False,
@@ -79,10 +134,14 @@ class CMemcache(CacheUtils):
                  min_compress_len=512 * 1024,
                  num_clients=10,
                  timeout_retry=5,
-                 binary=False):
+                 binary=False,
+                 validators=None):
+        self.name = name
         self.servers = servers
         self.clients = pylibmc.ClientPool(n_slots = num_clients)
         self.timeout_retry = timeout_retry
+        self.validators = validators or []
+
         for x in xrange(num_clients):
             client = pylibmc.Client(servers, binary=binary)
             behaviors = {
@@ -120,15 +179,27 @@ class CMemcache(CacheUtils):
                 raise
             except MemcachedError as e:
                 ex = e
+            sleep(random.uniform(0, 0.1))
 
         event_name = "cache.retry.%s" % fn.__name__
         g.stats.event_count(event_name, "fail")
         raise MemcachedMaximumRetryException(ex)
 
+    def validate(self, **kwargs):
+        kwargs['caller'] = sys._getframe().f_back.f_code.co_name
+        kwargs['cache_name'] = self.name
+        if not all(validator(**kwargs) for validator in self.validators):
+            return False
+
+        return True
+
     def get(self, key, default = None):
+        if not self.validate(key=key):
+            return default
+
         def do_get():
             with self.clients.reserve() as mc:
-                ret = mc.get(key)
+                ret = mc.get(str(key))
                 if ret is None:
                     return default
                 return ret
@@ -136,9 +207,12 @@ class CMemcache(CacheUtils):
         return self.retry(self.timeout_retry, do_get)
 
     def get_multi(self, keys, prefix = ''):
+        validated_keys = [k for k in (str(k) for k in keys)
+                          if self.validate(prefix=prefix, key=k)]
+
         def do_get_multi():
             with self.clients.reserve() as mc:
-                return mc.get_multi(keys, key_prefix = prefix)
+                return mc.get_multi(validated_keys, key_prefix = prefix)
 
         return self.retry(self.timeout_retry, do_get_multi)
 
@@ -151,67 +225,89 @@ class CMemcache(CacheUtils):
     simple_get_multi = get_multi
 
     def set(self, key, val, time = 0):
+        if not self.validate(key=key, value=val):
+            return None
+
         def do_set():
             with self.clients.reserve() as mc:
-                return mc.set(key, val, time = time,
+                return mc.set(str(key), val, time=time,
                                 min_compress_len = self.min_compress_len)
 
         return self.retry(self.timeout_retry, do_set)
 
     def set_multi(self, keys, prefix='', time=0):
-        new_keys = {}
-        for k,v in keys.iteritems():
-            new_keys[str(k)] = v
+        str_keys = ((str(k), v) for k, v in keys.iteritems())
+        validated_keys = {k: v for k, v in str_keys
+                          if self.validate(prefix=prefix, key=k, value=v)}
 
         def do_set_multi():
             with self.clients.reserve() as mc:
-                return mc.set_multi(new_keys, key_prefix = prefix,
+                return mc.set_multi(validated_keys, key_prefix = prefix,
                                     time = time,
                                     min_compress_len = self.min_compress_len)
 
         return self.retry(self.timeout_retry, do_set_multi)
 
     def add_multi(self, keys, prefix='', time=0):
-        new_keys = {}
-        for k,v in keys.iteritems():
-            new_keys[str(k)] = v
+        str_keys = ((str(k), v) for k, v in keys.iteritems())
+        validated_keys = {k: v for k, v in str_keys
+                          if self.validate(prefix=prefix, key=k, value=v)}
+
         with self.clients.reserve() as mc:
-            return mc.add_multi(new_keys, key_prefix = prefix,
+            return mc.add_multi(validated_keys, key_prefix = prefix,
                                 time = time)
 
     def incr_multi(self, keys, prefix='', delta=1):
+        validated_keys = [k for k in (str(k) for k in keys)
+                          if self.validate(prefix=prefix, key=k)]
+
         with self.clients.reserve() as mc:
-            return mc.incr_multi(map(str, keys),
+            return mc.incr_multi(validated_keys,
                                  key_prefix = prefix,
                                  delta=delta)
 
     def append(self, key, val, time=0):
+        if not self.validate(key=key, value=val):
+            return None
+
         with self.clients.reserve() as mc:
-            return mc.append(key, val, time=time)
+            return mc.append(str(key), val, time=time)
 
     def incr(self, key, delta=1, time=0):
+        if not self.validate(key=key):
+            return None
+
         # ignore the time on these
         with self.clients.reserve() as mc:
-            return mc.incr(key, delta)
+            return mc.incr(str(key), delta)
 
     def add(self, key, val, time=0):
+        if not self.validate(key=key, value=val):
+            return None
+
         try:
             with self.clients.reserve() as mc:
-                return mc.add(key, val, time=time)
+                return mc.add(str(key), val, time=time)
         except pylibmc.DataExists:
             return None
 
     def delete(self, key, time=0):
+        if not self.validate(key=key):
+            return None
+
         def do_delete():
             with self.clients.reserve() as mc:
-                return mc.delete(key)
+                return mc.delete(str(key))
 
         return self.retry(self.timeout_retry, do_delete)
 
     def delete_multi(self, keys, prefix=''):
+        validated_keys = [k for k in (str(k) for k in keys)
+                          if self.validate(prefix=prefix, key=k)]
+
         def do_delete_multi():
             with self.clients.reserve() as mc:
-                return mc.delete_multi(keys, key_prefix=prefix)
+                return mc.delete_multi(validated_keys, key_prefix=prefix)
 
         return self.retry(self.timeout_retry, do_delete_multi)
 
@@ -396,15 +492,12 @@ class TransitionalCache(CacheUtils):
         else:
             return self.replacement.stats
 
-    @stats.setter
-    def stats(self, value):
-        """No-op.
-
-        TransitionCache is designed to wrap two cache chains. We can ignore
-        the set (which happens at the end of reset_caches in app_globals.py)
-        because each chain will separately get dealt with on its own.
-        """
-        pass
+    @property
+    def read_chain(self):
+        if self.read_original:
+            return self.original
+        else:
+            return self.replacement
 
     @property
     def caches(self):
@@ -466,7 +559,6 @@ class TransitionalCache(CacheUtils):
     delete = make_set_fn("delete")
     delete_multi = make_set_fn("delete_multi")
     flush_all = make_set_fn("flush_all")
-    reset = make_set_fn("reset")
 
 
 def cache_timer_decorator(fn_name):
@@ -499,47 +591,6 @@ def cache_timer_decorator(fn_name):
     return wrap
 
 
-def log_invalid_keys(fn):
-    """Use to decorate CacheChain operations to log invalid memcache keys."""
-    def wrapped(self, *args, **kw):
-        try:
-            getattr(g, "log")
-        except TypeError:
-            # don't have access to g, maybe in a thread?
-            return fn(self, *args, **kw)
-
-        if self.check_keys and getattr(g, "log"):
-            keys = args[0]
-            prefix = kw.get("prefix", "")
-            if self.stats:
-                cache_name = self.stats.cache_name
-            else:
-                cache_name = "unknown"
-
-            live_config = getattr(g, "live_config", {})
-            log_chance = live_config.get("invalid_key_sample_rate", 1)
-            will_log = random.random() < log_chance
-
-            for key in tup(keys):
-                # map_keys will coerce keys to str but we need to do
-                # it for non multi operations so the `isgraph` checks
-                # don't fail
-                # any key that's not a valid str will end up
-                # triggering a ValueError when it hits memcache
-                key = str(key)
-
-                if prefix:
-                    key = prefix + key
-
-                for c in key:
-                    if will_log and not isgraph(c):
-                        g.log.warning(
-                            "%s: keyname is invalid: %r", cache_name, key)
-                        break
-        return fn(self, *args, **kw)
-    return wrapped
-
-
 class CacheChain(CacheUtils, local):
     def __init__(self, caches, cache_negative_results=False,
                  check_keys=True):
@@ -550,7 +601,6 @@ class CacheChain(CacheUtils, local):
 
     def make_set_fn(fn_name):
         @cache_timer_decorator(fn_name)
-        @log_invalid_keys
         def fn(self, *a, **kw):
             ret = None
             for c in self.caches:
@@ -580,12 +630,13 @@ class CacheChain(CacheUtils, local):
     cache_negative_results = False
 
     @cache_timer_decorator("get")
-    @log_invalid_keys
     def get(self, key, default = None, allow_local = True, stale=None):
         stat_outcome = False  # assume a miss until a result is found
+        is_localcache = False
         try:
             for c in self.caches:
-                if not allow_local and isinstance(c,LocalCache):
+                is_localcache = isinstance(c, LocalCache)
+                if not allow_local and is_localcache:
                     continue
 
                 val = c.get(key)
@@ -613,7 +664,8 @@ class CacheChain(CacheUtils, local):
         finally:
             if self.stats:
                 if stat_outcome:
-                    self.stats.cache_hit()
+                    if not is_localcache:
+                        self.stats.cache_hit()
                 else:
                     self.stats.cache_miss()
 
@@ -622,14 +674,16 @@ class CacheChain(CacheUtils, local):
         return prefix_keys(keys, prefix, l)
 
     @cache_timer_decorator("get_multi")
-    @log_invalid_keys
-    def simple_get_multi(self, keys, allow_local = True, stale=None):
+    def simple_get_multi(self, keys, allow_local = True, stale=None,
+                         stat_subname=None):
         out = {}
         need = set(keys)
         hits = 0
+        local_hits = 0
         misses = 0
         for c in self.caches:
-            if not allow_local and isinstance(c, LocalCache):
+            is_localcache = isinstance(c, LocalCache)
+            if not allow_local and is_localcache:
                 continue
 
             if c.permanent and not misses:
@@ -640,11 +694,15 @@ class CacheChain(CacheUtils, local):
             if len(out) == len(keys):
                 # we've found them all
                 break
+
             r = c.simple_get_multi(need)
             #update other caches
             if r:
-                if not c.permanent:
+                if is_localcache:
+                    local_hits += len(r)
+                elif not c.permanent:
                     hits += len(r)
+
                 for d in self.caches:
                     if c is d:
                         break # so we don't set caches later in the chain
@@ -667,8 +725,8 @@ class CacheChain(CacheUtils, local):
                 # If this chain contains no permanent caches, then we need to
                 # count the misses here.
                 misses = len(need)
-            self.stats.cache_hit(hits)
-            self.stats.cache_miss(misses)
+            self.stats.cache_hit(hits, subname=stat_subname)
+            self.stats.cache_miss(misses, subname=stat_subname)
 
         return out
 
@@ -690,7 +748,6 @@ class MemcacheChain(CacheChain):
     pass
 
 class HardcacheChain(CacheChain):
-    @log_invalid_keys
     def add(self, key, val, time=0):
         authority = self.caches[-1] # the authority is the hardcache
                                     # itself
@@ -702,7 +759,6 @@ class HardcacheChain(CacheChain):
 
         return added_val
 
-    @log_invalid_keys
     def accrue(self, key, time=0, delta=1):
         auth_value = self.caches[-1].get(key)
 
@@ -740,12 +796,9 @@ class StaleCacheChain(CacheChain):
         self.stats = None
         self.check_keys = check_keys
 
-    @log_invalid_keys
     @cache_timer_decorator("get")
     def get(self, key, default=None, stale = False, **kw):
         if kw.get('allow_local', True) and key in self.localcache:
-            if self.stats:
-                self.stats.cache_hit()
             return self.localcache[key]
 
         if stale:
@@ -778,18 +831,19 @@ class StaleCacheChain(CacheChain):
         return value
 
     @cache_timer_decorator("get_multi")
-    @log_invalid_keys
-    def simple_get_multi(self, keys, stale = False, **kw):
+    def simple_get_multi(self, keys, stale=False, stat_subname=None, **kw):
         if not isinstance(keys, set):
             keys = set(keys)
 
         ret = {}
+        local_hits = 0
 
         if kw.get('allow_local'):
             for k in list(keys):
                 if k in self.localcache:
                     ret[k] = self.localcache[k]
                     keys.remove(k)
+                    local_hits += 1
 
         if keys and stale:
             stale_values = self._getstale(keys)
@@ -801,8 +855,8 @@ class StaleCacheChain(CacheChain):
             stale_hits = len(stale_values)
             stale_misses = len(keys)
             if self.stats:
-                self.stats.stale_hit(stale_hits)
-                self.stats.stale_miss(stale_misses)
+                self.stats.stale_hit(stale_hits, subname=stat_subname)
+                self.stats.stale_miss(stale_misses, subname=stat_subname)
 
         if keys:
             values = self.realcache.simple_get_multi(keys)
@@ -813,9 +867,9 @@ class StaleCacheChain(CacheChain):
 
         if self.stats:
             misses = len(keys - set(ret.keys()))
-            hits = len(ret)
-            self.stats.cache_hit(hits)
-            self.stats.cache_miss(misses)
+            hits = len(ret) - local_hits
+            self.stats.cache_hit(hits, subname=stat_subname)
+            self.stats.cache_miss(misses, subname=stat_subname)
 
         return ret
 
@@ -1071,7 +1125,7 @@ def make_key(iden, *a, **kw):
     return '%s(%s)' % (iden, h.hexdigest())
 
 def test_stale():
-    from pylons import g
+    from pylons import app_globals as g
     ca = g.cache
     assert isinstance(ca, StaleCacheChain)
 

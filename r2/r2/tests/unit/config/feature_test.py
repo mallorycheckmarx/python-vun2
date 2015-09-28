@@ -22,6 +22,8 @@
 ###############################################################################
 
 import collections
+import random
+import string
 import unittest
 
 import mock
@@ -29,9 +31,13 @@ import mock
 from r2.config.feature.state import FeatureState
 from r2.config.feature.world import World
 
-MockAccount = collections.namedtuple('Account', 'name')
-gary = MockAccount(name='gary')
-all_uppercase = MockAccount(name='ALL_UPPERCASE')
+
+class MockAccount(object):
+    def __init__(self, name, _fullname):
+        self.name = name
+        self._fullname = _fullname
+gary = MockAccount(name='gary', _fullname='t2_beef')
+all_uppercase = MockAccount(name='ALL_UPPERCASE', _fullname='t2_f00d')
 
 
 class TestFeature(unittest.TestCase):
@@ -43,8 +49,13 @@ class TestFeature(unittest.TestCase):
             cls._world = World()
             cls._world.current_user = mock.Mock(return_value='')
             cls._world.current_subreddit = mock.Mock(return_value='')
+            cls._world.current_loid = mock.Mock(return_value='')
 
         return cls._world
+
+    @classmethod
+    def generate_loid(cls):
+        return ''.join(random.sample(string.letters + string.digits, 16))
 
     def _make_state(self, config, world=None):
         # Mock by hand because _parse_config is called in __init__, so we
@@ -55,6 +66,13 @@ class TestFeature(unittest.TestCase):
         if not world:
             world = self.world()
         return MockState('test_state', world)
+
+    def _assert_fuzzy_percent_true(self, results, percent):
+        stats = collections.Counter(results)
+        total = sum(stats.values())
+        # _roughly_ `percent` should have been `True`
+        diff = abs((float(stats[True]) / total) - (percent / 100.0))
+        self.assertTrue(diff < 0.1)
 
     def test_enabled(self):
         cfg = {'enabled': 'on'}
@@ -96,6 +114,20 @@ class TestFeature(unittest.TestCase):
         feature_state = self._make_state(cfg, mock_world)
         self.assertFalse(feature_state.is_enabled(user=gary))
 
+    def test_beta_enabled(self):
+        cfg = {'beta': True}
+        mock_world = self.world()
+        mock_world.user_has_beta_enabled = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_beta_disabled(self):
+        cfg = {'beta': True}
+        mock_world = self.world()
+        mock_world.user_has_beta_enabled = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
     def test_gold_enabled(self):
         cfg = {'gold': True}
         mock_world = self.world()
@@ -109,6 +141,74 @@ class TestFeature(unittest.TestCase):
         mock_world.has_gold = mock.Mock(return_value=False)
         feature_state = self._make_state(cfg, mock_world)
         self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_loggedin_enabled(self):
+        cfg = {'loggedin': True}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_loggedin_disabled(self):
+        cfg = {'loggedin': False}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=True)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_loggedout_enabled(self):
+        cfg = {'loggedout': True}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertTrue(feature_state.is_enabled(user=gary))
+
+    def test_loggedout_disabled(self):
+        cfg = {'loggedout': False}
+        mock_world = self.world()
+        mock_world.is_user_loggedin = mock.Mock(return_value=False)
+        feature_state = self._make_state(cfg, mock_world)
+        self.assertFalse(feature_state.is_enabled(user=gary))
+
+    def test_percent_loggedin(self):
+        num_users = 2000
+        users = []
+        for i in xrange(num_users):
+            users.append(MockAccount(name=str(i), _fullname="t2_%s" % str(i)))
+
+        def simulate_percent_loggedin(wanted_percent):
+            cfg = {'percent_loggedin': wanted_percent}
+            mock_world = self.world()
+            mock_world.is_user_loggedin = mock.Mock(return_value=True)
+            feature_state = self._make_state(cfg, mock_world)
+            return (feature_state.is_enabled(x) for x in users)
+
+        self.assertFalse(any(simulate_percent_loggedin(0)))
+        self.assertTrue(all(simulate_percent_loggedin(100)))
+        self._assert_fuzzy_percent_true(simulate_percent_loggedin(25), 25)
+        self._assert_fuzzy_percent_true(simulate_percent_loggedin(10), 10)
+        self._assert_fuzzy_percent_true(simulate_percent_loggedin(50), 50)
+        self._assert_fuzzy_percent_true(simulate_percent_loggedin(99), 99)
+
+    def test_percent_loggedout(self):
+        num_users = 2000
+
+        def simulate_percent_loggedout(wanted_percent):
+            cfg = {'percent_loggedout': wanted_percent}
+            for i in xrange(num_users):
+                mock_world = self.world()
+                loid = self.generate_loid()
+                mock_world.current_loid = mock.Mock(return_value=loid)
+                mock_world.is_user_loggedin = mock.Mock(return_value=False)
+                feature_state = self._make_state(cfg, mock_world)
+                yield feature_state.is_enabled()
+
+        self.assertFalse(any(simulate_percent_loggedout(0)))
+        self.assertTrue(all(simulate_percent_loggedout(100)))
+        self._assert_fuzzy_percent_true(simulate_percent_loggedout(25), 25)
+        self._assert_fuzzy_percent_true(simulate_percent_loggedout(10), 10)
+        self._assert_fuzzy_percent_true(simulate_percent_loggedout(50), 50)
+        self._assert_fuzzy_percent_true(simulate_percent_loggedout(99), 99)
 
     def test_url_enabled(self):
         mock_world = self.world()

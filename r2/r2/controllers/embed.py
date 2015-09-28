@@ -27,8 +27,11 @@ from r2.lib.template_helpers import get_domain
 from r2.lib.pages import Embed, BoringPage, HelpPage
 from r2.lib.filters import websafe, SC_OFF, SC_ON
 from r2.lib.memoize import memoize
+
 from pylons.i18n import _
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from BeautifulSoup import BeautifulSoup, Tag
 
@@ -38,7 +41,7 @@ from urllib2 import HTTPError
 def renderurl_cached(path):
     # Needed so http://reddit.com/help/ works
     fp = path.rstrip("/")
-    u = "http://code.reddit.com/wiki" + fp + '?stripped=1'
+    u = "https://code.reddit.com/wiki" + fp + '?stripped=1'
 
     g.log.debug("Pulling %s for help" % u)
 
@@ -84,7 +87,7 @@ class EmbedController(RedditController):
     GET_help = POST_help = renderurl
 
     def GET_blog(self):
-        return self.redirect("http://blog.%s/" %
+        return self.redirect("https://blog.%s/" %
                              get_domain(cname = False, subreddit = False,
                                         no_www = True))
 

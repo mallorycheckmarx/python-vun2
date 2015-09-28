@@ -46,8 +46,8 @@
         <td><b>${_( "bold")}</b></td>
       </tr>
       <tr>
-        <td>[reddit!](http://reddit.com)</td>
-        <td><a href="http://reddit.com">reddit!</a></td>
+        <td>[reddit!](https://reddit.com)</td>
+        <td><a href="https://reddit.com">reddit!</a></td>
       </tr>
       <tr>
         <td>
@@ -96,7 +96,7 @@
       </tr>
       % if show_embed_help:
       <tr>
-          <td>${_md('Links on their own line will be embedded:\n\nhttp://example.com')}</td>
+          <td>${_md('Links on their own line will be embedded:\n\nhttps://example.com')}</td>
           <td>${_('an embedded version of that link')}</td>
       </tr>
       % endif
@@ -126,7 +126,7 @@
   <input type="hidden" name="thing_id" value="${thing.fullname}"/>
 
   %if not thing.creating:
-    <div class="usertext-body may-blank-within md-container">
+    <div class="usertext-body may-blank-within md-container ${'admin_takedown' if thing.admin_takedown else ''}">
       % if not thing.expunged:
       ${unsafe(safemarkdown(thing.text, nofollow = thing.nofollow,
                                         target = thing.target))}
@@ -159,9 +159,12 @@
           ${error_field("RATELIMIT", "ratelimit", "span")}
           ${error_field("NO_TEXT", thing.name, "span")}
           ${error_field("TOO_OLD", "parent", "span")}
+          ${error_field("THREAD_LOCKED", "parent", "span")}
           ${error_field("DELETED_COMMENT", "parent", "span")}
           ${error_field("DELETED_LINK", "parent", "span")}
           ${error_field("USER_BLOCKED", "parent", "span")}
+          ${error_field("USER_MUTED", "parent", "span")}
+          ${error_field("MUTED_FROM_SUBREDDIT", "parent", "span")}
         %endif
         <div class="usertext-buttons">
           ${action_button("save", "submit", "",

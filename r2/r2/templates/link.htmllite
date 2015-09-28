@@ -20,7 +20,7 @@
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%namespace file="utils.html" import="optionalstyle"/>
+<%namespace file="utils.html" import="optionalstyle, nsfw_stamp, quarantine_stamp"/>
 
 <%!
    from pylons.i18n import _, ungettext
@@ -47,7 +47,7 @@
 <% 
    from r2.lib.strings import Score
    domain = get_domain(subreddit=False)
-   permalink = "http://%s%s" % (domain, thing.permalink)
+   permalink = "%s://%s%s" % (g.default_scheme, domain, thing.permalink)
    expanded = request.GET.get("expanded")
    two_col = request.GET.has_key("twocolumn") if l else False
  %>
@@ -77,9 +77,6 @@
        %elif c.cname:
          target="_top"
        %endif
-       %if thing.mousedown_url:
-         onmousedown="save_href($(this));this.href='${thing.mousedown_url}'"
-       %endif
        >
       ${thing.title}
     </a>
@@ -96,9 +93,18 @@
          ${optionalstyle("color:gray;")}
        %endif
        >
+      %if thing.quarantine:
+        <span class="quarantine-stamp stamp">${quarantine_stamp()}</span>
+      %endif
+      %if thing.nsfw:
+        <span class="nsfw-stamp stamp">${nsfw_stamp()}</span>
+      %endif
       %if not expanded:
       <%
-       score_dislikes, score_unvoted, score_likes = thing.display_score
+       if thing.hide_score:
+           score_dislikes = score_unvoted = score_likes = unsafe('&bull; points')
+       else:
+           score_dislikes, score_unvoted, score_likes = thing.display_score
        %>
       <span class="score dislikes" ${hide_if_appropriate('dislikes')}>
          ${score_dislikes}

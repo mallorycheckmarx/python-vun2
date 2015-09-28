@@ -23,7 +23,6 @@
 <%!
    from r2.lib.template_helpers import display_link_karma, header_url
    from r2.models.subreddit import DefaultSR, FakeSubreddit
-   from r2.lib import authentication
    
  %>
 <%namespace file="utils.html" import="plain_link, img_link, separator, logout"/>
@@ -44,7 +43,7 @@
   <div class="left">
    <%
         d = DefaultSR()
-        if c.site.header and c.allow_styles:
+        if c.site.header and c.allow_styles and not c.site.quarantine:
             header_img = header_url(c.site.header)
             header_size = c.site.header_size
             header_title = c.site.header_title
@@ -92,17 +91,17 @@
     <div class="menuitem">
       ${plain_link("submit", "/submit", _sr_path=False)}
     </div>
-    %if authentication.user_can_log_out():
+    %if g.auth_provider.is_logout_allowed():
     <div class="menuitem bottm-bar">
       ${logout(dest=request.fullpath)}
     </div>
     % endif
    %else:
     <div class="menuitem">
-      ${plain_link("sign in", "/login", _sr_path=False)}
+      ${plain_link("log in", "/login", _sr_path=False)}
     </div>
     <div class="menuitem bottm-bar">
-      ${plain_link("create an account", "/register", _sr_path=False)}
+      ${plain_link("sign up", "/register", _sr_path=False)}
     </div>
     <div class="menuitem">
       ${plain_link("subreddits", "/subreddits/", _sr_path=False)}

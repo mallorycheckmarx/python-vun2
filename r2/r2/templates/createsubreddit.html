@@ -23,6 +23,7 @@
 <%!
    from r2.config import feature
    from r2.lib.filters import keep_space
+   from r2.lib.menus import menu
    from r2.lib.pages import UserText
    from r2.lib.strings import strings
 %>
@@ -75,12 +76,19 @@ try participating in other communities on reddit for a little while first before
   </%utils:line_field>
 
   <%utils:line_field title="${_('description')}" css_class="usertext"
-                     description="${_('publicly describe your subreddit for all to see. 500 characters max.')}">
-    %if thing.site and thing.site.public_description:
-     ${UserText(None, text=thing.site.public_description or "", editable=True, creating=True, name="public_description", have_form=False)}
-    %else:
-     ${UserText(None, text="", creating=True, name="public_description", have_form=False)}
-    %endif
+                     description="${_('Appears in search results and social media links. 500 characters max.')}">
+    <div class="usertext-edit md-container">
+      <div class="md">
+        <textarea rows="1" cols="1" name="public_description" class="usertext">
+          %if thing.site and thing.site.public_description:
+            ${keep_space(thing.site.public_description or "")}
+          %endif
+        </textarea>
+        <div class="bottom-area">
+          ${error_field("TOO_LONG", "public_description")}
+        </div>
+      </div>
+    </div>
   </%utils:line_field>
 
   <%utils:line_field title="${_('sidebar')}" css_class="usertext"
@@ -167,6 +175,16 @@ try participating in other communities on reddit for a little while first before
       ${error_field("GOLD_REQUIRED", "type")}
       ${error_field("CANT_CONVERT_TO_GOLD_ONLY", "type")}
     </div>
+
+    %if c.user_is_admin:
+      <input class="nomargin" type="checkbox"
+                 name="quarantine" id="quarantine"
+                 %if thing.site and thing.site.quarantine:
+                   checked="checked"
+                 %endif
+      >
+      <label for="quarantine">quarantine this subreddit</label>
+    %endif
   </%utils:line_field>
 
   <%utils:line_field title="${_('content options')}">
@@ -297,6 +315,7 @@ try participating in other communities on reddit for a little while first before
             ${_("viewers must be over eighteen years old")}
           </label>
         </li>
+        %if not thing.site or not thing.site.quarantine:
         <li>
           <input class="nomargin" type="checkbox"
                  name="allow_top" id="allow_top"
@@ -319,6 +338,7 @@ try participating in other communities on reddit for a little while first before
             ${_("show thumbnail images of content")}
           </label>
         </li>
+        %endif
         <li>
           <input class="nomargin" type="checkbox"
                  name="exclude_banned_modqueue" id="exclude_banned_modqueue"
@@ -364,6 +384,15 @@ try participating in other communities on reddit for a little while first before
         %endif
         ${error_field("GOLD_ONLY_SR_REQUIRED", "hide_ads")}
       </ul>
+      <div class="usertext-edit">
+        <label for="suggested_comment_sort">${_('suggested comment sort')}&#32;<span class="gray">${_('(all comment threads will use this sorting method by default)')}</span></label>
+        <select class="nomargin" name="suggested_comment_sort" id="suggested_comment_sort">
+           <option value="">${_('none (recommended for most subreddits)')}</option>
+           %for sort in thing.comment_sorts:
+             <option ${'selected="selected"' if thing.site and sort == thing.site.suggested_comment_sort else ''} value="${sort}">${getattr(menu, sort, sort)}</option>
+           %endfor
+        </select>
+      </div>
     </div>
     <div class="usertext-edit">
       <div class="delete-field">
@@ -432,37 +461,39 @@ try participating in other communities on reddit for a little while first before
         &#32;
         <span class="gray">(${_("leaves this page")})</span>
         </li>
-        <li>
-          <label for="header-title">header mouseover text:</label>
-          <input type="text" name="header-title" id="header-title"
-                 value="${thing.site.header_title}"
-                 />
-        </li>
-        <li>
-          <%utils:image_upload post_target="/api/upload_sr_img" 
-                               current_image="${thing.site.header}"
-                               label="${_('upload header image')}"
-                               ask_type="${True}">
-            <br/>
-            <button id="delete-img" class="delete-img"
-                    %if not thing.site.header:
-                       style="display: none;"
-                    %endif
-                    onclick="return post_form(this.form, 'delete_sr_header');">
-              ${_('restore default header')}
-            </button>
-            <div class="clearleft"></div>
-            <input type="hidden" name="uh" value="${c.modhash}" />
-            <input type="hidden" name="r"  value="${c.site.name}" />
-            <input type="hidden" name="header" value="1" />
-  
-            <script type="text/javascript">
-              function on_image_success(img) {
-                 $("#header-img").log().attr("src", img.attr("src"));
-              }
-            </script>
-          </%utils:image_upload>
-        </li>
+        %if thing.allow_image_upload:
+          <li>
+            <label for="header-title">header mouseover text:</label>
+            <input type="text" name="header-title" id="header-title"
+                   value="${thing.site.header_title}"
+                   />
+          </li>
+          <li>
+            <%utils:image_upload post_target="/api/upload_sr_img" 
+                                 current_image="${thing.site.header}"
+                                 label="${_('upload header image')}"
+                                 ask_type="${True}">
+              <br/>
+              <button id="delete-img" class="delete-img"
+                      %if not thing.site.header:
+                         style="display: none;"
+                      %endif
+                      onclick="return post_form(this.form, 'delete_sr_header');">
+                ${_('restore default header')}
+              </button>
+              <div class="clearleft"></div>
+              <input type="hidden" name="uh" value="${c.modhash}" />
+              <input type="hidden" name="r"  value="${c.site.name}" />
+              <input type="hidden" name="header" value="1" />
+    
+              <script type="text/javascript">
+                function on_image_success(img) {
+                   $("#header-img").log().attr("src", img.attr("src"));
+                }
+              </script>
+            </%utils:image_upload>
+          </li>
+        %endif
       </ul>
     </%utils:line_field>
 %endif

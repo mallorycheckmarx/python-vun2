@@ -20,7 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 from BeautifulSoup import BeautifulSoup, Tag
 
@@ -45,6 +46,9 @@ class PoliciesController(RedditController):
         elif page == 'useragreement':
             wiki_name = g.wiki_page_user_agreement
             pagename = _('user agreement')
+        elif page == 'contentpolicy':
+            wiki_name = g.wiki_page_content_policy
+            pagename = _('content policy')
         else:
             abort(404)
 

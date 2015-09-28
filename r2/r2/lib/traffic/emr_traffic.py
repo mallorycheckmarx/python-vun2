@@ -21,7 +21,7 @@
 ###############################################################################
 
 from copy import copy
-from pylons import g
+from pylons import app_globals as g
 import os
 from time import time, sleep
 
@@ -51,7 +51,9 @@ class TrafficBase(EmrJob):
     BOOTSTRAP_NAME = 'traffic binaries'
     BOOTSTRAP_SCRIPT = os.path.join(g.TRAFFIC_SRC_DIR, 'traffic_bootstrap.sh')
     _defaults = dict(master_instance_type='m1.small',
-                     slave_instance_type='c3.2xlarge', num_slaves=1)
+                     slave_instance_type='c3.2xlarge', num_slaves=1,
+                     job_flow_role=g.emr_trafic_job_flow_role,
+                     service_role=g.emr_traffic_service_role)
 
     def __init__(self, emr_connection, jobflow_name, steps=None, **kw):
         combined_kw = copy(self._defaults)

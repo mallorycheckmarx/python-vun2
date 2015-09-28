@@ -35,7 +35,7 @@ from link import Link, Comment
 import pytz
 
 from pycassa.types import CompositeType, AsciiType
-from pylons import g
+from pylons import app_globals as g
 from datetime import datetime, timedelta
 
 __all__ = ['cast_vote', 'get_votes']
@@ -75,6 +75,8 @@ class LinkVotesByAccount(VotesByAccount):
     _thing2_cls = Link
     _views = []
     _last_modified_name = "LinkVote"
+    # this is taken care of in r2.lib.db.queries:queue_vote
+    _write_last_modified = False
 
 
 class CommentVotesByAccount(VotesByAccount):
@@ -82,6 +84,8 @@ class CommentVotesByAccount(VotesByAccount):
     _thing2_cls = Comment
     _views = []
     _last_modified_name = "CommentVote"
+    # this is taken care of in r2.lib.db.queries:queue_vote
+    _write_last_modified = False
 
 
 class VoteDetailsByThing(tdb_cassandra.View):
@@ -227,10 +231,9 @@ class VoterIPByThing(tdb_cassandra.View):
         cls._set_values(votee_fullname, {voter_id36: ip})
 
 
-def cast_vote(sub, obj, dir, ip, vote_info, cheater, timer, date):
+def cast_vote(sub, obj, vote_info, timer, date):
     from r2.models.admintools import valid_user, valid_thing, update_score
     from r2.lib.count import incr_sr_count
-    from r2.lib.db import queries
 
     names_by_dir = {True: "1", None: "0", False: "-1"}
 
@@ -239,11 +242,11 @@ def cast_vote(sub, obj, dir, ip, vote_info, cheater, timer, date):
     vote = Storage(
         _thing1=sub,
         _thing2=obj,
-        _name=names_by_dir[dir],
+        _name=names_by_dir[vote_info["dir"]],
         _date=date,
         valid_thing=True,
         valid_user=True,
-        ip=ip,
+        ip=vote_info["ip"],
     )
 
     # these track how much ups/downs should change on `obj`
@@ -279,7 +282,8 @@ def cast_vote(sub, obj, dir, ip, vote_info, cheater, timer, date):
     karma = sub.karma(kind, sr)
 
     if vote.valid_thing:
-        vote.valid_thing = valid_thing(vote, karma, cheater, vote_info)
+        vote.valid_thing = valid_thing(vote, karma, vote_info["cheater"],
+                                       vote_info["info"])
 
     if vote.valid_user:
         vote.valid_user = vote.valid_thing and valid_user(vote, sr, karma)
@@ -310,12 +314,20 @@ def cast_vote(sub, obj, dir, ip, vote_info, cheater, timer, date):
             timer.intermediate("incr_sr_counts")
 
     # write the vote to cassandra
-    VotesByAccount.copy_from(vote, vote_info)
+    VotesByAccount.copy_from(vote, vote_info["info"])
     timer.intermediate("cassavotes")
 
-    # update the search index
-    queries.changed(vote._thing2, boost_only=True)
-    timer.intermediate("changed")
+    num_votes = vote._thing2._ups + vote._thing2._downs
+    if num_votes < 20 or num_votes % 10 == 0:
+        # always update the search index if the thing has fewer than 20 votes
+        # when the thing has more votes queue an update less often
+        vote._thing2.update_search_index(boost_only=True)
+        timer.intermediate("update_search_index")
+
+    event_data = vote_info.get("event_data")
+    if event_data:
+        g.events.vote_event(vote, old_vote,
+            event_data["context"], event_data["sensitive"])
 
     return vote
 

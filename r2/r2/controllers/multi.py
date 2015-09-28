@@ -20,7 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.config.extensions import set_extension
@@ -117,7 +119,7 @@ class MultiApiController(RedditController):
     def GET_list_sr_multis(self, sr, expand_srs):
         """Fetch a list of public multis belonging to subreddit `srname`"""
         multis = LabeledMulti.by_owner(sr)
-        return self._format_multi_list(multis, sr, expand_srs)
+        return self._format_multi_list(multis, c.user, expand_srs)
 
     @require_oauth2_scope("read")
     @validate(VUser(), expand_srs=VBoolean("expand_srs"))
@@ -147,17 +149,17 @@ class MultiApiController(RedditController):
 
     def _check_new_multi_path(self, path_info):
         if path_info['prefix'] == 'r':
-            return self._check_sr_multi_path(path_info)
+            return self._get_multi_sr_owner(path_info)
 
-        return self._check_user_multi_path(path_info)
+        return self._get_multi_user_owner(path_info)
 
-    def _check_user_multi_path(self, path_info):
+    def _get_multi_user_owner(self, path_info):
         if path_info['owner'].lower() != c.user.name.lower():
             raise RedditError('MULTI_CANNOT_EDIT', code=403,
                               fields='multipath')
         return c.user
 
-    def _check_sr_multi_path(self, path_info):
+    def _get_multi_sr_owner(self, path_info):
         try:
             sr = Subreddit._by_name(path_info['owner'])
         except NotFound:

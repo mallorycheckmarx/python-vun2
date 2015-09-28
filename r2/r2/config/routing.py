@@ -24,7 +24,6 @@
 Setup your Routes options here
 """
 from routes import Mapper
-from pylons import config
 
 
 def not_in_sr(environ, results):
@@ -44,9 +43,15 @@ def partial_connect(mc, **override_args):
     return connect
 
 
-def make_map():
-    map = Mapper()
+def make_map(config):
+    map = Mapper(explicit=False)
+    map.minimization = True
     mc = map.connect
+
+    # Username-relative userpage redirects, need to be defined here in case
+    # a plugin defines a `/user/:name` handler.
+    mc('/user/me', controller='user', action='rel_user_redirect')
+    mc('/user/me/*rest', controller='user', action='rel_user_redirect')
 
     for plugin in reversed(config['r2.plugins']):
         plugin.add_routes(mc)
@@ -65,9 +70,9 @@ def make_map():
     mc('/submit', controller='front', action='submit')
 
     mc('/over18', controller='post', action='over18')
+    mc('/quarantine', controller='post', action='quarantine')
+    mc('/quarantine_optout', controller='api', action='quarantine_optout')
 
-    mc('/rules', controller='front', action='rules')
-    mc('/sup', controller='front', action='sup')
     mc('/traffic', controller='front', action='site_traffic')
     mc('/traffic/languages/:langcode', controller='front',
        action='lang_traffic', langcode='')
@@ -81,12 +86,13 @@ def make_map():
     mc('/subreddits/search', controller='front', action='search_reddits')
     mc('/subreddits/login', controller='forms', action='login')
     mc('/subreddits/:where', controller='reddits', action='listing',
-       where='popular', requirements=dict(where="popular|new|banned|employee|gold"))
+       where='popular', conditions={'function':not_in_sr},
+       requirements=dict(where="popular|new|banned|employee|gold|default|quarantine"))
     # If no subreddit is specified, might as well show a list of 'em.
     mc('/r', controller='redirect', action='redirect', dest='/subreddits')
 
     mc('/subreddits/mine/:where', controller='myreddits', action='listing',
-       where='subscriber',
+       where='subscriber', conditions={'function':not_in_sr},
        requirements=dict(where='subscriber|contributor|moderator'))
 
     # These routes are kept for backwards-compatibility reasons
@@ -95,10 +101,11 @@ def make_map():
     mc('/reddits/search', controller='front', action='search_reddits')
     mc('/reddits/login', controller='forms', action='login')
     mc('/reddits/:where', controller='reddits', action='listing',
-       where='popular', requirements=dict(where="popular|new|banned"))
+       where='popular', conditions={'function':not_in_sr},
+       requirements=dict(where="popular|new|banned"))
 
     mc('/reddits/mine/:where', controller='myreddits', action='listing',
-       where='subscriber',
+       where='subscriber', conditions={'function':not_in_sr},
        requirements=dict(where='subscriber|contributor|moderator'))
 
     mc('/buttons', controller='buttons', action='button_demo_page')
@@ -117,7 +124,7 @@ def make_map():
     mc('/awards/received', controller='front', action='received_award')
 
     mc('/i18n', controller='redirect', action='redirect',
-       dest='http://www.reddit.com/r/i18n')
+       dest='https://www.reddit.com/r/i18n')
     mc('/feedback', controller='redirect', action='redirect',
        dest='/contact')
     mc('/contact', controller='front', action='contact_us')
@@ -133,12 +140,9 @@ def make_map():
 
     mc('/admin/errors', controller='errorlog')
 
-    # Username-relative userpage redirects
-    mc('/user/me', controller='user', action='rel_user_redirect')
-    mc('/user/me/*rest', controller='user', action='rel_user_redirect')
-
     mc('/user/:username/about', controller='user', action='about',
        where='overview')
+    mc('/user/:username/trophies', controller='user', action='trophies')
     mc('/user/:username/:where', controller='user', action='listing',
        where='overview')
     mc('/user/:username/saved/:category', controller='user', action='listing',
@@ -164,6 +168,10 @@ def make_map():
     mc('/explore', controller='front', action='explore')
     mc('/api/recommend/feedback', controller='api', action='rec_feedback')
 
+    mc("/newsletter", controller="newsletter", action="newsletter")
+
+    mc('/oembed', controller='oembed', action='oembed')
+
     mc('/about/sidebar', controller='front', action='sidebar')
     mc('/about/sticky', controller='front', action='sticky')
     mc('/about/flair', controller='front', action='flairlisting')
@@ -176,8 +184,8 @@ def make_map():
           action='spamlisting',
           requirements=dict(location='reports|spam|modqueue|unmoderated|edited'))
        connect('/about/:where', controller='userlistlisting',
-          requirements=dict(where='contributors|banned|wikibanned|wikicontributors|moderators'),
-          action='listing')
+          requirements=dict(where='contributors|banned|muted|wikibanned|'
+              'wikicontributors|moderators'), action='listing')
        connect('/about/:location', controller='front', action='editreddit',
           requirements=dict(location='edit|stylesheet|traffic|about'))
        connect('/comments', controller='comments', action='listing')
@@ -225,6 +233,8 @@ def make_map():
     mc('/framebuster/:blah', controller='front', action='framebuster')
     mc('/framebuster/:what/:blah',
        controller='front', action='framebuster')
+
+    mc('/share/close', controller='front', action='share_close')
 
     # sponsor endpoints
     mc('/sponsor/report', controller='sponsor', action='report')
@@ -302,7 +312,11 @@ def make_map():
 
     mc('/help/:page', controller='policies', action='policy_page',
        conditions={'function':not_in_sr},
-       requirements={'page':'privacypolicy|useragreement'})
+       requirements={'page':'contentpolicy|privacypolicy|useragreement'})
+    mc('/rules', controller='redirect', action='redirect',
+        dest='/help/contentpolicy')
+    mc('/faq', controller='redirect', action='redirect',
+       dest='https://reddit.zendesk.com/')
 
     mc('/wiki/create/*page', controller='wiki', action='wiki_create')
     mc('/wiki/edit/*page', controller='wiki', action='wiki_revise')
@@ -322,15 +336,13 @@ def make_map():
     mc('/wiki/*page', controller='wiki', action='wiki_page')
     mc('/wiki/', controller='wiki', action='wiki_page')
 
-    mc('/:action', controller='wiki', requirements=dict(action="help|faq"))
+    mc('/:action', controller='wiki', requirements=dict(action="help"))
     mc('/help/*page', controller='wiki', action='wiki_redirect')
     mc('/w/*page', controller='wiki', action='wiki_redirect')
 
     mc('/goto', controller='toolbar', action='goto')
     mc('/tb/:id', controller='toolbar', action='tb')
-    mc('/toolbar/:action', controller='toolbar',
-       requirements=dict(action="toolbar|inner|login"))
-    mc('/toolbar/comments/:id', controller='toolbar', action='comments')
+    mc('/toolbar/*frame', controller='toolbar', action='redirect')
 
     mc('/c/:comment_id', controller='front', action='comment_by_id')
 
@@ -379,11 +391,11 @@ def make_map():
                                  "edit_campaign|delete_campaign|"
                                  "add_roadblock|rm_roadblock|check_inventory|"
                                  "refund_campaign|terminate_campaign|"
-                                 "review_fraud|create_promo")))
+                                 "review_fraud|create_promo|link_mobile_ad_image")))
     mc('/api/:action', controller='apiminimal',
        requirements=dict(action="new_captcha"))
     mc('/api/:type', controller='api',
-       requirements=dict(type='wikibannednote|bannednote'),
+       requirements=dict(type='wikibannednote|bannednote|mutednote'),
        action='relnote')
 
     # Route /api/multi here to prioritize it over the /api/:action rule
@@ -413,6 +425,8 @@ def make_map():
        requirements=dict(action="authorize"))
     mc("/api/v1/:action", controller="oauth2access",
        requirements=dict(action="access_token|revoke_token"))
+    mc("/api/v1/:action", controller="apiv1scopes",
+       requirements=dict(action="scopes"))
     mc("/api/v1/user/:username/trophies",
        controller="apiv1user", action="usertrophies")
     mc("/api/v1/:action", controller="apiv1user")
@@ -444,9 +458,7 @@ def make_map():
        dest='https://addons.mozilla.org/firefox/addon/socialite/')
 
     mc('/mobile', controller='redirect', action='redirect',
-       dest='http://m.reddit.com/')
-
-    mc('/authorize_embed', controller='front', action='authorize_embed')
+       dest='https://m.reddit.com/')
 
     # Used for showing ads
     mc("/ads/", controller="ad", action="ad")
@@ -457,6 +469,8 @@ def make_map():
 
     mc("/web/log/:level", controller="weblog", action="message",
        requirements=dict(level="error"))
+
+    mc("/web/poisoning", controller="weblog", action="report_cache_poisoning")
 
     # This route handles displaying the error page and
     # graphics used in the 404/500

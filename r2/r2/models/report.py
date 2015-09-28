@@ -28,7 +28,8 @@ from r2.lib.memoize import memoize
 from r2.models import Link, Comment, Message, Subreddit, Account
 from datetime import datetime
 
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 class Report(MultiRelation('report',
                            Relation(Account, Link),
@@ -136,12 +137,20 @@ class Report(MultiRelation('report',
                                     SRMember.c._name == "moderator")
             mod_dates = {rel._thing2_id: rel._date for rel in query}
 
+            if g.automoderator_account:
+                automoderator = Account._by_name(g.automoderator_account)
+            else:
+                automoderator = None
+
             mod_reports = []
             user_reports = []
 
             for report in reports:
+                # always include AutoModerator reports
+                if automoderator and report._thing1_id == automoderator._id:
+                    mod_reports.append(report)
                 # include in mod reports if made after the user became a mod
-                if (report._thing1_id in mod_dates and
+                elif (report._thing1_id in mod_dates and
                         report._date >= mod_dates[report._thing1_id]):
                     mod_reports.append(report)
                 else:

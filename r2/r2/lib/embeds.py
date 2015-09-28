@@ -1,27 +1,39 @@
 from datetime import datetime
-import hashlib
-import hmac
 import math
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.controllers.util import abort
 import pytz
 
 from r2.controllers.reddit_base import UnloggedUser
-from r2.lib.utils import constant_time_compare
+from r2.lib import js
 from r2.models import Account, NotFound
 from r2.models.subreddit import Subreddit
 
+# Note: This template is shared between python and javascript. See underscore
+# templating in embed.js for more info. (Specific note: Only %()s is supported
+# presently to use underscore templating.)
+_COMMENT_EMBED_TEMPLATE = (
+    '<div class="reddit-embed" '
+        'data-embed-media="%(media)s" '
+        'data-embed-parent="%(parent)s" '
+        'data-embed-live="%(live)s" '
+        'data-embed-created="%(created)s">'
+        '<a href="%(comment)s">Comment</a> '
+        'from discussion '
+        '<a href="%(link)s">%(title)s</a>.'
+    '</div>'
+)
 
-def embeddable_sr(thing):
-    if isinstance(thing, Subreddit):
-        sr = thing
-    else:
-        try:
-            sr = Subreddit._byID(thing.sr_id) if thing.sr_id else None
-        except NotFound:
-            sr = None
 
-    return sr if (sr is not None and sr.type not in Subreddit.private_types) else False
+def get_inject_template():
+    script_urls = js.src("comment-embed", absolute=True, mangle_name=False)
+    scripts = "".join('<script%s src="%s"></script>' % (
+        ' async' if len(script_urls) == 1 else '',
+        script_url
+    ) for script_url in script_urls)
+    return _COMMENT_EMBED_TEMPLATE + scripts
 
 
 def edited_after(thing, iso_timestamp, showedits):
@@ -41,14 +53,15 @@ def edited_after(thing, iso_timestamp, showedits):
     return created < thing.editted
 
 
-def prepare_embed_request(sr):
-    """Given a request, determine if we are embedding. If so, ensure the
-       subreddit is embeddable, prepare the request for embedding, and return
-       the key.
-    """
-    embed_key = request.GET.get('embed')
+def prepare_embed_request():
+    """Given a request, determine if we are embedding. If so, prepare the
+    request for embedding.
 
-    if not embed_key:
+    Returns the value of the embed GET parameter.
+    """
+    is_embed = request.GET.get('embed')
+
+    if not is_embed:
         return None
 
     if request.host != g.media_domain:
@@ -56,20 +69,12 @@ def prepare_embed_request(sr):
         # specifically untrusted domain
         abort(404)
 
-    if not embeddable_sr(sr):
-        abort(404)
-
     c.allow_framing = True
 
-    return embed_key
+    return is_embed
 
 
-def set_up_embed(embed_key, sr, thing, showedits):
-    expected_mac = hmac.new(g.secrets['comment_embed'], thing._id36,
-                            hashlib.sha1).hexdigest()
-    if not constant_time_compare(embed_key or '', expected_mac):
-        abort(401)
-
+def set_up_comment_embed(sr, thing, showedits):
     try:
         author = Account._byID(thing.author_id) if thing.author_id else None
     except NotFound:
@@ -80,6 +85,7 @@ def set_up_embed(embed_key, sr, thing, showedits):
     c.embed_config = {
         "eventtracker_url": g.eventtracker_url or "",
         "anon_eventtracker_url": g.anon_eventtracker_url or "",
+        "event_clicktracker_url": g.event_clicktracker_url or "",
         "created": iso_timestamp,
         "showedits": showedits,
         "thing": {
@@ -89,6 +95,7 @@ def set_up_embed(embed_key, sr, thing, showedits):
             "edited": edited_after(thing, iso_timestamp, showedits),
             "deleted": thing.deleted or author._deleted,
         },
+        "comment_max_height": 200,
     }
 
     c.render_style = "iframe"

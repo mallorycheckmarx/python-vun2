@@ -19,19 +19,17 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import c, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope
-from r2.controllers.reddit_base import (
-    abort_with_error,
-    OAuth2ResourceController,
-)
+from r2.controllers.reddit_base import OAuth2OnlyController
 from r2.lib.jsontemplates import (
     FriendTableItemJsonTemplate,
+    get_usertrophies,
     IdentityJsonTemplate,
     KarmaListJsonTemplate,
     PrefsJsonTemplate,
-    TrophyListJsonTemplate,
 )
 from r2.lib.pages import FriendTableItem
 from r2.lib.validator import (
@@ -55,25 +53,7 @@ PREFS_JSON_SPEC = VValidatedJSON.PartialObject({
 })
 
 
-class APIv1UserController(OAuth2ResourceController):
-    # OAuth2 doesn't rely on ambient credentials for authentication,
-    # so CSRF prevention is unnecessary.
-    handles_csrf = True
-
-    def pre(self):
-        OAuth2ResourceController.pre(self)
-	if request.method != "OPTIONS":
-            self.authenticate_with_token()
-            self.set_up_user_context()
-        self.run_sitewide_ratelimits()
-
-    def try_pagecache(self):
-        pass
-
-    @staticmethod
-    def on_validation_error(error):
-        abort_with_error(error, error.code or 400)
-
+class APIv1UserController(OAuth2OnlyController):
     @require_oauth2_scope("identity")
     @validate(
         VUser(),
@@ -99,14 +79,6 @@ class APIv1UserController(OAuth2ResourceController):
         resp = PrefsJsonTemplate(fields).data(c.oauth_user)
         return self.api_wrapper(resp)
 
-    def _get_usertrophies(self, user):
-        trophies = Trophy.by_account(user)
-        def visible_trophy(trophy):
-            return trophy._thing2.awardtype != 'invisible'
-        trophies = filter(visible_trophy, trophies)
-        resp = TrophyListJsonTemplate().render(trophies)
-        return self.api_wrapper(resp.finalize())
-
     @require_oauth2_scope("read")
     @validate(
         user=VAccountByName('username'),
@@ -117,7 +89,7 @@ class APIv1UserController(OAuth2ResourceController):
     )
     def GET_usertrophies(self, user):
         """Return a list of trophies for the a given user."""
-        return self._get_usertrophies(user)
+        return self.api_wrapper(get_usertrophies(user))
 
     @require_oauth2_scope("identity")
     @validate(
@@ -129,7 +101,7 @@ class APIv1UserController(OAuth2ResourceController):
     )
     def GET_trophies(self):
         """Return a list of trophies for the current user."""
-        return self._get_usertrophies(c.oauth_user)
+        return self.api_wrapper(get_usertrophies(c.oauth_user))
 
     @require_oauth2_scope("mysubreddits")
     @validate(

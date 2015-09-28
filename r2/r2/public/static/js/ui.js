@@ -9,17 +9,36 @@ r.ui.init = function() {
         store.safeSet('ui.shown.welcome', true)
     }
 
-    // mobile suggest infobar
-    var smallScreen = r.ui.isSmallScreen(),
-        onFrontPage = $.url().attr('path') == '/'
-    if (smallScreen && onFrontPage && r.config.renderstyle != 'compact') {
-        var infobar = $('<div class="infobar mellow">')
-            .html(r.utils.formatMarkdownLinks(
-                r._("Looks like you're browsing on a small screen. Would you like to try [reddit's mobile interface](%(url)s)?").format({
-                    url: location + '.compact'
-                })
-            ))
-        $('body > .content > :not(.infobar):first').before(infobar)
+    var smallScreen = r.ui.isSmallScreen();
+
+    // mweb beta banner
+    var mwebOptInCookieName = "__cf_mob_redir";
+    var onFrontPage = $.url().attr('path') == '/';
+    if (smallScreen && onFrontPage && r.config.renderstyle != 'compact' && !r.ui.inMobileWebBlacklist()) {
+        var a = document.createElement('a');
+        a.href = window.location;
+        a.host = 'm.' + r.config.cur_domain;
+        a.search += (a.search ? '&' : '?') + 'ref=mobile_beta_banner&ref_source=desktop'
+        var url = a.href;
+
+        var $bar = $(_.template(
+          '<a href="<%- url %>" class="mobile-web-redirect"><%- button_text %></a>', {
+            url: url,
+            button_text: r._("switch to mobile version"),
+          }));
+
+        $bar.on('click', function() {
+           $.cookie(mwebOptInCookieName, '1', {
+               domain: r.config.cur_domain,
+               path:'/',
+               expires: 90
+            });
+
+           // redirect
+           return true;
+        });
+
+        $('#header').before($bar)
     }
 
     $('.help-bubble').each(function(idx, el) {
@@ -66,7 +85,17 @@ r.ui.init = function() {
 
     r.ui.initLiveTimestamps()
 
-    r.ui.initTimings()
+    r.ui.initNewCommentHighlighting()
+
+    r.ui.initReadNext();
+
+    r.ui.initTimings();
+}
+
+r.ui.inMobileWebBlacklist = function() {
+  return _.any(r.config.mweb_blacklist_expressions, function(regex) {
+    return (new RegExp(regex)).test(window.location.pathname)
+  });
 }
 
 r.ui.isSmallScreen = function() {
@@ -105,6 +134,187 @@ r.ui.initLiveTimestamps = function() {
       })
     }
 }
+
+r.ui.initNewCommentHighlighting = function() {
+  if (!$('body').hasClass('comments-page')) {
+    return;
+  }
+
+  $visitSelector = $('#comment-visits');
+  if ($visitSelector.length === 0) {
+    return;
+  }
+
+  $(document).on('new_things_inserted', r.ui.highlightNewComments);
+  $visitSelector.on('change', r.ui.highlightNewComments);
+  r.ui.highlightNewComments();
+}
+
+r.ui.highlightNewComments = function() {
+  var $comments = $('.comment');
+  var selectedVisitTimestamp = $('#comment-visits').val();
+  var selectedVisit;
+
+  if (selectedVisitTimestamp) {
+    selectedVisit = Date.parse(selectedVisitTimestamp);
+  }
+
+  $comments.each(function() {
+    var $commentEl = $(this);
+    var $timeEl = $commentEl.find('> .entry .tagline time:first-of-type');
+    var commentTime = r.utils.parseTimestamp($timeEl);
+    var shouldHighlight = !!selectedVisit && commentTime > selectedVisit;
+
+    $commentEl.toggleClass('new-comment', shouldHighlight);
+  });
+}
+
+r.ui.initReadNext = function() {
+    // 2 week expiration
+    var ttl = (1000 * 60 * 60 * 24 * 14);
+    var $readNextContainer = $('.read-next-container');
+    var isDismissed = !!store.safeGet('readnext.dismissed');
+    var expiration = parseInt(store.safeGet('readnext.expiration'), 10);
+    var now = Date.now();
+
+    if (isDismissed) {
+        if (!expiration) {
+            expiration = now + ttl;
+            store.safeSet('readnext.expiration', expiration);
+        } else if (expiration < now) {
+            store.safeSet('readnext.dismissed', false);
+            isDismissed = false;
+        }
+    }
+
+    var currentLinkFullname = r.config.cur_link;
+
+    if (isDismissed || !$readNextContainer.length) {
+        return;
+    }
+
+    this.readNext = new r.ui.ReadNext({
+        el: $readNextContainer,
+        fixToBottom: !r.ui.isSmallScreen(),
+        currentLinkFullname: currentLinkFullname,
+        ttl: ttl,
+    });
+};
+
+r.ui.ReadNext = Backbone.View.extend({
+    events: {
+        'click .read-next-button.next': 'next',
+        'click .read-next-button.prev': 'prev',
+        'click .read-next-dismiss': 'dismiss',
+    },
+
+    initialize: function() {
+        this.$readNext = this.$el.find('.read-next');
+        this.$links = this.$readNext.find('.read-next-link');
+        this.numLinks = this.$links.length;
+
+        this.state = new Backbone.Model({
+            fixed: false,
+            index: -1,
+        });
+
+        this.state.on('change', this.render.bind(this));
+        
+        if (this.options.fixToBottom) {
+            this.updateScroll = this.updateScroll.bind(this);
+            window.addEventListener('scroll', this.updateScroll);
+            this.updateScroll();
+        }
+
+        var currentLinkId = '#read-next-link-' + this.options.currentLinkFullname;
+        var startingIndex = this.$links.index($(currentLinkId)) + 1;
+
+        this.state.set({
+            index: startingIndex,
+        });
+
+        this.resetRefIndicies(startingIndex);
+        this.$readNext.addClass('active');
+    },
+
+    resetRefIndicies: function(startingIndex) {
+        var a = document.createElement('a');
+
+        this.$links.toArray().forEach(function(link, i) {
+            var url = $.url(link.href);
+            var params = url.param();
+            if (!params.ref) {
+                return;
+            }
+            var relativeIndex = this.moduloIndex(i - startingIndex);
+            params.ref = params.ref.split('_')[0] + '_' + relativeIndex;
+            a.href = link.href;
+            a.search = $.param(params);
+            link.href = a.href;
+        }, this);
+    },
+
+    moduloIndex: function(i) {
+        var numLinks = this.numLinks;
+        return (i + numLinks) % numLinks;
+    },
+
+    next: function() {
+        var currentIndex = this.state.get('index');
+        this.state.set({
+            index: this.moduloIndex(currentIndex + 1),
+        });
+        r.analytics.fireGAEvent('readnext', 'nav-next');
+    },
+
+    prev: function() {
+        var currentIndex = this.state.get('index');
+        var numLinks = this.numLinks;
+        this.state.set({
+            index: this.moduloIndex(currentIndex - 1),
+        });
+        r.analytics.fireGAEvent('readnext', 'nav-prev');
+    },
+
+    dismiss: function() {
+        this.$el.fadeOut();
+        window.removeEventListener('scroll', this.updateScroll);
+        r.analytics.fireGAEvent('readnext', 'dismiss');
+        store.safeSet('readnext.dismissed', true);
+        var expiration = Date.now() + this.options.ttl;
+        store.safeSet('readnext.expiration', expiration);
+    },
+
+    updateScroll: function() {
+        var scrollPosition = window.scrollY;
+        var nodePosition = this.$el.position().top;
+
+        // stick to bottom    
+        var scrollOffset = window.innerHeight;
+        var nodeOffset = this.$readNext.height();
+        scrollPosition += scrollOffset;
+        nodePosition += nodeOffset;
+
+        this.state.set({
+            fixed: scrollPosition >= nodePosition,
+        });
+    },
+
+    render: function() {
+        var currentIndex = this.state.get('index');
+        var fixedPosition = this.state.get('fixed');
+
+        this.$links.removeClass('active');
+        this.$links.eq(currentIndex).addClass('active');
+
+        if (fixedPosition) {
+            this.$readNext.addClass('fixed');
+        } else {
+            this.$readNext.removeClass('fixed');
+        } 
+    },
+});
+
 
 r.ui.initTimings = function() {
   // return if we're not configured for sending stats
@@ -207,7 +417,7 @@ r.ui.Form = function(el) {
     }, this))
 
     this.$el.find('[data-validate-url]')
-        .validator()
+        .validator({ https: !!r.config.https_endpoint })
         .on('initialize.validator', function(e) {
             var $el = $(this);
 
@@ -219,9 +429,13 @@ r.ui.Form = function(el) {
             $(this).stateify('set', 'success');
         })
         .on('invalid.validator', function(e, resp) {
-            var error = r.utils.parseError(resp.errors[0]);
+            // resp may not always be set if client side validation triggered, like
+            // from input type=email
+            if (resp) {
+              var error = r.utils.parseError(resp.errors[0]);
 
-            $(this).stateify('set', 'error', error.message);
+              $(this).stateify('set', 'error', error.message);
+            }
         })
         .on('loading.validator', function(e) {
             $(this).stateify('set', 'loading');

@@ -1,27 +1,5 @@
 /*This hides the url bar on mobile*/
 (function($) {
-    /*
-    Creates an element on the body that works to create a modal box
-    The callback function runs when the cover is clicked
-    Use it, for example, to hide your modal box.
-
-    It is kind of tricky to use on mobile platforms, subject to many odd bugs, likely caused by the way mobile platforms handle z-index
-    */
-    function tool_cover(callback) {
-        var toolcover = $("#toolcover");
-        if (toolcover.length == 0) {
-            $("body").prepend("<div class='cover' id='toolcover'></div>");
-            toolcover = $("#toolcover");
-        }
-        toolcover.css("height", $(document).height())
-                .show().one("click", function() {
-                    $(this).hide();
-                    if (callback) callback();
-                    return false;
-                });
-    }
-
-    ;
     $.fn.show_toolbar = function() {
         var tb = this;
         $(this).show();
@@ -32,9 +10,7 @@
         text = $.unsafe_orig(text);
         if (typeof(text) == "string") {
             /* space compress the result */
-            text = text.replace(/[\s]+/g, " ")
-                    .replace(/> +/g, ">")
-                    .replace(/ +</g, "<");
+            text = r.utils.spaceCompress(text);
         }
         return (text || "");
     }
@@ -177,3 +153,23 @@ function fetch_more() {
         }
     });
 }
+
+$(function() {
+    if (!!store.safeGet('mobile-web-redirect-opted')) {
+        return;
+    }
+
+    var $bar = $('.mobile-web-redirect-bar');
+
+    $bar.find('.mobile-web-redirect-optin').on('click', function() {
+        store.safeSet('mobile-web-redirect-opted', true);
+    });
+
+    $bar.find('.mobile-web-redirect-optout').on('click', function(e) {
+        e.preventDefault();
+        store.safeSet('mobile-web-redirect-opted', true);
+        $bar.fadeOut();
+    });
+
+    $bar.show();
+});

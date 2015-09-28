@@ -26,7 +26,7 @@
   font-size: (@font-size / @base-font-keyword-size) * 1em;
 }
 
-
+.md-container-small,
 .md-container {
   font-size: @base-font-keyword;
 }
@@ -52,8 +52,10 @@
     &:extend(.md .-text all);
   }
 
-  max-width: 60em;
   color: @markdown-color-font;
+  max-width: 60em;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 
   .-headers {
     border: 0;
@@ -138,6 +140,7 @@
   code {
     margin: 0 2px;
     white-space: nowrap;
+    word-break: normal;
   }
 
   p {
@@ -283,6 +286,7 @@ code {
   }
 }
 
+.md-container-small .md,
 .side .md {
   @font-base: @font-x-small;
   @line-base: @line-x-small;

@@ -21,6 +21,7 @@
 ###############################################################################
 
 import cgi
+import json
 import re
 
 from collections import Counter
@@ -28,14 +29,15 @@ from collections import Counter
 import snudown
 
 from BeautifulSoup import BeautifulSoup, Tag
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
-from wrapped import Templated, CacheStub
 from r2.lib.souptest import (
     souptest_fragment,
     SoupError,
     SoupUnsupportedEntityError,
 )
+from r2.lib.unicode import _force_utf8, _force_unicode
 
 SC_OFF = "<!-- SC_OFF -->"
 SC_ON = "<!-- SC_ON -->"
@@ -95,24 +97,6 @@ class _Unsafe(unicode):
         return unicode(self)
 
 
-def _force_unicode(text):
-    if text == None:
-        return u''
-
-    if isinstance(text, unicode):
-        return text
-
-    try:
-        text = unicode(text, 'utf-8')
-    except UnicodeDecodeError:
-        text = unicode(text, 'latin1')
-    except TypeError:
-        text = unicode(text)
-    return text
-
-def _force_utf8(text):
-    return str(_force_unicode(text).encode('utf8'))
-
 def unsafe(text=''):
     return _Unsafe(_force_unicode(text))
 
@@ -121,6 +105,8 @@ def websafe_json(text=""):
 
 
 def conditional_websafe(text = ''):
+    from wrapped import Templated, CacheStub
+
     if text.__class__ == _Unsafe:
         return text
     elif isinstance(text, Templated):
@@ -168,8 +154,36 @@ def jssafe(text=u''):
     """Prevents text from breaking outside of string literals in JS"""
     if text.__class__ != unicode:
         text = _force_unicode(text)
-    #wrap the response in _Unsafe so make_websafe doesn't unescape it
+    # wrap the response in _Unsafe so conditional_websafe doesn't touch it
     return _Unsafe(text.translate(_js_escapes))
+
+
+_json_escapes = {
+    ord('>'): u'\\u003E',
+    ord('<'): u'\\u003C',
+    ord('&'): u'\\u0026',
+}
+
+
+def scriptsafe_dumps(obj, **kwargs):
+    """
+    Like `json.dumps()`, but safe for use in `<script>` blocks.
+
+    Also nice for response bodies that might be consumed by terrible browsers!
+
+    You should avoid using this to template data into inline event handlers.
+    When possible, you should do something like this instead:
+    ```
+    <button
+      onclick="console.log($(this).data('json-thing'))"
+      data-json-thing="${json_thing}">
+    </button>
+    ```
+    """
+    text = _force_unicode(json.dumps(obj, **kwargs))
+    # wrap the response in _Unsafe so conditional_websafe doesn't touch it
+    # TODO: this might be a hot path soon, C-ify it?
+    return _Unsafe(text.translate(_json_escapes))
 
 
 def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):

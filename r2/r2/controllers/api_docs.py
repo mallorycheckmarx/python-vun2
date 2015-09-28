@@ -26,7 +26,7 @@ from itertools import chain
 import inspect
 from os.path import abspath, relpath
 
-from pylons import g
+from pylons import app_globals as g
 from pylons.i18n import _
 from reddit_base import RedditController
 from r2.lib.utils import Storage
@@ -150,6 +150,10 @@ class ApidocsController(RedditController):
                     docs['parameters'] = {}
                 docs.update(api_doc)
 
+                # hide quarantine as a parameter
+                if 'parameters' in api_doc:
+                    docs['parameters'].pop('quarantine', None)
+
                 # append a message to the docstring if supplied
                 notes = docs.get("notes")
                 if notes:
@@ -201,6 +205,7 @@ class ApidocsController(RedditController):
         from r2.controllers.api import ApiController, ApiminimalController
         from r2.controllers.apiv1.user import APIv1UserController
         from r2.controllers.apiv1.gold import APIv1GoldController
+        from r2.controllers.apiv1.scopes import APIv1ScopesController
         from r2.controllers.captcha import CaptchaController
         from r2.controllers.front import FrontController
         from r2.controllers.wiki import WikiApiController, WikiController
@@ -210,6 +215,7 @@ class ApidocsController(RedditController):
         api_controllers = [
             (APIv1UserController, '/api/v1'),
             (APIv1GoldController, '/api/v1'),
+            (APIv1ScopesController, '/api/v1'),
             (ApiController, '/api'),
             (ApiminimalController, '/api'),
             (WikiApiController, '/api/wiki'),
