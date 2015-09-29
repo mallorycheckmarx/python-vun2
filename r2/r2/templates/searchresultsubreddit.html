@@ -81,7 +81,8 @@
     ${self.search_result_icon('filter')}
     ${plain_link(
         _("search within %(subreddit)s") % dict(subreddit=pretty_name),
-        search_url(thing.prev_search, thing.name, restrict_sr='on', sort=thing.sort, recent=thing.recent),
+        search_url(thing.prev_search, thing.name, restrict_sr='on', 
+                   sort=thing.sort, recent=thing.recent, syntax=thing.syntax),
         sr_path=False,
         cname=False,
         _class='search-link',

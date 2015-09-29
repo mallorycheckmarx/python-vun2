@@ -1449,8 +1449,9 @@ class SearchPage(BoringPage):
             kw['nav_menus'].append(MenuLink(title=_('enable NSFW results'),
                                             url=over18_url))
 
-        self.sr_facets = SubredditFacets(prev_search=prev_search, facets=facets,
-                                         sort=sort, recent=recent)
+        self.sr_facets = SubredditFacets(prev_search=prev_search,
+                                         facets=facets, sort=sort,
+                                         recent=recent, syntax=syntax)
         BoringPage.__init__(self, pagename, robots='noindex', *a, **kw)
 
     def content(self):
@@ -3259,10 +3260,12 @@ class SearchBar(Templated):
 
 
 class SubredditFacets(Templated):
-    def __init__(self, prev_search='', facets={}, sort=None, recent=None):
+    def __init__(self, prev_search='', facets={}, sort=None, recent=None,
+                 syntax=None):
         self.prev_search = prev_search
 
-        Templated.__init__(self, facets=facets, sort=sort, recent=recent)
+        Templated.__init__(self, facets=facets, sort=sort, recent=recent,
+                           syntax=syntax)
 
 
 class NewLink(Templated):
