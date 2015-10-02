@@ -29,7 +29,7 @@
 <head>
 
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<meta name="apple-itunes-app" content="app-id=923187241">
+<meta name="apple-itunes-app" content="app-id=923187241" app-argument="${request.url}">
 <meta name="referrer" content="${c.referrer_policy}" />
 <link rel="canonical" href="${thing.canonical_link}" />
 
