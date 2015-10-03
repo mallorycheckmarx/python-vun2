@@ -537,11 +537,43 @@ class Subreddit(Thing, Printable, BaseSite):
 
         return super(Subreddit, self).add_moderator(user, **kwargs)
 
+    def _handle_mod_succession(self):
+        from r2.models import ModAction
+        # cycle through each available moderator
+        for user_id, perms in self.moderators_with_perms().iteritems():
+            successor = Account._byID(user_id)
+            # skip deleted
+            if successor._deleted:
+                continue
+            # successor has full perms, end loop
+            if perms.is_superuser():
+                return
+            # if the successor does not have all perms, give it to him/her
+            successor_rel = self.get_moderator(successor)
+            successor_rel.set_permissions(perms.loads(None))
+            successor_rel._commit()
+            # Log this
+            ModAction.create(
+                self,
+                c.user,
+                'setpermissions',
+                target=successor,
+                details='set permissions on successor',
+                description=successor_rel.encoded_permissions
+            )
+            # end the loop as soon as a successor has been made
+            return
+
     def remove_moderator(self, user, **kwargs):
         hook = hooks.get_hook("subreddit.remove_moderator")
         hook.call(subreddit=self, user=user)
 
+        top_mod_id = self.moderators[0]
+
         ret = super(Subreddit, self).remove_moderator(user, **kwargs)
+
+        if user._id == top_mod_id and self.moderators:
+            self._handle_mod_succession()
 
         is_mod_somewhere = bool(Subreddit.reverse_moderator_ids(user))
         if not is_mod_somewhere:
