@@ -54,6 +54,9 @@
   %if not getattr(thing, "votable", True):
     <div class="unvotable-message">${strings.unvotable_message}</div>
   %endif
+  %if getattr(thing, "cannot_downvote", False):
+    <div class="nodownvote-message">${strings.contest_mode_no_downvote}</div>
+  %endif
 </p>
 
 ${self.commentBody()}

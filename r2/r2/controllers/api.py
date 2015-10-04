@@ -2199,6 +2199,11 @@ class ApiController(RedditController):
         if thing._age > thing.subreddit_slow.archive_age:
             store = False
 
+        if (dir < 0 and isinstance(thing, Comment):
+            if (thing.link_slow.contest_mode and
+                thing.subreddit_slow.contest_mode_upvotes_only):
+                store = False
+
         dir = (True if dir > 0
                else False if dir < 0
                else None)

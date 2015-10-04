@@ -129,5 +129,8 @@
   %else:
     ${_('contest mode randomizes comment sorting, hides scores, and collapses replies by default.')}
   %endif
+  %if thing.sr.contest_mode_upvotes_only:
+    ${_('Downvoting is disabled for threads on contest mode in this subreddit.')}
+  %endif
   </div>
 %endif

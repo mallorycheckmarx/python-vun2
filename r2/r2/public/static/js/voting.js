@@ -45,6 +45,11 @@
         return;
       }
 
+      if ($el.hasClass('nodownvotes')) {
+        $el.show_nodownvote_message();
+        return;
+      }
+
       var $thing = $el.thing();
       var id = $thing.thing_id();
       var dir = $el.hasClass(UP_CLS) ? 1 : $el.hasClass(DOWN_CLS) ? -1 : 0;
