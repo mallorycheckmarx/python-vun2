@@ -19,4 +19,4 @@ O código original do projeto foi desenvolvido em Lisp e mais tarde convertido p
 
 
 ###Estrutura
-Paradigma de desenvolvimento?
+Não nos foi possivel encontrar informação relativamente ao processo de desenvolvimento de software do Reddit principalmente devido ao facto de a grande parte da criação do mesmo ter sido em closed source, tendo apenas sido disponibilizado em open source depois do seu "release".
