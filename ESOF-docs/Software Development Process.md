@@ -58,3 +58,11 @@ Three years later the project was made available as an open source project and i
 
 ###Structure
 Não nos foi possivel encontrar informação relativamente ao processo de desenvolvimento de software do Reddit principalmente devido ao facto de a grande parte da criação do mesmo ter sido em closed source, tendo apenas sido disponibilizado em open source depois do seu "release".
+
+###Scrum
+Scrum is a way of software development, where a team is required as solid to reach a goal.
+Basically this methodology involves severals sprints, 1 to 3 weeks, having each sprint the follow structure:
+1-Plan
+2-Build
+3-Test
+4-Review
