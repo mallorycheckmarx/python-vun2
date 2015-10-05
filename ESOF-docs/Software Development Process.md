@@ -18,14 +18,19 @@ Reddit is an entertainment, social networking, and news website where registered
 
 ####Programming Language
 Reddit was originally written in Common Lisp but was rewritten in Python some months later.
+
 The reasons given for the switch were wider access to code libraries and greater development flexibility.
+
 Three years later the project was made available as an open source project and is now hosted on GitHub.
 
 ####History
 
 **June 2005**: Reddit was founded in Medford by two 22-year-old graduates of the University of Virginia. 
+
 **November 2005 - January2006**: Reddit merged with Aaron Swartz's company Infogami, and Swartz became an equal owner of the resulting parent company, Not A Bug. 
+
 **October 2006** Condé Nast Publications, owner of Wired, acquired Reddit and the team moved to San Francisco.
+
 **January 2007** Swartz was fired.
 
 By the end of 2008, the team had grown to include Erik Martin, Jeremy Edberg,[69] David King,[70] and Mike Schiraldi.[71] In 2009, Huffman and Ohanian moved on to form Hipmunk, recruiting Slowe[72] and King[73] shortly thereafter. In May 2010, Reddit was named in Lead411's "2010 Hottest San Francisco Companies" list.[74] In July 2010, after explosive traffic growth, Reddit introduced Reddit Gold, offering new features for a price of $3.99/month or $29.99/year.[75] Reddit Gold adds a number of features to the interface, including the ability to display more comments on a page, access to the private subreddit /r/lounge, and notifications whenever one's username is mentioned in a comment. It's also possible to endow comments or submissions of other users and thereby give a gold membership to them as an anonymous present.[76]
