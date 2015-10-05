@@ -62,7 +62,13 @@ Não nos foi possivel encontrar informação relativamente ao processo de desenv
 ###Scrum
 Scrum is a way of software development, where a team is required as solid to reach a goal.
 Basically this methodology involves severals sprints, 1 to 3 weeks, having each sprint the follow structure:
+
 1-Plan
+
 2-Build
+
 3-Test
+
 4-Review
+
+To get the finall product its necessary 3 Rols. First its the Product owner.
