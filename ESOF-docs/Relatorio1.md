@@ -10,11 +10,12 @@ https://github.com/Wargyy/reddit
 
 
 
-## Relatório 1 
+## Relatório de Processo de Desenvolvimento de Software
 
 
 ###Sobre
-O Reddit é uma cena tal, que faz coiso, alojada algures feita com cenas.
+O Reddit é um site do tipo de publicações sociais no qual os usuários podem divulgar ligações para conteúdo na Web. Outros usuários podem então votar positivamente ou negativamente nas ligações divulgadas, fazendo com que apareçam de uma forma mais ou menos destacada na página inicial do Reddit.
+O código original do projeto foi desenvolvido em Lisp e mais tarde convertido para Python sendo disponibilizado em Open-Source.
 
 
 ###Estrutura
