@@ -44,9 +44,9 @@
   if thing.details_text:
     title += ' (%s)' % thing.details_text
 
-  if isinstance(thing, Comment):
+  if isinstance(thing.target, Comment):
     permalink = thing.target.make_permalink(thing.parent_link, thing.subreddit)
-  elif isinstance(thing, Link):
+  elif isinstance(thing.target, Link):
     permalink = thing.target.make_permalink(thing.subreddit)
   else:
     permalink = None
