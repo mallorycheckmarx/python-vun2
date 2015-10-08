@@ -61,7 +61,7 @@ Não nos foi possivel encontrar informação relativamente ao processo de desenv
 
 ###Scrum
 Scrum is a way of software development, where a team is required as solid to reach a goal.
-Basically this methodology involves severals sprints, 1 to 3 weeks, having each sprint the follow structure:
+Basically this methodology involves several's sprints, 1 to 3 weeks, having each sprint the follow structure:
 
 1-Plan
 
@@ -71,4 +71,8 @@ Basically this methodology involves severals sprints, 1 to 3 weeks, having each 
 
 4-Review
 
-To get the finall product its necessary 3 Rols. First its the Product owner.
+To get the final product its necessary 3 Rols. First its the Product owner, who will request the product and pay for it. In second we have the Scrum Master, its the one that will push for the team, helping ensuring success, removing impediments and supporting the team. Finally we have the team, who will build the project.
+
+In the final of each sprint, team will dispute a sprint review (where team can improve the product) and a sprint retrospective (where team can be improved).
+
+If the final product its built after the sprint, team can put the product ready for shippment.
