@@ -59,6 +59,8 @@ menu =   MenuHandler(hot          = _('hot'),
                      confidence   = _('best'),
                      random       = _('random'),
                      qa           = _('q&a'),
+                     bottom       = _('bottom'),
+                     worst        = _('worst'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
                      rising       = _('rising'), 
@@ -558,6 +560,8 @@ class SortMenu(NavMenu):
         "confidence": operators.desc('_confidence'),
         "random": operators.shuffled('_confidence'),
         "qa": operators.desc('_qa'),
+        "bottom": operators.asc('_score'),
+        "worst": operators.asc('_confidence'),
     }
     _reverse_mapping = {v: k for k, v in _mapping.iteritems()}
 
@@ -579,7 +583,7 @@ class CommentSortMenu(SortMenu):
     """Sort menu for comments pages"""
     _default = 'confidence'
     _options = ('confidence', 'top', 'new', 'hot', 'controversial', 'old',
-                 'random', 'qa',)
+                 'random', 'qa', 'bottom', 'worst',)
 
     # Links may have a suggested sort of 'blank', which is an explicit None -
     # that is, do not check the subreddit for a suggested sort, either.
