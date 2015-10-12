@@ -56,11 +56,11 @@ Three years later the project was made available as open source software, and it
 * **July 2015**: Pao resigned and was replaced by Steve Huffman as CEO.
 
 
-###Structure
+## Structure
 ####Development Process
 We were unable to locate information relative to the development process of the Reddit software, mainly because a most of its development happened during its closed source period, as of a fact, some of the current contributers acknowledge that there may not even be one process set for it.
 
-**TODO: Try to find the development process by analysing the repository/code.**
+**TODO: Try to find the approximate development process used by analysing the repository/code.**
 
 **TODO: The following block of text is out of context/located in the wrong place**
 ```
