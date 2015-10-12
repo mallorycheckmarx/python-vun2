@@ -82,7 +82,7 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
     config['pylons.h'] = r2.lib.helpers
     config['routes.map'] = make_map(config)
 
-    #override the default response options
+    # override the default response options
     config['pylons.response_options']['headers'] = {}
 
     # when mako loads a previously compiled template file from its cache, it
