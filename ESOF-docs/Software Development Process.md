@@ -11,12 +11,12 @@ https://github.com/Wargyy/reddit
 
 ## Index
 
-* [Software Process Report](#Software-Process-Report)
-  * [About Reddit]()
-  * [Programming Language]()
-  * [History]()
-* [Structure]()
-  * [Development Process]()
+* [Software Process Report](#software-process-report)
+  * [About Reddit](#about-reddit)
+  * [Programming Language](#programming-language)
+  * [History](#history)
+* [Structure](#structure)
+  * [Development Process](#development-process)
 
 
 ## Software Process Report
