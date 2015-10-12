@@ -355,6 +355,9 @@ class FrontController(RedditController):
         if comment:
             displayPane.append(PermalinkMessage(article.make_permalink_slow()))
             page_classes.append('comment-permalink-page')
+        # if the user is a mod, add a class to visually allow switching to mod sorts
+        if c.user_is_loggedin and sr.is_moderator_with_perms(c.user, 'posts'):
+            page_classes.append('modsorts-on')
 
         displayPane.append(LinkCommentSep())
 
@@ -406,6 +409,22 @@ class FrontController(RedditController):
         elif suggested_sort and 'sort' not in request.params:
             sort = suggested_sort
             suggested_sort_active = True
+
+        # only mods with the posts perm use mod sorts
+        if sort in CommentSortMenu.mod_options:
+            if c.user_is_loggedin:
+                if not sr.is_moderator_with_perms(c.user, 'posts'):
+                    if suggested_sort and 'sort' not in request.params:
+                        sort = suggested_sort
+                        suggested_sort_active = True
+                    else:
+                        sort = c.user.pref_default_comment_sort
+            else:
+                if suggested_sort and 'sort' not in request.params:
+                    sort = suggested_sort
+                    suggested_sort_active = True
+                else:
+                    sort = c.user.pref_default_comment_sort
 
         # finally add the comment listing
         displayPane.append(CommentPane(article, CommentSortMenu.operator(sort),

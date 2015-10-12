@@ -23,6 +23,7 @@
 <%!
   from r2.config import feature
   from r2.lib.filters import jssafe
+  from r2.lib.menus import CommentSortMenu
 %>
 
 <%namespace file="printablebuttons.html" import="ynbutton" />
@@ -78,11 +79,13 @@
 </%def>
 
 %if thing.can_edit:
-  %if thing.suggested_sort == thing.sort:
-    <% clear_suggested_sort() %>
-  %else:
-    ${ynbutton(_("set as suggested sort"), _("suggested sort set"), "set_suggested_sort",
-      hidden_data=dict(id=thing.link._fullname, sort=thing.sort))}
+  %if thing.sort not in CommentSortMenu.mod_options:
+    %if thing.suggested_sort == thing.sort:
+      <% clear_suggested_sort() %>
+    %else:
+      ${ynbutton(_("set as suggested sort"), _("suggested sort set"), "set_suggested_sort",
+        hidden_data=dict(id=thing.link._fullname, sort=thing.sort))}
+    %endif
   %endif
 %endif
 
