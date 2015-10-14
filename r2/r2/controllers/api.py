@@ -1582,8 +1582,10 @@ class ApiController(RedditController):
         thing._commit()
         if state:
             action = 'setcontestmode'
+            queries.new_contest(thing)
         else:
             action = 'unsetcontestmode'
+            queries.remove_contest(thing)
         ModAction.create(c.site, c.user, action, target=thing)
         jquery.refresh()
 

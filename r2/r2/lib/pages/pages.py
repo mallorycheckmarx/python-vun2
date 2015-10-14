@@ -504,7 +504,8 @@ class Reddit(Templated):
             if feature.is_enabled('thread_locking'):
                 buttons += [NamedButton("locked", css_class="reddit-locked")]
 
-            buttons += [NamedButton("edited", css_class="reddit-edited")]
+            buttons += [NamedButton("contests", css_class="reddit-contests"),
+                        NamedButton("edited", css_class="reddit-edited")]
 
         if is_single_subreddit:
             if is_moderator_with_perms('access'):
