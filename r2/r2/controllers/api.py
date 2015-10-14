@@ -1425,6 +1425,8 @@ class ApiController(RedditController):
 
         ModAction.create(thing.subreddit_slow, c.user, target=thing,
                          action='lock')
+        queries.new_lock(thing)
+
 
 
     @require_oauth2_scope("modposts")
@@ -1450,6 +1452,8 @@ class ApiController(RedditController):
 
         ModAction.create(thing.subreddit_slow, c.user, target=thing,
                          action='unlock')
+        queries.remove_lock(thing)
+
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),

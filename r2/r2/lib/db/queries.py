@@ -460,6 +460,12 @@ def get_reported(sr, user=None, include_links=True, include_comments=True):
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 @cached_query(SubredditQueryCache)
+def get_locked_links(sr_id):
+    return Link._query(Link.c.sr_id == sr_id,
+                       Link.c.locked == True,
+                       sort = db_sort('new'))
+
+@cached_query(SubredditQueryCache)
 def get_unmoderated_links(sr_id):
     q = Link._query(Link.c.sr_id == sr_id,
                     Link.c._spam == (True, False),
@@ -481,6 +487,12 @@ def get_modqueue(sr, user=None, include_links=True, include_comments=True):
     if include_comments:
         queries.append(get_reported_comments)
         queries.append(get_spam_filtered_comments)
+    return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
+
+@merged_cached_query
+def get_locked(sr, user=None):
+    sr_ids = moderated_srids(sr, user)
+    queries = [get_locked_links]
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 @merged_cached_query
@@ -1643,6 +1655,19 @@ def clear_reports(things, rels):
             m.delete(q, deletes)
 
 
+def new_lock(thing):
+    with CachedQueryMutator() as m:
+        m.insert(get_locked_links(thing.sr_id), [thing])
+
+    amqp.add_item("new_lock", thing._fullname)
+
+
+def remove_lock(thing):
+    with CachedQueryMutator() as m:
+        q = get_locked_links(thing.sr_id)
+        m.delete(q, [thing])
+
+
 def add_all_srs():
     """Recalculates every listing query for every subreddit. Very,
        very slow."""
@@ -1656,6 +1681,7 @@ def add_all_srs():
         get_spam_comments(sr).update()
         get_reported_links(sr).update()
         get_reported_comments(sr).update()
+        get_locked_links(sr).update()
 
 def update_user(user):
     if isinstance(user, str):

@@ -194,6 +194,10 @@ class BaseSite(object):
                                     include_links=include_links,
                                     include_comments=include_comments)
 
+    def get_locked(self):
+        from r2.lib.db import queries
+        return queries.get_locked(self, user=c.user)
+
     def get_unmoderated(self):
         from r2.lib.db import queries
         return queries.get_unmoderated(self, user=c.user)
