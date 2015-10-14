@@ -482,6 +482,17 @@ def get_unmoderated_links(sr_id):
                   and_(Link.c._spam == False, Link.c.verdict != 'mod-approved')))
     return q
 
+@cached_query(SubredditQueryCache)
+def get_unmoderated_comments(sr_id):
+    q = Comment._query(Comment.c.sr_id == sr_id,
+                       Comment.c._spam == (True, False),
+                       sort = db_sort('new'))
+
+    # Doesn't really work because will not return Links with no verdict
+    q._filter(or_(and_(Comment.c._spam == True, Comment.c.verdict != 'mod-removed'),
+                  and_(Comment.c._spam == False, Comment.c.verdict != 'mod-approved')))
+    return q
+
 @merged_cached_query
 def get_modqueue(sr, user=None, include_links=True, include_comments=True):
     sr_ids = moderated_srids(sr, user)
@@ -508,9 +519,14 @@ def get_contests(sr, user=None):
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 @merged_cached_query
-def get_unmoderated(sr, user=None):
+def get_unmoderated(sr, user=None, include_links=True, include_comments=True):
     sr_ids = moderated_srids(sr, user)
-    queries = [get_unmoderated_links]
+    queries = []
+
+    if include_links:
+        queries.append(get_unmoderated_links)
+    if include_comments:
+        queries.append(get_unmoderated_comments)
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 def get_domain_links(domain, sort, time):
@@ -1079,6 +1095,7 @@ def new_comment(comment, inbox_rels):
         if comment._deleted:
             job_key = "delete_items"
             job.append(get_sr_comments(sr))
+            job.append(get_unmoderated_comments(sr))
             job.append(get_all_comments())
         else:
             job_key = "insert_items"
@@ -1087,6 +1104,9 @@ def new_comment(comment, inbox_rels):
             if (was_spam_filtered(comment) and
                     not (sr.exclude_banned_modqueue and author._spam)):
                 m.insert(get_spam_filtered_comments(sr), [comment])
+                m.insert(get_unmoderated_comments(sr), [comment])
+            if not was_spam_filtered(comment):
+                m.insert(get_unmoderated_comments(sr), [comment])
 
             amqp.add_item('new_comment', comment._fullname)
             add_to_commentstree_q(comment)
@@ -1432,6 +1452,8 @@ def delete(things):
             query_cache_deletes.append((get_spam_comments(sr), comments))
             query_cache_deletes.append((get_spam_filtered_comments(sr),
                                         comments))
+            query_cache_deletes.append((get_unmoderated_comments(sr_id),
+                                        comments))
             query_cache_deletes.append((get_edited_comments(sr), comments))
 
     for author_id, a_things in by_author.iteritems():
@@ -1519,6 +1541,8 @@ def ban(things, filtered=True):
             if not filtered:
                 query_cache_deletes.append(
                         (get_spam_filtered_comments(sr_id), comments))
+                query_cache_deletes.append(
+                        (get_unmoderated_comments(sr_id), comments))
 
         if modqueue_comments:
             query_cache_inserts.append(
@@ -1604,6 +1628,7 @@ def unban(things, insert=True):
             query_cache_deletes.append([get_spam_filtered_links(sr), links])
 
         if comments:
+            query_cache_deletes.append((get_unmoderated_comments(sr), comments))
             query_cache_deletes.append([get_spam_filtered_comments(sr), comments])
 
     with CachedQueryMutator() as m:

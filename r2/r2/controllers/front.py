@@ -665,7 +665,8 @@ class FrontController(RedditController):
         elif location == 'contests':
             query = c.site.get_contests()
         elif location == 'unmoderated':
-            query = c.site.get_unmoderated()
+            query = c.site.get_unmoderated(include_links=include_links,
+                                           include_comments=include_comments)
         elif location == 'edited':
             query = c.site.get_edited(include_links=include_links,
                                       include_comments=include_comments)
@@ -823,7 +824,7 @@ class FrontController(RedditController):
 
         extension_handling = "private" if c.user.pref_private_feeds else False
 
-        if location in ('reports', 'spam', 'modqueue', 'edited'):
+        if location in ('reports', 'spam', 'modqueue', 'edited', 'unmoderated'):
             buttons = [
                 QueryButton(_('links and comments'), None, query_param='only'),
                 QueryButton(_('links'), 'links', query_param='only'),

@@ -202,9 +202,11 @@ class BaseSite(object):
         from r2.lib.db import queries
         return queries.get_contests(self, user=c.user)
 
-    def get_unmoderated(self):
+    def get_unmoderated(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
-        return queries.get_unmoderated(self, user=c.user)
+        return queries.get_unmoderated(self, user=c.user,
+                                       include_links=include_links,
+                                       include_comments=include_comments)
 
     def get_edited(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
