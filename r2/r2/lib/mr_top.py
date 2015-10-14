@@ -92,12 +92,12 @@ def time_listings(intervals, thing_type):
             if thing.spam:
                 continue
 
-            if thing.thing_type == "link":
-                yield ("sr/link/top/%s/%d" % (interval, thing.sr_id),
-                       thing_score, thing.timestamp, fname)
-                yield ("sr/link/controversial/%s/%d" % (interval, thing.sr_id),
-                       thing_controversy, thing.timestamp, fname)
+            yield ("sr/%s/top/%s/%d" % (thing.thing_type, interval, thing.sr_id),
+                   thing_score, thing.timestamp, fname)
+            yield ("sr/%s/controversial/%s/%d" % (thing.thing_type, interval, thing.sr_id),
+                   thing_controversy, thing.timestamp, fname)
 
+            if thing.thing_type == "link":
                 if thing.url:
                     try:
                         parsed = UrlParser(thing.url)
@@ -117,6 +117,7 @@ def store_keys(key, maxes):
     category, thing_cls, sort, time, id = key.split("/")
 
     query = None
+    query2 = None
     if category == "user":
         if thing_cls == "link":
             query = queries._get_submitted(int(id), sort, time)
@@ -125,6 +126,9 @@ def store_keys(key, maxes):
     elif category == "sr":
         if thing_cls == "link":
             query = queries._get_links(int(id), sort, time)
+        elif thing_cls == "comment":
+            query = queries._get_sr_comments(int(id), sort, time)
+            query2 = queries.get_all_comments(sort, time)
     elif category == "domain":
         if thing_cls == "link":
             query = queries.get_domain_links(id, sort, time)
@@ -133,6 +137,10 @@ def store_keys(key, maxes):
     item_tuples = [tuple([item[-1]] + [float(x) for x in item[:-1]])
                    for item in maxes]
     query._replace(item_tuples)
+
+    if category == "sr" and thing_cls == "comment":
+        assert query2
+        query._replace(item_tuples)
 
 
 def write_permacache(fd = sys.stdin):

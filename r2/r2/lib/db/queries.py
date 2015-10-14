@@ -548,18 +548,25 @@ def user_query(kind, user_id, sort, time):
         q._filter(db_times[time])
     return make_results(q)
 
-def get_all_comments():
+def get_all_comments(sort='new', time='all'):
     """the master /comments page"""
-    q = Comment._query(sort = desc('_date'))
+    q = Comment._query(sort = db_sort(sort))
+
+    if time != 'all':
+        q._filter(db_times[time])
+    
     return make_results(q)
 
-def get_sr_comments(sr):
-    return _get_sr_comments(sr._id)
+def get_sr_comments(sr, sort='new', time='all'):
+    return _get_sr_comments(sr._id, sort, time)
 
-def _get_sr_comments(sr_id):
+def _get_sr_comments(sr_id, sort, time):
     """the subreddit /r/foo/comments page"""
     q = Comment._query(Comment.c.sr_id == sr_id,
-                       sort = desc('_date'))
+                       sort = db_sort(sort))
+    if time != 'all':
+        q._filter(db_times[time])
+
     return make_results(q)
 
 def _get_comments(user_id, sort, time):
@@ -1094,9 +1101,11 @@ def new_comment(comment, inbox_rels):
     with CachedQueryMutator() as m:
         if comment._deleted:
             job_key = "delete_items"
-            job.append(get_sr_comments(sr))
+            for sort in db_sorts.keys():
+                job.append(get_sr_comments(sr, sort, 'all'))
+            for sort in db_sorts.keys():
+                job.append(get_all_comments(sort, 'all'))
             job.append(get_unmoderated_comments(sr))
-            job.append(get_all_comments())
         else:
             job_key = "insert_items"
             if comment._spam:
@@ -1619,8 +1628,17 @@ def unban(things, insert=True):
             query_cache_deletes.append([get_spam_links(sr), links])
 
         if insert and comments:
-            add_queries([get_all_comments(), get_sr_comments(sr)],
-                        insert_items=comments)
+            q_list = [get_all_comments('new', 'all'),
+                      get_sr_comments(sr, 'new', 'all'),
+                      get_all_comments('hot', 'all'),
+                      get_sr_comments(sr, 'hot', 'all'),
+                      get_all_comments('top', 'all'),
+                      get_sr_comments(sr, 'top', 'all'),
+                      get_all_comments('controversial', 'all'),
+                      get_sr_comments(sr, 'controversial', 'all')]
+            # the time-filtered listings will have to wait for the
+            # next mr_top run
+            add_queries(q_list, insert_items=comments)
             query_cache_deletes.append([get_spam_comments(sr), comments])
 
         if links:
@@ -1768,13 +1786,21 @@ def run_new_comments(limit=1000):
         fnames = [msg.body for msg in msgs]
 
         comments = Comment._by_fullname(fnames, data=True, return_dict=False)
-        add_queries([get_all_comments()],
-                    insert_items=comments)
+        q_list = [get_all_comments('new', 'all'),
+                  get_all_comments('hot', 'all'),
+                  get_all_comments('top', 'all'),
+                  get_all_comments('controversial', 'all')]
+        # the time filtered listings will be done by mr_top
+        add_queries(q_list, insert_items=comments)
 
         bysrid = _by_srid(comments, False)
         for srid, sr_comments in bysrid.iteritems():
-            add_queries([_get_sr_comments(srid)],
-                        insert_items=sr_comments)
+            q_list = [_get_sr_comments(srid, 'new', 'all'),
+                      _get_sr_comments(srid, 'hot', 'all'),
+                      _get_sr_comments(srid, 'top', 'all'),
+                      _get_sr_comments(srid, 'controversial', 'all')]
+            # the time filtered listings will be done by mr_top
+            add_queries(q_list, insert_items=sr_comments)
 
     amqp.handle_items('newcomments_q', _run_new_comments, limit=limit)
 

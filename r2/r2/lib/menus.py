@@ -610,6 +610,11 @@ class CommentSortMenu(SortMenu):
             return title
 
 
+class SubredditCommentsSortMenu(SortMenu):
+    _default = 'new'
+    _options = ('hot', 'new', 'top', 'controversial')
+
+
 class SearchSortMenu(SortMenu):
     """Sort menu for search pages."""
     _default = 'relevance'
