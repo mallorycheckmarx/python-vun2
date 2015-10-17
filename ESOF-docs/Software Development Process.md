@@ -9,7 +9,14 @@ https://github.com/Wargyy/reddit
 * Pedro Albano
 * Pedro Faria
 
-## Index
+## Navigation
+
+##### Chapter
+
+* Software Development Process
+* [Requirement Elicitation](Requirement Elicitation.md)
+
+##### Table of Contents
 
 * [Software Process Report](#software-process-report)
   * [About Reddit](#about-reddit)
