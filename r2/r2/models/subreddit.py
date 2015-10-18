@@ -1647,6 +1647,14 @@ class AllMinus(AllSR):
             q._filter(not_(Link.c.sr_id.in_(self.exclude_sr_ids)))
         return q
 
+    def get_all_comments(self):
+        from r2.models import Comment
+        from r2.lib.db.operators import not_
+        q = AllSR.get_all_comments(self)
+        if c.user.gold and self.exclude_sr_ids:
+            q._filter(not_(Comment.c.sr_id.in_(self.exclude_sr_ids)))
+        return q
+
 
 class Filtered(object):
     unfiltered_path = None
