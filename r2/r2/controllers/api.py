@@ -559,6 +559,9 @@ class ApiController(RedditController):
         queries.queue_vote(c.user, l, dir=True, ip=request.ip,
             cheater=c.cheater)
 
+        if l.over_18:
+            queries.set_nsfw(l)
+
         if sr.should_ratelimit(c.user, 'link'):
             VRatelimit.ratelimit(rate_user=True, rate_ip = True,
                                  prefix = "rate_submit_")
@@ -1475,6 +1478,7 @@ class ApiController(RedditController):
                              action='marknsfw')
 
         thing.update_search_index()
+        queries.set_nsfw(thing)
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),
@@ -1505,6 +1509,7 @@ class ApiController(RedditController):
                              action='marknsfw', details='remove')
 
         thing.update_search_index()
+        queries.unset_nsfw(thing)
 
     @require_oauth2_scope("edit")
     @noresponse(VUser(),

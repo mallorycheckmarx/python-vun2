@@ -472,6 +472,12 @@ def get_contest_links(sr_id):
                        sort = db_sort('new'))
 
 @cached_query(SubredditQueryCache)
+def get_nsfw_links(sr_id):
+    return Link._query(Link.c.sr_id == sr_id,
+                       Link.c.over_18 == True,
+                       sort = db_sort('new'))
+
+@cached_query(SubredditQueryCache)
 def get_unmoderated_links(sr_id):
     q = Link._query(Link.c.sr_id == sr_id,
                     Link.c._spam == (True, False),
@@ -516,6 +522,12 @@ def get_locked(sr, user=None):
 def get_contests(sr, user=None):
     sr_ids = moderated_srids(sr, user)
     queries = [get_contest_links]
+    return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
+
+@merged_cached_query
+def get_nsfw(sr, user=None):
+    sr_ids = moderated_srids(sr, user)
+    queries = [get_nsfw_links]
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 @merged_cached_query
@@ -1735,6 +1747,18 @@ def remove_contest(thing):
         q = get_contest_links(thing.sr_id)
         m.delete(q, [thing])
 
+def set_nsfw(thing):
+    with CachedQueryMutator() as m:
+        m.insert(get_nsfw_links(thing.sr_id), [thing])
+
+    amqp.add_item("set_nsfw", thing._fullname)
+
+
+def unset_nsfw(thing):
+    with CachedQueryMutator() as m:
+        q = get_nsfw_links(thing.sr_id)
+        m.delete(q, [thing])
+
 
 def add_all_srs():
     """Recalculates every listing query for every subreddit. Very,
@@ -1751,6 +1775,7 @@ def add_all_srs():
         get_reported_comments(sr).update()
         get_locked_links(sr).update()
         get_contest_links(sr).update()
+        get_nsfw_links(sr).update()
 
 def update_user(user):
     if isinstance(user, str):

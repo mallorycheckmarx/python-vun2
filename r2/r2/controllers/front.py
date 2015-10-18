@@ -664,6 +664,8 @@ class FrontController(RedditController):
             query = c.site.get_locked()
         elif location == 'contests':
             query = c.site.get_contests()
+        elif location == 'nsfw':
+            query = c.site.get_nsfw()
         elif location == 'unmoderated':
             query = c.site.get_unmoderated(include_links=include_links,
                                            include_comments=include_comments)
@@ -710,6 +712,8 @@ class FrontController(RedditController):
                 return x.locked
             elif location == 'contests':
                 return x.contest_mode
+            elif location == 'nsfw':
+                return x.over_18
             elif location == "unmoderated":
                 # banned user, don't show if subreddit pref excludes
                 if x.author._spam and x.subreddit.exclude_banned_modqueue:
@@ -788,7 +792,8 @@ class FrontController(RedditController):
         uses_site=True,
         uri='/about/{location}',
         uri_variants=['/about/' + loc for loc in
-                      ('reports', 'spam', 'modqueue', 'locked', 'contests', 'unmoderated', 'edited')],
+                      ('reports', 'spam', 'modqueue', 'locked',
+                       'contests', 'nsfw', 'unmoderated', 'edited')],
     )
     def GET_spamlisting(self, location, only, num, after, reverse, count):
         """Return a listing of posts relevant to moderators.
@@ -799,6 +804,7 @@ class FrontController(RedditController):
             and items caught by the spam filter.
         * locked: Things that have been locked.
         * contests: Things that have been put into contest mode.
+        * nsfw: Things that are nsfw.
         * unmoderated: Things that have yet to be approved/removed by a mod.
         * edited: Things that have been edited recently.
 
@@ -809,6 +815,13 @@ class FrontController(RedditController):
             feature.is_enabled('thread_locking',
                                subreddit=c.site)):
             abort(404, 'not found')
+        if location == 'nsfw':
+            if c.site.over_18:
+                # there is no point if the sub is nsfw. All links would be nsfw.
+                abort(403)
+            if not c.over18 and c.render_style == 'html':
+                return self.intermediate_redirect('/over18', sr_path=False,
+                                              fullpath=request.fullurl)
         c.allow_styles = True
         c.profilepage = True
         panes = PaneStack()

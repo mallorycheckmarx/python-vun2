@@ -202,6 +202,10 @@ class BaseSite(object):
         from r2.lib.db import queries
         return queries.get_contests(self, user=c.user)
 
+    def get_nsfw(self):
+        from r2.lib.db import queries
+        return queries.get_nsfw(self, user=c.user)
+
     def get_unmoderated(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
         return queries.get_unmoderated(self, user=c.user,
