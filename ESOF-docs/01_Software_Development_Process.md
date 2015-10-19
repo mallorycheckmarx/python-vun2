@@ -9,13 +9,6 @@ https://github.com/Wargyy/reddit
 * Pedro Albano
 * Pedro Faria
 
-## Navigation
-
-##### Chapter
-
-* Software Development Process
-* [Requirement Elicitation](02_Requirement_Elicitation.md)
-
 ##### Table of Contents
 
 * [Software Process Report](#software-process-report)
@@ -24,6 +17,8 @@ https://github.com/Wargyy/reddit
   * [History](#history)
 * [Structure](#structure)
   * [Development Process](#development-process)
+
+[Return to Index](..)
 
 
 ## Software Process Report
