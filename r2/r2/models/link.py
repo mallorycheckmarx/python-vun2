@@ -761,10 +761,7 @@ class Link(Thing, Printable):
             if item.deleted and not c.user_is_admin:
                 item.author = DeletedUser()
                 item.as_deleted = True
-                if item._spam:
-                    item.selftext = '[removed by moderator]'
-                else:
-                    item.selftext = '[deleted by user]'
+                item.selftext = '[deleted by author]'
 
             item.votable = not item.archived
 
