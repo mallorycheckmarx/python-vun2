@@ -18,9 +18,6 @@ https://github.com/Wargyy/reddit
 * [Structure](#structure)
   * [Development Process](#development-process)
 
-[Return to Index](..)
-
-
 ## Software Process Report
 
 ###About reddit
