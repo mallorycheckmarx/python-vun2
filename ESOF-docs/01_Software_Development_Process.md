@@ -9,7 +9,7 @@ https://github.com/Wargyy/reddit
 * Pedro Albano
 * Pedro Faria
 
-##### Table of Contents
+##### Navigation
 * [Software Process Report](#software-process-report)
   * [About Reddit](#about-reddit)
   * [Programming Language](#programming-language)
@@ -18,8 +18,6 @@ https://github.com/Wargyy/reddit
   * [Development Process](#development-process)
 
 [Return to Chapter Select](Chapter_Select.md)
-
-
 
 ## Software Process Report
 
