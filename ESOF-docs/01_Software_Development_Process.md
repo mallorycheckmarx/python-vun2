@@ -10,6 +10,9 @@ https://github.com/Wargyy/reddit
 * Pedro Faria
 
 ##### Table of Contents
+###### [Chapter Select](Chapter_Select.md)
+
+
 * [Software Process Report](#software-process-report)
   * [About Reddit](#about-reddit)
   * [Programming Language](#programming-language)
@@ -17,7 +20,7 @@ https://github.com/Wargyy/reddit
 * [Structure](#structure)
   * [Development Process](#development-process)
 
-* [../Chapter Select](Chapter_Select.md)
+
 
 ## Software Process Report
 
