@@ -9,12 +9,12 @@ https://github.com/Wargyy/reddit
 * Pedro Albano
 * Pedro Faria
 
-##### Table of Contents
+## Navigation
 
 * [Requirement Elicitation](#requirement-elicitation)
 * [Domain and Use-Cases Diagram](#domain-and-use-cases-diagram)
 
-[Return to Chapter Select](Chapter_Select.md)
+[... Return to Chapter Select](Chapter_Select.md)
 
 ## Requirement Elicitation
 
