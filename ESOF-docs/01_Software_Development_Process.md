@@ -9,7 +9,8 @@ https://github.com/Wargyy/reddit
 * Pedro Albano
 * Pedro Faria
 
-##### Navigation
+## Navigation
+
 * [Software Process Report](#software-process-report)
   * [About Reddit](#about-reddit)
   * [Programming Language](#programming-language)
