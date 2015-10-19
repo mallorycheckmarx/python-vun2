@@ -11,7 +11,6 @@ https://github.com/Wargyy/reddit
 
 ##### Table of Contents
 * [Chapter Select](Chapter_Select.md)
-
 * [Software Process Report](#software-process-report)
   * [About Reddit](#about-reddit)
   * [Programming Language](#programming-language)
