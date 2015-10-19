@@ -11,13 +11,6 @@ https://github.com/Wargyy/reddit
 
 ## Navigation
 
-##### Chapter
-
-* Software Development Process
-* [Requirement Elicitation](02_Requirement_Elicitation.md)
-
-##### Table of Contents
-
 * [Software Process Report](#software-process-report)
   * [About Reddit](#about-reddit)
   * [Programming Language](#programming-language)
@@ -25,6 +18,7 @@ https://github.com/Wargyy/reddit
 * [Structure](#structure)
   * [Development Process](#development-process)
 
+[... Return to Chapter Select](Chapter_Select.md)
 
 ## Software Process Report
 
