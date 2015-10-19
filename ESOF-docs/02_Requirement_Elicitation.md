@@ -9,18 +9,12 @@ https://github.com/Wargyy/reddit
 * Pedro Albano
 * Pedro Faria
 
-## Navigation
-
-##### Chapter
-
-* [Software Development Process](01_Software_Development_Process.md)
-* Requirement Elicitation
-
 ##### Table of Contents
 
 * [Requirement Elicitation](#requirement-elicitation)
 * [Domain and Use-Cases Diagram](#domain-and-use-cases-diagram)
 
+[Return to Chapter Select](Chapter_Select.md)
 
 ## Requirement Elicitation
 
