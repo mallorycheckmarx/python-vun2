@@ -18,7 +18,7 @@ https://github.com/Wargyy/reddit
 * [Structure](#structure)
   * [Development Process](#development-process)
 
-[Return to Chapter Select](Chapter_Select.md)
+[... Return to Chapter Select](Chapter_Select.md)
 
 ## Software Process Report
 
