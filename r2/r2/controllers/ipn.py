@@ -218,8 +218,7 @@ def existing_subscription(subscr_id, paying_id, custom):
         # to guessing the user from the paying_id
         account_id = account_by_payingid(paying_id)
         should_set_subscriber = True
-        if account_id is None:
-            return None
+        return None
 
     try:
         account = Account._byID(account_id, data=True)
