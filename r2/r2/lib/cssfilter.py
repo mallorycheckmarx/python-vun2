@@ -352,7 +352,6 @@ SAFE_FUNCTIONS = {
     "translatex",
     "translatey",
     "translatez",
-    "url",
 }
 assert all(function == function.lower() for function in SAFE_FUNCTIONS)
 
