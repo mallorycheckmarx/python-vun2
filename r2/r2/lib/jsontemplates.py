@@ -690,7 +690,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
             if not thing.expunged:
                 return safemarkdown(thing.selftext)
             else:
-                return safemarkdown(_("[removed]"))
+                return safemarkdown(_("[removed by moderator]"))
         elif attr == "archived":
             return not thing.votable
         return ThingJsonTemplate.thing_attr(self, thing, attr)
