@@ -123,6 +123,12 @@ class EventQueue(object):
             for name, value in private_data.iteritems():
                 event.add(name, value)
 
+        if context_data:
+            referrer_url = context_data.get('referer')
+            if referrer_url:
+                event.add("referrer_url", referrer_url)
+                event.add("referrer_domain", domain(referrer_url))
+
         self.save_event(event)
 
     @squelch_exceptions
@@ -342,7 +348,7 @@ class EventQueue(object):
         event.add("sr_id", subreddit._id)
         event.add("sr_name", subreddit.name)
 
-        # Due to the redirect, the request object being sent isn't the 
+        # Due to the redirect, the request object being sent isn't the
         # original, so referrer and action data is missing for certain events
         if request and (event_type == "quarantine_interstitial_view" or
                  event_type == "quarantine_opt_out"):
@@ -469,7 +475,7 @@ class EventV2(object):
 
         data["domain"] = request.host
         data["user_agent"] = request.user_agent
-
+        data["referer"] = request.headers.get("Referer", None)
         return data
 
     @classmethod
