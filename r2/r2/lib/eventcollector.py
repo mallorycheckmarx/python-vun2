@@ -124,7 +124,7 @@ class EventQueue(object):
                 event.add(name, value)
 
         if context_data:
-            referrer_url = context_data.get('referer')
+            referrer_url = context_data.get('http_referrer')
             if referrer_url:
                 event.add("referrer_url", referrer_url)
                 event.add("referrer_domain", domain(referrer_url))
@@ -475,7 +475,7 @@ class EventV2(object):
 
         data["domain"] = request.host
         data["user_agent"] = request.user_agent
-        data["referer"] = request.headers.get("Referer", None)
+        data["http_referrer"] = request.headers.get("Referer", None)
         return data
 
     @classmethod
