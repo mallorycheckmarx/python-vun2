@@ -123,12 +123,6 @@ class EventQueue(object):
             for name, value in private_data.iteritems():
                 event.add(name, value)
 
-        if context_data:
-            referrer_url = context_data.get('http_referrer')
-            if referrer_url:
-                event.add("referrer_url", referrer_url)
-                event.add("referrer_domain", domain(referrer_url))
-
         self.save_event(event)
 
     @squelch_exceptions
@@ -365,11 +359,6 @@ class EventQueue(object):
             if thing_id36:
                 event.add("thing_id", int(thing_id36, 36))
 
-            referrer_url = request.headers.get('Referer', None)
-            if referrer_url:
-                event.add("referrer_url", referrer_url)
-                event.add("referrer_domain", domain(referrer_url))
-
         self.save_event(event)
 
     @squelch_exceptions
@@ -475,7 +464,12 @@ class EventV2(object):
 
         data["domain"] = request.host
         data["user_agent"] = request.user_agent
-        data["http_referrer"] = request.headers.get("Referer", None)
+
+        http_referrer = request.headers.get("Referer", None)
+        if http_referrer:
+            data["referrer_url"] = http_referrer
+            data["referrer_domain"] = domain(http_referrer)
+
         return data
 
     @classmethod
