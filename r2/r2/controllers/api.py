@@ -3729,7 +3729,27 @@ class ApiController(RedditController):
             if not c.user_is_admin and not link.can_flair_slow(c.user):
                 abort(403)
 
+            subreddit = link.subreddit_slow
             link.set_flair(text, css_class, set_by=c.user)
+
+            # XXX: more gross UI code
+            # Push some client-side updates back to the browser.
+            jquery('.id-%s .entry .linkflairlabel' % link._fullname).remove()
+            title_path = '.id-%s .entry > .title > .title' % link._fullname
+
+            # TODO: move this to a template
+            classes = ' '.join('linkflair-' + c for c in css_class.split())
+            flair = format_html('<span class="linkflairlabel %s">%s</span>',
+                                classes, text)
+
+            if subreddit.link_flair_position == 'left':
+                jquery(title_path).before(flair)
+            elif subreddit.link_flair_position == 'right':
+                jquery(title_path).after(flair)
+
+            # TODO: close the selector popup more gracefully
+            jquery('body').click()
+
         else:
             if form.has_errors("name", errors.BAD_FLAIR_TARGET):
                 return
@@ -3743,6 +3763,8 @@ class ApiController(RedditController):
                 jquery.redirect('?name=%s' % user.name)
                 return
 
+            # XXX: more gross UI code
+            # Push some client-side updates back to the browser.
             wrapped_user = WrappedUser(
                 user, force_show_flair=True, include_flair_selector=True)
             rendered = wrapped_user.render(style='html')
