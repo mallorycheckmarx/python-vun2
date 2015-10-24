@@ -1361,6 +1361,7 @@ class Comment(Thing, Printable):
         from r2.lib.wrapped import CachedVariable
         from r2.lib.pages import WrappedUser
         from r2.models.report import Report
+        from r2.lib.menus import CommentSortMenu
 
         #fetch parent links
         links = Link._byID(set(l.link_id for l in wrapped), data=True,
@@ -1556,9 +1557,19 @@ class Comment(Thing, Printable):
             else:
                 min_score = user.pref_min_comment_score
 
+            # if the sort is "worst" or "bottom", and the user has the proper
+            # permissions, do not collapse regardless.
+            modsort = request.params.get('sort') in CommentSortMenu.mod_options
+            if (item.subreddit.is_moderator_with_perms(c.user, 'posts') or
+                user_is_admin) and modsort:
+                prevent_collapse_modsort = True
+            else: 
+                prevent_collapse_modsort = False
+
             item.collapsed = False
             distinguished = item.distinguished and item.distinguished != "no"
-            item.prevent_collapse = profilepage or user_is_admin or distinguished
+            item.prevent_collapse = ((profilepage or user_is_admin or distinguished) or
+                                    prevent_collapse_modsort)
 
             if (item.deleted and item.subreddit.collapse_deleted_comments and
                     not item.prevent_collapse):
