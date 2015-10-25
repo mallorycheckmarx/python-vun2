@@ -173,6 +173,15 @@ class Builder(object):
             except AttributeError:
                 pass
 
+            if isinstance(item, Comment):
+                if not hasattr(w, 'subreddit'):
+                    w.subreddit = item.subreddit_slow
+                if not hasattr(w, 'link'):
+                    w.link = item.link_slow
+                if item.author_id == w.link.author_id and not w.link._deleted:
+                    add_attr(w.attribs, 'S',
+                             link=w.link.make_permalink(w.subreddit))
+
             if (w.distinguished == 'admin' and w.author):
                 add_attr(w.attribs, 'A')
 

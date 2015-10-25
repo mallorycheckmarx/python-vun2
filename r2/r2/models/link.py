@@ -1437,9 +1437,6 @@ class Comment(Thing, Printable):
 
             if not hasattr(item, 'subreddit'):
                 item.subreddit = item.subreddit_slow
-            if item.author_id == item.link.author_id and not item.link._deleted:
-                add_attr(item.attribs, 'S',
-                         link=item.link.make_permalink(item.subreddit))
             if not hasattr(item, 'target'):
                 item.target = "_top" if cname else None
 
