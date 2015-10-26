@@ -22,8 +22,12 @@ dedicado para isso.
 
 #### 3. Software Design: Architecture, frameworks, etc
 
+Software:
+http://staruml.io/ <-- Mentioned in email by the Prof.
+Enterprise Architect, Anything that makes Standard UML diagramas.
+
 Create the following Diagrams:
-- Logic (Packages)
-- Components (Something that is higher level than classes)
-- Deployment (Linked to Hardware)
-- Process (Activity Diagrams)
+- Logic (Packages) -> Pedro A
+- Components (Something that is higher level than classes) -> Daniel
+- Deployment (Linked to Hardware) -> Pedro F
+- Process (Activity Diagrams) -> Diogo
