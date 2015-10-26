@@ -19,6 +19,7 @@ https://github.com/Wargyy/reddit
 ## Packages Diagram
 
 ## Components Diagram
+![Components Diagram](/img/components_diagram.jpg)
 
 ## Deployment
 
