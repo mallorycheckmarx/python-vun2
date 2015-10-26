@@ -651,6 +651,7 @@ class Link(Thing, Printable):
             if item.can_ban:
                 item.ignore_reports_key = item.ignore_reports
             item.locked_key = item.locked
+            item.watching_key = item.watching
 
             item.mod_reports, item.user_reports = Report.get_reports(item)
 
@@ -1633,6 +1634,8 @@ class Comment(Thing, Printable):
                                      target=item.target,
                                      extra_css=extra_css,
                                      have_form=item.have_form)
+
+            item.watching_key = item.watching
 
             item.lastedited = CachedVariable("lastedited")
 
