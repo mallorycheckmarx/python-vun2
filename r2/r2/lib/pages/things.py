@@ -45,7 +45,8 @@ class PrintableButtons(Styled):
     def __init__(self, style, thing,
                  show_delete = False, show_report = True,
                  show_distinguish = False, show_lock = False,
-                 show_unlock = False, show_marknsfw = False,
+                 show_unlock = False, show_watch = False,
+                 show_unwatch = False, show_marknsfw = False,
                  show_unmarknsfw = False, is_link=False,
                  show_flair=False, show_rescrape=False,
                  show_givegold=False, **kw):
@@ -68,6 +69,8 @@ class PrintableButtons(Styled):
                         show_distinguish = show_distinguish,
                         show_lock = show_lock,
                         show_unlock = show_unlock,
+                        show_watch = show_watch,
+                        show_unwatch = show_unwatch,
                         show_marknsfw = show_marknsfw,
                         show_unmarknsfw = show_unmarknsfw,
                         show_flair = show_flair,
@@ -102,6 +105,12 @@ class LinkButtons(PrintableButtons):
                                             subreddit=thing.subreddit.name)):
             show_lock = not thing.locked
             show_unlock = not show_lock
+
+        show_watch = show_unwatch = False
+        watchable = thing.can_ban and not thing.archived
+        if watchable:
+            show_watch = not thing.watching
+            show_unwatch = not show_watch
 
         show_marknsfw = show_unmarknsfw = False
         show_rescrape = False
@@ -173,6 +182,8 @@ class LinkButtons(PrintableButtons):
                                   show_distinguish = show_distinguish,
                                   show_lock = show_lock,
                                   show_unlock = show_unlock,
+                                  show_watch = show_watch,
+                                  show_unwatch = show_unwatch,
                                   show_marknsfw = show_marknsfw,
                                   show_unmarknsfw = show_unmarknsfw,
                                   show_flair = thing.can_flair,
@@ -194,6 +205,12 @@ class CommentButtons(PrintableButtons):
         thing_editable = getattr(thing, 'editable', True)
         thing_takendown = getattr(thing, 'admin_takedown', False)
         editable = is_author and thing_editable and not thing_takendown
+
+        show_watch = show_unwatch = False
+        watchable = thing.can_ban and not thing.archived
+        if watchable:
+            show_watch = not thing.watching
+            show_unwatch = not show_watch
 
         # do we show the report button?
         show_report = not is_author and report and thing.can_reply
@@ -238,6 +255,8 @@ class CommentButtons(PrintableButtons):
                                   parent_permalink = thing.parent_permalink, 
                                   can_reply = thing.can_reply,
                                   locked = thing.link.locked,
+                                  show_watch = show_watch,
+                                  show_unwatch = show_unwatch,
                                   suppress_reply_buttons = suppress_reply_buttons,
                                   show_report=show_report,
                                   mod_reports=thing.mod_reports,

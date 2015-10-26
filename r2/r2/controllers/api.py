@@ -1461,6 +1461,52 @@ class ApiController(RedditController):
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),
                 VModhash(),
+                VSrCanSoftBan('id'),
+                thing=VByName('id'))
+    def POST_watch(self, thing):
+        """Watch a comment thread or comment.
+
+        See also: [/api/unwatch](#POST_api_unwatch).
+
+        """
+        if thing.archived:
+            # no point in watching archived things
+            return abort(400, "Bad Request")
+
+        thing.watching = True
+        thing._commit()
+
+        ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                         action='watch')
+        g.stats.simple_event('modaction.watch')
+
+
+    @require_oauth2_scope("modposts")
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanSoftBan('id'),
+                thing=VByName('id'))
+    def POST_unwatch(self, thing):
+        """Stop watching a comment thread or comment.
+
+        See also: [/api/watch](#POST_api_watch).
+
+        """
+        if thing.archived:
+            # no point in watching archived things
+            return abort(400, "Bad Request")
+
+        thing.watching = False
+        thing._commit()
+
+        ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                         action='unwatch')
+        g.stats.simple_event('modaction.unwatch')
+
+
+    @require_oauth2_scope("modposts")
+    @noresponse(VUser(),
+                VModhash(),
                 VSrCanAlter('id'),
                 thing = VByName('id'))
     @api_doc(api_section.links_and_comments)

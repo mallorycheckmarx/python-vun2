@@ -1182,6 +1182,20 @@ class VSrCanBan(VByName):
                     return True
         abort(403,'forbidden')
 
+
+class VSrCanSoftBan(VByName):
+    def run(self, thing_name):
+        if c.user_is_admin:
+            return True
+        elif c.user_is_loggedin:
+            item = VByName.run(self, thing_name)
+            if isinstance(item, (Link, Comment)):
+                sr = item.subreddit_slow
+                if sr.is_moderator_with_perms(c.user, 'posts'):
+                    return True
+        abort(403,'forbidden')
+
+
 class VSrSpecial(VByName):
     def run(self, thing_name):
         if c.user_is_admin:
