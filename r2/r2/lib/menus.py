@@ -59,6 +59,8 @@ menu =   MenuHandler(hot          = _('hot'),
                      confidence   = _('best'),
                      random       = _('random'),
                      qa           = _('q&a'),
+                     bottom       = _('bottom'),
+                     worst        = _('worst'),
                      saved        = _('saved {toolbar}'),
                      recommended  = _('recommended'),
                      rising       = _('rising'), 
@@ -519,6 +521,7 @@ class PageNameNav(Styled):
 class SortMenu(NavMenu):
     name = 'sort'
     hidden_options = []
+    mod_options = []
     button_cls = QueryButton
 
     # these are _ prefixed to avoid colliding with NavMenu attributes
@@ -540,7 +543,15 @@ class SortMenu(NavMenu):
     def make_buttons(self):
         buttons = []
         for name in self._options:
-            css_class = 'hidden' if name in self.hidden_options else ''
+            classes = []
+            if name in self.hidden_options:
+                classes.append('hidden')
+            if name in self.mod_options:
+                classes.append('modsort')
+            if classes == []:
+                css_class = ''
+            else:
+                css_class = ' '.join(classes)
             button = self.button_cls(self.make_title(name), name, self.name,
                                      css_class=css_class)
             buttons.append(button)
@@ -558,6 +569,8 @@ class SortMenu(NavMenu):
         "confidence": operators.desc('_confidence'),
         "random": operators.shuffled('_confidence'),
         "qa": operators.desc('_qa'),
+        "bottom": operators.asc('_score'),
+        "worst": operators.asc('_confidence'),
     }
     _reverse_mapping = {v: k for k, v in _mapping.iteritems()}
 
@@ -579,25 +592,34 @@ class CommentSortMenu(SortMenu):
     """Sort menu for comments pages"""
     _default = 'confidence'
     _options = ('confidence', 'top', 'new', 'hot', 'controversial', 'old',
-                 'random', 'qa',)
-
+                 'random', 'qa', 'bottom', 'worst',)
     # Links may have a suggested sort of 'blank', which is an explicit None -
     # that is, do not check the subreddit for a suggested sort, either.
-    suggested_sort_options = _options + ('blank',)
+    sub_suggested_sort_options = ('confidence', 'top', 'new', 'hot', 'controversial',
+                                  'old', 'random', 'qa',)
+    suggested_sort_options = sub_suggested_sort_options + ('blank',)
 
     def __init__(self, *args, **kwargs):
         self.suggested_sort = kwargs.pop('suggested_sort', None)
         super(CommentSortMenu, self).__init__(*args, **kwargs)
 
     @classmethod
-    def visible_options(cls):
-        return set(cls._options) - set(cls.hidden_options)
+    def visible_options(cls, is_article=False):
+        options =  set(cls._options) - set(cls.hidden_options)
+        if not is_article:
+            options -= set(cls.mod_options)
+        return options
 
     @class_property
     def hidden_options(cls):
         sorts = ['random']
         if feature.is_enabled('remove_hot_comments'):
             sorts.append('hot')
+        return sorts
+
+    @class_property
+    def mod_options(cls):
+        sorts = ['bottom', 'worst']
         return sorts
 
     def make_title(self, attr):

@@ -2571,7 +2571,7 @@ class ApiController(RedditController):
                    css_on_cname = VBoolean("css_on_cname"),
                    hide_ads = VBoolean("hide_ads"),
                    suggested_comment_sort=VOneOf('suggested_comment_sort',
-                                                 CommentSortMenu._options,
+                                                 CommentSortMenu.sub_suggested_sort_options,
                                                  default=None),
                    # community_rules = VLength('community_rules', max_length=1024),
                    # related_subreddits = VSubredditList('related_subreddits', limit=20),
