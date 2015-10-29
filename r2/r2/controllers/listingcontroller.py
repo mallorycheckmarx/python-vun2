@@ -33,8 +33,16 @@ from r2.lib.filters import _force_unicode
 from r2.lib.jsontemplates import get_usertrophies
 from r2.lib.pages import *
 from r2.lib.pages.things import wrap_links
-from r2.lib.menus import TimeMenu, SortMenu, RecSortMenu, ProfileSortMenu
-from r2.lib.menus import ControversyTimeMenu, menu, QueryButton
+from r2.lib.menus import (
+    TimeMenu,
+    SortMenu,
+    RecSortMenu,
+    ProfileSortMenu,
+    SubredditCommentsSortMenu,
+    ControversyTimeMenu,
+    menu,
+    QueryButton,
+)
 from r2.lib.rising import get_rising, normalized_rising
 from r2.lib.wrapped import Wrapped
 from r2.lib.normalized_hot import normalized_hot
@@ -1494,17 +1502,35 @@ class CommentsController(SubredditListingController):
                              c.user_is_admin or
                              item.subreddit.is_moderator(c.user)))
             can_see_deleted = c.user_is_loggedin and c.user_is_admin
-
-            return ((not item._spam or can_see_spam) and
-                    (not item._deleted or can_see_deleted))
+            keep_gone = ((not item._spam or can_see_spam) and
+                         (not item._deleted or can_see_deleted))
+            keep_time = True
+            if (self.time != 'all' and
+                item._date <= utils.timeago('1 %s' % str(self.time))):
+                keep_time = False
+            ret = keep_gone and keep_time
+            return ret
 
         return keep
 
+    @property
+    def menus(self):
+        # Always have the sort menu
+        res = [SubredditCommentsSortMenu(default = self.sort)]
+        if self.sort not in ("hot", "new"):
+            res.append(TimeMenu(default = self.time))
+        return res
+
     def query(self):
-        return c.site.get_all_comments()
+        return c.site.get_all_comments(self.sort, self.time)
 
     @require_oauth2_scope("read")
-    def GET_listing(self, **env):
+    @validate(sort = VMenu('sort', SubredditCommentsSortMenu, remember = False),
+              time = VMenu('t', TimeMenu, remember = False))
+    @listing_api_doc(uri='/comments', uses_site=True)
+    def GET_listing(self, sort, time, **env):
+        self.sort = sort
+        self.time = time
         c.profilepage = True
         self.suppress_reply_buttons = True
         return ListingController.GET_listing(self, **env)

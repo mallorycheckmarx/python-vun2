@@ -120,6 +120,7 @@ class Link(Thing, Printable):
                      pending=False,
                      disable_comments=False,
                      locked=False,
+                     watching=False,
                      selftext='',
                      sendreplies=True,
                      ip='0.0.0.0',
@@ -650,6 +651,7 @@ class Link(Thing, Printable):
             if item.can_ban:
                 item.ignore_reports_key = item.ignore_reports
             item.locked_key = item.locked
+            item.watching_key = item.watching
 
             item.mod_reports, item.user_reports = Report.get_reports(item)
 
@@ -1093,6 +1095,7 @@ class Comment(Thing, Printable):
                      moderator_banned=False,
                      new=False,
                      gildings=0,
+                     watching=False,
                      banned_before_moderator=False,
                      parents=None,
                      ignore_reports=False,
@@ -1631,6 +1634,8 @@ class Comment(Thing, Printable):
                                      target=item.target,
                                      extra_css=extra_css,
                                      have_form=item.have_form)
+
+            item.watching_key = item.watching
 
             item.lastedited = CachedVariable("lastedited")
 

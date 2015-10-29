@@ -136,7 +136,11 @@ menu =   MenuHandler(hot          = _('hot'),
                      flair        = _("edit flair"),
                      log          = _("moderation log"),
                      modqueue     = _("moderation queue"),
-                     unmoderated  = _("unmoderated links"),
+                     unmoderated  = _("unmoderated"),
+                     locked       = _("locked"),
+                     watching     = _("watching"),
+                     contests     = _("contests"),
+                     nsfw         = _("nsfw"),
                      edited       = _("edited"),
                      employee     = _("employee"),
                      automod      = _("automoderator config"),
@@ -606,6 +610,11 @@ class CommentSortMenu(SortMenu):
             return title + ' ' + _('(suggested)')
         else:
             return title
+
+
+class SubredditCommentsSortMenu(SortMenu):
+    _default = 'new'
+    _options = ('hot', 'new', 'top', 'controversial')
 
 
 class SearchSortMenu(SortMenu):

@@ -660,8 +660,18 @@ class FrontController(RedditController):
         elif location == 'modqueue':
             query = c.site.get_modqueue(include_links=include_links,
                                         include_comments=include_comments)
+        elif location == 'locked':
+            query = c.site.get_locked()
+        elif location == 'watching':
+            query = c.site.get_watching(include_links=include_links,
+                                        include_comments=include_comments)
+        elif location == 'contests':
+            query = c.site.get_contests()
+        elif location == 'nsfw':
+            query = c.site.get_nsfw()
         elif location == 'unmoderated':
-            query = c.site.get_unmoderated()
+            query = c.site.get_unmoderated(include_links=include_links,
+                                           include_comments=include_comments)
         elif location == 'edited':
             query = c.site.get_edited(include_links=include_links,
                                       include_comments=include_comments)
@@ -701,6 +711,14 @@ class FrontController(RedditController):
                     if ban_info.get("auto", True):
                         return True # spam, unless banned by a moderator
                 return False
+            elif location == 'locked':
+                return x.locked
+            elif location == 'watching':
+                return x.watching
+            elif location == 'contests':
+                return x.contest_mode
+            elif location == 'nsfw':
+                return x.over_18
             elif location == "unmoderated":
                 # banned user, don't show if subreddit pref excludes
                 if x.author._spam and x.subreddit.exclude_banned_modqueue:
@@ -779,7 +797,8 @@ class FrontController(RedditController):
         uses_site=True,
         uri='/about/{location}',
         uri_variants=['/about/' + loc for loc in
-                      ('reports', 'spam', 'modqueue', 'unmoderated', 'edited')],
+                      ('reports', 'spam', 'modqueue', 'locked', 'watching',
+                       'contests', 'nsfw', 'unmoderated', 'edited')],
     )
     def GET_spamlisting(self, location, only, num, after, reverse, count):
         """Return a listing of posts relevant to moderators.
@@ -788,12 +807,27 @@ class FrontController(RedditController):
         * spam: Things that have been marked as spam or otherwise removed.
         * modqueue: Things requiring moderator review, such as reported things
             and items caught by the spam filter.
+        * locked: Things that have been locked.
+        * watching: Things that are being watched closely.
+        * contests: Things that have been put into contest mode.
+        * nsfw: Things that are nsfw.
         * unmoderated: Things that have yet to be approved/removed by a mod.
         * edited: Things that have been edited recently.
 
         Requires the "posts" moderator permission for the subreddit.
 
         """
+        if (location == 'locked' and not
+            feature.is_enabled('thread_locking',
+                               subreddit=c.site)):
+            abort(404, 'not found')
+        if location == 'nsfw':
+            if c.site.over_18:
+                # there is no point if the sub is nsfw. All links would be nsfw.
+                abort(403)
+            if not c.over18 and c.render_style == 'html':
+                return self.intermediate_redirect('/over18', sr_path=False,
+                                              fullpath=request.fullurl)
         c.allow_styles = True
         c.profilepage = True
         panes = PaneStack()
@@ -809,7 +843,8 @@ class FrontController(RedditController):
 
         extension_handling = "private" if c.user.pref_private_feeds else False
 
-        if location in ('reports', 'spam', 'modqueue', 'edited'):
+        if location in ('reports', 'spam', 'modqueue',
+                        'watching', 'edited', 'unmoderated'):
             buttons = [
                 QueryButton(_('links and comments'), None, query_param='only'),
                 QueryButton(_('links'), 'links', query_param='only'),

@@ -460,6 +460,30 @@ def get_reported(sr, user=None, include_links=True, include_comments=True):
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 @cached_query(SubredditQueryCache)
+def get_locked_links(sr_id):
+    return Link._query(Link.c.sr_id == sr_id,
+                       Link.c.locked == True,
+                       sort = db_sort('new'))
+
+@cached_query(SubredditQueryCache)
+def get_watching_links(sr_id):
+    return Link._query(Link.c.sr_id == sr_id,
+                       Link.c.watching == True,
+                       sort = db_sort('new'))
+
+@cached_query(SubredditQueryCache)
+def get_contest_links(sr_id):
+    return Link._query(Link.c.sr_id == sr_id,
+                       Link.c.contest_mode == True,
+                       sort = db_sort('new'))
+
+@cached_query(SubredditQueryCache)
+def get_nsfw_links(sr_id):
+    return Link._query(Link.c.sr_id == sr_id,
+                       Link.c.over_18 == True,
+                       sort = db_sort('new'))
+
+@cached_query(SubredditQueryCache)
 def get_unmoderated_links(sr_id):
     q = Link._query(Link.c.sr_id == sr_id,
                     Link.c._spam == (True, False),
@@ -468,6 +492,24 @@ def get_unmoderated_links(sr_id):
     # Doesn't really work because will not return Links with no verdict
     q._filter(or_(and_(Link.c._spam == True, Link.c.verdict != 'mod-removed'),
                   and_(Link.c._spam == False, Link.c.verdict != 'mod-approved')))
+    return q
+
+@cached_query(SubredditQueryCache)
+def get_watching_comments(sr_id):
+    return Comment._query(Comment.c.sr_id == sr_id,
+                          Comment.c.watching == True,
+                          sort = db_sort('new'))
+
+
+@cached_query(SubredditQueryCache)
+def get_unmoderated_comments(sr_id):
+    q = Comment._query(Comment.c.sr_id == sr_id,
+                       Comment.c._spam == (True, False),
+                       sort = db_sort('new'))
+
+    # Doesn't really work because will not return Links with no verdict
+    q._filter(or_(and_(Comment.c._spam == True, Comment.c.verdict != 'mod-removed'),
+                  and_(Comment.c._spam == False, Comment.c.verdict != 'mod-approved')))
     return q
 
 @merged_cached_query
@@ -484,9 +526,43 @@ def get_modqueue(sr, user=None, include_links=True, include_comments=True):
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 @merged_cached_query
-def get_unmoderated(sr, user=None):
+def get_locked(sr, user=None):
     sr_ids = moderated_srids(sr, user)
-    queries = [get_unmoderated_links]
+    queries = [get_locked_links]
+    return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
+
+@merged_cached_query
+def get_watching(sr, user=None, include_links=True, include_comments=True):
+    sr_ids = moderated_srids(sr, user)
+    queries = []
+
+    if include_links:
+        queries.append(get_watching_links)
+    if include_comments:
+        queries.append(get_watching_comments)
+    return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
+
+@merged_cached_query
+def get_contests(sr, user=None):
+    sr_ids = moderated_srids(sr, user)
+    queries = [get_contest_links]
+    return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
+
+@merged_cached_query
+def get_nsfw(sr, user=None):
+    sr_ids = moderated_srids(sr, user)
+    queries = [get_nsfw_links]
+    return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
+
+@merged_cached_query
+def get_unmoderated(sr, user=None, include_links=True, include_comments=True):
+    sr_ids = moderated_srids(sr, user)
+    queries = []
+
+    if include_links:
+        queries.append(get_unmoderated_links)
+    if include_comments:
+        queries.append(get_unmoderated_comments)
     return [query(sr_id) for sr_id, query in itertools.product(sr_ids, queries)]
 
 def get_domain_links(domain, sort, time):
@@ -508,18 +584,25 @@ def user_query(kind, user_id, sort, time):
         q._filter(db_times[time])
     return make_results(q)
 
-def get_all_comments():
+def get_all_comments(sort='new', time='all'):
     """the master /comments page"""
-    q = Comment._query(sort = desc('_date'))
+    q = Comment._query(sort = db_sort(sort))
+
+    if time != 'all':
+        q._filter(db_times[time])
+    
     return make_results(q)
 
-def get_sr_comments(sr):
-    return _get_sr_comments(sr._id)
+def get_sr_comments(sr, sort='new', time='all'):
+    return _get_sr_comments(sr._id, sort, time)
 
-def _get_sr_comments(sr_id):
+def _get_sr_comments(sr_id, sort, time):
     """the subreddit /r/foo/comments page"""
     q = Comment._query(Comment.c.sr_id == sr_id,
-                       sort = desc('_date'))
+                       sort = db_sort(sort))
+    if time != 'all':
+        q._filter(db_times[time])
+
     return make_results(q)
 
 def _get_comments(user_id, sort, time):
@@ -1054,8 +1137,11 @@ def new_comment(comment, inbox_rels):
     with CachedQueryMutator() as m:
         if comment._deleted:
             job_key = "delete_items"
-            job.append(get_sr_comments(sr))
-            job.append(get_all_comments())
+            for sort in db_sorts.keys():
+                job.append(get_sr_comments(sr, sort, 'all'))
+            for sort in db_sorts.keys():
+                job.append(get_all_comments(sort, 'all'))
+            job.append(get_unmoderated_comments(sr))
         else:
             job_key = "insert_items"
             if comment._spam:
@@ -1063,6 +1149,9 @@ def new_comment(comment, inbox_rels):
             if (was_spam_filtered(comment) and
                     not (sr.exclude_banned_modqueue and author._spam)):
                 m.insert(get_spam_filtered_comments(sr), [comment])
+                m.insert(get_unmoderated_comments(sr), [comment])
+            if not was_spam_filtered(comment):
+                m.insert(get_unmoderated_comments(sr), [comment])
 
             amqp.add_item('new_comment', comment._fullname)
             add_to_commentstree_q(comment)
@@ -1408,6 +1497,8 @@ def delete(things):
             query_cache_deletes.append((get_spam_comments(sr), comments))
             query_cache_deletes.append((get_spam_filtered_comments(sr),
                                         comments))
+            query_cache_deletes.append((get_unmoderated_comments(sr_id),
+                                        comments))
             query_cache_deletes.append((get_edited_comments(sr), comments))
 
     for author_id, a_things in by_author.iteritems():
@@ -1495,6 +1586,8 @@ def ban(things, filtered=True):
             if not filtered:
                 query_cache_deletes.append(
                         (get_spam_filtered_comments(sr_id), comments))
+                query_cache_deletes.append(
+                        (get_unmoderated_comments(sr_id), comments))
 
         if modqueue_comments:
             query_cache_inserts.append(
@@ -1571,8 +1664,17 @@ def unban(things, insert=True):
             query_cache_deletes.append([get_spam_links(sr), links])
 
         if insert and comments:
-            add_queries([get_all_comments(), get_sr_comments(sr)],
-                        insert_items=comments)
+            q_list = [get_all_comments('new', 'all'),
+                      get_sr_comments(sr, 'new', 'all'),
+                      get_all_comments('hot', 'all'),
+                      get_sr_comments(sr, 'hot', 'all'),
+                      get_all_comments('top', 'all'),
+                      get_sr_comments(sr, 'top', 'all'),
+                      get_all_comments('controversial', 'all'),
+                      get_sr_comments(sr, 'controversial', 'all')]
+            # the time-filtered listings will have to wait for the
+            # next mr_top run
+            add_queries(q_list, insert_items=comments)
             query_cache_deletes.append([get_spam_comments(sr), comments])
 
         if links:
@@ -1580,6 +1682,7 @@ def unban(things, insert=True):
             query_cache_deletes.append([get_spam_filtered_links(sr), links])
 
         if comments:
+            query_cache_deletes.append((get_unmoderated_comments(sr), comments))
             query_cache_deletes.append([get_spam_filtered_comments(sr), comments])
 
     with CachedQueryMutator() as m:
@@ -1643,6 +1746,63 @@ def clear_reports(things, rels):
             m.delete(q, deletes)
 
 
+def new_lock(thing):
+    with CachedQueryMutator() as m:
+        m.insert(get_locked_links(thing.sr_id), [thing])
+
+    amqp.add_item("new_lock", thing._fullname)
+
+
+def remove_lock(thing):
+    with CachedQueryMutator() as m:
+        q = get_locked_links(thing.sr_id)
+        m.delete(q, [thing])
+
+
+def start_watching(thing):
+    with CachedQueryMutator() as m:
+        if isinstance(thing, Link):
+            m.insert(get_watching_links(thing.sr_id), [thing])
+        elif isinstance(thing, Comment):
+            m.insert(get_watching_comments(thing.sr_id), [thing])
+
+    amqp.add_item("start_watching", thing._fullname)
+
+
+def stop_watching(thing):
+    with CachedQueryMutator() as m:
+        if isinstance(thing, Link):
+            q = get_watching_links(thing.sr_id)
+        elif isinstance(thing, Comment):
+            q = get_watching_comments(thing.sr_id)
+        m.delete(q, [thing])
+
+
+def new_contest(thing):
+    with CachedQueryMutator() as m:
+        m.insert(get_contest_links(thing.sr_id), [thing])
+
+    amqp.add_item("new_contest", thing._fullname)
+
+
+def remove_contest(thing):
+    with CachedQueryMutator() as m:
+        q = get_contest_links(thing.sr_id)
+        m.delete(q, [thing])
+
+def set_nsfw(thing):
+    with CachedQueryMutator() as m:
+        m.insert(get_nsfw_links(thing.sr_id), [thing])
+
+    amqp.add_item("set_nsfw", thing._fullname)
+
+
+def unset_nsfw(thing):
+    with CachedQueryMutator() as m:
+        q = get_nsfw_links(thing.sr_id)
+        m.delete(q, [thing])
+
+
 def add_all_srs():
     """Recalculates every listing query for every subreddit. Very,
        very slow."""
@@ -1656,6 +1816,9 @@ def add_all_srs():
         get_spam_comments(sr).update()
         get_reported_links(sr).update()
         get_reported_comments(sr).update()
+        get_locked_links(sr).update()
+        get_contest_links(sr).update()
+        get_nsfw_links(sr).update()
 
 def update_user(user):
     if isinstance(user, str):
@@ -1691,13 +1854,21 @@ def run_new_comments(limit=1000):
         fnames = [msg.body for msg in msgs]
 
         comments = Comment._by_fullname(fnames, data=True, return_dict=False)
-        add_queries([get_all_comments()],
-                    insert_items=comments)
+        q_list = [get_all_comments('new', 'all'),
+                  get_all_comments('hot', 'all'),
+                  get_all_comments('top', 'all'),
+                  get_all_comments('controversial', 'all')]
+        # the time filtered listings will be done by mr_top
+        add_queries(q_list, insert_items=comments)
 
         bysrid = _by_srid(comments, False)
         for srid, sr_comments in bysrid.iteritems():
-            add_queries([_get_sr_comments(srid)],
-                        insert_items=sr_comments)
+            q_list = [_get_sr_comments(srid, 'new', 'all'),
+                      _get_sr_comments(srid, 'hot', 'all'),
+                      _get_sr_comments(srid, 'top', 'all'),
+                      _get_sr_comments(srid, 'controversial', 'all')]
+            # the time filtered listings will be done by mr_top
+            add_queries(q_list, insert_items=sr_comments)
 
     amqp.handle_items('newcomments_q', _run_new_comments, limit=limit)
 

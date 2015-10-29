@@ -67,6 +67,12 @@
   %if thing.show_unlock:
     <li>${ynbutton(_("unlock"), _("unlocked"), "unlock")}</li>
   %endif
+  %if thing.show_watch:
+    <li>${ynbutton(_("watch"), _("watching"), "watch")}</li>
+  %endif
+  %if thing.show_unwatch:
+    <li>${ynbutton(_("stop watching"), _("stopped watching"), "unwatch")}</li>
+  %endif
   %if thing.show_marknsfw:
     <li>${ynbutton(_("nsfw"), _("marked"), "marknsfw")}</li>
   %endif

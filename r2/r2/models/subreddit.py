@@ -194,9 +194,29 @@ class BaseSite(object):
                                     include_links=include_links,
                                     include_comments=include_comments)
 
-    def get_unmoderated(self):
+    def get_locked(self):
         from r2.lib.db import queries
-        return queries.get_unmoderated(self, user=c.user)
+        return queries.get_locked(self, user=c.user)
+
+    def get_watching(self, include_links=True, include_comments=True):
+        from r2.lib.db import queries
+        return queries.get_watching(self, user=c.user,
+                                    include_links=include_links,
+                                    include_comments=include_comments)
+
+    def get_contests(self):
+        from r2.lib.db import queries
+        return queries.get_contests(self, user=c.user)
+
+    def get_nsfw(self):
+        from r2.lib.db import queries
+        return queries.get_nsfw(self, user=c.user)
+
+    def get_unmoderated(self, include_links=True, include_comments=True):
+        from r2.lib.db import queries
+        return queries.get_unmoderated(self, user=c.user,
+                                       include_links=include_links,
+                                       include_comments=include_comments)
 
     def get_edited(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
@@ -204,9 +224,9 @@ class BaseSite(object):
                                   include_links=include_links,
                                   include_comments=include_comments)
 
-    def get_all_comments(self):
+    def get_all_comments(self, sort='new', time='all'):
         from r2.lib.db import queries
-        return queries.get_sr_comments(self)
+        return queries.get_sr_comments(self, sort, time)
 
     def get_gilded(self):
         from r2.lib.db import queries
@@ -1580,7 +1600,7 @@ class FriendsSR(FakeSubreddit):
                for friend in friends]
         return queries.MergedCachedResults(crs)
 
-    def get_all_comments(self):
+    def get_all_comments(self, sort='new', time='all'):
         from r2.lib.db import queries
 
         friends = c.user.get_recently_commented_friend_ids()
@@ -1591,9 +1611,8 @@ class FriendsSR(FakeSubreddit):
         # being sorted by 'new'. it would be nice to have a
         # cleaner UI than just blatantly ignoring their sort,
         # though
-        sort = 'new'
-        time = 'all'
 
+        # is the above comment still valid? I've no idea
         friends = Account._byID(friends,
                                 return_dict=False)
 
@@ -1635,9 +1654,9 @@ class AllSR(FakeSubreddit):
             q._filter(queries.db_times[time])
         return q
 
-    def get_all_comments(self):
+    def get_all_comments(self, sort='new', time='all'):
         from r2.lib.db import queries
-        return queries.get_all_comments()
+        return queries.get_all_comments(sort, time)
 
     def get_gilded(self):
         from r2.lib.db import queries
@@ -1671,6 +1690,14 @@ class AllMinus(AllSR):
         q = AllSR.get_links(self, sort, time)
         if c.user.gold and self.exclude_sr_ids:
             q._filter(not_(Link.c.sr_id.in_(self.exclude_sr_ids)))
+        return q
+
+    def get_all_comments(self, sort='new', time='all'):
+        from r2.models import Comment
+        from r2.lib.db.operators import not_
+        q = AllSR.get_all_comments(self, sort, time)
+        if c.user.gold and self.exclude_sr_ids:
+            q._filter(not_(Comment.c.sr_id.in_(self.exclude_sr_ids)))
         return q
 
 
@@ -1814,10 +1841,10 @@ class DefaultSR(_DefaultSR):
     def stylesheet_url_https(self):
         return self._base.stylesheet_url_https if self._base else ""
 
-    def get_all_comments(self):
+    def get_all_comments(self, sort='new', time='all'):
         from r2.lib.db.queries import _get_sr_comments, merge_results
         sr_ids = Subreddit.user_subreddits(c.user)
-        results = [_get_sr_comments(sr_id) for sr_id in sr_ids]
+        results = [_get_sr_comments(sr_id, sort, time) for sr_id in sr_ids]
         return merge_results(*results)
 
     def get_gilded(self):
@@ -1912,9 +1939,9 @@ class MultiReddit(FakeSubreddit):
     def get_links(self, sort, time):
         return get_links_sr_ids(self.kept_sr_ids, sort, time)
 
-    def get_all_comments(self):
+    def get_all_comments(self, sort='new', time='time'):
         from r2.lib.db.queries import _get_sr_comments, merge_results
-        results = [_get_sr_comments(sr_id) for sr_id in self.kept_sr_ids]
+        results = [_get_sr_comments(sr_id, sort, time) for sr_id in self.kept_sr_ids]
         return merge_results(*results)
 
     def get_gilded(self):

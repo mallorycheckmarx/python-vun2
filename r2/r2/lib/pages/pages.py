@@ -500,8 +500,17 @@ class Reddit(Templated):
         if is_moderator_with_perms('posts'):
             buttons += [NamedButton("modqueue", css_class="reddit-modqueue"),
                         NamedButton("reports", css_class="reddit-reported"),
-                        NamedButton("spam", css_class="reddit-spam"),
-                        NamedButton("edited", css_class="reddit-edited")]
+                        NamedButton("spam", css_class="reddit-spam")]
+            if feature.is_enabled('thread_locking'):
+                buttons += [NamedButton("locked", css_class="reddit-locked")]
+
+            buttons += [NamedButton("watching", css_class="reddit-watching"),
+                        NamedButton("contests", css_class="reddit-contests")]
+
+            if not c.site.over_18:
+                buttons += [NamedButton("nsfw", css_class="reddit-nsfw")]
+
+            buttons += [NamedButton("edited", css_class="reddit-edited")]
 
         if is_single_subreddit:
             if is_moderator_with_perms('access'):

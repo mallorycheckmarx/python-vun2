@@ -559,6 +559,9 @@ class ApiController(RedditController):
         queries.queue_vote(c.user, l, dir=True, ip=request.ip,
             cheater=c.cheater)
 
+        if l.over_18:
+            queries.set_nsfw(l)
+
         if sr.should_ratelimit(c.user, 'link'):
             VRatelimit.ratelimit(rate_user=True, rate_ip = True,
                                  prefix = "rate_submit_")
@@ -1428,6 +1431,8 @@ class ApiController(RedditController):
 
         ModAction.create(thing.subreddit_slow, c.user, target=thing,
                          action='lock')
+        queries.new_lock(thing)
+
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),
@@ -1455,6 +1460,56 @@ class ApiController(RedditController):
 
         ModAction.create(thing.subreddit_slow, c.user, target=thing,
                          action='unlock')
+        queries.remove_lock(thing)
+
+
+    @require_oauth2_scope("modposts")
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanSoftBan('id'),
+                thing=VByName('id'))
+    def POST_watch(self, thing):
+        """Watch a comment thread or comment.
+
+        See also: [/api/unwatch](#POST_api_unwatch).
+
+        """
+        if thing.archived:
+            # no point in watching archived things
+            return abort(400, "Bad Request")
+
+        thing.watching = True
+        thing._commit()
+
+        ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                         action='watch')
+        g.stats.simple_event('modaction.watch')
+        queries.start_watching(thing)
+
+
+    @require_oauth2_scope("modposts")
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanSoftBan('id'),
+                thing=VByName('id'))
+    def POST_unwatch(self, thing):
+        """Stop watching a comment thread or comment.
+
+        See also: [/api/watch](#POST_api_watch).
+
+        """
+        if thing.archived:
+            # no point in watching archived things
+            return abort(400, "Bad Request")
+
+        thing.watching = False
+        thing._commit()
+
+        ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                         action='unwatch')
+        g.stats.simple_event('modaction.unwatch')
+        queries.stop_watching(thing)
+
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),
@@ -1476,6 +1531,7 @@ class ApiController(RedditController):
                              action='marknsfw')
 
         thing.update_search_index()
+        queries.set_nsfw(thing)
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),
@@ -1506,6 +1562,7 @@ class ApiController(RedditController):
                              action='marknsfw', details='remove')
 
         thing.update_search_index()
+        queries.unset_nsfw(thing)
 
     @require_oauth2_scope("edit")
     @noresponse(VUser(),
@@ -1583,8 +1640,10 @@ class ApiController(RedditController):
         thing._commit()
         if state:
             action = 'setcontestmode'
+            queries.new_contest(thing)
         else:
             action = 'unsetcontestmode'
+            queries.remove_contest(thing)
         ModAction.create(c.site, c.user, action, target=thing)
         jquery.refresh()
 
