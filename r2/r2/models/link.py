@@ -1611,14 +1611,9 @@ class Comment(Thing, Printable):
                 item.render_css_class += " score-hidden"
 
             # in contest mode, use only upvotes for the score if the subreddit
-            # has been (manually) set to do so
-            if (item.link.contest_mode and
-                    item.subreddit.contest_mode_upvotes_only and
-                    not item.score_hidden):
-                item.score = item._ups
-                item.voting_score = [
-                    item.score - 1, item.score, item.score + 1]
-                item.collapsed = False
+            # has been (manually) set to do so. This is a convenience attribute
+            if (item.link.contest_mode and item.subreddit.contest_mode_upvotes_only):
+                item.cannot_downvote = True
 
             if item.is_author:
                 item.inbox_replies_enabled = item.sendreplies
