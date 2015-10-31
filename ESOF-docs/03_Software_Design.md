@@ -19,7 +19,7 @@ https://github.com/Wargyy/reddit
 [... Return to Chapter Select](Chapter_Select.md)
 
 ## Packages Diagram
-![Packages Diagram](/diagrams/packagesdiagram.png)
+![Packages Diagram](./diagrams/packagesdiagram.png)
 
 ## Components Diagram
 ![Components Diagram](/img/components_diagram.jpg)
