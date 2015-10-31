@@ -17,6 +17,7 @@ https://github.com/Wargyy/reddit
 * [Activity Diagram](#activity-diagram)
 
 ## Packages Diagram
+![Packages Diagram](/diagrams/packagesdiagram.png)
 
 ## Components Diagram
 ![Components Diagram](/img/components_diagram.jpg)
