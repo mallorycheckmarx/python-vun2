@@ -16,6 +16,8 @@ https://github.com/Wargyy/reddit
 * [Deployment](#deployment)
 * [Activity Diagram](#activity-diagram)
 
+[... Return to Chapter Select](Chapter_Select.md)
+
 ## Packages Diagram
 ![Packages Diagram](/diagrams/packagesdiagram.png)
 
@@ -26,4 +28,4 @@ https://github.com/Wargyy/reddit
 
 ## Activity Diagram
 
-[... Return to Chapter Select](Chapter_Select.md)
+
