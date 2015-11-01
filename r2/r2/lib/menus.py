@@ -20,7 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _, N_
 
 from r2.config import feature
@@ -82,7 +84,6 @@ menu =   MenuHandler(hot          = _('hot'),
                      logout       = _("logout"),
                      
                      #reddit footer strings
-                     faq          = _("FAQ"),
                      reddiquette  = _("reddiquette"),
                      contact      = _("contact us"),
                      buttons      = _("buttons"),
@@ -108,7 +109,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      security     = _("security"),
 
                      # messages
-                     compose      = _("compose"),
+                     compose      = _("send a private message"),
                      inbox        = _("inbox"),
                      sent         = _("sent"),
 
@@ -131,6 +132,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      contributors = _("edit approved submitters"),
                      banned       = _("ban users"),
                      banusers     = _("ban users"),
+                     muted        = _("mute users"),
                      flair        = _("edit flair"),
                      log          = _("moderation log"),
                      modqueue     = _("moderation queue"),
@@ -148,6 +150,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      popular      = _("popular"),
                      create       = _("create"),
                      mine         = _("my subreddits"),
+                     quarantine   = _("quarantine"),
 
                      i18n         = _("help translate"),
                      errors       = _("errors"),
@@ -593,8 +596,6 @@ class CommentSortMenu(SortMenu):
     @class_property
     def hidden_options(cls):
         sorts = ['random']
-        if not feature.is_enabled('qa_sort'):
-            sorts.append('qa')
         if feature.is_enabled('remove_hot_comments'):
             sorts.append('hot')
         return sorts
@@ -611,6 +612,17 @@ class SearchSortMenu(SortMenu):
     """Sort menu for search pages."""
     _default = 'relevance'
     _options = ('relevance', 'hot', 'top', 'new', 'comments')
+
+    @class_property
+    def hidden_options(cls):
+        return ['hot']
+
+    def make_buttons(self):
+        buttons = super(SearchSortMenu, self).make_buttons()
+        if feature.is_enabled('link_relevancy'):
+            button = self.button_cls('relevance2', 'relevance2', self.name)
+            buttons.append(button)
+        return buttons
 
 
 class SubredditSearchSortMenu(SortMenu):

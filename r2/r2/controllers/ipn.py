@@ -24,7 +24,9 @@ from datetime import datetime, timedelta
 
 import json
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 from sqlalchemy.exc import IntegrityError
 import stripe
@@ -268,13 +270,18 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage,
     if thing_fullname:
         thing = Thing._by_fullname(thing_fullname, data=True)
         thing._gild(buyer)
+        if isinstance(thing, Comment):
+            gilding_type = 'comment gild'
+        else:
+            gilding_type = 'post gild'
     else:
         thing = None
         get_hook('user.gild').call(recipient=recipient, gilder=buyer)
+        gilding_type = 'user gild'
 
     if signed:
         sender = buyer.name
-        md_sender = "[%s](/user/%s)" % (sender, sender)
+        md_sender = "/u/%s" % sender
         repliable = True
     else:
         sender = _("An anonymous redditor")
@@ -285,7 +292,7 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage,
         else:    
             repliable = True
 
-    create_gift_gold(buyer._id, recipient._id, days, c.start_time, signed, note)
+    create_gift_gold(buyer._id, recipient._id, days, c.start_time, signed, note, gilding_type)
 
     if months == 1:
         amount = "a month"
@@ -354,8 +361,8 @@ def send_gold_code(buyer, months, days,
     subject = _('Your gold gift code has been generated!')
     message = _('Here is your gift code for %(amount)s of reddit gold:\n\n'
                 '%(code)s\n\nThe recipient (or you!) can enter it at '
-                'http://www.reddit.com/gold or go directly to '
-                'http://www.reddit.com/thanks/%(code)s to claim it.'
+                'https://www.reddit.com/gold or go directly to '
+                'https://www.reddit.com/thanks/%(code)s to claim it.'
               ) % {'amount': amount, 'code': code}
 
     if buyer:
@@ -861,8 +868,9 @@ class GoldPaymentController(RedditController):
             elif goldtype == 'creddits':
                 buyer._incr('gold_creddits', months)
                 subject = "thanks for buying creddits!"
-                message = ("To spend them, visit http://%s/gold or your "
-                           "favorite person's userpage." % (g.domain))
+                message = ("To spend them, visit %s://%s/gold or your "
+                           "favorite person's userpage." % (g.default_scheme,
+                                                            g.domain))
 
             elif goldtype == 'gift':
                 send_gift(buyer, recipient, months, days, signed, giftmessage,
@@ -1347,7 +1355,7 @@ def days_from_months(months):
 def subtract_gold_days(user, days):
     user.gold_expiration -= timedelta(days=days)
     if user.gold_expiration < datetime.now(g.display_tz):
-        user.gold = False
+        admintools.degolden(user)
     user._commit()
 
 
@@ -1370,11 +1378,7 @@ def reverse_gold_purchase(transaction_id):
         goldtype = 'autorenew'
     else:
         secret = transaction.secret
-        if '{' in secret:
-            secret.strip('{}') # I goofed
-            pieces = secret.split(',')
-        else:
-            pieces = secret.split('-')
+        pieces = secret.split('-')
         goldtype = pieces[0]
 
     if goldtype == 'gift':

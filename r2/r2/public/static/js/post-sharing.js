@@ -188,6 +188,7 @@
     show: function() {
       this.$el.slideDown(this.animationSpeed, 'swing', function() {
         this.trigger('show', this);
+        this.selectLinkInputText();
       }.bind(this));
     },
 
@@ -224,6 +225,9 @@
         case 'twitter':
           return this.shareToTwitter();
 
+        case 'tumblr':
+          return this.shareToTumblr();
+
         default:
           this.close();
       }
@@ -240,12 +244,13 @@
 
     shareToFacebook: function() {
       var redditUrl = this.getShareLink('facebook');
+      var redirectUrl = r.config.currentOrigin + '/share/close';
       var shareParams = {
         app_id: r.config.facebook_app_id,
         display: 'popup',
         link: redditUrl,
         description: this.thingData.title,
-        redirect_uri: 'https://www.facebook.com',
+        redirect_uri: redirectUrl,
       }
       var shareUrl = replaceParams('https://www.facebook.com/dialog/feed', shareParams);
 
@@ -284,6 +289,19 @@
       var shareUrl = replaceParams('https://twitter.com/intent/tweet', shareParams);
 
       this.openWebIntent(shareUrl, 'twitter');
+    },
+
+    shareToTumblr: function() {
+      var redditUrl = this.getShareLink('tumblr');
+      var title = this.thingData.title;
+      var shareParams = {
+        canonicalUrl: redditUrl,
+        posttype: 'link',
+        title: title,
+      };
+      var shareUrl = replaceParams('https://www.tumblr.com/widgets/share/tool', shareParams);
+
+      this.openWebIntent(shareUrl, 'tumblr');
     },
 
     openWebIntent: function(shareUrl, windowTitle) {
@@ -354,8 +372,7 @@
     },
 
     selectLinkInputText: function() {
-      this.refs.$postSharingLinkInput.select();
-      this.trigger('link', 'focus');
+      this.refs.$postSharingLinkInput.focus().select();
     },
 
     fireCopyEvent: function() {
@@ -447,6 +464,13 @@
         },
       ];
 
+      if (r.config.feature_tumblr_sharing) {
+        shareOptions.push({
+          name: 'tumblr',
+          tooltip: r._('Share to %(name)s').format({name: 'Tumblr'}),
+        });
+      }
+
       if (r.config.logged) {
         shareOptions.push({
           name: 'email',
@@ -464,13 +488,16 @@
 
       $parentThing.find('.entry .buttons').after(postSharing.el);
 
+      r.ui.activeShareMenu = postSharing;
+
       postSharing.on('show', function() {
         r.analytics.fireGAEvent('post-sharing', 'open', thingId);
-        r.ui.activeShareMenu = postSharing;
       });
 
       postSharing.on('unmount', function() {
-        r.ui.activeShareMenu = null;
+        if (r.ui.activeShareMenu === postSharing) {
+          r.ui.activeShareMenu = null;
+        }
       });
 
       postSharing.on('close', function() {

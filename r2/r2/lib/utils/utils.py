@@ -37,7 +37,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from urllib import unquote_plus
+from urllib import unquote_plus, unquote
 from urllib2 import urlopen, Request
 from urlparse import urlparse, urlunparse
 
@@ -48,7 +48,9 @@ import unidecode
 from babel.dates import TIMEDELTA_UNITS
 from BeautifulSoup import BeautifulSoup, SoupStrainer
 from mako.filters import url_escape
-from pylons import c, g, request, config
+from pylons import request, config
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import ungettext, _
 
 from r2.lib.contrib import ipaddress
@@ -362,6 +364,9 @@ def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
     # work around CRBUG-464270
     if len(u.hostname) > 255:
         return None
+    # work around for Chrome crash with "%%30%30" - Sep 2015
+    if "%00" in unquote(u.path):
+        return None
     if u.username is not None or u.password is not None:
         return None
 
@@ -653,16 +658,13 @@ class UrlParser(object):
 
         On failure to find a subreddit, returns None.
         """
-        from pylons import g
-        from r2.models import Subreddit, Sub, NotFound, DefaultSR
+        from r2.models import Subreddit, NotFound, DefaultSR
         try:
             if (not self.hostname or
                     is_subdomain(self.hostname, g.domain) or
                     self.hostname.startswith(g.domain)):
                 if self.path.startswith('/r/'):
                     return Subreddit._by_name(self.path.split('/')[2])
-                elif self.path.startswith(('/subreddits/', '/reddits/')):
-                    return Sub
                 else:
                     return DefaultSR()
             elif self.hostname:
@@ -738,7 +740,6 @@ class UrlParser(object):
         g.domain, or a subdomain of the provided subreddit's cname.
         """
 
-        from pylons import g
         valid_subdomain = (
             not self.hostname or
             is_subdomain(self.hostname, g.domain) or
@@ -1124,7 +1125,6 @@ def find_recent_broken_things(from_time = None, to_time = None,
     """
     from r2.models import Link, Comment
     from r2.lib.db.operators import desc
-    from pylons import g
 
     from_time = from_time or timeago('1 hour')
     to_time = to_time or datetime.now(g.tz)
@@ -1621,7 +1621,7 @@ def simple_traceback(limit):
     """
 
     stack_trace = traceback.extract_stack(limit=limit)[:-2]
-    return "\n".join(":".join((os.path.basename(filename),
+    return "\n".join("-".join((os.path.basename(filename),
                                function_name,
                                str(line_number),
                               ))

@@ -22,7 +22,6 @@
 
 from r2.controllers.reddit_base import (
     cross_domain,
-    hsts_modify_redirect,
     is_trusted_origin,
     MinimalController,
     pagecache_policy,
@@ -33,7 +32,9 @@ from r2.controllers.reddit_base import (
 )
 
 from pylons.i18n import _
-from pylons import c, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.lib.validator import *
 
@@ -44,12 +45,12 @@ from r2.lib import recommender
 from r2.lib import hooks
 
 from r2.lib.utils import (
+    blockquote_text,
     extract_user_mentions,
     get_title,
     query_string,
     randstr,
     sanitize_url,
-    set_last_modified,
     timeago,
     timefromnow,
     timeuntil,
@@ -76,6 +77,7 @@ from r2.lib.pages import (
     FriendTableItem,
     InvitedModTableItem,
     ModTableItem,
+    MutedTableItem,
     SubredditStylesheet,
     WikiBannedTableItem,
     WikiMayContributeTableItem,
@@ -86,7 +88,6 @@ from r2.lib.pages.things import (
     hot_links_by_url_listing,
     wrap_links,
 )
-from r2.models.last_modified import LastModified
 
 from r2.lib.menus import CommentSortMenu
 from r2.lib.captcha import get_iden
@@ -111,7 +112,7 @@ from r2.lib.lock import TimeoutExpired
 from r2.lib.csrf import csrf_exempt
 
 from r2.models import wiki
-from r2.models.recommend import AccountSRFeedback
+from r2.models.recommend import AccountSRFeedback, FEEDBACK_ACTIONS
 from r2.lib.merge import ConflictException
 
 import csv
@@ -178,7 +179,7 @@ class ApiController(RedditController):
     @pagecache_policy(PAGECACHE_POLICY.NEVER)
     @require_oauth2_scope("read")
     @validate(
-        things=VByName('id', multiple=True, limit=100),
+        things=VByName('id', multiple=True, ignore_missing=True, limit=100),
         url=VUrl('url'),
     )
     @api_doc(api_section.links_and_comments, uses_site=True)
@@ -278,17 +279,23 @@ class ApiController(RedditController):
 
     @csrf_exempt
     @json_validate(email=ValidEmail("email"),
-                   newsletter_subscribe=VBoolean("newsletter_subscribe", default=False))
-    def POST_check_email(self, responder, email, newsletter_subscribe):
+                   newsletter_subscribe=VBoolean("newsletter_subscribe", default=False),
+                   sponsor=VBoolean("sponsor", default=False))
+    def POST_check_email(self, responder, email, newsletter_subscribe, sponsor):
         """
         Check whether an email is valid. Allows blank emails.
 
         Additionally checks if a newsletter is requested, and will be strict
         on blank emails if so.
         """
-        if feature.is_enabled('newsletter') and newsletter_subscribe and not email:
+        if newsletter_subscribe and not email:
             c.errors.add(errors.NEWSLETTER_NO_EMAIL, field="email")
             responder.has_errors("email", errors.NEWSLETTER_NO_EMAIL)
+            return
+
+        if sponsor and not email:
+            c.errors.add(errors.SPONSOR_NO_EMAIL, field="email")
+            responder.has_errors("email", errors.SPONSOR_NO_EMAIL)
             return
 
         if not (responder.has_errors("email", errors.BAD_EMAIL)):
@@ -345,13 +352,20 @@ class ApiController(RedditController):
         """
         if (form.has_errors("to",
                     errors.USER_DOESNT_EXIST, errors.NO_USER,
-                    errors.SUBREDDIT_NOEXIST, errors.USER_BLOCKED) or
+                    errors.SUBREDDIT_NOEXIST, errors.USER_BLOCKED,
+                ) or
                 form.has_errors("subject", errors.NO_SUBJECT) or
                 form.has_errors("subject", errors.TOO_LONG) or
                 form.has_errors("text", errors.NO_TEXT, errors.TOO_LONG) or
                 form.has_errors("message", errors.TOO_LONG) or
                 form.has_errors("captcha", errors.BAD_CAPTCHA) or
                 form.has_errors("from_sr", errors.SUBREDDIT_NOEXIST)):
+            return
+
+        if form.has_errors("to", errors.USER_MUTED):
+            g.events.muted_forbidden_event("muted", target=to,
+                request=request, context=c)
+            form.set_inputs(to="", subject="", text="", captcha="")
             return
 
         if from_sr and isinstance(to, Subreddit):
@@ -372,6 +386,13 @@ class ApiController(RedditController):
         if from_sr:
             if not from_sr.is_moderator_with_perms(c.user, "mail"):
                 abort(403)
+            elif from_sr.is_muted(to) and not c.user_is_admin:
+                c.errors.add(errors.MUTED_FROM_SUBREDDIT, field="to")
+                form.has_errors("to", errors.MUTED_FROM_SUBREDDIT)
+                g.events.muted_forbidden_event("muted mod", subreddit=from_sr,
+                    target=to, request=request, context=c)
+                form.set_inputs(to="", subject="", text="", captcha="")
+                return
             m, inbox_rel = Message._new(c.user, to, subject, body, request.ip,
                                         sr=from_sr, from_sr=True)
         else:
@@ -415,14 +436,13 @@ class ApiController(RedditController):
         sendreplies=VBoolean('sendreplies'),
         selftext=VMarkdown('text'),
         kind=VOneOf('kind', ['link', 'self']),
-        then=VOneOf('then', ('tb', 'comments'), default='comments'),
         extension=VLength("extension", 20,
                           docs={"extension": "extension used for redirects"}),
         resubmit=VBoolean('resubmit'),
     )
     @api_doc(api_section.links_and_comments)
     def POST_submit(self, form, jquery, url, selftext, kind, title,
-                    sr, then, extension, sendreplies, resubmit):
+                    sr, extension, sendreplies, resubmit):
         """Submit a link to a subreddit.
 
         Submit will create a link or self-post in the subreddit `sr` with the
@@ -447,6 +467,8 @@ class ApiController(RedditController):
             # VUrl may have replaced 'url' by adding 'http://'
             form.set_inputs(url=url)
 
+        is_self = (kind == "self")
+
         if not kind or form.has_errors('sr', errors.INVALID_OPTION):
             return
 
@@ -462,7 +484,7 @@ class ApiController(RedditController):
                             errors.NO_LINKS):
             return
 
-        if not sr.can_submit_text(c.user) and kind == "self":
+        if not sr.can_submit_text(c.user) and is_self:
             # this could happen if they actually typed "self" into the
             # URL box and we helpfully translated it for them
             c.errors.add(errors.NO_SELFS, field='sr')
@@ -478,36 +500,8 @@ class ApiController(RedditController):
             if form.has_errors('ratelimit', errors.RATELIMIT):
                 return
 
-            filled_quota = c.user.quota_full('link')
-            if filled_quota is not None:
-                if c.user._spam:
-                    msg = strings.generic_quota_msg
-                else:
-                    log_text ("over-quota",
-                              "%s just went over their per-%s quota" %
-                              (c.user.name, filled_quota), "info")
-
-                    verify_link = "/verify?reason=submit"
-                    reddiquette_link = "/wiki/reddiquette"
-
-                    if c.user.email_verified:
-                        msg = strings.verified_quota_msg
-                        msg %= {"reddiquette": reddiquette_link}
-                    else:
-                        msg = strings.unverified_quota_msg
-                        msg %= {
-                            "verify": verify_link,
-                            "reddiquette": reddiquette_link,
-                        }
-
-                md = safemarkdown(msg)
-                form.set_html(".status", md)
-                c.errors.add(errors.QUOTA_FILLED)
-                form.set_error(errors.QUOTA_FILLED, None)
-                return
-
-        if kind == 'link':
-            if not url or form.has_errors("url", errors.NO_URL, errors.BAD_URL):
+        if not is_self:
+            if form.has_errors("url", errors.NO_URL, errors.BAD_URL):
                 return
 
             if form.has_errors("url", errors.DOMAIN_BANNED):
@@ -520,7 +514,7 @@ class ApiController(RedditController):
                 if links:
                     c.errors.add(errors.ALREADY_SUB, field='url')
                     form.has_errors('url', errors.ALREADY_SUB)
-                    u = links[0].already_submitted_link(url)
+                    u = links[0].already_submitted_link(url, title)
                     if extension:
                         u = UrlParser(u)
                         u.set_extension(extension)
@@ -528,25 +522,33 @@ class ApiController(RedditController):
                     form.redirect(u)
                     return
 
-        if not c.user_is_admin and kind == 'self':
-            if len(selftext) > sr.selftext_max_length:
+        if not c.user_is_admin and is_self:
+            if len(selftext) > Link.SELFTEXT_MAX_LENGTH:
                 c.errors.add(errors.TOO_LONG, field='text',
-                             msg_params={'max_length': sr.selftext_max_length})
+                    msg_params={'max_length': Link.SELFTEXT_MAX_LENGTH})
                 form.set_error(errors.TOO_LONG, 'text')
                 return
 
         if not request.POST.get('sendreplies'):
-            sendreplies = kind == 'self'
+            sendreplies = is_self
 
         # get rid of extraneous whitespace in the title
         cleaned_title = re.sub(r'\s+', ' ', title, flags=re.UNICODE)
         cleaned_title = cleaned_title.strip()
 
-        l = Link._submit(cleaned_title, url if kind == 'link' else 'self',
-                         c.user, sr, request.ip, spam=c.user._spam,
-                         sendreplies=sendreplies)
+        l = Link._submit(
+            is_self=is_self,
+            title=cleaned_title,
+            content=selftext if is_self else url,
+            author=c.user,
+            sr=sr,
+            ip=request.ip,
+            spam=c.user._spam,
+            sendreplies=sendreplies,
+        )
 
-        if kind == 'link':
+
+        if not is_self:
             ban = is_banned_domain(url)
             if ban:
                 g.stats.simple_event('spam.domainban.link_url')
@@ -554,19 +556,10 @@ class ApiController(RedditController):
                 hooks.get_hook('banned_domain.submit').call(item=l, url=url,
                                                             ban=ban)
 
-        if kind == 'self':
-            l.url = l.make_permalink_slow()
-            l.is_self = True
-            l.selftext = selftext
-
-            l._commit()
-            l.set_url_cache()
-
-        queries.queue_vote(c.user, l, True, request.ip, cheater=c.cheater,
-                           event_data=g.events.event_base(request, c))
+        queries.queue_vote(c.user, l, dir=True, ip=request.ip,
+            cheater=c.cheater)
 
         if sr.should_ratelimit(c.user, 'link'):
-            c.user.clog_quota('link', l)
             VRatelimit.ratelimit(rate_user=True, rate_ip = True,
                                  prefix = "rate_submit_")
 
@@ -574,12 +567,7 @@ class ApiController(RedditController):
         l.update_search_index()
         g.events.submit_event(l, request=request, context=c)
 
-        if then == 'comments':
-            path = add_sr(l.make_permalink_slow())
-        elif then == 'tb':
-            form.attr('target', '_top')
-            path = add_sr('/tb/%s' % l._id36)
-
+        path = add_sr(l.make_permalink_slow())
         if extension:
             path += ".%s" % extension
 
@@ -621,13 +609,7 @@ class ApiController(RedditController):
         if request.params.get("hoist") != "cookie":
             responder._send_data(modhash = user.modhash())
             responder._send_data(cookie  = user.make_cookie())
-        if user.https_forced:
-            # The client may decide to redirect somewhere after a successful
-            # login, send it our HSTS grant endpoint so it can redirect through
-            # there and pick up the user's grant.
-            hsts_redir = "https://" + g.domain + "/modify_hsts_grant?dest="
-            responder._send_data(hsts_redir=hsts_redir)
-        responder._send_data(need_https=user.https_forced)
+        responder._send_data(need_https=feature.is_enabled("force_https"))
 
     @validatedForm(VLoggedOut(),
                    user = VThrottledLogin(['user', 'passwd']),
@@ -666,9 +648,14 @@ class ApiController(RedditController):
                    name = VUname(['user']),
                    email=ValidEmail("email"),
                    password = VPasswordChange(['passwd', 'passwd2']),
-                   rem = VBoolean('rem'))
+                   rem = VBoolean('rem'),
+                   newsletter_subscribe=VBoolean('newsletter_subscribe',
+                                                 default=False),
+                   sponsor=VBoolean('sponsor', default=False),
+                   )
     def _handle_register(self, form, responder, name, email,
-                      password, rem):
+                         password, rem, newsletter_subscribe,
+                         sponsor):
         bad_captcha = responder.has_errors('captcha', errors.BAD_CAPTCHA)
         if not (responder.has_errors("user",
                                 errors.USERNAME_TOO_SHORT,
@@ -681,16 +668,16 @@ class ApiController(RedditController):
                 responder.has_errors("passwd2", errors.BAD_PASSWORD_MATCH) or
                 responder.has_errors('ratelimit', errors.RATELIMIT) or
                 (not g.disable_captcha and bad_captcha)):
-            
-            newsletter_subscribe = False
-            if feature.is_enabled('newsletter'):
-                # Todo: add to validatedForm when feature is released
-                vnewsletter = VBoolean('newsletter_subscribe', default=False)
-                newsletter_subscribe = vnewsletter.run(request.params.get('newsletter_subscribe'))
-                if newsletter_subscribe and not email:
-                    c.errors.add(errors.NEWSLETTER_NO_EMAIL, field="email")
-                    form.has_errors("email", errors.NEWSLETTER_NO_EMAIL)
-                    return
+
+            if newsletter_subscribe and not email:
+                c.errors.add(errors.NEWSLETTER_NO_EMAIL, field="email")
+                form.has_errors("email", errors.NEWSLETTER_NO_EMAIL)
+                return
+
+            if sponsor and not email:
+                c.errors.add(errors.SPONSOR_NO_EMAIL, field="email")
+                form.has_errors("email", errors.SPONSOR_NO_EMAIL)
+                return
 
             user = register(name, password, request.ip)
             VRatelimit.ratelimit(rate_ip = True, prefix = "rate_register_")
@@ -715,12 +702,11 @@ class ApiController(RedditController):
             if any(reject):
                 return
 
-            if feature.is_enabled('newsletter'):
-                if newsletter_subscribe and email:
-                    try:
-                        newsletter.add_subscriber(email, source="register")
-                    except newsletter.NewsletterError as e:
-                        g.log.warning("Failed to subscribe: %r" % e)
+            if newsletter_subscribe and email:
+                try:
+                    newsletter.add_subscriber(email, source="register")
+                except newsletter.NewsletterError as e:
+                    g.log.warning("Failed to subscribe: %r" % e)
 
             self._login(responder, user, rem)
 
@@ -773,6 +759,7 @@ class ApiController(RedditController):
         'moderator_invite',
         'contributor',
         'banned',
+        'muted',
         'wikibanned',
         'wikicontributor',
     )
@@ -789,6 +776,7 @@ class ApiController(RedditController):
         'moderator_invite': {"modothers"},
         'contributor': {"modcontributors"},
         'banned': {"modcontributors"},
+        'muted': {"modcontributors"},
         'wikibanned': {"modcontributors", "modwiki"},
         'wikicontributor': {"modcontributors", "modwiki"},
         'friend': None,  # Handled with API v1 endpoint
@@ -832,6 +820,7 @@ class ApiController(RedditController):
         * moderator_invite: `modothers`
         * contributor: `modcontributors`
         * banned: `modcontributors`
+        * muted: `modcontributors`
         * wikibanned: `modcontributors` and `modwiki`
         * wikicontributor: `modcontributors` and `modwiki`
         * friend: Use [/api/v1/me/friends/{username}](#DELETE_api_v1_me_friends_{username})
@@ -868,6 +857,10 @@ class ApiController(RedditController):
                 required_perms.append('wiki')
             else:
                 required_perms.append('access')
+                # ability to unmute requires access and mail permissions
+                if type == 'muted':
+                    required_perms.append('mail')
+
         if (not c.user_is_admin
             and (type in self._sr_friend_types
                  and not container.is_moderator_with_perms(
@@ -885,11 +878,15 @@ class ApiController(RedditController):
 
         # Log this action
         if new and type in self._sr_friend_types:
-            action = dict(banned='unbanuser', moderator='removemoderator',
-                          moderator_invite='uninvitemoderator',
-                          wikicontributor='removewikicontributor',
-                          wikibanned='wikiunbanned',
-                          contributor='removecontributor').get(type, None)
+            action = dict(
+                banned='unbanuser',
+                moderator='removemoderator',
+                moderator_invite='uninvitemoderator',
+                wikicontributor='removewikicontributor',
+                wikibanned='wikiunbanned',
+                contributor='removecontributor',
+                muted='unmuteuser',
+            ).get(type, None)
             ModAction.create(container, c.user, action, target=victim)
 
         if type == "friend" and c.user.gold:
@@ -897,6 +894,9 @@ class ApiController(RedditController):
 
         if type in ('banned', 'wikibanned'):
             container.unschedule_unban(victim, type)
+
+        if type == 'muted':
+            MutedAccountsBySubreddit.unmute(container, victim)
 
     @require_oauth2_scope("modothers")
     @validatedForm(VSrModerator(), VModhash(),
@@ -966,6 +966,7 @@ class ApiController(RedditController):
         * moderator_invite: `modothers`
         * contributor: `modcontributors`
         * banned: `modcontributors`
+        * muted: `modcontributors`
         * wikibanned: `modcontributors` and `modwiki`
         * wikicontributor: `modcontributors` and `modwiki`
         * friend: Use [/api/v1/me/friends/{username}](#PUT_api_v1_me_friends_{username})
@@ -1050,34 +1051,35 @@ class ApiController(RedditController):
         else:
             permissions = None
 
-        if (type in ("banned", "moderator_invite") and
-                container.is_moderator(friend)):
+        if type == "moderator_invite" and container.is_moderator(friend):
             c.errors.add(errors.ALREADY_MODERATOR, field="name")
             form.set_error(errors.ALREADY_MODERATOR, "name")
             return
+        elif type in ("banned", "muted") and container.is_moderator(friend):
+            c.errors.add(errors.CANT_RESTRICT_MODERATOR, field="name")
+            form.set_error(errors.CANT_RESTRICT_MODERATOR, "name")
+            return
 
-        # don't allow increasing privileges of banned users
+        if type == "muted" and not container.can_mute(c.user, friend):
+            abort(403)
+
+        # don't allow increasing privileges of banned or muted users
         unbanned_types = ("moderator", "moderator_invite",
                           "contributor", "wikicontributor")
-        if type in unbanned_types and container.is_banned(friend):
-            c.errors.add(errors.BANNED_FROM_SUBREDDIT, field="name")
-            form.set_error(errors.BANNED_FROM_SUBREDDIT, "name")
-            return
+        if type in unbanned_types:
+            if container.is_banned(friend):
+                c.errors.add(errors.BANNED_FROM_SUBREDDIT, field="name")
+                form.set_error(errors.BANNED_FROM_SUBREDDIT, "name")
+                return
+            elif container.is_muted(friend):
+                c.errors.add(errors.MUTED_FROM_SUBREDDIT, field="name")
+                form.set_error(errors.MUTED_FROM_SUBREDDIT, "name")
+                return
 
         if type == "moderator":
             container.remove_moderator_invite(friend)
 
         new = fn(friend, permissions=type_and_permissions[1])
-
-        # Log this action
-        if new and type in self._sr_friend_types:
-            action = dict(banned='banuser',
-                          moderator='addmoderator',
-                          moderator_invite='invitemoderator',
-                          wikicontributor='wikicontributor',
-                          contributor='addcontributor',
-                          wikibanned='wikibanned').get(type, None)
-            ModAction.create(container, c.user, action, target=friend)
 
         if type == "friend" and c.user.gold:
             # Yes, the order of the next two lines is correct.
@@ -1086,9 +1088,16 @@ class ApiController(RedditController):
             c.user.friend_rels_cache(_update=True)
             c.user.add_friend_note(friend, note or '')
 
+        # additional logging/info needed for bans
         tempinfo = None
-        if type in ('banned', 'wikibanned'):
+        log_details = None
+        log_description = None
+
+        if type in ('banned', 'wikibanned', 'muted'):
             container.add_rel_note(type, friend, note)
+            log_description = note
+
+        if type in ('banned', 'wikibanned'):
             if duration:
                 container.unschedule_unban(friend, type)
                 tempinfo = container.schedule_unban(
@@ -1097,10 +1106,37 @@ class ApiController(RedditController):
                     c.user,
                     duration,
                 )
+                log_details = "changed to " if not new else ""
+                log_details += "%d days" % duration
             elif not new:
                 # Preexisting ban and no duration specified means turn the
                 # temporary ban into a permanent one.
                 container.unschedule_unban(friend, type)
+                log_details = "changed to permanent"
+            else:
+                log_details = "permanent"
+        elif new and type == 'muted':
+            MutedAccountsBySubreddit.mute(container, friend, c.user)
+
+        # Log this action
+        if (new or log_details) and type in self._sr_friend_types:
+            mod_action_by_type = {
+                "banned": "banuser",
+                "muted": "muteuser",
+                "contributor": "addcontributor",
+                "moderator": "addmoderator",
+                "moderator_invite": "invitemoderator",
+            }
+            action = mod_action_by_type.get(type, type)
+
+            ModAction.create(
+                container,
+                c.user,
+                action,
+                target=friend,
+                details=log_details,
+                description=log_description,
+            )
 
         row_cls = dict(friend=FriendTableItem,
                        moderator=ModTableItem,
@@ -1108,6 +1144,7 @@ class ApiController(RedditController):
                        contributor=ContributorTableItem,
                        wikicontributor=WikiMayContributeTableItem,
                        banned=BannedTableItem,
+                       muted=MutedTableItem,
                        wikibanned=WikiBannedTableItem).get(type)
 
         form.set_inputs(name = "")
@@ -1127,13 +1164,12 @@ class ApiController(RedditController):
             table.insert_table_rows(user_row, index=index)
             table.find(".notfound").hide()
 
-        if new:
-            if type == "banned":
-                if friend.has_interacted_with(container):
-                    send_ban_message(container, c.user, friend,
-                        ban_message, duration)
-            else:
-                notify_user_added(type, c.user, friend, container)
+        if type == "banned":
+            if friend.has_interacted_with(container):
+                send_ban_message(container, c.user, friend,
+                    ban_message, duration, new)
+        elif new:
+            notify_user_added(type, c.user, friend, container)
 
     @validatedForm(VGold(),
                    VModhash(),
@@ -1145,10 +1181,12 @@ class ApiController(RedditController):
         c.user.add_friend_note(friend, note)
         form.set_text('.status', _("saved"))
 
-    @validatedForm(VModhash(),
-                   type = VOneOf('type', ('bannednote', 'wikibannednote')),
-                   user = VExistingUname('name'),
-                   note = VLength('note', 300))
+    @validatedForm(
+        VModhash(),
+        type=VOneOf('type', ('bannednote', 'wikibannednote', 'mutednote')),
+        user=VExistingUname('name'),
+        note=VLength('note', 300),
+    )
     def POST_relnote(self, form, jquery, type, user, note):
         perm = 'wiki' if type.startswith('wiki') else 'access'
         if (not c.user_is_admin
@@ -1206,7 +1244,7 @@ class ApiController(RedditController):
             return
 
         form.set_text('.status',
-                      _('all other sessions have been signed out'))
+                      _('all other sessions have been logged out'))
         form.set_inputs(curpass = "")
 
         # deauthorize all access tokens
@@ -1218,44 +1256,6 @@ class ApiController(RedditController):
         # the password salt has changed, so the user's cookie has been
         # invalidated.  drop a new cookie.
         self.login(c.user)
-
-    @validatedForm(
-        VUser(),
-        VModhash(),
-        password=VVerifyPassword("curpass", fatal=False),
-        force_https=VBoolean("force_https"),
-    )
-    def POST_set_force_https(self, form, jquery, password, force_https):
-        """Toggle HTTPS-only sessions, invalidating other sessions.
-
-        A valid password (`curpass`) must be supplied.
-        """
-        if form.has_errors("curpass", errors.WRONG_PASSWORD):
-            return
-        if not force_https and feature.is_enabled("require_https"):
-            form.set_text(".status",
-                          _("you may not disable HTTPS on this account"))
-            return
-        c.user.pref_force_https = force_https
-        # Most pages we'd try to frame would be http:, and most browsers
-        # disallow mixed-content. Disable the toolbar when forcing HTTPS.
-        if force_https:
-            c.user.pref_frame = False
-        c.user._commit()
-
-        # run the change password command to get a new salt.
-        # OAuth tokens are fine since that always happened over HTTPS.
-        change_password(c.user, password)
-        form.set_text(".status",
-                      _("HTTPS preferences have been successfully changed"))
-        form.set_inputs(curpass="")
-
-        # the password salt has changed, so the user's cookie has been
-        # invalidated.  drop a new cookie.
-        self.login(c.user)
-
-        # Modify their HSTS grant
-        form.redirect(hsts_modify_redirect("/prefs/security"))
 
     @validatedForm(
         VUser(),
@@ -1290,6 +1290,7 @@ class ApiController(RedditController):
                     dest = None
 
                 emailer.verify_email(c.user, dest=dest)
+                form.set_inputs(curpass="")
                 form.set_text('.status',
                      _("you should be getting a verification email shortly."))
             else:
@@ -1348,7 +1349,7 @@ class ApiController(RedditController):
                    user = VThrottledLogin(["user", "passwd"]),
                    confirm = VBoolean("confirm"))
     def POST_delete_user(self, form, jquery, delete_message, username, user, confirm):
-        """Delete the currently signed in account.
+        """Delete the currently logged in account.
 
         A valid username/password and confirmation must be supplied. An
         optional `delete_message` may be supplied to explain the reason the
@@ -1369,8 +1370,6 @@ class ApiController(RedditController):
                 form.has_errors("delete_message", errors.TOO_LONG) or
                 form.has_errors("confirm", errors.CONFIRM)):
             redirect_url = "/?deleted=true"
-            if c.user.https_forced:
-                redirect_url = hsts_modify_redirect(redirect_url)
             c.user.delete(delete_message)
             form.redirect(redirect_url)
 
@@ -1391,11 +1390,9 @@ class ApiController(RedditController):
 
         thing.update_search_index()
 
-        #expire the item from the sr cache
         if isinstance(thing, Link):
             queries.delete(thing)
-
-        #comments have special delete tasks
+            thing.subreddit_slow.remove_sticky(thing)
         elif isinstance(thing, Comment):
             if not was_deleted:
                 queries.delete_comment(thing)
@@ -1404,6 +1401,60 @@ class ApiController(RedditController):
                                               # handled by unnotify
             queries.unnotify(thing)
             queries.delete(thing)
+
+    @require_oauth2_scope("modposts")
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanBan('id'),
+                thing=VByName('id', thing_cls=Link))
+    @api_doc(api_section.links_and_comments)
+    def POST_lock(self, thing):
+        """Lock a link.
+
+        Prevents a post from receiving new comments.
+
+        See also: [/api/unlock](#POST_api_unlock).
+
+        """
+        if not feature.is_enabled('thread_locking',
+                                  subreddit=thing.subreddit_slow.name):
+            abort(404, 'not found')
+
+        if thing.archived:
+            return abort(400, "Bad Request")
+
+        thing.locked = True
+        thing._commit()
+
+        ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                         action='lock')
+
+    @require_oauth2_scope("modposts")
+    @noresponse(VUser(),
+                VModhash(),
+                VSrCanBan('id'),
+                thing=VByName('id', thing_cls=Link))
+    @api_doc(api_section.links_and_comments)
+    def POST_unlock(self, thing):
+        """Unlock a link.
+
+        Allow a post to receive new comments.
+
+        See also: [/api/lock](#POST_api_lock).
+
+        """
+        if not feature.is_enabled('thread_locking',
+                                  subreddit=thing.subreddit_slow.name):
+            abort(404, 'not found')
+
+        if thing.archived:
+            return abort(400, "Bad Request")
+
+        thing.locked = False
+        thing._commit()
+
+        ModAction.create(thing.subreddit_slow, c.user, target=thing,
+                         action='unlock')
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(),
@@ -1506,9 +1557,6 @@ class ApiController(RedditController):
         by default, or AMAs may be sorted by Q&A. A sort of an empty string
         clears the default sort.
         """
-        if not feature.is_enabled('default_sort'):
-            return abort(403, "This feature is not yet enabled")
-
         if c.user._id != thing.author_id:
             ModAction.create(thing.subreddit_slow, c.user, target=thing,
                              action='setsuggestedsort')
@@ -1533,38 +1581,48 @@ class ApiController(RedditController):
         """
         thing.contest_mode = state
         thing._commit()
+        if state:
+            action = 'setcontestmode'
+        else:
+            action = 'unsetcontestmode'
+        ModAction.create(c.site, c.user, action, target=thing)
         jquery.refresh()
 
     @require_oauth2_scope("modposts")
-    @validatedForm(VUser(),
-                   VModhash(),
-                   VSrCanBan('id'),
-                   thing=VByName('id'),
-                   state=VBoolean('state'))
+    @validatedForm(
+        VUser(),
+        VModhash(),
+        VSrCanBan('id'),
+        thing=VByName('id'),
+        state=VBoolean('state'),
+        num=VInt("num", min=1, max=Subreddit.MAX_STICKIES, coerce=True),
+    )
     @api_doc(api_section.links_and_comments)
-    def POST_set_subreddit_sticky(self, form, jquery, thing, state):
-        """Set or unset a self-post as the sticky post in its subreddit.
+    def POST_set_subreddit_sticky(self, form, jquery, thing, state, num):
+        """Set or unset a Link as the sticky in its subreddit.
         
         `state` is a boolean that indicates whether to sticky or unsticky
         this post - true to sticky, false to unsticky.
 
-        Note that if another post was previously stickied, stickying a new
-        one will replace the previous one.
+        The `num` argument is optional, and only used when stickying a post.
+        It allows specifying a particular "slot" to sticky the post into, and
+        if there is already a post stickied in that slot it will be replaced.
+        If there is no post in the specified slot to replace, or `num` is None,
+        the bottom-most slot will be used.
         
         """
-        if not isinstance(thing, Link) or not thing.is_self:
+        if not isinstance(thing, Link):
             return
 
         sr = thing.subreddit_slow
 
         if state:
-            sr.sticky_fullname = thing._fullname
-            ModAction.create(sr, c.user, 'sticky', target=thing)
-        elif not state:
-            sr.sticky_fullname = None
-            ModAction.create(sr, c.user, 'unsticky', target=thing)
+            if thing._fullname in sr.get_sticky_fullnames():
+                abort(409, "Already stickied")
+            sr.set_sticky(thing, c.user, num=num)
+        else:
+            sr.remove_sticky(thing, c.user)
 
-        sr._commit()
         jquery.refresh()
 
     @require_oauth2_scope("report")
@@ -1661,7 +1719,9 @@ class ApiController(RedditController):
             sr = None
 
         if getattr(thing, "from_sr", False) and sr:
-            BlockedSubredditsByAccount.block(c.user, sr)
+            # Users may only block a subreddit they don't mod
+            if not (sr.is_moderator(c.user) or c.user_is_admin):
+                BlockedSubredditsByAccount.block(c.user, sr)
             return
 
         # Users may only block someone who has
@@ -1700,6 +1760,72 @@ class ApiController(RedditController):
             BlockedSubredditsByAccount.unblock(c.user, sr)
             return
 
+    @require_oauth2_scope("modcontributors")
+    @noresponse(
+        VUser(),
+        VModhash(),
+        message=VByName('id'),
+    )
+    @api_doc(api_section.moderation)
+    def POST_mute_message_author(self, message):
+        '''For muting user via modmail.'''
+        if not message:
+            return
+        subreddit = message.subreddit_slow
+
+        if not subreddit:
+            abort(403, 'Not modmail')
+
+        user = message.author_slow
+        if not subreddit.can_mute(c.user, user):
+            abort(403)
+
+        if not c.user_is_admin:
+            if not subreddit.is_moderator_with_perms(c.user, 'access', 'mail'):
+                abort(403, 'Invalid mod permissions')
+
+            quota_key = "sr%squota-%s" % ("muted", subreddit._id36)
+            g.cache.add(quota_key, 0, time=g.sr_quota_time)
+            subreddit_quota = g.cache.incr(quota_key)
+            quota_limit = getattr(g, "sr_%s_quota" % "muted")
+            if subreddit_quota > quota_limit and subreddit.use_quotas:
+                abort(403, errors.SUBREDDIT_RATELIMIT)
+
+        added = subreddit.add_muted(user)
+        # Don't mute the user and create another modaction if already muted
+        if added:
+            MutedAccountsBySubreddit.mute(subreddit, user, c.user, message)
+            permalink = message.make_permalink(force_domain=True)
+            ModAction.create(subreddit, c.user, 'muteuser',
+                target=user, description=permalink)
+            subreddit.add_rel_note('muted', user, permalink)
+
+    @require_oauth2_scope("modcontributors")
+    @noresponse(
+        VUser(),
+        VModhash(),
+        message=VByName('id'),
+    )
+    @api_doc(api_section.moderation)
+    def POST_unmute_message_author(self, message):
+        '''For unmuting user via modmail.'''
+        if not message:
+            return
+        subreddit = message.subreddit_slow
+
+        if not subreddit:
+            abort(403, 'Not modmail')
+
+        user = message.author_slow
+        if not c.user_is_admin:
+            if not subreddit.is_moderator_with_perms(c.user, 'access', 'mail'):
+                abort(403, 'Invalid mod permissions')
+
+        removed = subreddit.remove_muted(user)
+        if removed:
+            MutedAccountsBySubreddit.unmute(subreddit, user)
+            ModAction.create(subreddit, c.user, 'unmuteuser', target=user)
+
     @require_oauth2_scope("edit")
     @validatedForm(
         VUser(),
@@ -1727,7 +1853,7 @@ class ApiController(RedditController):
             max_length = 10000
             admin_override = False
         else:
-            max_length = item.subreddit_slow.selftext_max_length
+            max_length = Link.SELFTEXT_MAX_LENGTH
             admin_override = c.user_is_admin
 
         if not admin_override and len(text) > max_length:
@@ -1782,15 +1908,11 @@ class ApiController(RedditController):
                 ignore_missing=True,
             )))
 
-        if kind == 'link':
-            set_last_modified(item, 'comments')
-            LastModified.touch(item._fullname, 'Comments')
-
         wrapper = default_thing_wrapper(expand_children = True)
         jquery(".content").replace_things(item, True, True, wrap = wrapper)
         jquery(".content .link .rank").hide()
 
-    @require_oauth2_scope("submit")
+    @allow_oauth2_access
     @validatedForm(
         VUser(),
         VModhash(),
@@ -1805,9 +1927,9 @@ class ApiController(RedditController):
         `parent` is the fullname of the thing being replied to. Its value
         changes the kind of object created by this request:
 
-        * the fullname of a Link: a top-level comment in that Link's thread.
-        * the fullname of a Comment: a comment reply to that comment.
-        * the fullname of a Message: a message reply to that message.
+        * the fullname of a Link: a top-level comment in that Link's thread. (requires `submit` scope)
+        * the fullname of a Comment: a comment reply to that comment. (requires `submit` scope)
+        * the fullname of a Message: a message reply to that message. (requires `privatemessages` scope)
 
         `text` should be the raw markdown body of the comment or message.
 
@@ -1818,13 +1940,50 @@ class ApiController(RedditController):
         #check the parent type here cause we need that for the
         #ratelimit checks
         if isinstance(parent, Message):
+            if (c.oauth_user and not
+                    c.oauth_scope.has_any_scope({'privatemessages', 'submit'})):
+                abort(403, 'forbidden')
             if not getattr(parent, "repliable", True):
                 abort(403, 'forbidden')
             if not parent.can_view_slow():
                 abort(403, 'forbidden')
+
+            if parent.sr_id and not c.user_is_admin:
+                sr = parent.subreddit_slow
+                # get the first message to see who the non-mod recipient
+                # in a modmail conversation is
+                message = parent
+                if parent.first_message:
+                    message = Message._byID(parent.first_message, data=True)
+
+                user_muted_error = False
+                if sr.is_muted(message.author_slow):
+                    user_muted_error = True
+                    muted_user = message.author_slow
+                elif message.to_id and sr.is_muted(message.recipient_slow):
+                    user_muted_error = True
+                    muted_user = message.recipient_slow
+
+                if user_muted_error:
+                    if sr.is_moderator(c.user):
+                        c.errors.add(errors.MUTED_FROM_SUBREDDIT, field="parent")
+                        g.events.muted_forbidden_event("muted mod",
+                            sr, parent_message=parent, target=muted_user,
+                            request=request, context=c,
+                        )
+                    else:
+                        c.errors.add(errors.USER_MUTED, field="parent")
+                        g.events.muted_forbidden_event("muted",
+                            parent_message=parent, target=sr,
+                            request=request, context=c,
+                        )
+
             is_message = True
             should_ratelimit = False
         else:
+            if (c.oauth_user and not
+                    c.oauth_scope.has_access(c.site.name, {'submit'})):
+                abort(403, 'forbidden')
             is_message = False
             if isinstance(parent, Link):
                 link = parent
@@ -1839,9 +1998,6 @@ class ApiController(RedditController):
                     not sr.should_ratelimit(c.user, 'comment')):
                 should_ratelimit = False
 
-            if link._age > sr.archive_age:
-                c.errors.add(errors.TOO_OLD, field = "parent")
-
             hooks.get_hook("comment.validate").call(sr=sr, link=link,
                            parent_comment=parent_comment)
 
@@ -1853,7 +2009,10 @@ class ApiController(RedditController):
                 commentform.has_errors("comment", errors.TOO_LONG) or
                 commentform.has_errors("ratelimit", errors.RATELIMIT) or
                 commentform.has_errors("parent", errors.DELETED_COMMENT,
-                    errors.DELETED_LINK, errors.TOO_OLD, errors.USER_BLOCKED)):
+                    errors.DELETED_LINK, errors.TOO_OLD, errors.USER_BLOCKED,
+                    errors.USER_MUTED, errors.MUTED_FROM_SUBREDDIT,
+                    errors.THREAD_LOCKED)
+        ):
             return
 
         if is_message:
@@ -1876,9 +2035,8 @@ class ApiController(RedditController):
         else:
             item, inbox_rel = Comment._new(c.user, link, parent_comment,
                                            comment, request.ip)
-            queries.queue_vote(c.user, item, True, request.ip,
-                               cheater=c.cheater,
-                               event_data=g.events.event_base(request, c))
+            queries.queue_vote(c.user, item, dir=True, ip=request.ip,
+                cheater=c.cheater)
 
         if is_message:
             queries.new_message(item, inbox_rel)
@@ -1906,17 +2064,13 @@ class ApiController(RedditController):
     @validatedForm(
         VUser(),
         VModhash(),
-        VCaptcha(),
         VRatelimitImproved(prefix='share', max_usage=g.RL_SHARE_MAX_REQS,
                            rate_user=True, rate_ip=True),
-        share_from=VLength('share_from', max_length=100),
-        emails=ValidEmailsOrExistingUnames("share_to"),
-        reply_to=ValidEmails("replyto", num=1), 
+        share_to=ValidEmailsOrExistingUnames("share_to"),
         message=VLength("message", max_length=1000), 
         link=VByName('parent', thing_cls=Link),
     )
-    def POST_share(self, shareform, jquery, emails, link, share_from, reply_to,
-                   message):
+    def POST_share(self, shareform, jquery, share_to, message, link):
         if not link:
             abort(404, 'not found')
 
@@ -1926,57 +2080,32 @@ class ApiController(RedditController):
         if not should_ratelimit:
             c.errors.remove((errors.RATELIMIT, 'ratelimit'))
 
-        # share_from and messages share a too_long error.
-        # finding an error on one necessitates hiding the other error
-        if shareform.has_errors("share_from", errors.TOO_LONG):
-            shareform.find(".message-errors").children().hide()
+        if shareform.has_errors("message", errors.TOO_LONG):
             return
-        elif shareform.has_errors("message", errors.TOO_LONG):
-            shareform.find(".share-form-errors").children().hide()
-            return
-        # reply_to and share_to also share errors...
         elif shareform.has_errors("share_to", errors.BAD_EMAILS,
                                   errors.NO_EMAILS,
                                   errors.TOO_MANY_EMAILS):
-            shareform.find(".reply-to-errors").children().hide()
-            return
-        elif shareform.has_errors("replyto", errors.BAD_EMAILS,
-                                  errors.TOO_MANY_EMAILS):
-            shareform.find(".share-to-errors").children().hide()
-            return
-        # lastly, check the captcha.
-        elif shareform.has_errors("captcha", errors.BAD_CAPTCHA):
             return
         elif shareform.has_errors("ratelimit", errors.RATELIMIT):
             return
 
-        if not link.subreddit_slow.can_view(c.user):
+        subreddit = link.subreddit_slow
+
+        if subreddit.quarantine or not subreddit.can_view(c.user):
             return abort(403, 'forbidden')
 
-        emails, users = emails
-        jquery.things(link._fullname).set_text(".share", _("shared"))
-        shareform.html(format_html("<div class='clearleft'></div>"
-                                   "<p class='error'>%s</p>",
-                                   _("your link has been shared.")))
+        emails, users = share_to
+        link_title = _force_unicode(link.title)
 
         if getattr(link, "promoted", None) and link.disable_comments:
-            message = message + "\n\n" if message else ""
-            message += '\n%s\n\n%s\n\n' % (link.title, link.url)
+            message = blockquote_text(message) + "\n\n" if message else ""
+            message += '\n%s\n\n%s\n\n' % (link_title, link.url)
             email_message = pm_message = message
         else:
-            message = message + "\n\n" if message else ""
-            message += '\n%s\n' % link.title
+            message = blockquote_text(message) + "\n\n" if message else ""
+            message += '\n%s\n' % link_title
 
-            urlparts = (get_domain(cname=c.cname, subreddit=False),
-                        link._id36)
-            url = "http://%s/tb/%s" % urlparts
-            url_parser = UrlParser(url)
-            url_parser.update_query(ref="share", ref_source="email")
-            email_source_url = url_parser.unparse()
-            url_parser.update_query(ref_source="pm")
-            pm_source_url = url_parser.unparse()
-
-            message_body = '\n%(source_url)s\n\n'
+            message_body = '\n'
 
             # Deliberately not translating this, as it'd be in the
             # sender's language
@@ -2000,17 +2129,14 @@ class ApiController(RedditController):
 
             message_body += '%(comments_url)s'
             email_message = message + message_body % {
-                    "source_url": email_source_url,
                     "comments_url": email_comments_url,
                 }
             pm_message = message + message_body % {
-                    "source_url": pm_source_url,
                     "comments_url": pm_comments_url,
                 }
         
         # E-mail everyone
-        emailer.share(link, emails, from_name = share_from or "",
-                      body = email_message or "", reply_to = reply_to or "")
+        emailer.share(link, emails, body=email_message or "")
 
         # Send the PMs
         subject = "%s has shared a link with you!" % c.user.name
@@ -2083,8 +2209,7 @@ class ApiController(RedditController):
                else None)
 
         queries.queue_vote(user, thing, dir, request.ip, vote_info=vote_info,
-                           store=store, cheater=c.cheater,
-                           event_data=g.events.event_base(request, c))
+            store=store, cheater=c.cheater)
 
     @require_oauth2_scope("modconfig")
     @validatedForm(VSrModerator(perms='config'),
@@ -2127,9 +2252,6 @@ class ApiController(RedditController):
             form.find('.errors').hide()
             form.set_text(".status", _('saved'))
             form.set_html(".errors ul", "")
-            if wr:
-                description = wiki.modactions.get('config/stylesheet')
-                ModAction.create(c.site, c.user, 'wikirevise', description)
 
         jquery.apply_stylesheet(parsed)
 
@@ -2334,6 +2456,9 @@ class ApiController(RedditController):
 
         """
 
+        if c.site.quarantine:
+            abort(403)
+
         # default error list (default values will reset the errors in
         # the response if no error is raised)
         errors = dict(BAD_CSS_NAME = "", IMAGE_ERROR = "")
@@ -2537,8 +2662,7 @@ class ApiController(RedditController):
             'wikimode',
         ]
 
-        if feature.is_enabled('default_sort'):
-            keyword_fields.append('suggested_comment_sort')
+        keyword_fields.append('suggested_comment_sort')
 
         kw = {k: v for k, v in kw.iteritems() if k in keyword_fields}
 
@@ -2604,6 +2728,8 @@ class ApiController(RedditController):
         if kw['hide_ads'] and not can_set_hide_ads:
             form.set_error(errors.GOLD_ONLY_SR_REQUIRED, 'hide_ads')
             c.errors.add(errors.GOLD_ONLY_SR_REQUIRED, field='hide_ads')
+        elif not can_set_hide_ads and sr:
+            kw['hide_ads'] = sr.hide_ads
 
         can_set_employees_only = c.user.employee
         if kw['type'] == 'employees_only' and not can_set_employees_only:
@@ -2658,10 +2784,9 @@ class ApiController(RedditController):
             sr._commit()
 
             Subreddit.subscribe_defaults(c.user)
-            # make sure this user is on the admin list of that site!
-            if sr.add_subscriber(c.user):
-                sr._incr('_ups', 1)
+            sr.add_subscriber(c.user)
             sr.add_moderator(c.user)
+
             if not sr.hide_contributors:
                 sr.add_contributor(c.user)
             redir = sr.path + "about/edit/?created=true"
@@ -2683,6 +2808,10 @@ class ApiController(RedditController):
             if not sr.domain:
                 del kw['css_on_cname']
 
+            if sr.quarantine:
+                del kw['allow_top']
+                del kw['show_media']
+
             #notify ads if sr in a collection changes over_18 to true
             if kw.get('over_18', False) and not sr.over_18:
                 collections = []
@@ -2697,7 +2826,11 @@ class ApiController(RedditController):
                     emailer.sales_email(msg)
 
             # do not clobber these fields if absent in request
-            no_clobber = ('community_rules', 'key_color', 'related_subreddits')
+            no_clobber = (
+                'community_rules',
+                'key_color',
+                'related_subreddits',
+            )
 
             for k, v in kw.iteritems():
                 if getattr(sr, k, None) != v:
@@ -2747,6 +2880,9 @@ class ApiController(RedditController):
         if getattr(thing, "promoted", None):
             return
 
+        if thing._deleted:
+            return
+
         filtered = thing._spam
         kw = {'target': thing}
 
@@ -2769,22 +2905,14 @@ class ApiController(RedditController):
                         banner=c.user.name,
                         train_spam=train_spam)
 
-        modified_thing = None
-        if isinstance(thing, Link):
-            modified_thing = thing
-        elif isinstance(thing, Comment):
-            modified_thing = Link._byID(thing.link_id)
-
-        if modified_thing:
-            set_last_modified(modified_thing, 'comments')
-            LastModified.touch(modified_thing._fullname, 'Comments')
-
         if isinstance(thing, (Link, Comment)):
             sr = thing.subreddit_slow
             action = 'remove' + thing.__class__.__name__.lower()
             ModAction.create(sr, c.user, action, **kw)
 
-        if isinstance(thing, Comment):
+        if isinstance(thing, Link):
+            sr.remove_sticky(thing)
+        elif isinstance(thing, Comment):
             queries.unnotify(thing)
 
 
@@ -2823,6 +2951,9 @@ class ApiController(RedditController):
             sr = thing.subreddit_slow
             action = 'approve' + thing.__class__.__name__.lower()
             ModAction.create(sr, c.user, action, **kw)
+
+        if isinstance(thing, Comment) and insert:
+            queries.renotify(thing)
 
     @require_oauth2_scope("modposts")
     @noresponse(VUser(), VModhash(),
@@ -3037,13 +3168,25 @@ class ApiController(RedditController):
     @noresponse(VUser(),
                 VModhash(),
                 things = VByName('id', multiple = True))
+    @api_doc(api_section.messages)
     def POST_collapse_message(self, things):
+        """Collapse a message
+
+        See also: [/api/uncollapse_message](#POST_uncollapse_message)
+
+        """
         self.collapse_handler(things, True)
 
     @noresponse(VUser(),
                 VModhash(),
                 things = VByName('id', multiple = True))
+    @api_doc(api_section.messages)
     def POST_uncollapse_message(self, things):
+        """Uncollapse a message
+
+        See also: [/api/collapse_message](#POST_collapse_message)
+
+        """
         self.collapse_handler(things, False)
 
     @require_oauth2_scope("privatemessages")
@@ -3135,15 +3278,20 @@ class ApiController(RedditController):
                                        parent = parent, skip = False)
         else:
             builder = UserMessageBuilder(c.user, parent = parent, skip = False)
+
         listing = Listing(builder).listing()
+
         a = []
         for item in listing.things:
             a.append(item)
-            for x in item.child.things:
-                a.append(x)
+            if hasattr(item, "child"):
+                for x in item.child.things:
+                    a.append(x)
+
         for item in a:
             if hasattr(item, "child"):
                 item.child = None
+
         jquery.things(parent._fullname).parent().replace_things(a, False, True)
 
     @require_oauth2_scope("read")
@@ -3388,32 +3536,102 @@ class ApiController(RedditController):
 
         if not sr:
             return abort(404, 'not found')
-        elif action == "sub" and not sr.can_comment(c.user):
+        elif action == "sub" and not sr.can_view(c.user):
+            return abort(403, 'permission denied')
+        elif isinstance(sr, FakeSubreddit):
             return abort(403, 'permission denied')
 
-        try:
-            Subreddit.subscribe_defaults(c.user)
+        Subreddit.subscribe_defaults(c.user)
 
-            if action == "sub":
-                SubredditParticipationByAccount.mark_participated(c.user, sr)
+        if action == "sub":
+            SubredditParticipationByAccount.mark_participated(c.user, sr)
 
-                if sr.add_subscriber(c.user):
-                    sr._incr('_ups', 1)
-                else:
-                    # tried to subscribe but user was already subscribed
-                    pass
+            if not sr.is_subscriber(c.user):
+                sr.add_subscriber(c.user)
+        else:
+            if sr.is_subscriber(c.user):
+                sr.remove_subscriber(c.user)
             else:
-                if sr.remove_subscriber(c.user):
-                    sr._incr('_ups', -1)
-                else:
-                    # tried to unsubscribe but user was not subscribed
-                    return abort(404, 'not found')
-            sr.update_search_index(boost_only=True)
-        except CreationError:
-            # This only seems to happen when someone is pounding on the
-            # subscribe button or the DBs are really lagged; either way,
-            # some other proc has already handled this subscribe request.
+                # tried to unsubscribe but user was not subscribed
+                return abort(404, 'not found')
+        sr.update_search_index(boost_only=True)
+
+    @validatedForm(
+        VAdmin(),
+        VModhash(),
+        subreddit=VByName('subreddit'),
+        quarantine=VBoolean('quarantine'),
+        subject=VLength('subject', 1000),
+        body=VMarkdownLength('body', max_length=10000),
+    )
+    def POST_quarantine(self, form, jquery, subreddit, quarantine, subject, body):
+        if subreddit.quarantine == quarantine:
             return
+
+        subreddit.quarantine = quarantine
+        subreddit._commit()
+        system_user = Account.system_user()
+        kw = dict(
+            sr_id36=subreddit._id36,
+            mod_id36=system_user._id36,
+            action="editsettings",
+            details="quarantine",
+        )
+        ma = ModAction(**kw)
+        ma._commit()
+
+        if config['r2.import_private']:
+            from r2admin.lib.admin_utils import record_admin_event
+            if quarantine:
+                record_admin_event('quarantine', page="subreddit_page",
+                    target_thing=subreddit)
+            else:
+                record_admin_event('unquarantine', page="subreddit_page",
+                    target_thing=subreddit)
+
+        if body.strip():
+            send_system_message(subreddit, subject, body,
+                distinguished='admin', repliable=False)
+
+        # Refresh the CSS since images aren't allowed
+        stylesheet_contents = subreddit.fetch_stylesheet_source()
+        css_errors, parsed = subreddit.parse_css(stylesheet_contents)
+        subreddit.change_css(stylesheet_contents, parsed, author=system_user)
+        jquery.refresh()
+
+    @require_oauth2_scope("subscribe")
+    @noresponse(
+        VUser(),
+        VModhash(),
+        sr=VSRByName('sr_name'),
+    )
+    def POST_quarantine_optout(self, sr):
+        """Opt out from a quarantined subreddit"""
+        if not sr:
+            return abort(404, 'not found')
+        else:
+            g.events.quarantine_event('quarantine_opt_out', sr,
+                request=request, context=c)
+            QuarantinedSubredditOptInsByAccount.opt_out(c.user, sr)
+        return self.redirect('/')
+
+    @require_oauth2_scope("subscribe")
+    @noresponse(
+        VUser(),
+        VModhash(),
+        sr=VSRByName('sr_name'),
+    )
+    def POST_quarantine_optin(self, sr):
+        """Opt in to a quarantined subreddit"""
+        if not sr:
+            return abort(404, 'not found')
+        elif not c.user.email_verified:
+            return abort(403, 'email not verified')
+        else:
+            g.events.quarantine_event('quarantine_opt_in', sr,
+                request=request, context=c)
+            QuarantinedSubredditOptInsByAccount.opt_in(c.user, sr)
+        return self.redirect('/r/%s' % sr.name)
 
     @validatedForm(VAdmin(),
                    VModhash(),
@@ -3556,11 +3774,28 @@ class ApiController(RedditController):
         jquery('.tagline .id-%s' % user._fullname).parent().html(unflair)
 
     @require_oauth2_scope("modflair")
-    @validate(VSrModerator(perms='flair'),
-              VModhash(),
-              flair_csv = nop('flair_csv'))
+    @validate(
+        VSrModerator(perms='flair'),
+        VModhash(),
+        flair_csv=nop("flair_csv",
+            docs={"flair_csv": "comma-seperated flair information"}),
+    )
     @api_doc(api_section.flair, uses_site=True)
     def POST_flaircsv(self, flair_csv):
+        """Change the flair of multiple users in the same subreddit with a
+        single API call.
+
+        Requires a string 'flair_csv' which has up to 100 lines of the form
+        '`user`,`flairtext`,`cssclass`' (Lines beyond the 100th are ignored).
+
+        If both `cssclass` and `flairtext` are the empty string for a given
+        `user`, instead clears that user's flair.
+
+        Returns an array of objects indicating if each flair setting was 
+        applied, or a reason for the failure.
+
+        """
+        
         limit = 100  # max of 100 flair settings per call
         results = FlairCsv()
         # encode to UTF-8, since csv module doesn't fully support unicode
@@ -3751,6 +3986,9 @@ class ApiController(RedditController):
                    flair_template = VFlairTemplateByID('flair_template_id'))
     @api_doc(api_section.flair, uses_site=True)
     def POST_deleteflairtemplate(self, form, jquery, flair_template):
+        if not flair_template:
+            return self.abort404()
+
         idx = FlairTemplateBySubredditIndex.by_sr(c.site._id)
         if idx.delete_by_id(flair_template._id):
             jquery('#%s' % flair_template._id).parent().remove()
@@ -3770,9 +4008,11 @@ class ApiController(RedditController):
 
     @csrf_exempt
     @require_oauth2_scope("flair")
-    @validate(VUser(),
-              user = VFlairAccount('name'),
-              link = VFlairLink('link'))
+    @validate(
+        VUser(),
+        user=VFlairAccount('name'),
+        link=VFlairLink('link'),
+    )
     @api_doc(api_section.flair, uses_site=True)
     def POST_flairselector(self, user, link):
         """Return information about a users's flair options.
@@ -3780,26 +4020,37 @@ class ApiController(RedditController):
         If `link` is given, return link flair options.
         Otherwise, return user flair options for this subreddit.
 
-        The signed in user's flair is also returned.
+        The logged in user's flair is also returned.
         Subreddit moderators may give a user by `name` to instead
         retrieve that user's flair.
 
         """
+
         if link:
             if not (c.user_is_admin or link.can_flair_slow(c.user)):
                 abort(403)
 
-            return FlairSelector(link=link, site=link.subreddit_slow).render()
+            site = link.subreddit_slow
+            user = c.user
+            return FlairSelector(user, site, link).render()
+        else:
+            if isinstance(c.site, FakeSubreddit):
+                abort(403)
+            else:
+                site = c.site
 
-        if user and not (c.user_is_admin
-                         or c.site.is_moderator_with_perms(c.user, 'flair')):
-            # ignore user parameter if c.user is not mod/admin
-            user = None
-        # Don't leak old flair for deleted users
-        if user and user._deleted:
-            abort(403)
+            if user:
+                if (user != c.user and
+                        not c.user_is_admin and
+                        not site.is_moderator_with_perms(c.user, 'flair')):
+                    abort(403)
+            else:
+                user = c.user
 
-        return FlairSelector(user=user).render()
+            if user._deleted:
+                abort(403)
+
+            return FlairSelector(user, site).render()
 
     @require_oauth2_scope("flair")
     @validatedForm(VUser(),
@@ -3816,11 +4067,13 @@ class ApiController(RedditController):
             subreddit = link.subreddit_slow
             if not (c.user_is_admin or link.can_flair_slow(c.user)):
                 abort(403)
-        else:
+        elif user:
             flair_type = USER_FLAIR
             subreddit = c.site
             if not (c.user_is_admin or user.can_flair_in_sr(c.user, subreddit)):
                 abort(403)
+        else:
+            return self.abort404()
 
         if flair_template_id:
             try:
@@ -4024,20 +4277,6 @@ class ApiController(RedditController):
 
         jquery('.gadget').show().find('.click-gadget').html(
             spaceCompress(content))
-
-    @csrf_exempt
-    @noresponse()
-    def POST_tb_commentspanel_show(self):
-        # this preference is allowed for non-logged-in users
-        c.user.pref_frame_commentspanel = True
-        c.user._commit()
-
-    @csrf_exempt
-    @noresponse()
-    def POST_tb_commentspanel_hide(self):
-        # this preference is allowed for non-logged-in users
-        c.user.pref_frame_commentspanel = False
-        c.user._commit()
 
     @csrf_exempt
     @require_oauth2_scope("read")
@@ -4476,6 +4715,7 @@ class ApiController(RedditController):
                                   skip=True)
         listing = LinkListing(builder, nextprev=False).listing()
         promote.add_trackers(listing.things, c.site)
+        promote.update_served(listing.things)
         if listing.things:
             w = listing.things[0]
             w.num = ""
@@ -4510,7 +4750,7 @@ class ApiController(RedditController):
 
     @validatedForm(VUser(),
                    VModhash(),
-                   action=VOneOf("type", recommend.FEEDBACK_ACTIONS),
+                   action=VOneOf("type", FEEDBACK_ACTIONS),
                    srs=VSRByNames("srnames"))
     def POST_rec_feedback(self, form, jquery, action, srs):
         if form.has_errors("type", errors.INVALID_OPTION):

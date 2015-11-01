@@ -20,7 +20,9 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 
 class World(object):
@@ -68,6 +70,12 @@ class World(object):
     def current_oauth_client(self):
         client = self.stacked_proxy_safe_get(c, 'oauth2_client', None)
         return getattr(client, '_id', None)
+
+    def current_loid(self):
+        cookies = self.stacked_proxy_safe_get(request, 'cookies')
+        if not cookies:
+            return None
+        return cookies.get("loid", None)
 
     def is_admin(self, user):
         if not user or not hasattr(user, 'name'):

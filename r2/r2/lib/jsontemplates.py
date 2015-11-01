@@ -29,10 +29,11 @@ from r2.config import feature
 from r2.config.extensions import get_api_subtype
 from r2.lib.filters import spaceCompress, safemarkdown, _force_unicode
 from r2.models import Account, Report, Trophy
-from r2.models.subreddit import SubSR
 from r2.models.token import OAuth2Scope, extra_oauth2_scope
 import time, pytz
-from pylons import c, g, response
+from pylons import response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.models.wiki import ImagesByWikiPage
@@ -241,7 +242,7 @@ class ThingJsonTemplate(JsonTemplate):
             return distinguished
 
         if attr in ["num_reports", "report_reasons", "banned_by", "approved_by"]:
-            if c.user_is_loggedin and thing.user_is_moderator:
+            if c.user_is_loggedin and thing.can_ban:
                 if attr == "num_reports":
                     return thing.reported
                 elif attr == "report_reasons":
@@ -275,7 +276,7 @@ class ThingJsonTemplate(JsonTemplate):
 
 class SubredditJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
-        accounts_active="accounts_active",
+        accounts_active="accounts_active_count",
         banner_img="banner_img",
         banner_size="banner_size",
         collapse_deleted_comments="collapse_deleted_comments",
@@ -290,12 +291,14 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         icon_img="icon_img",
         icon_size="icon_size",
         # key_color="key_color",
+        lang="lang",
         over18="over_18",
         public_description="public_description",
         public_description_html="public_description_html",
         public_traffic="public_traffic",
         # related_subreddits="related_subreddits",
         hide_ads="hide_ads",
+        quarantine="quarantine",
         submission_type="link_type",
         submit_link_label="submit_link_label",
         submit_text_label="submit_text_label",
@@ -303,9 +306,11 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         submit_text_html="submit_text_html",
         subreddit_type="type",
         subscribers="_ups",
+        suggested_comment_sort="suggested_comment_sort",
         title="title",
         url="path",
         user_is_banned="is_banned",
+        user_is_muted="is_muted",
         user_is_contributor="is_contributor",
         user_is_moderator="is_moderator",
         user_is_subscriber="is_subscriber",
@@ -353,11 +358,9 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         if attr not in self._public_attrs and not thing.can_view(c.user):
             return None
 
-        if attr == "_ups" and thing.hide_subscribers:
+        if (attr == "_ups" and
+                (thing.hide_subscribers or thing.hide_num_users_info)):
             return 0
-        # Don't return accounts_active counts in /subreddits
-        elif (attr == "accounts_active" and isinstance(c.site, SubSR)):
-            return None
         elif attr == 'description_html':
             return safemarkdown(thing.description)
         elif attr == 'public_description_html':
@@ -377,6 +380,10 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         elif attr == 'is_banned':
             if c.user_is_loggedin:
                 return thing.banned
+            return None
+        elif attr == 'is_muted':
+            if c.user_is_loggedin:
+                return thing.muted
             return None
         elif attr == 'submit_text_html':
             return safemarkdown(thing.submit_text)
@@ -475,6 +482,7 @@ class TrimmedSubredditJsonTemplate(SubredditJsonTemplate):
         subscribers="_ups",
         url="path",
         user_is_banned="is_banned",
+        user_is_muted="is_muted",
         user_is_contributor="is_contributor",
         user_is_moderator="is_moderator",
         user_is_subscriber="is_subscriber",
@@ -482,7 +490,7 @@ class TrimmedSubredditJsonTemplate(SubredditJsonTemplate):
 
     def thing_attr(self, thing, attr):
         if attr in ('is_banned', 'is_contributor', 'is_moderator',
-                    'is_subscriber'):
+                'is_subscriber', 'is_muted'):
             # can't use SubredditJsonTemplate.thing_attr for these attributes
             # because it depends on the thing being a fully built/wrapped object
             # that has run through Subreddit.add_props
@@ -609,10 +617,12 @@ class LinkJsonTemplate(ThingJsonTemplate):
         edited="editted",
         gilded="gildings",
         hidden="hidden",
+        hide_score="hide_score",
         is_self="is_self",
         likes="likes",
         link_flair_css_class="flair_css_class",
         link_flair_text="flair_text",
+        locked="locked",
         media="media_object",
         media_embed="media_embed",
         num_comments="num_comments",
@@ -621,6 +631,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         mod_reports="mod_reports",
         user_reports="user_reports",
         over_18="over_18",
+        quarantine="quarantine",
         permalink="permalink",
         removal_reason="admin_takedown",
         saved="saved",
@@ -686,56 +697,58 @@ class LinkJsonTemplate(ThingJsonTemplate):
             return not thing.votable
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
+    @staticmethod
+    def generate_image_links(preview_object, censor_nsfw=False):
+        # Determine which previews would be feasible with our given dims
+        source_width = preview_object['width']
+        source_height = preview_object['height']
+        source_ratio = float(source_height) / source_width
+
+        preview_resolutions = []
+        for w in LinkJsonTemplate.PREVIEW_RESOLUTIONS:
+            if w > source_width:
+                continue
+
+            url = g.image_resizing_provider.resize_image(
+                preview_object, w, censor_nsfw,
+                LinkJsonTemplate.PREVIEW_MAX_RATIO)
+            h = int(w * source_ratio)
+            preview_resolutions.append({
+                "url": url,
+                "width": w,
+                "height": h,
+            })
+
+        url = g.image_resizing_provider.resize_image(
+            preview_object, censor_nsfw=censor_nsfw)
+
+        return {
+            "source": {
+                "url": url,
+                "width": source_width,
+                "height": source_height,
+            },
+            "resolutions": preview_resolutions,
+        }
+
     def raw_data(self, thing):
         d = ThingJsonTemplate.raw_data(self, thing)
 
         if c.permalink_page:
             d["upvote_ratio"] = thing.upvote_ratio
 
-        if feature.is_enabled('default_sort'):
-            d['suggested_sort'] = thing.sort_if_suggested()
+        d['suggested_sort'] = thing.sort_if_suggested()
 
-        preview_object = getattr(thing, 'preview_object', None)
-        if feature.is_enabled('link_preview') and preview_object:
-            source_width = preview_object['width']
-            source_height = preview_object['height']
-            source_ratio = float(source_height) / source_width
-
-            def generate_image_links(censor_nsfw=False):
-                # Determine which previews would be feasible with our given dims
-                preview_resolutions = []
-                for w in self.PREVIEW_RESOLUTIONS:
-                    if w > source_width:
-                        continue
-
-                    url = g.image_resizing_provider.resize_image(
-                        preview_object, w, censor_nsfw, self.PREVIEW_MAX_RATIO)
-                    h = int(w * source_ratio)
-                    preview_resolutions.append({
-                        "url": url,
-                        "width": w,
-                        "height": h,
-                    })
-
-                d['post_hint'] = thing.post_hint
-                url = g.image_resizing_provider.resize_image(
-                    preview_object, censor_nsfw=censor_nsfw)
-
-                return {
-                    "source": {
-                        "url": url,
-                        "width": source_width,
-                        "height": source_height,
-                    },
-                    "resolutions": preview_resolutions,
-                }
-
+        preview_object = thing.preview_image
+        if preview_object:
             d['preview'] = {}
-            images = generate_image_links()
+            d['post_hint'] = thing.post_hint
+            images = self.generate_image_links(preview_object)
             images['id'] = preview_object['uid']
             images['variants'] = {}
             if thing.nsfw:
-                images['variants']['nsfw'] = generate_image_links(censor_nsfw=True)
+                images['variants']['nsfw'] = self.generate_image_links(
+                    preview_object, censor_nsfw=True)
             d['preview']['images'] = [images]
 
         return d
@@ -849,7 +862,7 @@ class CommentJsonTemplate(ThingTemplate):
         if hasattr(item, "action_type"):
             data["action_type"] = item.action_type
 
-        if c.user_is_loggedin and item.user_is_moderator:
+        if c.user_is_loggedin and item.can_ban:
             data["num_reports"] = item.reported
             data["report_reasons"] = Report.get_reasons(item)
 
@@ -870,6 +883,9 @@ class CommentJsonTemplate(ThingTemplate):
             data["banned_by"] = None
 
         if c.profilepage:
+            data["quarantine"] = item.subreddit.quarantine
+            data["over_18"] = item.link.is_nsfw
+
             data["link_title"] = item.link.title
             data["link_author"] = item.link_author.name
 
@@ -1143,6 +1159,10 @@ class BannedTableItemJsonTemplate(RelTableItemJsonTemplate):
     )
 
 
+class MutedTableItemJsonTemplate(RelTableItemJsonTemplate):
+    pass
+
+
 class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
     _data_attrs_ = RelTableItemJsonTemplate.data_attrs(
         mod_permissions="permissions",
@@ -1363,6 +1383,7 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
         submit_text='site.submit_text',
         subreddit_id='site._fullname',
         subreddit_type='site.type',
+        suggested_comment_sort="site.suggested_comment_sort",
         title='site.title',
         wiki_edit_age='site.wiki_edit_age',
         wiki_edit_karma='site.wiki_edit_karma',

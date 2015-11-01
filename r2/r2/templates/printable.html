@@ -105,6 +105,8 @@ ${self.RenderPrintable()}
       rowclass += " gilded"
     if hasattr(what, "user_gilded") and what.user_gilded:
       rowclass += " user-gilded"
+    if not getattr(what, "archived", False) and getattr(what, "locked", False):
+      rowclass += " locked"
     if getattr(what, "stickied", False):
       rowclass += " stickied"
     if getattr(what, "is_controversial", False):
@@ -160,6 +162,9 @@ ${self.RenderPrintable()}
       selflink = ""
  %>
 <div class="${self.thing_css_class(thing)} ${self.thing_css_rowclass(thing)} ${unsafe(cls)} ${selflink}"
+    %if not getattr(thing, 'deleted', False) or getattr(thing, 'can_ban', False):
+      id="thing_${thing._fullname}"
+    %endif
     ${thing.display} onclick="click_thing(this)"
     ${unsafe(self.thing_data_attributes(thing))}>
   <p class="parent">
@@ -209,14 +214,10 @@ ${self.RenderPrintable()}
    arrow_type = "up" if dir > 0 else "down"
    arrow_class = arrow_type + ("mod" if mod else "")
    login_class = "login-required" if not g.read_only_mode else ""
+   archived_class = "archived" if not getattr(thing, 'votable', True) else ""
 %>
-  <div ${classes("arrow", arrow_class, login_class)}
+  <div ${classes("arrow", arrow_class, login_class, archived_class)}
     %if not g.read_only_mode:
-       %if getattr(thing, "votable", True):
-         onclick="$(this).vote(r.config.vote_hash, null, event)"
-       %else:
-         onclick="$(this).show_unvotable_message()"
-       %endif
        role="button"
        % if dir > 0:
        aria-label="${_("upvote")}"

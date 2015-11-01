@@ -262,51 +262,57 @@ rate_limit = (function() {
     };
 })()
 
+$.fn.updateThing = function(update) {
+    var $thing = $(this);
+    var $entry = $thing.children('.entry');
 
-$.fn.vote = function(vh, callback, event, ui_only) {
-    /* for vote to work, $(this) should be the clicked arrow */
-    if (reddit.logged && $(this).hasClass("arrow")) {
-        var dir = ( $(this).hasClass(up_cls) ? 1 :
-                    ( $(this).hasClass(down_cls) ? -1 : 0) );
-        var things = $(this).all_things_by_id();
-        /* find all arrows of things on the page */
-        var arrows = things.children().not(".child").find('.arrow');
+    if ('friend' in update) {
+        var label = '<a class="friend" title="friend" href="/prefs/friends">F</a>';
+        
+        $entry.find('.author')
+              .addClass('friend')
+              .next('.userattrs')
+              .each(function() {
+                    var $this = $(this);
 
-        /* set the new arrow states */
-        var u_before = (dir == 1) ? up_cls : upmod_cls;
-        var u_after  = (dir == 1) ? upmod_cls : up_cls;
-        arrows.filter("."+u_before).removeClass(u_before).addClass(u_after);
-
-        var d_before = (dir == -1) ? down_cls : downmod_cls;
-        var d_after  = (dir == -1) ? downmod_cls : down_cls;
-        arrows.filter("."+d_before).removeClass(d_before).addClass(d_after);
-
-        /* let the user vote only if they are logged in */
-        if(reddit.logged) {
-            things.each(function() {
-                    var entry =  $(this).find(".entry:first, .midcol:first");
-                    if(dir > 0)
-                        entry.addClass('likes')
-                            .removeClass('dislikes unvoted');
-                    else if(dir < 0)
-                        entry.addClass('dislikes')
-                            .removeClass('likes unvoted');
-                    else
-                        entry.addClass('unvoted')
-                            .removeClass('likes dislikes');
-                });
-            if(!$.defined(ui_only)) {
-                var thing_id = things.filter(":first").thing_id();
-                /* IE6 hack */
-                vh += event ? "" : ("-" + thing_id); 
-                $.request("vote", {id: thing_id, dir : dir, vh : vh});
-            }
-        }
-        /* execute any callbacks passed in.  */
-        if(callback) 
-            callback(things, dir);
+                    if (!$this.html()) {
+                        $this.html(' [' + label + ']');
+                    } else if (!$this.find('.friend').length) {
+                        $this.find('a:first').before(label + ',');
+                    }
+              });
     }
-};
+
+    if ('voted' in update) {
+        var $midcol = $thing.children('.midcol');
+        var $up = $midcol.find('.arrow.'+up_cls+', .arrow.'+upmod_cls);
+        var $down = $midcol.find('.arrow.'+down_cls+', .arrow.'+downmod_cls);
+        var $elems = $($midcol).add($entry);
+
+        switch (update.voted) {
+            case 1:
+                $elems.addClass('likes').removeClass('dislikes unvoted');
+                $up.removeClass(up_cls).addClass(upmod_cls);
+                $down.removeClass(downmod_cls).addClass(down_cls);
+            break;
+            case -1:
+                $elems.addClass('dislikes').removeClass('likes unvoted');
+                $up.removeClass(upmod_cls).addClass(up_cls);
+                $down.removeClass(down_cls).addClass(downmod_cls);
+            break;
+            default:
+                $elems.addClass('unvoted').removeClass('likes dislikes');
+                $up.removeClass(upmod_cls).addClass(up_cls);
+                $down.removeClass(downmod_cls).addClass(down_cls);
+        }
+    }
+
+    if ('saved' in update) {
+        $thing.addClass('saved');
+        $entry.find('.save-button a')
+              .text(r._('unsave'));
+    }
+}
 
 $.fn.show_unvotable_message = function() {
   $(this).thing().find(".entry:first .unvotable-message").css("display", "inline-block");
@@ -324,19 +330,24 @@ $.fn.all_things_by_id = function() {
     return this.thing().add( $.things(this.thing_id()) );
 };
 
-$.fn.thing_id = function(class_filter) {
-    class_filter = $.with_default(class_filter, "thing");
+$.fn.thing_id = function() {
     /* Returns the (reddit) ID of the current element's thing */
-    var t = (this.hasClass("thing")) ? this : this.thing();
-    if(class_filter != "thing") {
-        t = t.find("." + class_filter + ":first");
+    var t = this.hasClass('thing') ? this : this.thing();
+
+    if (!t.length) {
+        return '';
     }
-    if(t.length) {
-        var id = $.grep(t.get(0).className.match(/\S+/g),
-                        function(i) { return i.match(/^id-/); }); 
-        return (id.length) ? id[0].slice(3, id[0].length) : "";
+
+    var id = t.data('fullname');
+
+    if (id) {
+        return id;
     }
-    return "";
+
+    // fallback to old, clunky way of getting id from class
+    id = $.grep(t.get(0).className.match(/\S+/g),
+                function(i) { return i.match(/^id-/); }); 
+    return (id.length) ? id[0].slice(3, id[0].length) : '';
 };
 
 $.things = function() {
@@ -348,15 +359,6 @@ $.things = function() {
     var sel = $.map(arguments, function(x) { return ".thing.id-" + x; })
        .join(", ");
     return $(sel);
-};
-
-$.fn.same_author = function() {
-    var aid = $(this).thing_id("author");
-    var ids = [];
-    $(".author.id-" + aid).each(function() {
-            ids.push(".thing.id-" + $(this).thing_id());
-        });
-    return $(ids.join(", "));
 };
 
 $.fn.things = function() {

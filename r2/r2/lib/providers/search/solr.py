@@ -30,7 +30,8 @@ import time
 import urllib
 
 from lxml import etree
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.lib import amqp, filters
 from r2.lib.configparse import ConfigValue
@@ -695,7 +696,7 @@ class SolrSubredditUploader(SolrSearchUploader):
         return SubredditFields(thing).fields()
 
     def should_index(self, thing):
-        return getattr(thing, 'author_id', None) != -1
+        return thing._id != Subreddit.get_promote_srid()
 
  
 def _progress_key(item):

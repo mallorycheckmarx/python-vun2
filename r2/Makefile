@@ -55,7 +55,7 @@ clean_pyx:
 	rm -f $(PYX_C_FILES) $(PYX_SO_FILES)
 
 #################### i18n
-STRINGS_FILE := r2/lib/strings.py
+STRINGS_FILE := r2/lib/generate_strings.py
 GENERATED_STRINGS_FILE := r2/lib/generated_strings.py
 
 .PHONY: i18n clean_i18n
@@ -65,7 +65,7 @@ i18n: $(GENERATED_STRINGS_FILE)
 	$(PYTHON) setup.py extract_messages --input-dirs=r2,$(PLUGIN_I18N_PATHS) -o $(POTFILE)
 
 $(GENERATED_STRINGS_FILE): $(STRINGS_FILE)
-	paster run standalone $(STRINGS_FILE) -c "generate_strings()" > $(GENERATED_STRINGS_FILE)
+	$(PYTHON) $(STRINGS_FILE) > $(GENERATED_STRINGS_FILE)
 
 clean_i18n:
 	rm -f $(GENERATED_STRINGS_FILE)
@@ -186,7 +186,7 @@ define JS_MODULE_TEMPLATE
 $(JS_MODULE_OUTPUTS_$(1)): $(JS_MODULE_DEPS_$(1)) r2/lib/js.py
 	# remove mangled output symlinks, similar to above.
 	rm -f $(JS_MODULE_OUTPUTS_$(1))
-	paster run standalone r2/lib/js.py -c "build_module('$(1)')"
+	$(PYTHON) r2/lib/js.py build_module "$(1)"
 	touch $$@
 endef
 

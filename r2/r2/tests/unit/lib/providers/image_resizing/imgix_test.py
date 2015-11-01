@@ -21,12 +21,10 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.tests import stage_for_paste
-stage_for_paste()
-
 import unittest
+from r2.tests import RedditTestCase
 
-from pylons import g
+from pylons import app_globals as g
 
 from r2.lib.providers.image_resizing import NotLargeEnough
 from r2.lib.providers.image_resizing.imgix import ImgixImageResizingProvider

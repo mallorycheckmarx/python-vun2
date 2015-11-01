@@ -19,7 +19,10 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import c, g
+
+from pylons import tmpl_context as c
+from pylons import app_globals as g
+
 from r2.config import feature
 from r2.lib.menus import CommentSortMenu
 from r2.lib.validator.validator import (
@@ -37,7 +40,6 @@ from r2.models import Subreddit, NotFound
 # Non-preference validators should be added to to the controller
 # method directly (see PostController.POST_options)
 PREFS_VALIDATORS = dict(
-    pref_frame=VBoolean('frame'),
     pref_clickgadget=VBoolean('clickgadget'),
     pref_organic=VBoolean('organic'),
     pref_newwindow=VBoolean('newwindow'),
@@ -84,6 +86,8 @@ PREFS_VALIDATORS = dict(
     pref_default_theme_sr=VSRByName("theme_selector", False),
     pref_other_theme=VSRByName("other_theme", False),
     pref_beta=VBoolean('beta'),
+    pref_legacy_search=VBoolean('legacy_search'),
+    pref_threaded_modmail=VBoolean('threaded_modmail', False),
 )
 
 
@@ -94,7 +98,8 @@ def set_prefs(user, prefs):
             # to the beta subreddit.
             try:
                 sr = Subreddit._by_name(g.beta_sr)
-                sr.add_subscriber(user)
+                if not sr.is_subscriber(user):
+                    sr.add_subscriber(user)
             except NotFound:
                 g.log.warning("Could not find beta subreddit '%s'. It may "
                               "need to be created." % g.beta_sr)
@@ -103,7 +108,7 @@ def set_prefs(user, prefs):
 
 def filter_prefs(prefs, user):
     # replace stylesheet_override with other_theme if it doesn't exist
-    if feature.is_enabled_for('stylesheets_everywhere', user):
+    if feature.is_enabled('stylesheets_everywhere', user=user):
         if not prefs["pref_default_theme_sr"]:
             if prefs.get("pref_other_theme", False):
                 prefs["pref_default_theme_sr"] = prefs["pref_other_theme"]
@@ -135,7 +140,7 @@ def filter_prefs(prefs, user):
         prefs['pref_highlight_new_comments'] = True
 
     # check stylesheet override
-    if feature.is_enabled_for('stylesheets_everywhere', user):
+    if feature.is_enabled('stylesheets_everywhere', user=user):
         override_sr = prefs['pref_default_theme_sr']
         if not override_sr:
             del prefs['pref_default_theme_sr']

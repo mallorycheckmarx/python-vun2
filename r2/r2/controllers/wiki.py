@@ -20,7 +20,10 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import request, g, c
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
+
 from reddit_base import RedditController
 from r2.controllers.oauth2 import require_oauth2_scope
 from r2.lib.utils import url_links_builder
@@ -86,7 +89,7 @@ page_descriptions = {
     "config/stylesheet": _("This page is the subreddit stylesheet, changes here apply to the subreddit css"),
     "config/submit_text": _("The contents of this page appear on the submit page"),
     "config/sidebar": _("The contents of this page appear on the subreddit sidebar"),
-    "config/description": _("The contents of this page appear in the public subreddit description"),
+    "config/description": _("The contents of this page appear in the public subreddit description and when the user does not have access to the subreddit"),
     "config/automoderator": _("This page is used to configure AutoModerator for the subreddit, please see [the full documentation](/wiki/automoderator/full-documentation) for information"),
 }
 
@@ -99,6 +102,8 @@ RENDERERS_BY_PAGE = {
     "config/sidebar": "reddit",
     "config/stylesheet": "stylesheet",
     "config/submit_text": "reddit",
+    "toolbox": "rawcode",
+    "usernotes": "rawcode",
 }
 
 class WikiController(RedditController):
@@ -409,7 +414,8 @@ class WikiApiController(WikiController):
 
                 if page.special or c.is_wiki_mod:
                     description = modactions.get(page.name, 'Page %s edited' % page.name)
-                    ModAction.create(c.site, c.user, 'wikirevise', details=description)
+                    ModAction.create(c.site, c.user, "wikirevise",
+                        details=description, description=reason)
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
         return json.dumps({})

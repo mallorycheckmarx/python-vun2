@@ -54,6 +54,9 @@ from r2.lib.cache import (
     Permacache,
     SelfEmptyingCache,
     StaleCacheChain,
+    TransitionalCache,
+    validate_size_error,
+    validate_size_warn,
 )
 from r2.lib.configparse import ConfigValue, ConfigValueParser
 from r2.lib.contrib import ipaddress
@@ -169,7 +172,6 @@ class Globals(object):
             'MIN_RATE_LIMIT_KARMA',
             'MIN_RATE_LIMIT_COMMENT_KARMA',
             'HOT_PAGE_AGE',
-            'QUOTA_THRESHOLD',
             'ADMIN_COOKIE_TTL',
             'ADMIN_COOKIE_MAX_IDLE',
             'OTP_COOKIE_TTL',
@@ -180,7 +182,6 @@ class Globals(object):
             'max_comment_parent_walk',
             'max_sr_images',
             'num_serendipity',
-            'sr_dropdown_threshold',
             'comment_visits_period',
             'butler_max_mentions',
             'min_membership_create_community',
@@ -213,6 +214,7 @@ class Globals(object):
             'RL_AVG_REQ_PER_SEC',
             'RL_OAUTH_AVG_REQ_PER_SEC',
             'RL_LOGIN_AVG_PER_SEC',
+            'RL_LOGIN_IP_AVG_PER_SEC',
             'RL_SHARE_AVG_PER_SEC',
         ],
 
@@ -237,6 +239,7 @@ class Globals(object):
             'trust_local_proxies',
             'shard_link_vote_queues',
             'shard_commentstree_queues',
+            'authnet_validate',
             'ENFORCE_RATELIMIT',
             'RL_SITEWIDE_ENABLED',
             'RL_OAUTH_SITEWIDE_ENABLED',
@@ -254,6 +257,7 @@ class Globals(object):
             'srmembercaches',
             'relcaches',
             'ratelimitcaches',
+            'hardcache_memcaches',
             'cassandra_seeds',
             'automatic_reddits',
             'hardcache_categories',
@@ -274,6 +278,11 @@ class Globals(object):
             'mobile_ad_image_size',
         ],
 
+        ConfigValue.tuple_of(ConfigValue.float): [
+            'ios_versions',
+            'android_versions',
+        ],
+
         ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
             'agents',
         ],
@@ -290,6 +299,7 @@ class Globals(object):
             'community_email',
             'smtp_server',
             'events_collector_url',
+            'events_collector_test_url',
             'search_provider',
         ],
 
@@ -308,6 +318,7 @@ class Globals(object):
             'gold_year_price',
             'cpm_selfserve',
             'cpm_selfserve_geotarget_metro',
+            'cpm_selfserve_geotarget_country',
             'cpm_selfserve_collection',
         ],
     }
@@ -331,7 +342,11 @@ class Globals(object):
             'spotlight_interest_nosub_p',
             'gold_revenue_goal',
             'invalid_key_sample_rate',
-            'events_collector_sample_rate',
+            'events_collector_vote_sample_rate',
+            'events_collector_poison_sample_rate',
+            'events_collector_mod_sample_rate',
+            'events_collector_quarantine_sample_rate',
+            'https_cert_testing_probability',
         ],
         ConfigValue.tuple: [
             'fastlane_links',
@@ -359,12 +374,15 @@ class Globals(object):
         ConfigValue.dict(ConfigValue.str, ConfigValue.float): [
             'pennies_per_server_second',
         ],
+        ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
+            'employee_approved_clients',
+        ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.choice(**PERMISSIONS)): [
             'employees',
         ],
     }
 
-    def __init__(self, global_conf, app_conf, paths, **extra):
+    def __init__(self, config, global_conf, app_conf, paths, **extra):
         """
         Globals acts as a container for objects available throughout
         the life of the application.
@@ -372,6 +390,9 @@ class Globals(object):
         One instance of Globals is created by Pylons during
         application initialization and is available during requests
         via the 'g' variable.
+
+        ``config``
+            The PylonsConfig object passed in from ``config/environment.py``
 
         ``global_conf``
             The same variable used throughout ``config/middleware.py``
@@ -416,8 +437,8 @@ class Globals(object):
         
         # turn on for language support
         self.lang = getattr(self, 'site_lang', 'en')
-        self.languages, self.lang_name = \
-            get_active_langs(default_lang=self.lang)
+        self.languages, self.lang_name = get_active_langs(
+            config, default_lang=self.lang)
 
         all_languages = self.lang_name.keys()
         all_languages.sort()
@@ -439,10 +460,11 @@ class Globals(object):
             raise AttributeError
 
     def setup(self):
+        self.env = 'unit_test' if 'test' in sys.argv[0] else ''
         self.queues = queues.declare_queues(self)
 
         self.extension_subdomains = dict(
-            m="mobile",
+            simple="mobile",
             i="compact",
             api="api",
             rss="rss",
@@ -501,7 +523,7 @@ class Globals(object):
             self.read_only_mode = True
 
         origin_prefix = self.domain_prefix + "." if self.domain_prefix else ""
-        self.origin = "http://" + origin_prefix + self.domain
+        self.origin = self.default_scheme + "://" + origin_prefix + self.domain
 
         self.trusted_domains = set([self.domain])
         if self.https_endpoint:
@@ -583,6 +605,8 @@ class Globals(object):
 
         self.RL_LOGIN_MAX_REQS = int(self.config["RL_LOGIN_AVG_PER_SEC"] *
                                      self.RL_RESET_SECONDS)
+        self.RL_LOGIN_IP_MAX_REQS = int(self.config["RL_LOGIN_IP_AVG_PER_SEC"] *
+                                        self.RL_RESET_SECONDS)
         self.RL_SHARE_MAX_REQS = int(self.config["RL_SHARE_AVG_PER_SEC"] *
                                      self.RL_RESET_SECONDS)
 
@@ -617,8 +641,6 @@ class Globals(object):
             self.secrets = extract_secrets(parser)
             self.throttles = tuple()  # immutable since it's not real
 
-        self.startup_timer.intermediate("zookeeper")
-
         ################# PRIVILEGED USERS
         self.admins = PermissionFilteredEmployeeList(
             self.live_config, type="admin")
@@ -627,86 +649,120 @@ class Globals(object):
         self.employees = PermissionFilteredEmployeeList(
             self.live_config, type="employee")
 
+        # Store which OAuth clients employees may use, the keys are just for
+        # readability.
+        self.employee_approved_clients = \
+            self.live_config["employee_approved_clients"].values()
+
+        self.startup_timer.intermediate("zookeeper")
+
         ################# MEMCACHE
         num_mc_clients = self.num_mc_clients
 
         # the main memcache pool. used for most everything.
-        memcache = CMemcache(
+        memcaches = CMemcache(
+            "main",
             self.memcaches,
             min_compress_len=1400,
             num_clients=num_mc_clients,
-            binary=True,
+            validators=[validate_size_error],
         )
 
         # a pool just used for @memoize results
         memoizecaches = CMemcache(
+            "memoize",
             self.memoizecaches,
             min_compress_len=50 * 1024,
             num_clients=num_mc_clients,
-            binary=True,
+            validators=[validate_size_error],
         )
 
         # a pool just for srmember rels
         srmembercaches = CMemcache(
+            "srmember",
             self.srmembercaches,
             min_compress_len=96,
             num_clients=num_mc_clients,
-            binary=True,
+            validators=[validate_size_error],
         )
 
         # a pool just for rels
         relcaches = CMemcache(
+            "rel",
             self.relcaches,
             min_compress_len=96,
             num_clients=num_mc_clients,
-            binary=True,
+            validators=[validate_size_error],
         )
 
         ratelimitcaches = CMemcache(
+            "ratelimit",
             self.ratelimitcaches,
             min_compress_len=96,
             num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         # a smaller pool of caches used only for distributed locks.
-        # TODO: move this to ZooKeeper
-        self.lock_cache = CMemcache(self.lockcaches,
-                                    binary=True,
-                                    num_clients=num_mc_clients)
+        self.lock_cache = CMemcache(
+            "lock",
+            self.lockcaches,
+            num_clients=num_mc_clients,
+            validators=[validate_size_error],
+        )
         self.make_lock = make_lock_factory(self.lock_cache, self.stats)
 
         # memcaches used in front of the permacache CF in cassandra.
         # XXX: this is a legacy thing; permacache was made when C* didn't have
         # a row cache.
-        permacache_memcaches = CMemcache(self.permacache_memcaches,
+        permacache_memcaches = CMemcache("perma",
+                                         self.permacache_memcaches,
                                          min_compress_len=1400,
-                                         num_clients=num_mc_clients)
+                                         num_clients=num_mc_clients,
+                                         validators=[],)
 
         # the stalecache is a memcached local to the current app server used
         # for data that's frequently fetched but doesn't need to be fresh.
         if self.stalecaches:
-            stalecaches = CMemcache(self.stalecaches,
-                                    binary=True,
-                                    num_clients=num_mc_clients)
+            stalecaches = CMemcache(
+                "stale",
+                self.stalecaches,
+                num_clients=num_mc_clients,
+                validators=[validate_size_error],
+            )
         else:
             stalecaches = None
 
         # rendercache holds rendered partial templates.
         rendercaches = CMemcache(
+            "render",
             self.rendercaches,
             noreply=True,
             no_block=True,
             num_clients=num_mc_clients,
             min_compress_len=480,
+            validators=[],
         )
 
         # pagecaches hold fully rendered pages
         pagecaches = CMemcache(
+            "page",
             self.pagecaches,
             noreply=True,
             no_block=True,
             num_clients=num_mc_clients,
             min_compress_len=1400,
+            validators=[],
+        )
+
+        # hardcache memcache pool
+        hardcache_memcaches = CMemcache(
+            "hardcache",
+            self.hardcache_memcaches,
+            binary=True,
+            min_compress_len=1400,
+            num_clients=num_mc_clients,
+            validators=[validate_size_error],
         )
 
         self.startup_timer.intermediate("memcache")
@@ -750,10 +806,10 @@ class Globals(object):
             self.cache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                memcache,
+                memcaches,
             )
         else:
-            self.cache = MemcacheChain((localcache_cls(), memcache))
+            self.cache = CacheChain((localcache_cls(), memcaches))
         cache_chains.update(cache=self.cache)
 
         if stalecaches:
@@ -832,7 +888,7 @@ class Globals(object):
         # hardcache is used for various things that tend to expire
         # TODO: replace hardcache w/ cassandra stuff
         self.hardcache = HardcacheChain(
-            (localcache_cls(), memcache, HardCache(self)),
+            (localcache_cls(), hardcache_memcaches, HardCache(self)),
             cache_negative_results=True,
         )
         cache_chains.update(hardcache=self.hardcache)
@@ -843,6 +899,9 @@ class Globals(object):
         # 'g'
         def reset_caches():
             for name, chain in cache_chains.iteritems():
+                if isinstance(chain, TransitionalCache):
+                    chain = chain.read_chain
+
                 chain.reset()
                 if isinstance(chain, StaleCacheChain):
                     chain.stats = StaleCacheStats(self.stats, name)
@@ -910,8 +969,13 @@ class Globals(object):
     def load_db_params(self):
         self.databases = tuple(ConfigValue.to_iter(self.config.raw_data['databases']))
         self.db_params = {}
+        self.predefined_type_ids = {}
         if not self.databases:
             return
+
+        if self.env == 'unit_test':
+            from mock import MagicMock
+            return MagicMock()
 
         dbm = db_manager.db_manager()
         db_param_names = ('name', 'db_host', 'db_user', 'db_pass', 'db_port',
@@ -954,7 +1018,6 @@ class Globals(object):
             return params, flags
 
         prefix = 'db_table_'
-        self.predefined_type_ids = {}
         for k, v in self.config.raw_data.iteritems():
             if not k.startswith(prefix):
                 continue

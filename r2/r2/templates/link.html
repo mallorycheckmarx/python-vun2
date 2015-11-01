@@ -21,8 +21,9 @@
 ###############################################################################
 
 <%!
-   from pylons import g
+   from pylons import app_globals as g
 
+   from r2.config import feature
    from r2.lib.filters import conditional_websafe
    from r2.lib.template_helpers import (
        get_domain,
@@ -35,7 +36,7 @@
 %>
  
 <%inherit  file="printable.html"/>
-<%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp, thumbnail_img" />
+<%namespace file="utils.html" import="plain_link, thing_timestamp, edited, nsfw_stamp, quarantine_stamp, thumbnail_img" />
 <%namespace file="printablebuttons.html" import="toggle_button" />
  
 <%def name="numcol()">
@@ -60,9 +61,6 @@
      %if c.cname:
        target="_top"
      %endif
-     %if thing.mousedown_url:
-       onmousedown="save_href($(this));this.href='${thing.mousedown_url}'"
-     %endif
      >
      ${caller.body()}
   </a>
@@ -70,9 +68,14 @@
 
 <%def name="bottom_buttons()">
   <ul class="flat-list buttons">
+    %if thing.quarantine:
+      <li>
+        <span class="quarantine-stamp stamp">${quarantine_stamp()}</span>
+      </li>
+    %endif
     %if thing.nsfw:
-     <li class="rounded nsfw-stamp stamp">
-      ${nsfw_stamp()}
+     <li>
+       <span class="nsfw-stamp stamp">${nsfw_stamp()}</span>
      </li>
     %endif
     ${self.buttons()}
@@ -160,8 +163,8 @@
 </%def>
 
 <%def name="subreddit()" buffered="True">
-  ${plain_link('/r/' + thing.subreddit.name, thing.subreddit_path, sr_path = False,
-               cname = False, _class = "subreddit hover may-blank")}
+  ${plain_link('/r/' + thing.subreddit.name, thing.subreddit_path, _sr_path=False,
+               nocname=True, _class="subreddit hover may-blank")}
 </%def>
 
 <%def name="midcol(display=True, cls = '')">
@@ -183,9 +186,13 @@
 </%def>
 
 
-<%def name="domain()">
+<%def name="domain(link=True)">
   <span class="domain">
-    (<a href="${thing.domain_path}">${thing.domain_str}</a>)
+    %if link:
+      (<a href="${thing.domain_path}">${thing.domain_str}</a>)
+    %else:
+      (${thing.domain_str})
+    %endif
     %if c.user_is_admin:
       &#32;
       <a class="adminbox" href="/admin/domain/${thing.domain}">d</a>

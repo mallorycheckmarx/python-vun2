@@ -20,6 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+import random
+
 from r2.config import feature
 from r2.lib.db.thing     import Thing, Relation, NotFound
 from r2.lib.db.operators import lower
@@ -36,7 +38,9 @@ from r2.models.last_modified import LastModified
 from r2.models.modaction import ModAction
 from r2.models.trylater import TryLater
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 import time
 import hashlib
@@ -46,7 +50,6 @@ from datetime import datetime, timedelta
 import bcrypt
 import hmac
 import hashlib
-import itertools
 from pycassa.system_manager import ASCII_TYPE
 
 
@@ -70,8 +73,6 @@ class Account(Thing):
     _int_prop_suffix = '_karma'
     _essentials = ('name', )
     _defaults = dict(pref_numsites = 25,
-                     pref_frame = False,
-                     pref_frame_commentspanel = False,
                      pref_newwindow = False,
                      pref_clickgadget = 5,
                      pref_store_visits = False,
@@ -112,6 +113,7 @@ class Account(Thing):
                      pref_public_server_seconds=False,
                      pref_ignore_suggested_sort=False,
                      pref_beta=False,
+                     pref_legacy_search=False,
                      mobile_compress = False,
                      mobile_thumbnail = True,
                      reported = 0,
@@ -148,6 +150,7 @@ class Account(Thing):
                      selfserve_cpm_override_pennies=None,
                      pref_show_gold_expiration=False,
                      admin_takedown_strikes=0,
+                     pref_threaded_modmail=False,
                      )
     _preference_attrs = tuple(k for k in _defaults.keys()
                               if k.startswith("pref_"))
@@ -256,19 +259,22 @@ class Account(Thing):
     def update_last_visit(self, current_time):
         from admintools import apply_updates
 
-        apply_updates(self)
+        timer = g.stats.get_timer("account.update_last_visit")
+        timer.start()
+
+        apply_updates(self, timer)
 
         prev_visit = LastModified.get(self._fullname, "Visit")
+        timer.intermediate("get_last_modified")
+
         if prev_visit and current_time - prev_visit < timedelta(days=1):
+            timer.intermediate("set_last_modified.noop")
+            timer.stop()
             return
 
-        g.log.debug ("Updating last visit for %s from %s to %s" %
-                    (self.name, prev_visit, current_time))
-
         LastModified.touch(self._fullname, "Visit")
-
-        self.last_visit = int(time.time())
-        self._commit()
+        timer.intermediate("set_last_modified.done")
+        timer.stop()
 
     def make_cookie(self, timestr=None):
         if not self._loaded:
@@ -404,6 +410,15 @@ class Account(Thing):
         #   - None: (the default) the user is not a mod anywhere
         return self.modmsgtime is not None
 
+    def is_mutable(self, subreddit):
+        # Don't allow muting of other mods in the subreddit
+        if subreddit.is_moderator(self):
+            return False
+
+        # Don't allow muting of u/reddit or u/AutoModerator
+        return not (self == self.system_user() or
+            self == self.automoderator_user())
+
     # Used on the goldmember version of /prefs/friends
     @memoize('account.friend_rels')
     def friend_rels_cache(self):
@@ -445,6 +460,25 @@ class Account(Thing):
         rel = rels[friend._id]
         rel.note = note
         rel._commit()
+
+    def _get_friend_ids_by(self, data_value_name, limit):
+        friend_ids = self.friend_ids()
+        if len(friend_ids) <= limit:
+            return friend_ids
+        
+        with g.stats.get_timer("friends_query.%s" % data_value_name):
+            result = self.sort_ids_by_data_value(
+                friend_ids, data_value_name, limit=limit, desc=True)
+
+        return result.fetchall()
+
+    @memoize("get_recently_submitted_friend_ids", time=10*60)
+    def get_recently_submitted_friend_ids(self, limit=100):
+        return self._get_friend_ids_by("last_submit_time", limit)
+
+    @memoize("get_recently_commented_friend_ids", time=10*60)
+    def get_recently_commented_friend_ids(self, limit=100):
+        return self._get_friend_ids_by("last_comment_time", limit)
 
     def delete(self, delete_message=None):
         self.delete_message = delete_message
@@ -532,125 +566,26 @@ class Account(Thing):
         else:
             return None
 
-    def quota_key(self, kind):
-        return "user_%s_quotas-%s" % (kind, self.name)
-
-    def clog_quota(self, kind, item):
-        key = self.quota_key(kind)
-        fnames = g.hardcache.get(key, [])
-        fnames.append(item._fullname)
-        g.hardcache.set(key, fnames, 86400 * 30)
-
-    def quota_baskets(self, kind):
-        from r2.models.admintools import filter_quotas
-        key = self.quota_key(kind)
-        fnames = g.hardcache.get(key)
-
-        if not fnames:
-            return None
-
-        unfiltered = Thing._by_fullname(fnames, data=True, return_dict=False)
-
-        baskets, new_quotas = filter_quotas(unfiltered)
-
-        if new_quotas is None:
-            pass
-        elif new_quotas == []:
-            g.hardcache.delete(key)
-        else:
-            g.hardcache.set(key, new_quotas, 86400 * 30)
-
-        return baskets
-
-    # Needs to take the *canonicalized* version of each email
-    # When true, returns the reason
-    @classmethod
-    def which_emails_are_banned(cls, canons):
-        banned = hooks.get_hook('email.get_banned').call(canons=canons)
-
-        # Create a dictionary like:
-        # d["abc.def.com"] = [ "bob@abc.def.com", "sue@abc.def.com" ]
-        rv = {}
-        canons_by_domain = {}
-
-        # email.get_banned will return a list of lists (one layer from the
-        # hooks system, the second from the function itself); chain them
-        # together for easy processing
-        for canon in itertools.chain(*banned):
-            rv[canon] = None
-
-            at_sign = canon.find("@")
-            domain = canon[at_sign+1:]
-            canons_by_domain.setdefault(domain, [])
-            canons_by_domain[domain].append(canon)
-
-        # Hand off to the domain ban system; it knows in the case of
-        # abc@foo.bar.com to check foo.bar.com, bar.com, and .com
-        from r2.models.admintools import bans_for_domain_parts
-
-        for domain, canons in canons_by_domain.iteritems():
-            for d in bans_for_domain_parts(domain):
-                if d.no_email:
-                    rv[canon] = "domain"
-
-        return rv
-
     def set_email(self, email):
         old_email = self.email
         self.email = email
         self._commit()
         AccountsByCanonicalEmail.update_email(self, old_email, email)
 
-    def has_banned_email(self):
-        canon = self.canonical_email()
-        which = self.which_emails_are_banned((canon,))
-        return which.get(canon, None)
-
     def canonical_email(self):
         return canonicalize_email(self.email)
-
-    def cromulent(self):
-        """Return whether the user has validated their email address and
-           passes some rudimentary 'not evil' checks."""
-
-        if not self.email_verified:
-            return False
-
-        if self.has_banned_email():
-            return False
-
-        # Otherwise, congratulations; you're cromulent!
-        return True
-
-    def quota_limits(self, kind):
-        if kind != 'link':
-            raise NotImplementedError
-
-        if self.cromulent():
-            return dict(hour=3, day=10, week=50, month=150)
-        else:
-            return dict(hour=1,  day=3,  week=5,   month=5)
-
-    def quota_full(self, kind):
-        limits = self.quota_limits(kind)
-        baskets = self.quota_baskets(kind)
-
-        if baskets is None:
-            return None
-
-        total = 0
-        filled_quota = None
-        for key in ('hour', 'day', 'week', 'month'):
-            total += len(baskets[key])
-            if total >= limits[key]:
-                filled_quota = key
-
-        return filled_quota
 
     @classmethod
     def system_user(cls):
         try:
             return cls._by_name(g.system_user)
+        except (NotFound, AttributeError):
+            return None
+
+    @classmethod
+    def automoderator_user(cls):
+        try:
+            return cls._by_name(g.automoderator_account)
         except (NotFound, AttributeError):
             return None
 
@@ -741,17 +676,6 @@ class Account(Thing):
                 (self.name in g.admins or
                  self.name in g.sponsors or
                  self.name in g.employees))
-
-    @property
-    def https_forced(self):
-        """Return whether this account may only be used via HTTPS."""
-        if feature.is_enabled_for("require_https", self):
-            return True
-        return self.pref_force_https
-
-    @property
-    def uses_toolbar(self):
-        return not self.https_forced and self.pref_frame
 
     @property
     def has_gold_subscription(self):
@@ -1080,3 +1004,39 @@ class SubredditParticipationByAccount(tdb_cassandra.DenormalizedRelation):
     @classmethod
     def mark_participated(cls, account, subreddit):
         cls.create(account, [subreddit])
+
+
+class QuarantinedSubredditOptInsByAccount(tdb_cassandra.DenormalizedRelation):
+    _use_db = True
+    _last_modified_name = 'QuarantineSubredditOptin'
+    _read_consistency_level = tdb_cassandra.CL.QUORUM
+    _write_consistency_level = tdb_cassandra.CL.QUORUM
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+        "default_validation_class": tdb_cassandra.DATE_TYPE,
+    }
+    _connection_pool = 'main'
+    _views = []
+
+    @classmethod
+    def value_for(cls, thing1, thing2):
+        return datetime.now(g.tz)
+
+    @classmethod
+    def opt_in(cls, account, subreddit):
+        if subreddit.quarantine:
+            cls.create(account, subreddit)
+
+    @classmethod
+    def opt_out(cls, account, subreddit):
+        if subreddit.is_subscriber(account):
+            subreddit.remove_subscriber(account)
+        cls.destroy(account, subreddit)
+
+    @classmethod
+    def is_opted_in(cls, user, subreddit):
+        try:
+            r = cls.fast_query(user, [subreddit])
+        except tdb_cassandra.NotFound:
+            return False
+        return (user, subreddit) in r

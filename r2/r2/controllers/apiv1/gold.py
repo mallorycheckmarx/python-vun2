@@ -19,7 +19,10 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import c, g, request
+
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope
@@ -82,6 +85,10 @@ class APIv1GoldController(OAuth2OnlyController):
     def POST_gild(self, target):
         if not isinstance(target, (Comment, Link)):
             err = RedditError("NO_THING_ID")
+            self.on_validation_error(err)
+
+        if target.subreddit_slow.quarantine:
+            err = RedditError("GILDING_NOT_ALLOWED")
             self.on_validation_error(err)
 
         self._gift_using_creddits(

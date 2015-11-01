@@ -29,7 +29,8 @@ import uuid
 from pycassa import NotFoundException
 from pycassa.system_manager import INT_TYPE, UTF8_TYPE
 from pycassa.util import convert_uuid_to_time
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _, ungettext
 from datetime import datetime
 import sqlalchemy as sa
@@ -82,7 +83,8 @@ gold_table = sa.Table('reddit_gold', METADATA,
                       sa.Column('secret', sa.String, nullable = True),
                       sa.Column('account_id', sa.String, nullable = True),
                       sa.Column('days', sa.Integer, nullable = True),
-                      sa.Column('subscr_id', sa.String, nullable = True))
+                      sa.Column('subscr_id', sa.String, nullable = True),
+                      sa.Column('gilding_type', sa.String, nullable = True))
 
 indices = [index_str(gold_table, 'status', 'status'),
            index_str(gold_table, 'date', 'date'),
@@ -279,18 +281,21 @@ def create_claimed_gold (trans_id, payer_email, paying_id,
                                 account_id=account_id,
                                 date=date)
 
-def create_gift_gold (giver_id, recipient_id, days, date, signed, note=None):
-    trans_id = "X%d%s-%s" % (int(time()), randstr(2), 'S' if signed else 'A')
 
-    gold_table.insert().execute(trans_id=trans_id,
-                                status="gift",
-                                paying_id=giver_id,
-                                payer_email='',
-                                pennies=0,
-                                days=days,
-                                account_id=recipient_id,
-                                date=date,
-                                secret=note,
+def create_gift_gold(giver_id, recipient_id, days, date,
+            signed, note=None, gilding_type=None):
+    trans_id = "X%d%s-%s" % (int(time()), randstr(2), 'S' if signed else 'A')
+    gold_table.insert().execute(
+        trans_id=trans_id,
+        status="gift",
+        paying_id=giver_id,
+        payer_email='',
+        pennies=0,
+        days=days,
+        account_id=recipient_id,
+        date=date,
+        secret=note,
+        gilding_type=gilding_type,
     )
 
 

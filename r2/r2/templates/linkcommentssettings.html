@@ -77,7 +77,7 @@
   </li>
 </%def>
 
-%if feature.is_enabled('default_sort') and thing.can_edit:
+%if thing.can_edit:
   %if thing.suggested_sort == thing.sort:
     <% clear_suggested_sort() %>
   %else:
@@ -107,13 +107,17 @@
   %endif
 %endif
 
-%if thing.can_edit and thing.link.is_self:
+%if thing.can_edit:
   %if thing.stickied:
     ${ynbutton(_("unsticky this post"), _("unstickied"), "set_subreddit_sticky",
       hidden_data=dict(id=thing.link._fullname, state=False))}
+  %elif thing.stickies_full:
+    ${ynbutton(_("sticky this post"), _("stickied"), "set_subreddit_sticky",
+      question=_("sticky this? (bottom sticky will be replaced)"),
+      hidden_data=dict(id=thing.link._fullname, state=True))}
   %else:
     ${ynbutton(_("sticky this post"), _("stickied"), "set_subreddit_sticky",
-      question=_("sticky this? (any existing sticky will be replaced)"),
+      question=_("sticky this?"),
       hidden_data=dict(id=thing.link._fullname, state=True))}
   %endif
 %endif

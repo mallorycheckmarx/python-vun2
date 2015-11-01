@@ -26,7 +26,7 @@
   font-size: (@font-size / @base-font-keyword-size) * 1em;
 }
 
-
+.md-container-small,
 .md-container {
   font-size: @base-font-keyword;
 }
@@ -75,6 +75,10 @@
   a {
     color: @markdown-color-link;
     text-decoration: none;
+
+    del {
+      color: inherit;
+    }
   }
 
   h6 {
@@ -140,6 +144,7 @@
   code {
     margin: 0 2px;
     white-space: nowrap;
+    word-break: normal;
   }
 
   p {
@@ -285,6 +290,7 @@ code {
   }
 }
 
+.md-container-small .md,
 .side .md {
   @font-base: @font-x-small;
   @line-base: @line-x-small;

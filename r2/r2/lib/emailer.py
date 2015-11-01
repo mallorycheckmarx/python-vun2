@@ -28,7 +28,8 @@ from email.errors import HeaderParseError
 import datetime
 import traceback, sys, smtplib
 
-from pylons import c, g
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 import simplejson as json
 
 from r2.config import feature
@@ -41,15 +42,17 @@ from r2.models.token import EmailVerificationToken, PasswordResetToken
 trylater_hooks = hooks.HookRegistrar()
 
 def _system_email(email, body, kind, reply_to = "", thing = None,
-                  from_address = g.feedback_email):
+                  from_address=g.feedback_email, user=None):
     """
     For sending email from the system to a user (reply address will be
     feedback and the name will be reddit.com)
     """
-    Email.handler.add_to_queue(c.user if c.user_is_loggedin else None,
-                               email, g.domain, from_address,
-                               kind, body = body, reply_to = reply_to,
-                               thing = thing)
+    if user is None and c.user_is_loggedin:
+        user = c.user
+    Email.handler.add_to_queue(user,
+        email, g.domain, from_address, kind,
+        body=body, reply_to=reply_to, thing=thing,
+    )
 
 def _nerds_email(body, from_name, kind):
     """
@@ -123,7 +126,9 @@ def password_email(user):
     _system_email(user.email,
                   PasswordReset(user=user,
                                 passlink=passlink).render(style='email'),
-                  Email.Kind.RESET_PASSWORD)
+                  Email.Kind.RESET_PASSWORD,
+                  user=user,
+                  )
     return True
 
 @trylater_hooks.on('trylater.message_notification_email')
@@ -145,7 +150,7 @@ def message_notification_email(data):
         # In case a user has enabled the preference while it was enabled for
         # them, but we've since turned it off.  We need to explicitly state the
         # user because we're not in the context of an HTTP request from them.
-        if not feature.is_enabled_for('orangereds_as_emails', user):
+        if not feature.is_enabled('orangereds_as_emails', user=user):
             continue
 
         if g.cache.get(MESSAGE_THROTTLE_KEY) > MAX_EMAILS_PER_DAY:
@@ -203,7 +208,9 @@ def password_change_email(user):
 
     return _system_email(user.email,
                          PasswordChangeEmail(user=user).render(style='email'),
-                         Email.Kind.PASSWORD_CHANGE)
+                         Email.Kind.PASSWORD_CHANGE,
+                         user=user,
+                         )
 
 def email_change_email(user):
     """Queues a system email for a email change notification."""
@@ -327,6 +334,10 @@ def opt_in(msg_hash):
 def _promo_email(thing, kind, body = "", **kw):
     from r2.lib.pages import Promo_Email
     a = Account._byID(thing.author_id, True)
+
+    if not a.email:
+        return
+
     body = Promo_Email(link = thing, kind = kind,
                        body = body, **kw).render(style = "email")
     return _system_email(a.email, body, kind, thing = thing,

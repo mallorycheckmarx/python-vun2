@@ -21,7 +21,23 @@ r.analytics = {
       r.analytics.fireFunnelEvent('ads', r.config.ads_virtual_page);
     }
 
-    r.analytics.stripAnalyticsParams();
+    var url = r.config.tracker_url;
+    var params = {};
+
+    if (!r.config.user_id) {
+      var tracker = new redditlib.Tracker();
+      var loggedOutData = tracker.getTrackingData();
+      if (loggedOutData && loggedOutData.loid) {
+        params = {
+            loid: loggedOutData.loid
+        };
+        if (loggedOutData.loidcreated) {
+          params['loidcreated'] = loggedOutData.loidcreated
+        }
+      }
+    }
+
+    r.analytics.firePageTrackingPixel(url, params, r.analytics.stripAnalyticsParams);
   },
 
   _eventPredicates: {},
@@ -95,7 +111,10 @@ r.analytics = {
 
     // if it's for Gold tracking and we have new _ga available
     // then use it to track the event; otherwise, fallback to old version
-    if (options.tracker && '_ga' in window && window._ga.getByName(options.tracker)) {
+    if (options.tracker &&
+        '_ga' in window &&
+        window._ga.getByName &&
+        window._ga.getByName(options.tracker)) {
       window._ga(options.tracker + '.send', 'pageview', {
         'page': page,
         'hitCallback': callback
@@ -207,13 +226,42 @@ r.analytics = {
     );
   },
 
+  firePageTrackingPixel: function(url, params, callback) {
+    if (!url) { return; }
+
+    params = params || {};
+
+    var querystring = [
+      'r=' + Math.random(),
+    ];
+
+    var referrer = document.referrer || '';
+    var referrerDomain = referrer.match(/\/\/([^\/]+)/);
+
+    if (referrerDomain && referrerDomain.length > 1) {
+      querystring.push('referrer_domain=' + encodeURIComponent(referrerDomain[1]));
+    }
+
+    for(var p in params) {
+      if (params.hasOwnProperty(p)) {
+        querystring.push(
+          encodeURIComponent(p) + '=' + encodeURIComponent(params[p])
+        );
+      }
+    }
+
+    var pixel = new Image();
+    pixel.onload = pixel.onerror = callback;
+    pixel.src = url + '&' + querystring.join('&');
+  },
+
   // If we passed along referring tags to this page, after it's loaded, remove them from the URL so that 
   // the user can have a clean, copy-pastable URL. This will also help avoid erroneous analytics if they paste the URL
   // in an email or something.
   stripAnalyticsParams: function() {
     var hasReplaceState = !!(window.history && window.history.replaceState);
     var params = $.url().param();
-    var stripParams = ['ref', 'ref_source'];
+    var stripParams = ['ref', 'ref_source', 'ref_campaign'];
     var strippedParams = _.omit(params, stripParams);
 
     if (hasReplaceState && !_.isEqual(params, strippedParams)) {

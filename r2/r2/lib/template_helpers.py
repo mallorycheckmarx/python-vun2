@@ -22,14 +22,23 @@
 
 import hmac
 import hashlib
+import urllib
 
+from r2.config import feature
 from r2.models import *
-from filters import unsafe, websafe, _force_utf8, conditional_websafe
+from filters import (
+    _force_utf8,
+    conditional_websafe,
+    keep_space,
+    unsafe,
+    websafe,
+)
+from r2.lib.cache_poisoning import make_poisoning_report_mac
 from r2.lib.utils import UrlParser, timeago, timesince, is_subdomain
 
 from r2.lib import hooks
 from r2.lib.static import static_mtime
-from r2.lib import js
+from r2.lib import js, tracking
 
 import babel.numbers
 import simplejson
@@ -40,7 +49,10 @@ import urlparse
 import calendar
 import math
 import time
-from pylons import g, c, request
+
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _, ungettext
 
 static_text_extensions = {
@@ -132,10 +144,30 @@ def js_config(extra_config=None):
     logged = c.user_is_loggedin and c.user.name
     user_id = c.user_is_loggedin and c.user._id
     gold = bool(logged and c.user.gold)
-
     controller_name = request.environ['pylons.routes_dict']['controller']
     action_name = request.environ['pylons.routes_dict']['action']
-    mac = hmac.new(g.secrets["action_name"], controller_name + '.' + action_name, hashlib.sha1)
+    route_name = controller_name + '.' + action_name
+
+    cache_policy = "loggedout_www"
+    if c.user_is_loggedin:
+        cache_policy = "loggedin_www_new"
+
+    # Canary for detecting cache poisoning
+    poisoning_canary = None
+    poisoning_report_mac = None
+    if logged:
+        if "pc" in c.cookies and len(c.cookies["pc"].value) == 2:
+            poisoning_canary = c.cookies["pc"].value
+            poisoning_report_mac = make_poisoning_report_mac(
+                poisoner_canary=poisoning_canary,
+                poisoner_name=logged,
+                poisoner_id=user_id,
+                cache_policy=cache_policy,
+                source="web",
+                route_name=route_name,
+            )
+
+    mac = hmac.new(g.secrets["action_name"], route_name, hashlib.sha1)
     verification = mac.hexdigest()
     cur_subreddit = ""
     if isinstance(c.site, Subreddit) and not c.default_sr:
@@ -166,9 +198,12 @@ def js_config(extra_config=None):
         "extension": c.extension,
         "https_endpoint": is_subdomain(request.host, g.domain) and g.https_endpoint,
         # does the client only want to communicate over HTTPS?
-        "https_forced": c.user.https_forced,
+        "https_forced": feature.is_enabled("force_https"),
         # debugging?
         "debug": g.debug,
+        "poisoning_canary": poisoning_canary,
+        "poisoning_report_mac": poisoning_report_mac,
+        "cache_policy": cache_policy,
         "send_logs": g.live_config["frontend_logging"],
         "server_time": math.floor(time.time()),
         "status_msg": {
@@ -177,6 +212,7 @@ def js_config(extra_config=None):
           "loading": _("loading...")
         },
         "is_fake": isinstance(c.site, FakeSubreddit),
+        "tracker_url": "",  # overridden below if configured
         "adtracker_url": g.adtracker_url,
         "clicktracker_url": g.clicktracker_url,
         "uitracker_url": g.uitracker_url,
@@ -192,10 +228,14 @@ def js_config(extra_config=None):
         "is_sponsor": logged and c.user_is_sponsor,
         "pageInfo": {
           "verification": verification,
-          "actionName": controller_name + '.' + action_name,
+          "actionName": route_name,
         },
         "facebook_app_id": g.live_config["facebook_app_id"],
+        "feature_tumblr_sharing": feature.is_enabled('tumblr_sharing'),
     }
+
+    if g.tracker_url:
+        config["tracker_url"] = tracking.get_pageview_pixel_url()
 
     if g.uncompressedJS:
         config["uncompressedJS"] = True
@@ -373,19 +413,16 @@ def get_domain(cname = False, subreddit = True, no_www = False):
     return domain
 
 def dockletStr(context, type, browser):
-    domain      = get_domain()
-
-    # while site_domain will hold the (possibly) cnamed version
-    site_domain = get_domain(True)
+    site_host = "%s://%s" % (g.default_scheme, get_domain())
 
     if type == "serendipity!":
-        return "http://"+site_domain+"/random"
+        return site_host+"/random"
     elif type == "submit":
-        return ("javascript:location.href='http://"+site_domain+
+        return ("javascript:location.href='"+site_host+
                "/submit?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)")
     elif type == "reddit toolbar":
-        return ("javascript:%20var%20h%20=%20window.location.href;%20h%20=%20'http://" +
-                site_domain + "/s/'%20+%20escape(h);%20window.location%20=%20h;")
+        return ("javascript:%20var%20h%20=%20window.location.href;%20h%20=%20'" +
+                site_host + "/s/'%20+%20escape(h);%20window.location%20=%20h;")
     else:
         # these are the linked/disliked buttons, which we have removed
         # from the UI
@@ -393,13 +430,13 @@ def dockletStr(context, type, browser):
                  "var i=document.getElementById('redstat')||document.createElement('a');"
                  "var s=i.style;s.position='%(position)s';s.top='0';s.left='0';"
                  "s.zIndex='10002';i.id='redstat';"
-                 "i.href='http://%(site_domain)s/submit?url='+u+'&title='+"
+                 "i.href='%(site_host)s/submit?url='+u+'&title='+"
                  "encodeURIComponent(document.title);"
                  "var q=i.firstChild||document.createElement('img');"
-                 "q.src='http://%(domain)s/d/%(type)s.png?v='+Math.random()+'&uh=%(modhash)s&u='+u;"
+                 "q.src='%(site_host)s/d/%(type)s.png?v='+Math.random()+'&uh=%(modhash)s&u='+u;"
                  "i.appendChild(q);document.body.appendChild(i)};b()") %
                 dict(position = "absolute" if browser == "ie" else "fixed",
-                     domain = domain, site_domain = site_domain, type = type,
+                     site_host = site_host, type = type,
                      modhash = c.modhash if c.user else ''))
 
 
@@ -601,11 +638,11 @@ def simplified_timesince(date, include_tense=True):
     if date > timeago("1 minute"):
         return _("just now")
 
-    since = []
-    since.append(timesince(date))
+    since = timesince(date)
     if include_tense:
-        since.append(_("ago"))
-    return " ".join(since)
+        return _("%s ago") % since
+    else:
+        return since
 
 
 def display_link_karma(karma):
@@ -640,12 +677,15 @@ def format_html(format_string, *args, **kwargs):
     return unsafe(format_string % format_args)
 
 
-def _ws(*args, **kwargs):
+def _ws(text, keep_spaces=False):
     """Helper function to get HTML escaped output from gettext"""
-    return websafe(_(*args, **kwargs))
+    if keep_spaces:
+        return keep_space(_(text))
+    else:
+        return websafe(_(text))
 
 
-def _wsf(format_trans, *args, **kwargs):
+def _wsf(format, keep_spaces=True, *args, **kwargs):
     """
     format_html, but with an escaped, translated string as the format str
 
@@ -654,9 +694,10 @@ def _wsf(format_trans, *args, **kwargs):
 
     Example:
 
-      _wsf("Are you %s? %s", name, unsafe(checkbox_html))
+      _wsf("Are you %(name)s? %(box)s", name=name, box=unsafe(checkbox_html))
     """
-    return format_html(_ws(format_trans), *args, **kwargs)
+    format_trans = _ws(format, keep_spaces)
+    return format_html(format_trans, *args, **kwargs)
 
 
 def get_linkflair_css_classes(thing, prefix="linkflair-", on_class="has-linkflair", off_class="no-linkflair"):
@@ -670,3 +711,9 @@ def get_linkflair_css_classes(thing, prefix="linkflair-", on_class="has-linkflai
         return on_class
     else:
         return off_class
+
+
+def update_query(base_url, **kw):
+    parsed = UrlParser(base_url)
+    parsed.update_query(**kw)
+    return parsed.unparse()

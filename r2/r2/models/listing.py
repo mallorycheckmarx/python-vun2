@@ -25,7 +25,8 @@ from link import *
 from vote import *
 from report import *
 from subreddit import DefaultSR, AllSR, Frontpage
-from pylons import i18n, request, g
+from pylons import i18n, request
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.config import feature
@@ -202,6 +203,37 @@ class BannedListing(UserListing):
         return items
 
 
+class MutedListing(UserListing):
+    type = 'muted'
+
+    @classmethod
+    def populate_from_muted(cls, item, muted=None):
+        if not muted:
+            return
+        time = muted.get(item.user.name)
+        if time:
+            delay = time - datetime.now(g.tz)
+            item.muted = max(int(delay.total_seconds()), 0)
+
+    @property
+    def form_title(self):
+        return _("mute users")
+
+    @property
+    def title(self):
+        return _("users muted from"
+                 " /r/%(subreddit)s") % dict(subreddit=c.site.name)
+
+    def get_items(self, *a, **kw):
+        items = UserListing.get_items(self, *a, **kw)
+        wrapped_items = items[0]
+        names = [item.user.name for item in wrapped_items]
+        muted = c.site.get_muted_items(names)
+        for wrapped in wrapped_items:
+            MutedListing.populate_from_muted(wrapped, muted)
+        return items
+
+
 class WikiBannedListing(BannedListing):
     type = 'wikibanned'
 
@@ -307,7 +339,7 @@ class SearchListing(LinkListing):
             self.timing = time.time() - self.builder.start_time
 
         if legacy_render_class:
-            wrapped.render_class = Listing
+            wrapped.render_class = LinkListing
 
         return wrapped
 

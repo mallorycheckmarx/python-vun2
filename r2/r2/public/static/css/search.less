@@ -1,12 +1,13 @@
 @color-body: @color-text-grey;
 @color-meta: @color-dark-grey;
-@color-link: @color-alien-blue;
+@color-link: darken(@color-alien-blue, 5%);
+@color-link-visited: @color-link-purple;
+
 @color-unsubscribe: darken(@color-warning-red, 10%);
 @color-subscribe: darken(@color-green, 10%);
 @color-subscribe-button-focus: @color-white;
 @color-group-header-border: @color-pale-grey;
 
-@color-title: darken(@color-link, 5%);
 @color-subreddit: @color-meta;
 
 @max-width: 750px;
@@ -15,11 +16,12 @@
 @search-font-large: @font-medium;
 @search-font-medium: @font-small;
 @search-font-base: @font-x-small;
+@search-font-small: @font-xx-small;
 @search-line-base: @line-medium;
 @search-line-small: @line-x-small;
 
-.search-font-size(@font:@search-font-base, @line:@search-line-base) {
-  .md-font-size(@search-font-base, @font, @line);
+.search-font-size(@font:@search-font-base, @line:@search-line-base, @base:@search-font-base) {
+  .md-font-size(@base, @font, @line);
 }
 
 .combined-search-page {
@@ -31,10 +33,29 @@
     .md-base-font-size(@search-font-base);
   }
 
+  .search-result.visited {
+    .search-title,
+    .search-link {
+      &, > mark {
+        color: @color-link-visited;
+      }
+    }
+  }
 
   .search-result {
     margin-bottom: @margin-x-large * 1px;
     margin-top: @margin-small * 1px;
+
+    a {
+      &, > mark {
+        color: @color-link;
+      }
+
+      &:visited,
+      &:visited > mark {
+        color: @color-link-visited;
+      }
+    }
 
     &.has-thumbnail {
       .display-flex();
@@ -60,23 +81,17 @@
     .search-result-footer {
       .search-font-size();
       vertical-align: baseline;
-
-      > * {
-        // prevent unstyled children (e.g. spans) from adding to line-height
-        line-height: 0;
-      }
     }
 
     .search-result-header {
       .search-font-size();
 
-      > * {
+      * {
         vertical-align: top;
       }
 
       .search-title {
         font-size: @search-font-large * 1px;
-        color: @color-title;
         margin-right: @margin-x-small * 1px;
       }
 
@@ -88,17 +103,69 @@
     }
 
     .search-result-meta {
-      .search-font-size();
+      .search-font-size(@search-font-small, @search-line-base);
       color: @color-meta;
-      font-size: 12px;
+
+      .search-result-icon {
+        vertical-align: text-bottom;
+      }
+    }
+
+    .search-score {
+      .search-font-size(@search-font-base, @search-font-base, @search-font-small);
+
+      &:after {
+        content: ' •';
+      }
+    }
+
+    .search-comments {
+      font-weight: bold;
+      color: @color-meta;
     }
 
     .search-result-body {
       .search-font-size(@search-font-base, @search-line-small);
       color: @color-body;
-      max-height: 45px;
-      overflow: hidden;
       padding-right: @margin-xxx-large * 1px;
+    }
+
+    .search-expando {
+      overflow: hidden;
+
+      &.collapsed {
+        max-height: 45px;
+        position: relative;
+
+        &:before {
+          bottom: 0;
+          content:'';
+          height: 15px;
+          left: 0;
+          position: absolute;
+          width: 100%;
+
+          .linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 1));
+        }
+      }
+    }
+
+    .search-expando-button {
+      color: @color-link;
+
+      &:hover {
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+      > span {
+        display: none;
+      }
+
+      &.expanded .search-expando-button-label-expanded,
+      &.collapsed .search-expando-button-label-collapsed {
+        display: inline;
+      }
     }
 
     .search-result-footer {
@@ -108,7 +175,6 @@
       white-space: nowrap;
 
       .search-link {
-        color: @color-link;
         margin-left: @margin-x-small * 1px;
       }
     }
@@ -151,6 +217,7 @@
       }
 
       .add, .remove {
+        color: @color-white;
         text-align: center;
         transform: scale(1, 1);
         transition: all 0.15s;
@@ -206,6 +273,14 @@
         font-size: inherit;
       }
     }
+
+    footer .info {
+      color: @color-meta;
+    }
+  }
+
+  .author {
+    margin-right: 0;
   }
 
   .search-result-icon {
@@ -215,6 +290,11 @@
     height: 15px;
     vertical-align: middle;
     width: 16px;
+  }
+
+  .search-result-icon-score {
+    background-image: data-uri('../ambivote-icon.png');
+    background-size: 10px 14px;
   }
 
   .search-result-icon-external {
@@ -307,10 +387,6 @@
 
   .linkflairlabel {
     line-height: 17px;
-  }
-
-  .stamp {
-    text-transform: uppercase;
   }
 
   // undo old styles, remove when unflagged

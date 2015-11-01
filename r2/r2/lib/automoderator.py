@@ -43,7 +43,7 @@ import re
 import traceback
 import yaml
 
-from pylons import g
+from pylons import app_globals as g
 
 from r2.lib import amqp
 from r2.lib.db import queries
@@ -53,7 +53,6 @@ from r2.lib.utils import (
     TimeoutFunction,
     TimeoutFunctionException,
     lowercase_keys_recursively,
-    set_last_modified,
     timeinterval_fromstr,
     tup,
 )
@@ -69,6 +68,7 @@ from r2.models import (
     Message,
     ModAction,
     Report,
+    Subreddit,
     Thing,
     WikiPage,
 )
@@ -476,8 +476,15 @@ class RuleTarget(object):
             valid_targets=(Link, Comment),
             component_type="check",
         ),
-        "set_sticky": RuleComponent(
+        "set_locked": RuleComponent(
             valid_types=bool,
+            valid_targets=Link,
+            component_type="action",
+        ),
+        "set_sticky": RuleComponent(
+            valid_types=(bool, int),
+            valid_values=set(
+                [True, False] + range(1, Subreddit.MAX_STICKIES+1)),
             valid_targets=Link,
             component_type="action",
         ),
@@ -970,19 +977,12 @@ class RuleTarget(object):
             )
 
             # TODO: shouldn't need to do all of this here
-            modified_thing = None
             log_action = None
             if isinstance(item, Link):
-                modified_thing = item
                 log_action = "removelink"
             elif isinstance(item, Comment):
-                modified_thing = data["link"]
                 log_action = "removecomment"
                 queries.unnotify(item)
-
-            if modified_thing:
-                set_last_modified(modified_thing, "comments")
-                LastModified.touch(modified_thing._fullname, "Comments")
 
             if log_action:
                 if self.action_reason:
@@ -1023,22 +1023,29 @@ class RuleTarget(object):
                 item.contest_mode = self.set_contest_mode
                 item._commit()
 
-        if self.set_sticky is not None:
-            already_stickied = data["subreddit"].sticky_fullname == item._fullname
-            if already_stickied != self.set_sticky:
-                if not self.set_sticky:
-                    data["subreddit"].sticky_fullname = None
-                else:
-                    data["subreddit"].sticky_fullname = item._fullname
-                data["subreddit"]._commit()
+        if self.set_locked is not None:
+            if item.locked != self.set_locked:
+                item.locked = self.set_locked
+                item._commit()
 
-                # TODO: shouldn't need to do this here
+                log_action = 'lock' if self.set_locked else 'unlock'
+                ModAction.create(data["subreddit"], ACCOUNT, log_action,
+                    target=item)
+
+        if self.set_sticky is not None:
+            stickied_fullnames = data["subreddit"].get_sticky_fullnames()
+            already_stickied = item._fullname in stickied_fullnames
+            if already_stickied != bool(self.set_sticky):
                 if self.set_sticky:
-                    log_action = "sticky"
+                    # if set_sticky is a bool, don't specify a slot
+                    if isinstance(self.set_sticky, bool):
+                        num = None
+                    else:
+                        num = self.set_sticky
+
+                    data["subreddit"].set_sticky(item, ACCOUNT, num)
                 else:
-                    log_action = "unsticky"
-                ModAction.create(
-                    data["subreddit"], ACCOUNT, log_action, target=item)
+                    data["subreddit"].remove_sticky(item, ACCOUNT)
 
         if self.set_suggested_sort is not None:
             if not item.suggested_sort:
@@ -1394,7 +1401,8 @@ class Rule(object):
             new_comment.distinguished = "yes"
             new_comment.sendreplies = False
             new_comment._commit()
-            queries.queue_vote(ACCOUNT, new_comment, True, None)
+            queries.queue_vote(ACCOUNT, new_comment, dir=True, ip=None,
+                send_event=False)
             queries.new_comment(new_comment, inbox_rel)
 
             g.stats.simple_event("automoderator.comment")

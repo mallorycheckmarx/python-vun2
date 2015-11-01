@@ -48,17 +48,18 @@ from r2.lib.utils import (
     extract_user_mentions,
     iters,
     timeago,
+    to36,
     trunc_string,
     precise_format_timedelta,
 )
-from r2.lib import hooks, organic, sup, trending
+from r2.lib import hooks, organic, trending
 from r2.lib.memoize import memoize
 from r2.lib.validator import *
 import socket
 
 from api_docs import api_doc, api_section
 
-from pylons import g
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from datetime import timedelta
@@ -129,6 +130,9 @@ class ListingController(RedditController):
         self.reverse = reverse
         self.sr_detail = sr_detail
 
+        if c.site.login_required and not c.user_is_loggedin:
+            raise UserRequiredException
+
         self.query_obj = self.query()
         self.builder_obj = self.builder()
 
@@ -175,23 +179,25 @@ class ListingController(RedditController):
         elif isinstance(self.query_obj, (CachedQuery, MergedCachedQuery)):
             builder_cls = IDBuilder
 
-        b = builder_cls(self.query_obj,
-                        num = self.num,
-                        skip = self.skip,
-                        after = self.after,
-                        count = self.count,
-                        reverse = self.reverse,
-                        keep_fn = self.keep_fn(),
-                        sr_detail=self.sr_detail,
-                        wrap = self.builder_wrapper)
-
-        return b
+        builder = builder_cls(
+            self.query_obj,
+            num=self.num,
+            skip=self.skip,
+            after=self.after,
+            count=self.count,
+            reverse=self.reverse,
+            keep_fn=self.keep_fn(),
+            sr_detail=self.sr_detail,
+            wrap=self.builder_wrapper,
+            prewrap_fn=self.prewrap_fn(),
+        )
+        return builder
 
     def keep_fn(self):
         def keep(item):
             wouldkeep = item.keep_item(item)
             if isinstance(c.site, AllSR):
-                if not item.subreddit.allow_top:
+                if not item.subreddit.discoverable:
                     return False
             if getattr(item, "promoted", None) is not None:
                 return False
@@ -199,6 +205,9 @@ class ListingController(RedditController):
                 return False
             return wouldkeep
         return keep
+
+    def prewrap_fn(self):
+        return
 
     def listing(self):
         """Listing to generate from the builder"""
@@ -424,8 +433,14 @@ class HotController(ListingWithPromos):
             return normalized_hot(c.site.kept_sr_ids, obey_age_limit=False,
                                   ageweight=c.site.ageweight)
         else:
-            if c.site.sticky_fullname:
-                link_list = [c.site.sticky_fullname]
+            sticky_fullnames = c.site.get_sticky_fullnames()
+            if sticky_fullnames:
+                # need to use a copy of the list because we add all the other
+                # links into this below, so get_sticky_fullnames() will start
+                # returning a list of all the hot links after this if we
+                # modify it directly
+                link_list = sticky_fullnames[:]
+                
                 wrapped = wrap_links(link_list,
                                      wrapper=self.builder_wrapper,
                                      keep_fn=self.keep_fn(),
@@ -433,10 +448,10 @@ class HotController(ListingWithPromos):
                 # add all other items and decrement count if sticky is visible
                 if wrapped.things:
                     link_list += [l for l in c.site.get_links('hot', 'all')
-                                    if l != c.site.sticky_fullname]
+                                    if l not in sticky_fullnames]
                     if not self.after:
-                        self.count -= 1
-                        self.num += 1
+                        self.count -= len(sticky_fullnames)
+                        self.num += len(sticky_fullnames)
                     return link_list
             
             # no sticky or sticky hidden
@@ -523,9 +538,6 @@ class NewController(ListingWithPromos):
     @require_oauth2_scope("read")
     @listing_api_doc(uri='/new', uses_site=True)
     def GET_listing(self, **env):
-        if request.params.get('sort') == 'rising':
-            return self.redirect(add_sr('/rising'))
-
         return ListingController.GET_listing(self, **env)
 
 class RisingController(NewController):
@@ -554,7 +566,7 @@ class BrowseController(ListingWithPromos):
             oldest = timeago('1 %s' % (str(self.time),))
             def keep(item):
                 if isinstance(c.site, AllSR):
-                    if not item.subreddit.allow_top:
+                    if not item.subreddit.discoverable:
                         return False
                 return item._date > oldest and item.keep_item(item)
             return keep
@@ -628,11 +640,12 @@ class AdsController(SubredditListingController):
 
     def listing(self):
         listing = ListingController.listing(self)
-        promote.add_trackers(listing.things, c.site)
         return listing
 
     def GET_listing(self, *a, **kw):
         self.promos = set()
+        if not c.site.allow_ads:
+            self.abort404()
         return SubredditListingController.GET_listing(self, *a, **kw)
 
 
@@ -789,30 +802,21 @@ class UserController(ListingController):
     def query(self):
         q = None
         if self.where == 'overview':
-            self.check_modified(self.vuser, 'overview')
             q = queries.get_overview(self.vuser, self.sort, self.time)
 
         elif self.where == 'comments':
-            sup.set_sup_header(self.vuser, 'commented')
-            self.check_modified(self.vuser, 'commented')
             q = queries.get_comments(self.vuser, self.sort, self.time)
 
         elif self.where == 'submitted':
-            sup.set_sup_header(self.vuser, 'submitted')
-            self.check_modified(self.vuser, 'submitted')
             q = queries.get_submitted(self.vuser, self.sort, self.time)
 
         elif self.where == 'gilded':
-            sup.set_sup_header(self.vuser, 'gilded')
-            self.check_modified(self.vuser, 'gilded')
             if self.show == 'given':
                 q = queries.get_user_gildings(self.vuser)
             else:
                 q = queries.get_gilded_user(self.vuser)
 
         elif self.where in ('upvoted', 'downvoted'):
-            sup.set_sup_header(self.vuser, self.where)
-            self.check_modified(self.vuser, self.where)
             if self.where == 'upvoted':
                 q = queries.get_liked(self.vuser)
             else:
@@ -828,7 +832,6 @@ class UserController(ListingController):
             q = queries.get_saved(self.vuser, sr_id,
                                   category=self.savedcategory)
         elif self.where == 'actions':
-            self.check_modified(self.vuser, 'actions')
             if not votes_visible(self.vuser):
                 q = queries.get_overview(self.vuser, self.sort, self.time)
             else:
@@ -1092,14 +1095,23 @@ class MessageController(ListingController):
                 root = Subreddit._byID(parent.sr_id)
                 message_cls = SrMessageBuilder
 
-            return message_cls(root,
-                               wrap = self.builder_wrapper,
-                               parent = parent,
-                               skip = skip,
-                               num = self.num,
-                               after = self.after,
-                               keep_fn = self.keep_fn(),
-                               reverse = self.reverse)
+            enable_threaded = (
+                (self.where == "moderator" or
+                    parent and parent.sr_id) and
+                c.user.pref_threaded_modmail
+            )
+
+            return message_cls(
+                root,
+                wrap=self.builder_wrapper,
+                parent=parent,
+                skip=skip,
+                num=self.num,
+                after=self.after,
+                keep_fn=self.keep_fn(),
+                reverse=self.reverse,
+                threaded=enable_threaded,
+            )
         return ListingController.builder(self)
 
     def _verify_inbox_count(self, kept_msgs):
@@ -1293,14 +1305,29 @@ class RedditsController(ListingController):
                                             stale = True)
                 reddits._sort = desc('_date')
             elif self.where == 'employee':
-                reddits = Subreddit._query(
-                    Subreddit.c.type=='employees_only',
-                    write_cache=True,
-                    read_cache=True,
-                    cache_time=5 * 60,
-                    stale=True,
-                )
-                reddits._sort = desc('_downs')
+                if c.user_is_loggedin and c.user.employee:
+                    reddits = Subreddit._query(
+                        Subreddit.c.type=='employees_only',
+                        write_cache=True,
+                        read_cache=True,
+                        cache_time=5 * 60,
+                        stale=True,
+                    )
+                    reddits._sort = desc('_downs')
+                else:
+                    abort(404)
+            elif self.where == 'quarantine':
+                if c.user_is_admin:
+                    reddits = Subreddit._query(
+                        Subreddit.c.quarantine==True,
+                        write_cache=True,
+                        read_cache=True,
+                        cache_time=5 * 60,
+                        stale=True,
+                    )
+                    reddits._sort = desc('_downs')
+                else:
+                    abort(404)
             elif self.where == 'gold':
                 reddits = Subreddit._query(
                     Subreddit.c.type=='gold_only',
@@ -1323,8 +1350,10 @@ class RedditsController(ListingController):
                 reddits._sort = desc('_downs')
 
             if g.domain != 'reddit.com':
-                # don't try to render special subreddits (like promos)
-                reddits._filter(Subreddit.c.author_id != -1)
+                # don't try to render /r/promos on opensource installations
+                promo_sr_id = Subreddit.get_promote_srid()
+                if promo_sr_id:
+                    reddits._filter(Subreddit.c._id != promo_sr_id)
 
         if self.where == 'popular':
             self.render_params = {"show_interestbar": True}
@@ -1337,7 +1366,6 @@ class RedditsController(ListingController):
                      uri_variants=[
                          '/subreddits/popular',
                          '/subreddits/new',
-                         '/subreddits/employee',
                          '/subreddits/gold',
                          '/subreddits/default',
                      ])
@@ -1380,20 +1408,34 @@ class MyredditsController(ListingController):
     def query(self):
         if self.where == 'moderator' and not c.user.is_moderator_somewhere:
             return []
-        reddits = SRMember._query(SRMember.c._name == self.where,
-                                  SRMember.c._thing2_id == c.user._id,
-                                  #hack to prevent the query from
-                                  #adding it's own date
-                                  sort = (desc('_t1_ups'), desc('_t1_date')),
-                                  eager_load = True,
-                                  thing_data = True,
-                                  thing_stale = True)
-        reddits.prewrap_fn = lambda x: x._thing1
-        return reddits
+        elif self.where == "subscriber":
+            sr_ids = Subreddit.subscribed_ids_by_user(c.user)
+            sr_fullnames = [
+                Subreddit._fullname_from_id36(to36(sr_id)) for sr_id in sr_ids]
+            return sr_fullnames
+        else:
+            q = SRMember._query(
+                SRMember.c._name == self.where,
+                SRMember.c._thing2_id == c.user._id,
+                #hack to prevent the query from
+                #adding it's own date
+                sort=(desc('_t1_ups'), desc('_t1_date')),
+                eager_load=True,
+                thing_data=True,
+                thing_stale=True,
+            )
+            return q
+
+    def prewrap_fn(self):
+        if self.where != "subscriber":
+            def sr_from_srmember(srmember):
+                sr = srmember._thing1
+                return sr
+            return sr_from_srmember
 
     def content(self):
         user = c.user if c.user_is_loggedin else None
-        num_subscriptions = len(Subreddit.reverse_subscriber_ids(user))
+        num_subscriptions = len(Subreddit.subscribed_ids_by_user(user))
         if self.where == 'subscriber' and num_subscriptions == 0:
             message = strings.sr_messages['empty']
         else:
@@ -1409,11 +1451,13 @@ class MyredditsController(ListingController):
         return stack
 
     def build_listing(self, after=None, **kwargs):
-        if after and isinstance(after, Subreddit):
-            after = SRMember._fast_query(after, c.user, self.where,
-                                         data=False).values()[0]
-        if after and not isinstance(after, SRMember):
-            abort(400, 'gimme a srmember')
+        if after:
+            if self.where == "subscriber":
+                if not isinstance(after, Subreddit):
+                    abort(400, 'gimme a subreddit')
+            else:
+                after = SRMember._fast_query(
+                    after, c.user, self.where, data=False).values()[0]
 
         return ListingController.build_listing(self, after=after, **kwargs)
 
@@ -1502,6 +1546,8 @@ class UserListListingController(ListingController):
     def builder_wrapper(self):
         if self.where == 'banned':
             cls = BannedTableItem
+        elif self.where == 'muted':
+            cls = MutedTableItem
         elif self.where == 'moderators':
             return self.moderator_wrap
         elif self.where == 'wikibanned':
@@ -1544,6 +1590,7 @@ class UserListListingController(ListingController):
               'moderators': 'moderator',
               'contributors': 'contributor',
               'banned': 'banned',
+              'muted': 'muted',
               'wikibanned': 'wikibanned',
               'wikicontributors': 'wikicontributor',
              }
@@ -1651,7 +1698,7 @@ class UserListListingController(ListingController):
                      uses_site=True,
                      uri='/about/{where}',
                      uri_variants=['/about/' + where for where in [
-                        'banned', 'wikibanned', 'contributors',
+                        'banned', 'muted', 'wikibanned', 'contributors',
                         'wikicontributors', 'moderators']])
     def GET_listing(self, where, user=None, **kw):
         if isinstance(c.site, FakeSubreddit):
@@ -1689,6 +1736,12 @@ class UserListListingController(ListingController):
             if not has_mod_access:
                 abort(403)
             self.listing_cls = BannedListing
+
+        elif where == 'muted':
+            if not (has_mod_access and
+                    c.site.is_moderator_with_perms(c.user, 'mail')):
+                abort(403)
+            self.listing_cls = MutedListing
 
         elif where == 'wikibanned':
             if not c.site.is_moderator_with_perms(c.user, 'wiki'):
@@ -1758,4 +1811,6 @@ class GildedController(SubredditListingController):
     def GET_listing(self, **env):
         c.profilepage = True
         self.suppress_reply_buttons = True
+        if not c.site.allow_gilding:
+            self.abort404()
         return ListingController.GET_listing(self, **env)

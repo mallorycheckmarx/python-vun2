@@ -24,17 +24,6 @@
 import os
 import fnmatch
 import sys
-
-
-try:
-    import pkg_resources
-except ImportError:
-    print "Distribute >= 0.6.16 is required to run this."
-    sys.exit(1)
-else:
-    pkg_resources.require("distribute>=0.6.16")
-
-
 from setuptools import setup, find_packages, Extension
 
 
@@ -58,41 +47,41 @@ setup(
     name="r2",
     version="",
     install_requires=[
-        "webob==1.0.8",
-        "webtest<=1.4.3",  # anything newer requires WebOb>=1.2.0
-        "Pylons==0.9.7",
-        "Routes==1.11",
+        "Pylons",
+        "Routes",
         "mako>=0.5",
         "boto >= 2.0",
         "pytz",
         "pycrypto",
         "Babel>=1.0",
         "cython>=0.14",
-        "SQLAlchemy==0.7.4",
+        "SQLAlchemy",
         "BeautifulSoup",
         "chardet",
         "psycopg2",
         "pycassa>=1.7.0",
-        "PIL",
         "pycaptcha",
         "amqplib",
-        "pylibmc>=1.2.1",
         "py-bcrypt",
         "snudown>=1.1.0",
         "l2cs>=2.0.2",
         "lxml",
         "kazoo",
         "stripe",
-        "requests<1.0.0",
+        "requests",
         "tinycss2",
         "unidecode",
         "PyYAML",
+        "Pillow",
+        "pylibmc==1.2.2",
+        "webob",
+        "webtest",
     ],
     # Extra dependencies that aren't needed for running the app.
     # * https://pythonhosted.org/setuptools/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
     # * https://github.com/pypa/sampleproject/blob/300f04dc44df51492deb859ac98ba521d2c7a17a/setup.py#L71-L77
-    extras_require = {
-        'test': ['mock'],
+    extras_require={
+        'test': ['mock', 'nose'],
     },
     dependency_links=[
         "https://github.com/reddit/snudown/archive/v1.1.3.tar.gz#egg=snudown-1.1.3",

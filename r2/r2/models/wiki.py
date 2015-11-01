@@ -27,7 +27,8 @@ from r2.lib.db.thing import NotFound
 from r2.lib.merge import *
 from r2.models.last_modified import LastModified
 from pycassa.system_manager import TIME_UUID_TYPE
-from pylons import c, g
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.controllers.util import abort
 from r2.lib.db.tdb_cassandra import NotFound
 from r2.models.printable import Printable
@@ -79,7 +80,8 @@ special_length_restrictions_bytes = {
     'config/stylesheet': 128*1024,
     'config/submit_text': 1024,
     'config/sidebar': 5120,
-    'config/description': 500
+    'config/description': 500,
+    'usernotes': 1024*1024,
 }
 
 modactions = {

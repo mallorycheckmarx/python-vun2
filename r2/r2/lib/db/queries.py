@@ -28,10 +28,11 @@ from r2.lib.db.thing import Thing, Merge
 from r2.lib.db.operators import asc, desc, timeago
 from r2.lib.db.sorts import epoch_seconds
 from r2.lib.db import tdb_cassandra
-from r2.lib.utils import fetch_things2, tup, UniqueIterator, set_last_modified
+from r2.lib.utils import fetch_things2, tup, UniqueIterator
 from r2.lib import utils
-from r2.lib import amqp, sup, filters
+from r2.lib import amqp, filters
 from r2.lib.comment_tree import add_comments, update_comment_votes
+from r2.lib.eventcollector import EventV2
 from r2.models.promo import PROMOTE_STATUS, PromotionLog
 from r2.models.query_cache import (
     cached_query,
@@ -58,7 +59,11 @@ import collections
 from copy import deepcopy
 from r2.lib.db.operators import and_, or_
 
-from pylons import g
+from pylons import app_globals as g
+from pylons import tmpl_context as c
+from pylons import request
+
+
 query_cache = g.permacache
 log = g.log
 make_lock = g.make_lock
@@ -994,7 +999,7 @@ def new_link(link):
         results.append(get_domain_links(domain, 'new', "all"))
 
     with CachedQueryMutator() as m:
-        if link._spam:    
+        if link._spam:
             m.insert(get_spam_links(sr), [link])
         if not (sr.exclude_banned_modqueue and author._spam):
             m.insert(get_unmoderated_links(sr), [link])
@@ -1018,6 +1023,9 @@ def update_comment_notifications(comment, inbox_rels, mutator):
 
     for inbox_rel in tup(inbox_rels):
         inbox_owner = inbox_rel._thing1
+        unread = (is_visible and
+            getattr(inbox_rel, 'unread_preremoval', True))
+
         if inbox_rel._name == "inbox":
             query = get_inbox_comments(inbox_owner)
         elif inbox_rel._name == "selfreply":
@@ -1032,7 +1040,7 @@ def update_comment_notifications(comment, inbox_rels, mutator):
         else:
             mutator.delete(query, [inbox_rel])
 
-        set_unread(comment, inbox_owner, unread=is_visible, mutator=mutator)
+        set_unread(comment, inbox_owner, unread=unread, mutator=mutator)
 
 
 def new_comment(comment, inbox_rels):
@@ -1260,13 +1268,38 @@ def unread_handler(things, user, unread):
 
 
 def unnotify(thing, possible_recipients=None):
-    """Given a Thing, remove any notifications to possible recipients for it.
+    """Given a Thing, remove any notifications to its possible recipients.
 
     `possible_recipients` is a list of account IDs to unnotify. If not passed,
     deduce all possible recipients and remove their notifications.
     """
     from r2.lib import butler
+    error_message = ("Unable to unnotify thing of type: %r" % thing)
+    notification_handler(thing,
+        notify_function=butler.remove_mention_notification,
+        error_message=error_message,
+        possible_recipients=possible_recipients,
+    )
 
+
+def renotify(thing, possible_recipients=None):
+    """Given a Thing, reactivate notifications for possible recipients.
+
+    `possible_recipients` is a list of account IDs to renotify. If not passed,
+    deduce all possible recipients and add their notifications.
+    This is used when unspamming comments.
+    """
+    from r2.lib import butler
+    error_message = ("Unable to renotify thing of type: %r" % thing)
+    notification_handler(thing,
+        notify_function=butler.readd_mention_notification,
+        error_message=error_message,
+        possible_recipients=possible_recipients,
+    )
+
+
+def notification_handler(thing, notify_function,
+        error_message, possible_recipients=None):
     if not possible_recipients:
         possible_recipients = Inbox.possible_recipients(thing)
 
@@ -1286,20 +1319,28 @@ def unnotify(thing, possible_recipients=None):
             ("inbox", "selfreply", "mention"),
         )
 
+        # if the comment has been spammed, remember the previous
+        # new value in case it becomes unspammed
+        if thing._spam:
+            for (tupl, rel) in rels.iteritems():
+                if rel:
+                    rel.unread_preremoval = rel.new
+                    rel._commit()
+
         replies, mentions = utils.partition(
             lambda r: r._name == "mention",
             filter(None, rels.values()),
         )
 
         for mention in mentions:
-            butler.remove_mention_notification(mention)
+            notify_function(mention)
 
         replies = list(replies)
         if replies:
             with CachedQueryMutator() as m:
                 update_comment_notifications(thing, replies, mutator=m)
     else:
-        raise ValueError("Unable to unnotify thing of type: %r" % thing)
+        raise ValueError(error_message)
 
 
 def _by_srid(things, srs=True):
@@ -1693,7 +1734,7 @@ vote_names_by_dir = {True: "1", None: "0", False: "-1"}
 vote_dirs_by_name = {v: k for k, v in vote_names_by_dir.iteritems()}
 
 def queue_vote(user, thing, dir, ip, vote_info=None, cheater=False, store=True,
-               event_data=None):
+        send_event=True):
     # set the vote in memcached so the UI gets updated immediately
     key = prequeued_vote_key(user, thing)
     grace_period = int(g.vote_queue_grace_period.total_seconds())
@@ -1731,8 +1772,16 @@ def queue_vote(user, thing, dir, ip, vote_info=None, cheater=False, store=True,
             "ip": ip,
             "info": vote_info,
             "cheater": cheater,
-            "event": event_data,
         }
+
+        if send_event:
+            # the vote event will actually be sent from an async queue
+            # processor, so we need to pull out the context data at this point
+            vote["event_data"] = {
+                "context": EventV2.get_context_data(request, c),
+                "sensitive": EventV2.get_sensitive_context_data(request, c),
+            }
+
         amqp.add_item(qname, json.dumps(vote))
 
 def prequeued_vote_key(user, item):
@@ -1821,40 +1870,6 @@ def handle_vote(user, thing, vote, foreground=False, timer=None, date=None):
         return
 
     new_vote(v, foreground=foreground, timer=timer)
-
-    timestamps = []
-    if isinstance(thing, Link):
-
-        #update the modified flags
-        if user._id == thing.author_id:
-            timestamps.append('Overview')
-            timestamps.append('Submitted')
-            #update sup listings
-            sup.add_update(user, 'submitted')
-
-            #update sup listings
-            if dir:
-                sup.add_update(user, 'liked')
-            elif dir is False:
-                sup.add_update(user, 'disliked')
-
-    elif isinstance(thing, Comment):
-        #update last modified
-        if user._id == thing.author_id:
-            timestamps.append('Overview')
-            timestamps.append('Commented')
-            #update sup listings
-            sup.add_update(user, 'commented')
-
-    else:
-        raise NotImplementedError
-
-    timer.intermediate("sup")
-
-    for timestamp in timestamps:
-        set_last_modified(user, timestamp.lower())
-    LastModified.touch(user._fullname, timestamps)
-    timer.intermediate("last_modified")
 
 
 def process_votes(qname, limit=0):

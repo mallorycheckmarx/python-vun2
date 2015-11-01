@@ -42,7 +42,7 @@ from r2.models.recommend import (
     ExploreSettings,
 )
 
-from pylons import g
+from pylons import app_globals as g
 from pylons.i18n import _
 
 # recommendation sources
@@ -260,7 +260,11 @@ def random_sample(items, count):
 
 def is_visible(sr):
     """True if sr is visible to regular users, false if private or banned."""
-    return sr.type not in Subreddit.private_types and not sr._spam
+    return (
+        sr.type not in Subreddit.private_types and
+        not sr._spam and
+        sr.discoverable
+    )
 
 
 class SRRecommendation(tdb_cassandra.View):

@@ -1,6 +1,8 @@
 from datetime import datetime
 import math
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.controllers.util import abort
 import pytz
 
@@ -34,18 +36,6 @@ def get_inject_template():
     return _COMMENT_EMBED_TEMPLATE + scripts
 
 
-def embeddable_sr(thing):
-    if isinstance(thing, Subreddit):
-        sr = thing
-    else:
-        try:
-            sr = Subreddit._byID(thing.sr_id, data=True) if thing.sr_id else None
-        except NotFound:
-            sr = None
-
-    return sr if (sr is not None and sr.type not in Subreddit.private_types) else False
-
-
 def edited_after(thing, iso_timestamp, showedits):
     if not thing:
         return False
@@ -63,9 +53,11 @@ def edited_after(thing, iso_timestamp, showedits):
     return created < thing.editted
 
 
-def prepare_embed_request(sr):
-    """Given a request, determine if we are embedding. If so, ensure the
-       subreddit is embeddable and prepare the request for embedding.
+def prepare_embed_request():
+    """Given a request, determine if we are embedding. If so, prepare the
+    request for embedding.
+
+    Returns the value of the embed GET parameter.
     """
     is_embed = request.GET.get('embed')
 
@@ -77,15 +69,12 @@ def prepare_embed_request(sr):
         # specifically untrusted domain
         abort(404)
 
-    if not embeddable_sr(sr):
-        abort(404)
-
     c.allow_framing = True
 
     return is_embed
 
 
-def set_up_embed(sr, thing, showedits):
+def set_up_comment_embed(sr, thing, showedits):
     try:
         author = Account._byID(thing.author_id) if thing.author_id else None
     except NotFound:

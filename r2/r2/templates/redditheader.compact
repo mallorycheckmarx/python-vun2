@@ -43,7 +43,7 @@
   <div class="left">
    <%
         d = DefaultSR()
-        if c.site.header and c.allow_styles:
+        if c.site.header and c.allow_styles and not c.site.quarantine:
             header_img = header_url(c.site.header)
             header_size = c.site.header_size
             header_title = c.site.header_title
@@ -98,10 +98,10 @@
     % endif
    %else:
     <div class="menuitem">
-      ${plain_link("sign in", "/login", _sr_path=False)}
+      ${plain_link("log in", "/login", _sr_path=False)}
     </div>
     <div class="menuitem bottm-bar">
-      ${plain_link("create an account", "/register", _sr_path=False)}
+      ${plain_link("sign up", "/register", _sr_path=False)}
     </div>
     <div class="menuitem">
       ${plain_link("subreddits", "/subreddits/", _sr_path=False)}

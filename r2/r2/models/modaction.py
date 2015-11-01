@@ -25,7 +25,9 @@ import itertools
 from uuid import UUID
 
 from pycassa.system_manager import TIME_UUID_TYPE
-from pylons import c, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.lib.db import tdb_cassandra
@@ -55,11 +57,12 @@ class ModAction(tdb_cassandra.UuidThing):
                'removecomment', 'approvecomment', 'addmoderator',
                'invitemoderator', 'uninvitemoderator', 'acceptmoderatorinvite',
                'removemoderator', 'addcontributor', 'removecontributor',
-               'editsettings', 'editflair', 'distinguish', 'marknsfw', 
+               'editsettings', 'editflair', 'distinguish', 'marknsfw',
                'wikibanned', 'wikicontributor', 'wikiunbanned', 'wikipagelisted',
                'removewikicontributor', 'wikirevise', 'wikipermlevel',
                'ignorereports', 'unignorereports', 'setpermissions',
-               'setsuggestedsort', 'sticky', 'unsticky')
+               'setsuggestedsort', 'sticky', 'unsticky', 'setcontestmode',
+               'unsetcontestmode', 'lock', 'unlock', 'muteuser', 'unmuteuser')
 
     _menu = {'banuser': _('ban user'),
              'unbanuser': _('unban user'),
@@ -91,6 +94,12 @@ class ModAction(tdb_cassandra.UuidThing):
              'setsuggestedsort': _('set suggested sort'),
              'sticky': _('sticky post'),
              'unsticky': _('unsticky post'),
+             'setcontestmode': _('set contest mode'),
+             'unsetcontestmode': _('unset contest mode'),
+             'lock': _('lock post'),
+             'unlock': _('unlock post'),
+             'muteuser': _('mute user'),
+             'unmuteuser': _('unmute user'),
             }
 
     _text = {'banuser': _('banned'),
@@ -123,6 +132,12 @@ class ModAction(tdb_cassandra.UuidThing):
              'setsuggestedsort': _('set suggested sort'),
              'sticky': _('stickied'),
              'unsticky': _('unstickied'),
+             'setcontestmode': _('set contest mode on'),
+             'unsetcontestmode': _('unset contest mode on'),
+             'lock': _('locked'),
+             'unlock': _('unlocked'),
+             'muteuser': _('muted'),
+             'unmuteuser': _('unmuted'),
             }
 
     _details_text = {# approve comment/link
@@ -207,6 +222,9 @@ class ModAction(tdb_cassandra.UuidThing):
 
         ma = cls(**kw)
         ma._commit()
+
+        g.events.mod_event(ma, sr, mod, target, request=request, context=c)
+
         return ma
 
     def _on_create(self):
@@ -253,21 +271,16 @@ class ModAction(tdb_cassandra.UuidThing):
 
         return q
 
-    def get_extra_text(self):
-        text = ''
-        if hasattr(self, 'details') and not self.details == None:
+    @property
+    def details_text(self):
+        text = ""
+        if getattr(self, "details", None):
             text += self._details_text.get(self.details, self.details)
-        if hasattr(self, 'description') and not self.description == None:
-            text += ' %s' % self.description
+        if getattr(self, "description", None):
+            if text:
+                text += ": "
+            text += self.description
         return text
-
-    @classmethod
-    def get_rgb(cls, item, fade=0.8):
-        sr_id = item.subreddit._id
-        r = int(256 - (hash(str(sr_id)) % 256)*(1-fade))
-        g = int(256 - (hash(str(sr_id) + ' ') % 256)*(1-fade))
-        b = int(256 - (hash(str(sr_id) + '  ') % 256)*(1-fade))
-        return (r, g, b)
 
     @classmethod
     def add_props(cls, user, wrapped):
@@ -307,7 +320,6 @@ class ModAction(tdb_cassandra.UuidThing):
             item.moderator = moderators[item.mod_id36]
             item.subreddit = srs[item.sr_id36]
             item.text = cls._text.get(item.action, '')
-            item.details = item.get_extra_text()
             item.target = None
             item.target_author = None
 
@@ -351,7 +363,8 @@ class ModAction(tdb_cassandra.UuidThing):
                 item.mod_button = mod_button
 
                 if isinstance(c.site, ModSR) or isinstance(c.site, MultiReddit):
-                    item.bgcolor = 'rgb(%s,%s,%s)' % cls.get_rgb(item)
+                    rgb = item.subreddit.get_rgb()
+                    item.bgcolor = 'rgb(%s,%s,%s)' % rgb
                     item.is_multi = True
                 else:
                     item.bgcolor = "rgb(255,255,255)"

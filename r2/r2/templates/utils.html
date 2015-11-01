@@ -114,22 +114,6 @@ ${first_defined(kw[1:])}
   </${kind}>
 </%def>
 
-<%def name="success_field(success_str, kind='p', successful=False, hide='')">
-<${kind} class="error success">
-  %if successful:
-  ${success_str}
-  %endif
-</${kind}>
-<script type="text/javascript">
-  function fire_success() {
-  $('success').innerHTML = "${success_str}";
-  %if hide:
-  hide(document.getElementById('${hide}'));
-  %endif
-  }
-</script>
-</%def>
-
 <%def name="img_link(link_text, img, path, _id='', target='', img_id=None, size=None, **kw)">
   <% 
      if (not target or target == '_parent') and c.cname:
@@ -283,6 +267,28 @@ ${unsafe(txt)}
     <iframe src="about:blank" name="${form_id}-iframe" id="${form_id}-iframe">
     </iframe>
   </form>
+</%def>
+
+
+<%def name="image_upload_inline(form_id='file', field_id='inline-file')">
+  <div id="${field_id}">
+    <input type="file" name="${form_id}" id="${form_id}">
+    ${error_field("IMAGE_ERROR", "span")}
+    <script>
+      function completedUploadImage (status, img_src, name, errors, form_id) {
+        if (status == 'failed') {
+          var $form = $('#${field_id}');
+          $form.find('.status').html('');
+          for (var i in errors) {
+            $form.find('.error.' + errors[i][0])
+                .show().text(errors[i][1]);
+          }
+          var top = $form.position().top;
+          $(window).scrollTop(top);
+        }
+      }
+    </script>
+  </div>
 </%def>
 
 <%def name="image_upload(post_target, current_image = None, onsubmit = '', 
@@ -485,23 +491,6 @@ ${unsafe(txt)}
   </form>
 </%def>
 
-<%def name="block_field(title, description = '', css_class= '', **kw)">
-  <div class="roundfield ${css_class}"
-       %for k, v in kw.iteritems():
-         ${k}="${v}"
-       %endfor
-       >
-    <span class="title">${title}</span>
-    &#32;
-    %if description:
-      <span class="gray">${description}</span>
-    %endif
-    <div class="roundfield-content">
-      ${caller.body()}
-    </div>
-  </div>
-</%def>
-
 <%def name="block_field(kind, title, description = '', css_class= '', **kw)">
   <div class="${kind} ${css_class}"
        %for k, v in kw.iteritems():
@@ -511,7 +500,7 @@ ${unsafe(txt)}
     <span class="title">${title}</span>
     &#32;
     %if description:
-      <span class="gray">${description}</span>
+      <span class="little gray">${description}</span>
     %endif
     <div class="${kind}-content">
       ${caller.body()}
@@ -586,6 +575,10 @@ ${unsafe(txt)}
   </time>
 </%def>
 
+<%def name="buffered_timestamp(date, since=None, live=False, include_tense=False)" buffered="True">
+  ${timestamp(date, since, live, include_tense)}
+</%def>
+
 <%def name="thing_timestamp(thing, since=None, live=False, include_tense=False)">
   ## todo: use pubdate attribute once things are <article> tags.
   ## note: comment and link templates will pass a CachedVariable stub as since.
@@ -638,6 +631,12 @@ ${unsafe(txt)}
   <acronym title="${_('Adult content: Not Safe For Work')}">
     ${_("NSFW")}
   </acronym>
+</%def>
+
+<%def name="quarantine_stamp()">
+  <span title="${_('Quarantined content: Content may be highly offensive')}">
+    ${_("Quarantined")}
+  </span>
 </%def>
 
 <%def name="thumbnail_img(thing)">

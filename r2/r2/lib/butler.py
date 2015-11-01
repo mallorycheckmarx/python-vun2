@@ -20,7 +20,8 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.lib.db import queries
 from r2.lib.db.tdb_sql import CreationError
@@ -48,6 +49,16 @@ def remove_mention_notification(mention):
     with query_cache.CachedQueryMutator() as m:
         m.delete(queries.get_inbox_comment_mentions(inbox_owner), [mention])
         queries.set_unread(thing, inbox_owner, unread=False, mutator=m)
+
+
+def readd_mention_notification(mention):
+    """Reinsert into inbox after a comment has been unspammed"""
+    inbox_owner = mention._thing1
+    thing = mention._thing2
+    with query_cache.CachedQueryMutator() as m:
+        m.insert(queries.get_inbox_comment_mentions(inbox_owner), [mention])
+        unread = getattr(mention, 'unread_preremoval', True)
+        queries.set_unread(thing, inbox_owner, unread=unread, mutator=m)
 
 
 def monitor_mentions(comment):

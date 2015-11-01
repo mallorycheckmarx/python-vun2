@@ -35,7 +35,7 @@ from link import Link, Comment
 import pytz
 
 from pycassa.types import CompositeType, AsciiType
-from pylons import g
+from pylons import app_globals as g
 from datetime import datetime, timedelta
 
 __all__ = ['cast_vote', 'get_votes']
@@ -324,8 +324,10 @@ def cast_vote(sub, obj, vote_info, timer, date):
         vote._thing2.update_search_index(boost_only=True)
         timer.intermediate("update_search_index")
 
-    if "event" in vote_info and vote_info["event"]:
-        g.events.vote_event(vote, old_vote, event_base=vote_info["event"])
+    event_data = vote_info.get("event_data")
+    if event_data:
+        g.events.vote_event(vote, old_vote,
+            event_data["context"], event_data["sensitive"])
 
     return vote
 

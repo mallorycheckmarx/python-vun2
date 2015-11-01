@@ -22,14 +22,15 @@
 
 from datetime import datetime
 
-from pylons import g, response
+from pylons import response
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.controllers.reddit_base import MinimalController
 from r2.lib import embeds
 from r2.lib.base import abort
 from r2.lib.errors import ForbiddenError
-from r2.lib.filters import scriptsafe_dumps, websafe
+from r2.lib.filters import scriptsafe_dumps, websafe, _force_unicode
 from r2.lib.utils import url_to_thing
 from r2.lib.template_helpers import format_html, make_url_https
 from r2.lib.validator import can_view_link_comments, validate, VBoolean, VUrl
@@ -69,7 +70,7 @@ def _oembed_comment(thing, **embed_options):
 
         title = _('%(author)s\'s comment from discussion "%(title)s"') % {
             "author": author_name,
-            "title": link.title,
+            "title": _force_unicode(link.title),
         }
     else:
         author_name = ""

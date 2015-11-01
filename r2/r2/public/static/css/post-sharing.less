@@ -6,6 +6,7 @@
 @post-sharing-shareplane-image: '../share-paper-airplane.png';
 @post-sharing-facebook-image: '../share-to-facebook.png';
 @post-sharing-twitter-image: '../share-to-twitter.png';
+@post-sharing-tumblr-image: '../share-to-tumblr.png';
 @post-sharing-email-image: '../share-to-email.png';
 
 @post-sharing-color-success: @color-green;
@@ -49,6 +50,7 @@
     display: block;
 
     .c-form-group {
+      .align-items(center);
       .display-flex();
 
       > * {
@@ -57,7 +59,6 @@
 
       > .post-sharing-label {
         .flex(0 0 20%);
-        line-height: @post-sharing-icon-size + (@margin-small * 1px);
         padding-right: @margin-small * 1px;
         text-align: right;
       }
@@ -108,7 +109,7 @@
     }
 
     .c-tooltip {
-      .transform(translate(-50%, -2px));
+      .transform(translate(-50%, @tooltip-arrow-width * -1));
       .transition(all, 0.15s);
       bottom: 50%;
       left: 50%;
@@ -138,6 +139,10 @@
 
   .post-sharing-option-twitter {
     background-image: data-uri(@post-sharing-twitter-image);
+  }
+
+  .post-sharing-option-tumblr {
+    background-image: data-uri(@post-sharing-tumblr-image);
   }
 
   .post-sharing-option-email {

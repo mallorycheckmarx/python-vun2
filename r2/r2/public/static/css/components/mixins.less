@@ -84,6 +84,16 @@
   display: flex;
 }
 
+.align-items(@props) {
+    -webkit-align-items: @props;
+    align-items: @props;
+}
+
+.justify-content(@props) {
+    -webkit-justify-content: @props;
+    justify-content: @props;
+}
+
 .clearfix() {
     &:before,
     &:after {

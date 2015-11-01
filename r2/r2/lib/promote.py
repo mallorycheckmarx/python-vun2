@@ -33,7 +33,8 @@ import time
 import urllib
 import urlparse
 
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import ungettext
 from pytz import timezone
 
@@ -45,10 +46,15 @@ from r2.lib import (
 from r2.lib.db.operators import not_
 from r2.lib.db import queries
 from r2.lib.cache import sgm
+from r2.lib.filters import _force_utf8
 from r2.lib.geoip import location_by_ips
 from r2.lib.memoize import memoize
 from r2.lib.strings import strings
-from r2.lib.utils import to_date, weighted_lottery
+from r2.lib.utils import (
+    constant_time_compare,
+    to_date,
+    weighted_lottery,
+)
 from r2.models import (
     Account,
     Bid,
@@ -58,6 +64,7 @@ from r2.models import (
     Frontpage,
     Link,
     MultiReddit,
+    NotFound,
     NO_TRANSACTION,
     PromoCampaign,
     PROMOTE_STATUS,
@@ -104,35 +111,38 @@ def promo_keep_fn(item):
 
 # attrs
 
-def _base_domain():
+def _base_host():
     if g.domain_prefix:
-        return g.domain_prefix + '.' + g.domain
+        base_domain = g.domain_prefix + '.' + g.domain
     else:
-        return g.domain
+        base_domain = g.domain
+    return "%s://%s" % (g.default_scheme, base_domain)
+
 
 def promo_traffic_url(l): # old traffic url
-    return "http://%s/traffic/%s/" % (_base_domain(), l._id36)
+    return "%s/traffic/%s/" % (_base_host(), l._id36)
 
 def promotraffic_url(l): # new traffic url
-    return "http://%s/promoted/traffic/headline/%s" % (_base_domain(), l._id36)
+    return "%s/promoted/traffic/headline/%s" % (_base_host(), l._id36)
 
 def promo_edit_url(l):
-    return "http://%s/promoted/edit_promo/%s" % (_base_domain(), l._id36)
-
-def pay_url(l, campaign):
-    return "%spromoted/pay/%s/%s" % (g.payment_domain, l._id36, campaign._id36)
+    return "%s/promoted/edit_promo/%s" % (_base_host(), l._id36)
 
 def view_live_url(l, srname):
-    domain = _base_domain()
+    host = _base_host()
     if srname:
-        domain += '/r/%s' % srname
-    return 'http://%s/?ad=%s' % (domain, l._fullname)
+        host += '/r/%s' % srname
+    return '%s/?ad=%s' % (host, l._fullname)
 
+def payment_url(action, link_id36, campaign_id36):
+    path = '/promoted/%s/%s/%s' % (action, link_id36, campaign_id36)
+    return urlparse.urljoin(g.payment_domain, path)
 
-def refund_url(link, campaign):
-    return "%spromoted/refund/%s/%s" % (g.payment_domain, link._id36,
-                                        campaign._id36)
+def pay_url(l, campaign):
+    return payment_url('pay', l._id36, campaign._id36)
 
+def refund_url(l, campaign):
+    return payment_url('refund', l._id36, campaign._id36)
 
 # booleans
 
@@ -166,20 +176,54 @@ def is_finished(link):
 def is_live_on_sr(link, sr):
     return bool(live_campaigns_by_link(link, sr=sr))
 
+def is_pending(campaign):
+    today = promo_datetime_now().date()
+    return today < to_date(campaign.start_date)
 
 def update_query(base_url, query_updates):
     scheme, netloc, path, params, query, fragment = urlparse.urlparse(base_url)
     query_dict = urlparse.parse_qs(query)
     query_dict.update(query_updates)
-    query = urllib.urlencode(query_dict)
+    query = urllib.urlencode(query_dict, doseq=True)
     return urlparse.urlunparse((scheme, netloc, path, params, query, fragment))
 
 
-def add_trackers(items, sr):
-    """Add tracking names and hashes to a list of wrapped promoted links."""
+def update_served(items):
     for item in items:
         if not item.promoted:
             continue
+
+        campaign = PromoCampaign._by_fullname(item.campaign)
+
+        if not campaign.has_served:
+            campaign.has_served = True
+            campaign._commit()
+
+
+NO_CAMPAIGN = "NO_CAMPAIGN"
+
+def is_valid_click_url(link, click_url, click_hash):
+    expected_mac = get_click_url_hmac(link, click_url)
+
+    return constant_time_compare(click_hash, expected_mac)
+
+
+def get_click_url_hmac(link, click_url):
+    secret = g.secrets["adserver_click_url_secret"]
+    data = "|".join([link._fullname, click_url])
+
+    return hmac.new(secret, data, hashlib.sha256).hexdigest()
+
+
+def add_trackers(items, sr, adserver_click_urls=None):
+    """Add tracking names and hashes to a list of wrapped promoted links."""
+    adserver_click_urls = adserver_click_urls or {}
+    for item in items:
+        if not item.promoted:
+            continue
+
+        if item.campaign is None:
+            item.campaign = NO_CAMPAIGN
 
         tracking_name_fields = [item.fullname, item.campaign]
         if not isinstance(sr, FakeSubreddit):
@@ -203,7 +247,8 @@ def add_trackers(items, sr):
             item.third_party_tracking_url_2 = item.third_party_tracking_2
 
         # construct the click redirect url
-        url = urllib.unquote(item.url.encode("utf-8"))
+        item_url = adserver_click_urls.get(item.campaign, item.url)
+        url = urllib.unquote(_force_utf8(item_url))
         hashable = ''.join((url, tracking_name.encode("utf-8")))
         click_mac = hmac.new(
             g.tracking_secret, hashable, hashlib.sha1).hexdigest()
@@ -220,39 +265,45 @@ def add_trackers(items, sr):
         # also overwrite the permalink url with redirect click_url for selfposts
         if item.is_self:
             item.permalink = click_url
-
+        else:
+            # add encrypted click url to the permalink for comments->click
+            item.permalink = update_query(item.permalink, {
+                "click_url": url,
+                "click_hash": get_click_url_hmac(item, url),
+            })
 
 def update_promote_status(link, status):
     queries.set_promote_status(link, status)
     hooks.get_hook('promote.edit_promotion').call(link=link)
 
 
-def new_promotion(title, url, selftext, user, ip):
+def new_promotion(is_self, title, content, author, ip):
     """
     Creates a new promotion with the provided title, etc, and sets it
     status to be 'unpaid'.
     """
     sr = Subreddit._byID(Subreddit.get_promote_srid())
-    l = Link._submit(title, url, user, sr, ip)
+    l = Link._submit(
+        is_self=is_self,
+        title=title,
+        content=content,
+        author=author,
+        sr=sr,
+        ip=ip,
+    )
+
     l.promoted = True
     l.disable_comments = False
     l.sendreplies = True
     PromotionLog.add(l, 'promotion created')
 
-    if url == 'self':
-        l.url = l.make_permalink_slow()
-        l.is_self = True
-        l.selftext = selftext
-
-    l._commit()
-
     update_promote_status(l, PROMOTE_STATUS.unpaid)
 
     # the user has posted a promotion, so enable the promote menu unless
     # they have already opted out
-    if user.pref_show_promote is not False:
-        user.pref_show_promote = True
-        user._commit()
+    if author.pref_show_promote is not False:
+        author.pref_show_promote = True
+        author._commit()
 
     # notify of new promo
     emailer.new_promo(l)
@@ -278,10 +329,14 @@ def get_transactions(link, campaigns):
     bids_by_campaign = {c._id: bid_dict[(c._id, c.trans_id)] for c in campaigns}
     return bids_by_campaign
 
-def new_campaign(link, dates, bid, cpm, target, priority, location,
-                 platform, mobile_os):
+def new_campaign(link, dates, bid, cpm, target, frequency_cap, frequency_cap_duration,
+                 priority, location, platform, mobile_os, ios_devices,
+                 ios_version_range, android_devices, android_version_range):
     campaign = PromoCampaign.create(link, target, bid, cpm, dates[0], dates[1],
-                                    priority, location, platform, mobile_os)
+                                    frequency_cap, frequency_cap_duration, priority,
+                                    location, platform, mobile_os, ios_devices,
+                                    ios_version_range, android_devices,
+                                    android_version_range)
     PromotionWeights.add(link, campaign)
     PromotionLog.add(link, 'campaign %s created' % campaign._id)
 
@@ -297,8 +352,10 @@ def new_campaign(link, dates, bid, cpm, target, priority, location,
 def free_campaign(link, campaign, user):
     auth_campaign(link, campaign, user, -1)
 
-def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location,
-                  platform='desktop', mobile_os=None):
+def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
+                  frequency_cap_duration, priority, location, platform='desktop',
+                  mobile_os=None, ios_devices=None, ios_version_range=None,
+                  android_devices=None, android_version_range=None):
     changed = {}
     if bid != campaign.bid:
          # if the bid amount changed, cancel any pending transactions
@@ -319,6 +376,13 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location,
     if target != campaign.target:
         changed['target'] = (campaign.target, target)
         campaign.target = target
+    if frequency_cap != campaign.frequency_cap:
+        changed['frequency_cap'] = (campaign.frequency_cap, frequency_cap)
+        campaign.frequency_cap = frequency_cap
+    if frequency_cap_duration != campaign.frequency_cap_duration:
+        changed['frequency_cap_duration'] = (campaign.frequency_cap_duration,
+                                             frequency_cap_duration)
+        campaign.frequency_cap_duration = frequency_cap_duration
     if priority != campaign.priority:
         changed['priority'] = (campaign.priority.name, priority.name)
         campaign.priority = priority
@@ -331,6 +395,20 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location,
     if mobile_os != campaign.mobile_os:
         changed["mobile_os"] = (campaign.mobile_os, mobile_os)
         campaign.mobile_os = mobile_os
+    if ios_devices != campaign.ios_devices:
+        changed['ios_devices'] = (campaign.ios_devices, ios_devices)
+        campaign.ios_devices = ios_devices
+    if android_devices != campaign.android_devices:
+        changed['android_devices'] = (campaign.android_devices, android_devices)
+        campaign.android_devices = android_devices
+    if ios_version_range != campaign.ios_version_range:
+        changed['ios_version_range'] = (campaign.ios_version_range,
+                                        ios_version_range)
+        campaign.ios_version_range = ios_version_range
+    if android_version_range != campaign.android_version_range:
+        changed['android_version_range'] = (campaign.android_version_range,
+                                            android_version_range)
+        campaign.android_version_range = android_version_range
 
     change_strs = map(lambda t: '%s: %s -> %s' % (t[0], t[1][0], t[1][1]),
                       changed.iteritems())

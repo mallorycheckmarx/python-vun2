@@ -31,7 +31,8 @@ from sqlalchemy.dialects.postgresql.base import PGInet
 from r2.lib.db.tdb_sql import make_metadata, index_str, create_table
 from r2.lib.utils import Enum, tup
 from r2.lib.memoize import memoize
-from pylons import g, request
+from pylons import request
+from pylons import app_globals as g
 from pylons.i18n import _
 
 def mail_queue(metadata):
@@ -171,6 +172,7 @@ class EmailHandler(object):
             try:
                 o.insert().values({o.c.email: email,
                                    o.c.msg_hash: msg_hash}).execute()
+                g.stats.simple_event('share.opt_out')
 
                 #clear caches
                 has_opted_out(email, _update = True)
@@ -187,6 +189,7 @@ class EmailHandler(object):
             o = self.opt_table
             if self.has_opted_out(email):
                 sa.delete(o, o.c.email == email).execute()
+                g.stats.simple_event('share.opt_in')
 
                 #clear caches
                 has_opted_out(email, _update = True)

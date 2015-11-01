@@ -23,8 +23,12 @@
 
 import unittest
 
+from mock import MagicMock
+from pylons import app_globals as g
+
 from r2.lib.permissions import PermissionSet
 
+from r2.models import NotFound
 from r2.models.account import Account
 from r2.models.subreddit import SRMember, Subreddit
 
@@ -35,9 +39,9 @@ class TestPermissionSet(PermissionSet):
 class SRMemberTest(unittest.TestCase):
     def setUp(self):
         a = Account()
-        a._commit()
+        a._id = 1
         sr = Subreddit()
-        sr._commit()
+        sr._id = 2
         self.rel = SRMember(sr, a, 'test')
 
     def test_get_permissions(self):
@@ -111,6 +115,139 @@ class IsValidNameTest(unittest.TestCase):
 
     def test_numerics(self):
         self.assertTrue(Subreddit.is_valid_name('090'))
+
+
+class ByNameTest(unittest.TestCase):
+    def setUp(self):
+        self.cache = MagicMock()
+        g.cache = self.cache
+
+        self.subreddit_byID = MagicMock()
+        Subreddit._byID = self.subreddit_byID
+
+        self.subreddit_query = MagicMock()
+        Subreddit._query = self.subreddit_query
+
+    def testSingleCached(self):
+        subreddit = Subreddit(id=1, name="exists")
+        self.cache.get_multi.return_value = {"exists": subreddit._id}
+        self.subreddit_byID.return_value = [subreddit]
+
+        ret = Subreddit._by_name("exists")
+
+        self.assertEqual(ret, subreddit)
+        self.assertEqual(self.subreddit_query.call_count, 0)
+
+    def testSingleFromDB(self):
+        subreddit = Subreddit(id=1, name="exists")
+        self.cache.get_multi.return_value = {}
+        self.subreddit_query.return_value = [subreddit]
+        self.subreddit_byID.return_value = [subreddit]
+
+        ret = Subreddit._by_name("exists")
+
+        self.assertEqual(ret, subreddit)
+        self.assertEqual(self.cache.set_multi.call_count, 1)
+
+    def testSingleNotFound(self):
+        self.cache.get_multi.return_value = {}
+        self.subreddit_query.return_value = []
+
+        with self.assertRaises(NotFound):
+            Subreddit._by_name("doesnotexist")
+
+    def testSingleInvalid(self):
+        with self.assertRaises(NotFound):
+            Subreddit._by_name("_illegalunderscore")
+
+        self.assertEqual(self.cache.get_multi.call_count, 0)
+        self.assertEqual(self.subreddit_query.call_count, 0)
+
+    def testMultiCached(self):
+        srs = [
+            Subreddit(id=1, name="exists"),
+            Subreddit(id=2, name="also"),
+        ]
+        self.cache.get_multi.return_value = {sr.name: sr._id for sr in srs}
+        self.subreddit_byID.return_value = srs
+
+        ret = Subreddit._by_name(["exists", "also"])
+
+        self.assertEqual(ret, {sr.name: sr for sr in srs})
+        self.assertEqual(self.subreddit_query.call_count, 0)
+
+    def testMultiCacheMissesAllExist(self):
+        srs = [
+            Subreddit(id=1, name="exists"),
+            Subreddit(id=2, name="also"),
+        ]
+
+        self.cache.get_multi.return_value = {}
+        self.subreddit_query.return_value = srs
+        self.subreddit_byID.return_value = srs
+
+        ret = Subreddit._by_name(["exists", "also"])
+
+        self.assertEqual(ret, {sr.name: sr for sr in srs})
+        self.assertEqual(self.cache.get_multi.call_count, 1)
+        self.assertEqual(self.subreddit_query.call_count, 1)
+
+    def testMultiSomeDontExist(self):
+        sr = Subreddit(id=1, name="exists")
+        self.cache.get_multi.return_value = {sr.name: sr._id}
+        self.subreddit_query.return_value = []
+        self.subreddit_byID.return_value = [sr]
+
+        ret = Subreddit._by_name(["exists", "doesnt"])
+
+        self.assertEqual(ret, {sr.name: sr})
+        self.assertEqual(self.cache.get_multi.call_count, 1)
+        self.assertEqual(self.subreddit_query.call_count, 1)
+
+    def testMultiSomeInvalid(self):
+        sr = Subreddit(id=1, name="exists")
+        self.cache.get_multi.return_value = {sr.name: sr._id}
+        self.subreddit_query.return_value = []
+        self.subreddit_byID.return_value = [sr]
+
+        ret = Subreddit._by_name(["exists", "_illegalunderscore"])
+
+        self.assertEqual(ret, {sr.name: sr})
+        self.assertEqual(self.cache.get_multi.call_count, 1)
+        self.assertEqual(self.subreddit_query.call_count, 0)
+
+    def testForceUpdate(self):
+        sr = Subreddit(id=1, name="exists")
+        self.cache.get_multi.return_value = {sr.name: sr._id}
+        self.subreddit_query.return_value = [sr]
+        self.subreddit_byID.return_value = [sr]
+
+        ret = Subreddit._by_name("exists", _update=True)
+
+        self.assertEqual(ret, sr)
+        self.cache.set_multi.assert_called_once_with(
+            {sr.name: sr._id}, prefix="subreddit.byname")
+
+    def testCacheNegativeResults(self):
+        self.cache.get_multi.return_value = {}
+        self.subreddit_query.return_value = []
+        self.subreddit_byID.return_value = []
+
+        with self.assertRaises(NotFound):
+            Subreddit._by_name("doesnotexist")
+
+        self.cache.set_multi.assert_called_once_with(
+            {"doesnotexist": Subreddit.SRNAME_NOTFOUND}, prefix="subreddit.byname")
+
+    def testExcludeNegativeLookups(self):
+        self.cache.get_multi.return_value = {"doesnotexist": Subreddit.SRNAME_NOTFOUND}
+
+        with self.assertRaises(NotFound):
+            Subreddit._by_name("doesnotexist")
+        self.assertEqual(self.subreddit_query.call_count, 0)
+        self.assertEqual(self.subreddit_byID.call_count, 0)
+        self.assertEqual(self.cache.set_multi.call_count, 0)
+
 
 if __name__ == '__main__':
     unittest.main()

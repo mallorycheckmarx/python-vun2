@@ -23,7 +23,7 @@
 <%namespace file="utils.html" import="timestamp, plain_link"/>
 
 <%!
-    from pylons import c
+    from pylons import tmpl_context as c
     from r2.lib.filters import _force_unicode
     from r2.models import Account, Comment, Link
 
@@ -53,7 +53,7 @@
       }
       permalink = thing.target.make_permalink(thing.parent_link, thing.subreddit)
     %>
-    ${plain_link(text, permalink, title=title, sr_path=False, cname=False, _class="may-blank")}&#32;
+    ${plain_link(text, permalink, title=title, _sr_path=False, nocname=True, _class="may-blank")}&#32;
   %elif hasattr(thing, "target") and isinstance(thing.target, Link):
     <%
       title = _force_unicode(thing.target.title)
@@ -68,13 +68,13 @@
       }
       permalink = thing.target.make_permalink(thing.subreddit)
     %>
-    ${plain_link(text, permalink, title=title, sr_path=False, cname=False, _class="may-blank")}&#32;
+    ${plain_link(text, permalink, title=title, _sr_path=False, nocname=True, _class="may-blank")}&#32;
   %elif hasattr(thing, "wrapped_user_target"):
     ${thing.wrapped_user_target}&#32;
   %endif
 
-  %if hasattr(thing, 'details') and thing.details:
-    <em>(${thing.details})</em>
+  %if thing.details_text:
+    <em>(${thing.details_text})</em>
   %endif
   </td>
 </tr>

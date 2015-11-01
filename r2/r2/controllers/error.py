@@ -28,7 +28,10 @@ import pylons
 
 from webob.exc import HTTPFound, HTTPMovedPermanently
 from pylons.i18n import _
-from pylons import c, g, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
+
 
 try:
     # place all r2 specific imports in here.  If there is a code error, it'll
@@ -37,10 +40,10 @@ try:
     from r2.config import extensions
     from r2.controllers.reddit_base import (
         RedditController,
-        Cookies,
         pagecache_policy,
         PAGECACHE_POLICY,
     )
+    from r2.lib.cookies import Cookies
     from r2.lib.errors import ErrorSet
     from r2.lib.filters import (
         safemarkdown,
@@ -49,7 +52,7 @@ try:
         websafe_json,
     )
     from r2.lib import log, pages
-    from r2.lib.strings import rand_strings
+    from r2.lib.strings import get_funny_translated_string
     from r2.lib.template_helpers import static
     from r2.lib.base import abort
     from r2.models.link import Link
@@ -207,10 +210,6 @@ class ErrorController(RedditController):
             if code in (204, 304):
                 # NEVER return a content body on 204/304 or downstream
                 # caches may become very confused.
-                if request.GET.has_key('x-sup-id'):
-                    x_sup_id = request.GET.get('x-sup-id')
-                    if '\r\n' not in x_sup_id:
-                        response.headers['x-sup-id'] = x_sup_id
                 return ""
             elif c.render_style not in self.allowed_render_styles:
                 return str(code)
@@ -227,9 +226,10 @@ class ErrorController(RedditController):
             elif code == 429:
                 return self.send429()
             elif code == 500:
-                randmin = {'admin': random.choice(self.admins)}
                 failien_url = make_failien_url()
-                sad_message = safemarkdown(rand_strings.sadmessages % randmin)
+                sad_message = get_funny_translated_string("500_page")
+                sad_message %= {'admin': random.choice(self.admins)}
+                sad_message = safemarkdown(sad_message)
                 return redditbroke % (failien_url, sad_message)
             elif code == 503:
                 return self.send503()

@@ -29,13 +29,15 @@ from collections import Counter
 import snudown
 
 from BeautifulSoup import BeautifulSoup, Tag
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 
 from r2.lib.souptest import (
     souptest_fragment,
     SoupError,
     SoupUnsupportedEntityError,
 )
+from r2.lib.unicode import _force_utf8, _force_unicode
 
 SC_OFF = "<!-- SC_OFF -->"
 SC_ON = "<!-- SC_ON -->"
@@ -94,24 +96,6 @@ class _Unsafe(unicode):
     def cache_key(self, style):
         return unicode(self)
 
-
-def _force_unicode(text):
-    if text == None:
-        return u''
-
-    if isinstance(text, unicode):
-        return text
-
-    try:
-        text = unicode(text, 'utf-8')
-    except UnicodeDecodeError:
-        text = unicode(text, 'latin1')
-    except TypeError:
-        text = unicode(text)
-    return text
-
-def _force_utf8(text):
-    return str(_force_unicode(text).encode('utf8'))
 
 def unsafe(text=''):
     return _Unsafe(_force_unicode(text))

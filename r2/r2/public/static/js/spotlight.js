@@ -1,16 +1,56 @@
 !function(r, _, $) {
   r.spotlight = {
+    _bindEvents: function() {
+      // unbind everything and then selectively rebind
+      this.$listing.off('.spotlight');
+      this.$listing.find('.arrow.prev').off('.spotlight');
+      this.$listing.find('.arrow.next').off('.spotlight');
+      $(document).off('.spotlight');
+      $(window).off('.spotlight');
+
+      this.$listing.on('click.spotlight', function(e) {
+        var $target = $(e.target);
+        if ($target.is('.thumbnail, .title')) {
+          this.adWasClicked = true;
+        }
+      }.bind(this));
+
+      if (this.$listing.length) {
+        this.$listing.find('.arrow.prev').on('click.spotlight', this.prev);
+        this.$listing.find('.arrow.next').on('click.spotlight', this.next);
+      }
+
+      if (this.showPromo) {
+        // IE 9 and below do not have this prop or work with
+        // visibilitychange.
+        if ('hidden' in document) {
+          $(document).on('visibilitychange.spotlight', this._requestOrSaveTimestamp.bind(this));
+        } else {
+          $(window).on('focus.spotlight blur.spotlight', this._requestOrSaveTimestamp.bind(this));
+        }
+      }
+    },
+
     setup: function(organicLinks, interestProb, showPromo, srnames) {
       this.organics = [];
       this.lineup = [];
+      this.adWasClicked = false;
       this.interestProb = interestProb;
       this.showPromo = showPromo;
       this.srnames = srnames;
-      this.lastPromoTimestamp = Date.now();
-      this.MIN_PROMO_TIME = 1500;
+      this.loid = $.cookie('loid');
+      this.lastTabChangeTimestamp = Date.now();
+      this.MIN_PROMO_TIME = 3000;
       this.next = this._advance.bind(this, 1);
       this.prev = this._advance.bind(this, -1);
       this.$listing = $('.organic-listing');
+      this.adBlockIsEnabled = $('#siteTable_organic').is(":hidden");
+
+      if (this.adBlockIsEnabled) {
+        this.showPromo = false;
+      }
+
+      this._bindEvents();
 
       organicLinks.forEach(function(name) {
         this.organics.push(name);
@@ -21,13 +61,6 @@
         this.lineup.push('.interestbar');
       }
 
-      if (!this.$listing.length) {
-        return;
-      }
-
-      this.$listing.find('.arrow.prev').on('click', this.prev);
-      this.$listing.find('.arrow.next').on('click', this.next);
-
       var selectedThing;
       var lastClickFullname = r.analytics.breadcrumbs.lastClickFullname();
       var $lastClickThing = $(lastClickFullname ? '.id-' + lastClickFullname : null);
@@ -36,7 +69,8 @@
         r.debug('restoring spotlight selection to last click');
         selectedThing = { fullname: lastClickFullname, };
       } else {
-        selectedThing = this.chooseRandom();
+        var shouldForcePromo = this._isDocumentVisible() && this.showPromo;
+        selectedThing = this.chooseRandom(shouldForcePromo);
       }
 
       this.lineup = _.chain(this.lineup)
@@ -49,45 +83,52 @@
 
       this.lineup.pos = 0;
       this._advance(0);
+    },
 
-      if ('hidden' in document) {
-        this.readyForNewPromo = !document.hidden;
-
-        $(document).on('visibilitychange', function(e) {
-          if (!document.hidden) {
-            this.requestNewPromo();
-          }
-        }.bind(this));
+    _requestOrSaveTimestamp: function() {
+      if ( this._isDocumentVisible() ) {
+        this.requestNewPromo();
       } else {
-        this.readyForNewPromo = document.hasFocus();
+        this.lastTabChangeTimestamp = Date.now();
+      }
+    },
 
-        $(window).on('focus', this.requestNewPromo.bind(this));
+    _isDocumentVisible: function () {
+      if ('hidden' in document) {
+        return !document.hidden;
+      } else {
+        return document.hasFocus();
       }
     },
 
     requestNewPromo: function() {
-      // if the page loads in a background tab, this should be false.  In that
-      // case, we don't want to load a new ad, as this will be the first view
-      if (!this.readyForNewPromo) {
-        this.readyForNewPromo = true;
-        return;
-      }
-
-      // the ad will be stored as a promise
-      if (!this.lineup[this.lineup.pos].promise) {
-        return;
-      }
-
       var $promotedLink = this.$listing.find('.promotedlink');
+      // if there isn't an ad visible currently don't fetch a new one
+      if (!$promotedLink.is(':visible')) {
+        return;
+      }
+      // we don't want to fetch a new ad when the user has clicked so they 
+      // can have a chance to vote or comment on the last ad.
+      if (this.adWasClicked) {
+        return;
+      }
+
+      
       var $clearLeft = $promotedLink.next('.clearleft');
 
-      if (!$promotedLink.length || $promotedLink.is(':hidden') ||
-          $promotedLink.offset().top < window.scrollY ||
-          Date.now() - this.lastPromoTimestamp < this.MIN_PROMO_TIME) {
+      if (this.adBlockIsEnabled ||
+          Date.now() - this.lastTabChangeTimestamp < this.MIN_PROMO_TIME) {
         return;
       }
 
-      var newPromo = this.requestPromo();
+      if ($promotedLink.length && $promotedLink.offset().top < window.scrollY) {
+        return;
+      }
+
+      var newPromo = this.requestPromo({
+        refresh: true,
+      });
+
       newPromo.then(function($promo) {
         if (!$promo || !$promo.length) {
           return;
@@ -96,16 +137,30 @@
         var $link = $promo.eq(0);
         var fullname = $link.data('fullname');
 
-        this.organics[this.lineup.pos] = fullname;
-        this.lineup[this.lineup.pos] = newPromo;
-        $promotedLink.add($clearLeft).remove();
-        $promo.show();
+        if ($promotedLink.length) {
+          this.organics[this.lineup.pos] = fullname;
+          this.lineup[this.lineup.pos] = newPromo;
+        } else {
+          this.organics[this.lineup.pos + 1] = fullname;
+          this.lineup[this.lineup.pos + 1] = newPromo;
+        }
+
+        if (!$link.hasClass('adsense-wrap')) {
+          if ($promotedLink.length) {
+            $promotedLink.add($clearLeft).remove(); 
+            $promo.show();            
+          } else {
+            this.next()
+          }
+        }
         // force a redraw to prevent showing duplicate ads
         this.$listing.hide().show();
       }.bind(this));
     },
 
-    requestPromo: function() {
+    requestPromo: function(options) {
+      options = options || {};
+
       return $.ajax({
         type: 'POST',
         url: '/api/request_promo',
@@ -113,27 +168,45 @@
         data: {
           srnames: this.srnames,
           r: r.config.post_site,
+          loid: this.loid,
+          is_refresh: options.refresh,
         },
       }).pipe(function(promo) {
+        var prevPromo = this.$listing.find('.promotedlink')
         if (promo) {
-          this.lastPromoTimestamp = Date.now();
+          if (this.showPromo) {
+            $('#siteTable_organic').show('slow');
+          }
+
           var $item = $(promo);
-          $item.hide().appendTo(this.$listing);
+          // adsense will throw error if inserted while hidden
+          if (!$item.hasClass('adsense-wrap')) {
+            $item.hide().appendTo(this.$listing);
+          } else {
+            var $promotedLink = this.$listing.find('.promotedlink');
+            $promotedLink.remove()
+            $item.appendTo(this.$listing);
+          }
           return $item;
         } else {
+          if (!prevPromo.length && !this.organics.length) {
+            // spotlight box must be hidden when no ad is returned
+            // and there is no other content.
+            $('#siteTable_organic').hide();
+          }
           return false;
         }
       }.bind(this));
     },
 
-    chooseRandom: function() {
-      if (this.showPromo) {
+    chooseRandom: function(forcePromo) {
+      if (forcePromo) {
         return this.requestPromo();
       } else if (Math.random() < this.interestProb) {
         return '.interestbar';
       } else {
-        var name = this.organics[Math.floor(Math.random() * this.organics.length)];
-        return { fullname: name, };
+        var name = this.organics[_.random(this.organics.length)];
+        return (name) ? { fullname: name, } : null;
       }
     },
 
@@ -232,12 +305,22 @@
 
       // this function can be called before the help bubble has initialized
       $(function() {
-        $help.data('HelpBubble').hide(function() {
+        var help = $help.data('HelpBubble');
+
+        // `r.ui.refreshListing` replaces the help and it needs
+        // to be reinitialized.
+        if (!help) {
+          help = new r.ui.Bubble({el: $help.get(0)});
+        }
+
+        help.hide(function() {
           $help.find('.help-section').hide();
           if ($thing.hasClass('promoted')) {
             $help.find('.help-promoted').show();
           } else if ($thing.hasClass('interestbar')) {
             $help.find('.help-interestbar').show();
+          } else if ($thing.hasClass('adsense-wrap')) {
+            $help.find('.help-adserver').show()
           } else {
             $help.find('.help-organic').show();
           }

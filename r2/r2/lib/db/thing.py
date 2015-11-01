@@ -29,7 +29,7 @@ import itertools
 from copy import copy, deepcopy
 from datetime import datetime, timedelta
 
-from pylons import g
+from pylons import app_globals as g
 
 from r2.lib import amqp, hooks
 from r2.lib.cache import sgm
@@ -533,7 +533,8 @@ class DataThing(object):
 class ThingMeta(type):
     def __init__(cls, name, bases, dct):
         if name == 'Thing' or hasattr(cls, '_nodb') and cls._nodb: return
-        #print "checking thing", name
+        if g.env == 'unit_test':
+            return
 
         #TODO exceptions
         cls._type_name = name.lower()
@@ -572,8 +573,11 @@ class Thing(DataThing):
                 self._created = True
                 self._loaded = False
 
-            if not date: date = datetime.now(g.tz)
-            
+            if not date:
+                date = datetime.now(g.tz)
+            else:
+                date = date.astimezone(g.tz)
+
             self._ups = ups
             self._downs = downs
             self._date = date
@@ -651,6 +655,12 @@ class Thing(DataThing):
 
         return Things(cls, *rules, **kw)
 
+    @classmethod
+    def sort_ids_by_data_value(cls, thing_ids, value_name,
+            limit=None, desc=False):
+        return tdb.sort_thing_ids_by_data_value(
+            cls._type_id, thing_ids, value_name, limit, desc)
+
     def update_search_index(self, boost_only=False):
         msg = {'fullname': self._fullname}
         if boost_only:
@@ -665,6 +675,9 @@ class RelationMeta(type):
     def __init__(cls, name, bases, dct):
         if name == 'RelationCls': return
         #print "checking relation", name
+
+        if g.env == 'unit_test':
+            return
 
         cls._type_name = name.lower()
         try:
@@ -741,8 +754,10 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                     self._created = True
                     self._loaded = False
 
-                if not date: date = datetime.now(g.tz)
-
+                if not date:
+                    date = datetime.now(g.tz)
+                else:
+                    date = date.astimezone(g.tz)
 
                 #store the id, and temporarily store the actual object
                 #because we may need it later
@@ -904,10 +919,6 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                 res_obj[t] = rel
 
             return res_obj
-
-        @classmethod
-        def _gay(cls):
-            return cls._type1 == cls._type2
 
         @classmethod
         def _build(cls, id, bases):
@@ -1131,12 +1142,15 @@ def load_things(rels, load_data=False, stale=False):
     kind = rels[0].__class__
 
     t1_ids = set()
-    t2_ids = t1_ids if kind._gay() else set()
+    if kind._type1 == kind._type2:
+        t2_ids = t1_ids
+    else:
+        t2_ids = set()
     for rel in rels:
         t1_ids.add(rel._thing1_id)
         t2_ids.add(rel._thing2_id)
     kind._type1._byID(t1_ids, data=load_data, stale=stale)
-    if not kind._gay():
+    if kind._type1 != kind._type2:
         t2_items = kind._type2._byID(t2_ids, data=load_data, stale=stale)
 
 class Relations(Query):

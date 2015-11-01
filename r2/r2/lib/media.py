@@ -38,11 +38,11 @@ import urlparse
 import gzip
 
 import BeautifulSoup
-import Image
-import ImageFile
+from PIL import Image, ImageFile
+import lxml.html
 import requests
 
-from pylons import g
+from pylons import app_globals as g
 
 from r2 import models
 from r2.config import feature
@@ -70,17 +70,6 @@ from urllib2 import (
     HTTPError,
     URLError,
 )
-
-
-# TODO: replace this with data from the embedly service api when available
-_SECURE_SERVICES = [
-    "youtube",
-    "vimeo",
-    "soundcloud",
-    "wistia",
-    "slideshare",
-    "vine",
-]
 
 
 def _image_to_str(image):
@@ -322,16 +311,29 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
             print "%s made a bad secure media obj for url %s" % (scraper, url)
             secure_media_object = None
 
+        # If thumbnail can't be found, attempt again using _ThumbnailOnlyScraper
+        # This should fix bugs that occur when embed.ly caches links before the 
+        # thumbnail is available
+        if (not thumbnail_image and 
+                not isinstance(scraper, _ThumbnailOnlyScraper)):
+            scraper = _ThumbnailOnlyScraper(url)
+            try:
+                thumbnail_image, preview_object, _, _ = scraper.scrape()
+            except (HTTPError, URLError) as e:
+                use_cache = False
+
         if thumbnail_image and save_thumbnail:
             thumbnail_size = thumbnail_image.size
             thumbnail_url = upload_media(thumbnail_image)
+        else:
+            # don't cache if thumbnail is absent
+            use_cache = False
 
         media = Media(media_object, secure_media_object, preview_object,
                       thumbnail_url, thumbnail_size)
 
-    # Store the media in the cache (if requested), possibly extending the ttl
-    use_cache = use_cache and save_thumbnail    # don't cache partial scrape
-    if use_cache and media is not ERROR_MEDIA:
+    if use_cache and save_thumbnail and media is not ERROR_MEDIA:
+        # Store the media in the cache, possibly extending the ttl
         MediaByURL.add(url,
                        media,
                        autoplay=autoplay,
@@ -361,10 +363,11 @@ def _get_scrape_url(link):
 
 
 def _set_media(link, force=False, **kwargs):
-    if link.is_self:
-        if not feature.is_enabled('scrape_self_posts'):
-            return
-    else:
+    # Do not process thumbnails for quarantined subreddits
+    if link.subreddit_slow.quarantine:
+        return
+
+    if not link.is_self:
         if not force and (link.has_thumbnail or link.media_object):
             return
 
@@ -501,10 +504,9 @@ class Scraper(object):
             return scraper
 
         embedly_services = _fetch_embedly_services()
-        for service_re, service_secure in embedly_services:
+        for service_re in embedly_services:
             if service_re.match(url):
                 return _EmbedlyScraper(url,
-                                       service_secure,
                                        autoplay=autoplay,
                                        maxwidth=maxwidth)
 
@@ -641,9 +643,8 @@ class _EmbedlyScraper(Scraper):
     """
     EMBEDLY_API_URL = "https://api.embed.ly/1/oembed"
 
-    def __init__(self, url, can_embed_securely, autoplay=False, maxwidth=600):
+    def __init__(self, url, autoplay=False, maxwidth=600):
         self.url = url
-        self.can_embed_securely = can_embed_securely
         self.maxwidth = int(maxwidth)
         self.embedly_params = {}
 
@@ -703,9 +704,9 @@ class _EmbedlyScraper(Scraper):
 
         thumbnail = _prepare_image(image)
 
-        secure_oembed = {}
-        if self.can_embed_securely:
-            secure_oembed = self._fetch_from_embedly(secure=True)
+        secure_oembed = self._fetch_from_embedly(secure=True)
+        if not self.validate_secure_oembed(secure_oembed):
+            secure_oembed = {}
 
         return (
             thumbnail,
@@ -713,6 +714,22 @@ class _EmbedlyScraper(Scraper):
             self._make_media_object(oembed),
             self._make_media_object(secure_oembed),
         )
+
+    def validate_secure_oembed(self, oembed):
+        """Check the "secure" embed is safe to embed, and not a placeholder"""
+        if not oembed.get("html"):
+            return False
+
+        # Get the embed.ly iframe's src
+        iframe_src = lxml.html.fromstring(oembed['html']).get('src')
+        if not iframe_src:
+            return False
+        iframe_src_url = UrlParser(iframe_src)
+
+        # Per embed.ly support: If the URL for the provider is HTTP, we're
+        # gonna get a placeholder image instead
+        provider_src_url = UrlParser(iframe_src_url.query_dict.get('src'))
+        return not provider_src_url.scheme or provider_src_url.scheme == "https"
 
     @classmethod
     def media_embed(cls, media_object):
@@ -750,13 +767,10 @@ def _fetch_embedly_services():
 
     service_data = _fetch_embedly_service_data()
 
-    services = []
-    for service in service_data:
-        services.append((
-            re.compile("(?:%s)" % "|".join(service["regex"])),
-            service["name"] in _SECURE_SERVICES,
-        ))
-    return services
+    return [
+        re.compile("(?:%s)" % "|".join(service["regex"]))
+        for service in service_data
+    ]
 
 
 def run():

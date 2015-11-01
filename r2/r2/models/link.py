@@ -27,6 +27,7 @@ from r2.lib.db.operators import desc
 from r2.lib.utils import (
     base_url,
     domain,
+    epoch_timestamp,
     strip_www,
     timesince,
     title_to_url,
@@ -39,7 +40,13 @@ from account import (
     DeletedUser,
     SubredditParticipationByAccount,
 )
-from subreddit import DefaultSR, DomainSR, Subreddit
+from subreddit import (
+    DefaultSR,
+    DomainSR,
+    FakeSubreddit,
+    Subreddit,
+    SubredditsActiveForFrontPage,
+)
 from printable import Printable
 from r2.config import extensions
 from r2.lib.memoize import memoize
@@ -62,7 +69,9 @@ from r2.models.trylater import TryLater
 from r2.models.query_cache import CachedQueryMutator
 from r2.models.promo import PROMOTE_STATUS
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 from datetime import datetime, timedelta
 from hashlib import md5
@@ -71,6 +80,7 @@ import simplejson as json
 import random, re
 import pycassa
 from collections import defaultdict
+from itertools import cycle
 from pycassa.cassandra.ttypes import NotFoundException
 from pycassa.system_manager import (
     ASCII_TYPE,
@@ -109,6 +119,7 @@ class Link(Thing, Printable):
                      managed_promo=False,
                      pending=False,
                      disable_comments=False,
+                     locked=False,
                      selftext='',
                      sendreplies=True,
                      ip='0.0.0.0',
@@ -126,6 +137,8 @@ class Link(Thing, Printable):
                      )
     _essentials = ('sr_id', 'author_id')
     _nsfw = re.compile(r"\bnsf[wl]\b", re.I)
+
+    SELFTEXT_MAX_LENGTH = 40000
 
     def __init__(self, *a, **kw):
         Thing.__init__(self, *a, **kw)
@@ -145,9 +158,12 @@ class Link(Thing, Printable):
     def is_nsfw(self):
         return self.over_18 or bool(self._nsfw.search(self.title))
 
+    @property
+    def is_embeddable(self):
+        return not self.is_nsfw and self.subreddit_slow.is_embeddable
+
     @classmethod
     def _by_url(cls, url, sr):
-        from subreddit import FakeSubreddit
         if isinstance(sr, FakeSubreddit):
             sr = None
 
@@ -170,21 +186,17 @@ class Link(Thing, Printable):
 
         raise NotFound('Link "%s"' % url)
 
-    def set_url_cache(self):
-        if self.url != 'self':
-            LinksByUrl._set_values(LinksByUrl._key_from_url(self.url),
-                                   {self._id36: ''})
-
-    def already_submitted_link(self, url):
+    def already_submitted_link(self, url, title):
         permalink = self.make_permalink_slow()
         p = UrlParser(permalink)
-        p.update_query(already_submitted="true", submit_url=url)
+        p.update_query(already_submitted="true", submit_url=url,
+                       submit_title=title)
         return p.unparse()
 
     @classmethod
-    def resubmit_link(cls, url):
+    def resubmit_link(cls, url, title):
         p = UrlParser("/submit")
-        p.update_query(resubmit="true", url=url)
+        p.update_query(resubmit="true", url=url, title=title)
         return p.unparse()
 
     @classmethod
@@ -200,23 +212,53 @@ class Link(Thing, Printable):
             return cls._defaults['comment_tree_version']
 
     @classmethod
-    def _submit(cls, title, url, author, sr, ip, spam=False, sendreplies=True):
+    def _submit(cls, is_self, title, content, author, sr, ip,
+                spam=False, sendreplies=True):
         from r2.models import admintools
 
-        l = cls(_ups=1,
-                title=title,
-                url=url,
-                _spam=spam,
-                author_id=author._id,
-                sendreplies=sendreplies,
-                sr_id=sr._id,
-                lang=sr.lang,
-                ip=ip,
-                comment_tree_version=cls._choose_comment_tree_version())
+        if is_self:
+            url = "self"
+            selftext = content
+        else:
+            url = content
+            selftext = cls._defaults["selftext"]
+
+        over_18 = False
+        if cls._nsfw.search(title):
+            over_18 = True
+
+        l = cls(
+            _ups=1,
+            title=title,
+            url=url,
+            selftext=selftext,
+            _spam=spam,
+            author_id=author._id,
+            sendreplies=sendreplies,
+            sr_id=sr._id,
+            lang=sr.lang,
+            ip=ip,
+            comment_tree_version=cls._choose_comment_tree_version(),
+            is_self=is_self,
+            over_18=over_18,
+        )
+
         l._commit()
-        l.set_url_cache()
+        # Note: this does not provide atomicity, so for self posts when
+        # a request dies after the previous line but before the next line
+        # you will have a link whose URL is literally 'self'
+        if is_self:
+            l.url = l.make_permalink_slow()
+            l._commit()
+        else:
+            LinksByUrl.add_link(l, l.url)
+
         LinksByAccount.add_link(author, l)
         SubredditParticipationByAccount.mark_participated(author, sr)
+        SubredditsActiveForFrontPage.mark_new_post(sr)
+        author.last_submit_time = int(epoch_timestamp(datetime.now(g.tz)))
+        author._commit()
+
         if author._spam:
             g.stats.simple_event('spam.autoremove.link')
             admintools.spam(l, banner='banned user')
@@ -224,6 +266,29 @@ class Link(Thing, Printable):
         hooks.get_hook('link.new').call(link=l)
 
         return l
+
+    def set_content(self, is_self, content):
+        if not self.promoted:
+            raise ValueError("set_content is only supported for promoted links")
+
+        was_self = self.is_self
+        self.is_self = is_self
+
+        if is_self:
+            if not was_self:
+                LinksByUrl.remove_link(self, self.url)
+
+            self.url = self.make_permalink_slow()
+            self.selftext = content
+        else:
+            if not was_self:
+                LinksByUrl.remove_link(self, self.url)
+
+            self.url = content
+            self.selftext = self._defaults.get("selftext", "")
+            LinksByUrl.add_link(self, self.url)
+
+        self._commit()
 
     def _save(self, user, category=None):
         LinkSavesByAccount._save(user, self, category)
@@ -254,8 +319,15 @@ class Link(Thing, Printable):
         else:
             return domain(self.url)
 
+    @property
+    def num_comments(self):
+        # Paper over obviously broken comment counts (those that are negative).
+        return max(self.__getattr__('num_comments'), 0)
+
     def keep_item(self, wrapped):
         user = c.user if c.user_is_loggedin else None
+        if not c.user_is_admin and self._deleted:
+            return False
 
         if not (c.user_is_admin or (isinstance(c.site, DomainSR) and
                                     wrapped.subreddit.is_moderator(user))):
@@ -339,19 +411,20 @@ class Link(Thing, Printable):
         # include that in the path
         if self.promoted is not None:
             if force_domain:
-                res = "http://%s/%s" % (get_domain(cname=False,
-                                                   subreddit=False), p)
+                permalink_domain = get_domain(cname=False, subreddit=False)
+                res = "%s://%s/%s" % (g.default_scheme, permalink_domain, p)
             else:
                 res = "/%s" % p
         elif not c.cname and not force_domain:
             res = "/r/%s/%s" % (sr.name, p)
         elif sr != c.site or force_domain:
             if(c.cname and sr == c.site):
-                res = "http://%s/%s" % (get_domain(cname=True,
-                                                    subreddit=False), p)
+                permalink_domain = get_domain(cname=True, subreddit=False)
+                res = "%s://%s/%s" % (g.default_scheme, permalink_domain, p)
             else:
-                res = "http://%s/r/%s/%s" % (get_domain(cname=False,
-                                                    subreddit=False), sr.name, p)
+                permalink_domain = get_domain(cname=False, subreddit=False)
+                res = "%s://%s/r/%s/%s" % (g.default_scheme, permalink_domain,
+                                           sr.name, p)
         else:
             res = "/%s" % p
 
@@ -392,8 +465,7 @@ class Link(Thing, Printable):
 
     @staticmethod
     def _should_expunge_selftext(link):
-        verdict = getattr(link, "verdict", "")
-        if verdict not in ("admin-removed", "mod-removed"):
+        if not link._spam:
             return False
         if not c.user_is_loggedin:
             return True
@@ -413,7 +485,6 @@ class Link(Thing, Printable):
         from r2.lib.utils import timeago
         from r2.lib.template_helpers import get_domain, unsafe, format_html
         from r2.models.report import Report
-        from r2.models.subreddit import FakeSubreddit
         from r2.lib.wrapped import CachedVariable
 
         # referencing c's getattr is cheap, but not as cheap when it
@@ -421,7 +492,6 @@ class Link(Thing, Printable):
         user_is_admin = c.user_is_admin
         user_is_loggedin = c.user_is_loggedin
         pref_media = user.pref_media
-        pref_frame = user.uses_toolbar
         cname = c.cname
         site = c.site
 
@@ -472,6 +542,8 @@ class Link(Thing, Printable):
         else:
             is_moderator_srids = set()
 
+        sticky_fullnames = site.get_sticky_fullnames()
+
         for item in wrapped:
             show_media = False
             if not hasattr(item, "score_fmt"):
@@ -497,34 +569,45 @@ class Link(Thing, Printable):
                                 item.nsfw_str)
             item.nsfw = item.over_18 and user.pref_label_nsfw
 
-            item.show_new_post_sharing = feature.is_enabled('improved_sharing')
+            item.quarantine = item.subreddit.quarantine
 
             item.is_author = (user == item.author)
 
             item.thumbnail_sprited = False
+
+            if item.quarantine:
+                item.thumbnail = ""
+                item.preview_image = None
             # always show a promo author their own thumbnail
-            if item.promoted and (user_is_admin or item.is_author) and item.has_thumbnail:
+            elif item.promoted and (user_is_admin or item.is_author) and item.has_thumbnail:
                 item.thumbnail = media.thumbnail_url(item)
+                item.preview_image = getattr(item, 'preview_object', None)
             elif user.pref_no_profanity and item.over_18 and not c.site.over_18:
                 if show_media:
                     item.thumbnail = "nsfw"
                     item.thumbnail_sprited = True
                 else:
                     item.thumbnail = ""
+                item.preview_image = None
             elif not show_media:
                 item.thumbnail = ""
+                item.preview_image = None
             elif (item._deleted or
                   item._spam and item._date < timeago("6 hours")):
                 item.thumbnail = "default"
                 item.thumbnail_sprited = True
+                item.preview_image = None
             elif item.has_thumbnail:
                 item.thumbnail = media.thumbnail_url(item)
+                item.preview_image = getattr(item, 'preview_object', None)
             elif item.is_self:
                 item.thumbnail = "self"
                 item.thumbnail_sprited = True
+                item.preview_image = getattr(item, 'preview_object', None)
             else:
                 item.thumbnail = "default"
                 item.thumbnail_sprited = True
+                item.preview_image = getattr(item, 'preview_object', None)
 
             item.score = max(0, item.score)
 
@@ -562,10 +645,11 @@ class Link(Thing, Printable):
                 item.subreddit.allow_gilding
             )
 
+            # set an attribute on the Wrapped item so that it will be
+            # added to the render cache key
             if item.can_ban:
-                # set an attribute on the Wrapped item so that it will be
-                # added to the render cache key
                 item.ignore_reports_key = item.ignore_reports
+            item.locked_key = item.locked
 
             item.mod_reports, item.user_reports = Report.get_reports(item)
 
@@ -627,13 +711,11 @@ class Link(Thing, Printable):
             else:
                 item.hide_score = False
 
-            # store user preferences locally for caching
-            item.pref_frame = pref_frame
             # is this link a member of a different (non-c.site) subreddit?
             item.different_sr = (isinstance(site, FakeSubreddit) or
                                  site.name != item.subreddit.name)
             item.stickied = (not item.different_sr and
-                             site.sticky_fullname == item._fullname)
+                item._fullname in sticky_fullnames)
 
             if user_is_loggedin and item.author_id == user._id:
                 item.nofollow = False
@@ -644,7 +726,7 @@ class Link(Thing, Printable):
 
             item.subreddit_path = item.subreddit.path
             if cname:
-                item.subreddit_path = ("http://" +
+                item.subreddit_path = (g.default_scheme + "://" +
                      get_domain(cname=(site == item.subreddit),
                                 subreddit=False))
                 if site != item.subreddit:
@@ -656,21 +738,10 @@ class Link(Thing, Printable):
             # attach video or selftext as needed
             item.link_child, item.editable = make_link_child(item)
 
-            item.tblink = "http://%s/tb/%s" % (
-                get_domain(cname=cname, subreddit=False),
-                item._id36)
-
             if item.is_self and not item.promoted:
                 item.href_url = item.permalink
             else:
                 item.href_url = item.url
-
-            # show the toolbar if the preference is set and the link
-            # is neither a promoted link nor a self post
-            if pref_frame and not item.is_self and not item.promoted:
-                item.mousedown_url = item.tblink
-            else:
-                item.mousedown_url = None
 
             item.fresh = not any((item.likes != None,
                                   item.saved,
@@ -690,8 +761,9 @@ class Link(Thing, Printable):
             if item.deleted and not c.user_is_admin:
                 item.author = DeletedUser()
                 item.as_deleted = True
+                item.selftext = '[deleted]'
 
-            item.votable = item._age < item.subreddit.archive_age
+            item.votable = not item.archived
 
             item.expunged = False
             if item.is_self:
@@ -825,6 +897,41 @@ class Link(Thing, Printable):
         """
         return (self.author_id,)
 
+    @property
+    def archived(self):
+        if getattr(self, 'subreddit', None):
+            sr = self.subreddit
+        else:
+            sr = self.subreddit_slow
+        return self._age >= sr.archive_age
+
+    def can_view_promo(self, user):
+        if self.promoted:
+            # promos are visible only if the user is either the author
+            # or the link is live/previously live.
+            is_author = c.user_is_loggedin and user._id == self.author_id
+            return (c.user_is_sponsor or
+                    is_author or
+                    self.promote_status >= PROMOTE_STATUS.promoted)
+
+        # not a promo, therefore it is visible
+        # this preserves the original behavior of `visible_promo()`
+        return True
+
+    def can_comment(self, user):
+        if getattr(self, 'subreddit', None):
+            sr = self.subreddit
+        else:
+            sr = self.subreddit_slow
+
+        if self.archived:
+            return False
+
+        if self.locked and not sr.can_distinguish(user):
+            return False
+
+        return sr.can_comment(user) and self.can_view_promo(user)
+
     def sort_if_suggested(self):
         """Returns a sort, if the link or its subreddit has suggested one."""
         if self.suggested_sort:
@@ -903,6 +1010,19 @@ class LinksByUrl(tdb_cassandra.View):
             up.hostname = up.hostname.lower()
             keyurl = _force_utf8(UrlParser.base_url(up.unparse()))
         return keyurl
+
+    @classmethod
+    def add_link(cls, link, url):
+        rowkey = cls._key_from_url(url)
+        column = {link._id36: ''}
+        cls._set_values(rowkey, column)
+
+    @classmethod
+    def remove_link(cls, link, url):
+        rowkey = cls._key_from_url(url)
+        column = {link._id36: ''}
+        cls._remove(rowkey, column)
+
 
 # Note that there are no instances of PromotedLink or LinkCompressed,
 # so overriding their methods here will not change their behaviour
@@ -1042,6 +1162,8 @@ class Comment(Thing, Printable):
         CommentsByAccount.add_comment(author, c)
         SubredditParticipationByAccount.mark_participated(
             author, c.subreddit_slow)
+        author.last_comment_time = int(epoch_timestamp(datetime.now(g.tz)))
+        author._commit()
 
         def should_send():
             # don't send the message to author if replying to own comment
@@ -1112,6 +1234,17 @@ class Comment(Thing, Printable):
         # The author is often already on the wrapped comment as .author
         # If available, that should be used instead of calling this
         return Account._byID(self.author_id, data=True, return_dict=False)
+
+    @property
+    def archived(self):
+        link = getattr(self, 'link', None)
+        if link and getattr(link, 'subreddit', None):
+            sr = link.subreddit
+        elif link:
+            sr = link.subreddit_slow
+        else:
+            sr = self.subreddit_slow
+        return self._age >= sr.archive_age
 
     def keep_item(self, wrapped):
         return True
@@ -1247,8 +1380,17 @@ class Comment(Thing, Printable):
         if c.user_is_loggedin:
             is_moderator_subreddits = {
                 sr._id for sr in subreddits if sr.is_moderator(user)}
+            can_reply_srs = set(
+                sr._id for sr in subreddits if sr.can_comment(user))
+            can_distinguish_srs = set(
+                sr._id for sr in subreddits if sr.can_distinguish(user))
+            promo_sr_id = Subreddit.get_promote_srid()
+            if promo_sr_id:
+                can_reply_srs.add(promo_sr_id)
         else:
             is_moderator_subreddits = set()
+            can_reply_srs = set()
+            can_distinguish_srs = set()
 
         cids = dict((w._id, w) for w in wrapped)
         parent_ids = set(cm.parent_id for cm in wrapped
@@ -1256,10 +1398,6 @@ class Comment(Thing, Printable):
                          and cm.parent_id not in cids)
         parents = Comment._byID(
             parent_ids, data=True, stale=True, ignore_missing=True)
-
-        can_reply_srs = set(s._id for s in subreddits if s.can_comment(user)) \
-                        if c.user_is_loggedin else set()
-        can_reply_srs.add(Subreddit.get_promote_srid())
 
         profilepage = c.profilepage
         user_is_admin = c.user_is_admin
@@ -1289,6 +1427,7 @@ class Comment(Thing, Printable):
             # for caching:
             item.profilepage = c.profilepage
             item.link = links.get(item.link_id)
+            item.show_admin_context = user_is_admin
 
             if (item.link._score <= 1 or item.score < 3 or
                 item.link._spam or item._spam or item.author._spam):
@@ -1320,9 +1459,12 @@ class Comment(Thing, Printable):
             else:
                 item.parent_permalink = None
 
-            item.can_reply = item.link._age < item.subreddit.archive_age
-            if c.user_is_loggedin:
-                item.can_reply &= item.sr_id in can_reply_srs
+            if user_is_loggedin:
+                item.can_reply = (not item.link.archived and
+                    (not item.link.locked or item.sr_id in can_distinguish_srs) and
+                    item.sr_id in can_reply_srs)
+            else:
+                item.can_reply = not item.link.archived and not item.link.locked
 
             item.can_embed = c.can_embed or False
 
@@ -1364,14 +1506,21 @@ class Comment(Thing, Printable):
                 extra_css += "grayed"
                 if not user_is_admin:
                     item.author = DeletedUser()
-                    item.body = '[deleted]'
                     item.gildings = 0
                     item.distinguished = None
+                    # If removed by an admin or moderator, distinguish that
+                    # from being deleted by the user.
+                    if item._spam:
+                        item.body = '[removed]'
+                    else:
+                        item.body = '[deleted]'
 
             if focal_comment == item._id36:
                 extra_css += " border"
 
             if profilepage:
+                item.nsfw = user.pref_label_nsfw and (item.link.is_nsfw or item.subreddit.over_18)
+
                 link_author = authors[item.link.author_id]
                 if ((item.link._deleted or link_author._deleted) and
                         not user_is_admin):
@@ -1393,7 +1542,7 @@ class Comment(Thing, Printable):
 
             item.subreddit_path = item.subreddit.path
             if cname:
-                item.subreddit_path = ("http://" +
+                item.subreddit_path = (g.default_scheme + "://" +
                      get_domain(cname=(site == item.subreddit),
                                 subreddit=False))
                 if site != item.subreddit:
@@ -1436,7 +1585,7 @@ class Comment(Thing, Printable):
             item.is_author = (user == item.author)
             item.is_focal = (focal_comment == item._id36)
 
-            item.votable = item._age < item.subreddit.archive_age
+            item.votable = not item.archived
 
             hide_period = ('{0} minutes'
                           .format(item.subreddit.comment_score_hide_mins))
@@ -1555,6 +1704,10 @@ class MoreMessages(Printable):
         return self.parent._id36
 
     @property
+    def _id(self):
+        return self.parent._id
+
+    @property
     def subject(self):
         return self.parent.subject
 
@@ -1581,6 +1734,10 @@ class MoreMessages(Printable):
     @property
     def subreddit(self):
         return self.parent.subreddit
+
+    @property
+    def accent_color(self):
+        return getattr(self.parent, "accent_color", None)
 
 
 class MoreComments(Printable):
@@ -1696,6 +1853,9 @@ class Message(Thing, Printable):
         if to_subreddit:
             SubredditParticipationByAccount.mark_participated(author, sr)
 
+        if sr_id:
+            g.stats.simple_event("modmail.received_message")
+
         inbox_rel = []
 
         inbox_hook = hooks.get_hook("message.skip_inbox")
@@ -1775,6 +1935,19 @@ class Message(Thing, Printable):
     @property
     def permalink(self):
         return "/message/messages/%s" % self._id36
+
+    def make_permalink(self, force_domain=False):
+        from r2.lib.template_helpers import get_domain
+        p = self.permalink
+        if force_domain:
+            permalink_domain = get_domain(cname=False, subreddit=False)
+            res = "%s://%s%s" % (g.default_scheme, permalink_domain, p)
+        else:
+            res = p
+        return res
+
+    def make_permalink_slow(self, context=None, anchor=False, force_domain=False):
+        return self.make_permalink(force_domain)
 
     def can_view_slow(self):
         if c.user_is_loggedin:
@@ -1860,6 +2033,13 @@ class Message(Thing, Printable):
                             c.extension not in ("rss", "xml", "api", "json"))
         to_set_unread = []
 
+        # accent colors for color coded modmail
+        sr_colors = None
+        if isinstance(c.site, FakeSubreddit):
+            mod_sr_ids = Subreddit.reverse_moderator_ids(user)
+            if len(mod_sr_ids) > 1:
+                sr_colors = dict(zip(mod_sr_ids, cycle(Subreddit.ACCENT_COLORS)))
+
         for item in wrapped:
             user_is_recipient = item.to_id == user._id
             user_is_sender = (item.author_id == user._id and
@@ -1901,7 +2081,13 @@ class Message(Thing, Printable):
                     "from %(author)s via %(subreddit)s sent %(when)s")
             elif item.sr_id:
                 item.user_is_recipient = not user_is_sender
-                user_is_moderator = item.sr_id in user_mod_sr_ids
+                item.user_is_moderator = item.sr_id in user_mod_sr_ids
+
+                if sr_colors and item.user_is_moderator:
+                    item.accent_color = sr_colors.get(item.sr_id)
+
+                if item.subreddit.is_muted(item.author):
+                    item.sr_muted = True
 
                 if sent_by_sr:
                     if item.sr_id in blocked_srids:
@@ -1909,7 +2095,7 @@ class Message(Thing, Printable):
                         item.sr_blocked = True
                         item.is_collapsed = True
 
-                    if not user_is_moderator and not c.user_is_admin:
+                    if not item.user_is_moderator and not c.user_is_admin:
                         item.author = item.subreddit
                         item.hide_author = True
                         item.taglinetext = _(
@@ -2006,7 +2192,7 @@ class Message(Thing, Printable):
     def subreddit_slow(self):
         from subreddit import Subreddit
         if self.sr_id:
-            return Subreddit._byID(self.sr_id)
+            return Subreddit._byID(self.sr_id, data=True)
 
     @property
     def author_slow(self):
@@ -2014,6 +2200,11 @@ class Message(Thing, Printable):
         # The author is often already on the wrapped message as .author
         # If available, that should be used instead of calling this
         return Account._byID(self.author_id, data=True, return_dict=False)
+
+    @property
+    def recipient_slow(self):
+        """Returns the message's recipient."""
+        return Account._byID(self.to_id, data=True, return_dict=False)
 
     @staticmethod
     def wrapped_cache_key(wrapped, style):

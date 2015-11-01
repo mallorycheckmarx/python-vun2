@@ -27,7 +27,8 @@ from base64 import urlsafe_b64encode
 
 from pycassa.system_manager import ASCII_TYPE, DATE_TYPE, UTF8_TYPE
 
-from pylons import g, c
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 
 from r2.lib import hooks
@@ -149,7 +150,7 @@ class OAuth2Scope:
             "name": _("Approve submitters and ban users"),
             "description": _(
                 "Add/remove users to approved submitter lists and "
-                "ban/unban users from subreddits I moderate."
+                "ban/unban or mute/unmute users from subreddits I moderate."
             ),
         },
         "modflair": {
@@ -306,6 +307,12 @@ class OAuth2Scope:
         if self.subreddit_only and subreddit not in self.subreddits:
             return False
         return (self.scopes >= required_scopes)
+
+    def has_any_scope(self, required_scopes):
+        if self.FULL_ACCESS in self.scopes:
+            return True
+
+        return bool(self.scopes & required_scopes)
 
     def is_valid(self):
         return all(scope in self.scope_info for scope in self.scopes)

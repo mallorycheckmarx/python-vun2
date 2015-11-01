@@ -19,7 +19,8 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
-from pylons import c, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope
 from r2.controllers.reddit_base import OAuth2OnlyController
@@ -48,7 +49,6 @@ import r2.lib.validator.preferences as vprefs
 PREFS_JSON_SPEC = VValidatedJSON.PartialObject({
     k[len("pref_"):]: v for k, v in
     vprefs.PREFS_VALIDATORS.iteritems()
-    if k in Account._preference_attrs
 })
 
 

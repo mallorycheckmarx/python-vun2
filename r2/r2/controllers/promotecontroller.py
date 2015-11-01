@@ -27,7 +27,9 @@ from babel.numbers import format_number
 import json
 import urllib
 
-from pylons import c, g, request
+from pylons import request
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _, N_
 
 from r2.controllers.api import ApiController
@@ -89,6 +91,7 @@ from r2.lib.validator import (
     VDate,
     VExistingUname,
     VFloat,
+    VFrequencyCap,
     VImageType,
     VInt,
     VLength,
@@ -97,6 +100,7 @@ from r2.lib.validator import (
     VLocation,
     VModhash,
     VOneOf,
+    VOSVersion,
     VPriority,
     VPromoCampaign,
     VPromoTarget,
@@ -106,6 +110,7 @@ from r2.lib.validator import (
     VSponsor,
     VSponsorAdmin,
     VSponsorAdminOrAdminSecret,
+    VVerifiedSponsor,
     VSubmitSR,
     VTitle,
     VUploadLength,
@@ -128,6 +133,9 @@ from r2.models import (
     Subreddit,
     Target,
 )
+
+IOS_DEVICES = ('iPhone', 'iPad', 'iPod',)
+ANDROID_DEVICES = ('phone', 'tablet',)
 
 
 def campaign_has_oversold_error(form, campaign):
@@ -192,7 +200,7 @@ class PromoteController(RedditController):
         content = RefundPage(link, campaign)
         return Reddit("refund", content=content, show_sidebar=False).render()
 
-    @validate(VSponsor("link"),
+    @validate(VVerifiedSponsor("link"),
               link=VLink("link"),
               campaign=VPromoCampaign("campaign"))
     def GET_pay(self, link, campaign):
@@ -746,7 +754,7 @@ class PromoteApiController(ApiController):
                     third_party_tracking, third_party_tracking_2,
                     is_managed, l=None, thumbnail_file=None):
         should_ratelimit = False
-        is_self = kind == "self"
+        is_self = (kind == "self")
         is_link = not is_self
         if not c.user_is_sponsor:
             should_ratelimit = True
@@ -805,9 +813,14 @@ class PromoteApiController(ApiController):
 
         if not l:
             # creating a new promoted link
-            l = promote.new_promotion(title, url if kind == 'link' else 'self',
-                                      selftext if kind == 'self' else '',
-                                      user, request.ip)
+            l = promote.new_promotion(
+                is_self=is_self,
+                title=title,
+                content=(selftext if is_self else url),
+                author=user,
+                ip=request.ip,
+            )
+
             if c.user_is_sponsor:
                 l.managed_promo = is_managed
                 l.domain_override = domain_override or None
@@ -841,11 +854,12 @@ class PromoteApiController(ApiController):
         if not promote.is_promoted(l) or c.user_is_sponsor:
             if title and title != l.title:
                 l.title = title
-                changed = not c.user_is_sponsor
+                changed = True
 
-            if kind == 'link' and url and url != l.url:
-                l.url = url
-                changed = not c.user_is_sponsor
+            # type changing
+            if is_self != l.is_self:
+                l.set_content(is_self, selftext if is_self else url)
+                changed = True
 
         # only trips if the title and url are changed by a non-sponsor
         if changed:
@@ -986,32 +1000,55 @@ class PromoteApiController(ApiController):
     @validatedForm(
         VSponsor('link_id36'),
         VModhash(),
-        start=VDate('startdate'),
+        start=VDate('startdate', required=False),
         end=VDate('enddate'),
         link=VLink('link_id36'),
         bid=VFloat('bid', coerce=False),
         target=VPromoTarget(),
         campaign_id36=nop("campaign_id36"),
+        frequency_cap=VFrequencyCap(("frequency_capped",
+                                     "frequency_cap",
+                                     "frequency_cap_duration"),),
         priority=VPriority("priority"),
         location=VLocation(),
         platform=VOneOf("platform", ("mobile", "desktop", "all"), default="desktop"),
         mobile_os=VList("mobile_os", choices=["iOS", "Android"]),
+        os_versions=VOneOf('os_versions', ('all', 'filter'), default='all'),
+        ios_devices=VList('ios_device', choices=IOS_DEVICES),
+        android_devices=VList('android_device', choices=ANDROID_DEVICES),
+        ios_versions=VOSVersion('ios_version_range', 'ios'),
+        android_versions=VOSVersion('android_version_range', 'android'),
     )
     def POST_edit_campaign(self, form, jquery, link, campaign_id36,
-                           start, end, bid, target, priority, location,
-                           platform, mobile_os):
+                           start, end, bid, target, frequency_cap,
+                           priority, location, platform, mobile_os,
+                           os_versions, ios_devices, ios_versions,
+                           android_devices, android_versions):
         if not link:
             return
 
-        if platform in ('mobile', 'all') and not mobile_os:
-            c.errors.add(errors.BAD_PROMO_MOBILE_OS, field='mobile_os')
-            form.set_error(errors.BAD_PROMO_MOBILE_OS, 'mobile_os')
+        if form.has_errors('frequency_cap', errors.INVALID_FREQUENCY_CAP):
             return
 
-        if platform == 'mobile' and priority.cpm:
-            c.errors.add(errors.BAD_PROMO_MOBILE_PRIORITY, field='priority')
-            form.set_error(errors.BAD_PROMO_MOBILE_PRIORITY, 'priority')
-            return
+        # if on mobile platform, do a few checks
+        if platform in ('mobile', 'all'):
+            # check if platform includes mobile, but no mobile OS is selected
+            if not mobile_os:
+                c.errors.add(errors.BAD_PROMO_MOBILE_OS, field='mobile_os')
+                form.set_error(errors.BAD_PROMO_MOBILE_OS, 'mobile_os')
+                return
+            elif os_versions == 'filter':
+                # check if OS is selected, but OS devices are not
+                if (('iOS' in mobile_os and not ios_devices) or
+                        ('Android' in mobile_os and not android_devices)):
+                    c.errors.add(errors.BAD_PROMO_MOBILE_DEVICE, field='os_versions')
+                    form.set_error(errors.BAD_PROMO_MOBILE_DEVICE, 'os_versions')
+                    return
+                # check if OS versions are invalid
+                if form.has_errors('os_version', errors.INVALID_OS_VERSION):
+                    c.errors.add(errors.INVALID_OS_VERSION, field='os_version')
+                    form.set_error(errors.INVALID_OS_VERSION, 'os_version')
+                    return
 
         if not (c.user_is_sponsor or platform == 'desktop'):
             return abort(403, 'forbidden')
@@ -1037,9 +1074,40 @@ class PromoteApiController(ApiController):
                 form.has_errors('enddate', errors.BAD_DATE)):
             return
 
+        if not campaign_id36 and not start:
+            c.errors.add(errors.BAD_DATE, field='startdate')
+            form.set_error('startdate', errors.BAD_DATE)
+
         min_start, max_start, max_end = promote.get_date_limits(
             link, c.user_is_sponsor)
-        if start.date() < min_start:
+
+        if campaign_id36:
+            promo_campaign = PromoCampaign._byID36(campaign_id36)
+
+            # Start not sent for campaigns already serving,
+            # use the current start
+            if not start:
+                start = promo_campaign.start_date
+
+            if promo_campaign.start_date.date() != start.date():
+                # Can't edit the start date of campaigns that have served
+                if promo_campaign.has_served:
+                    c.errors.add(errors.START_DATE_CANNOT_CHANGE, field='startdate')
+                    form.has_errors('startdate', errors.START_DATE_CANNOT_CHANGE)
+                    return
+
+                # Or that are live or completed
+                live_campaigns = promote.live_campaigns_by_link(link)
+                is_pending = promote.is_pending(promo_campaign)
+                is_live = promo_campaign in live_campaigns
+                is_complete = (promo_campaign.is_paid and
+                               not (is_live or is_pending))
+                if is_live or is_complete:
+                    c.errors.add(errors.START_DATE_CANNOT_CHANGE, field='startdate')
+                    form.has_errors('startdate', errors.START_DATE_CANNOT_CHANGE)
+                    return
+
+        elif start.date() < min_start:
             c.errors.add(errors.DATE_TOO_EARLY,
                          msg_params={'day': min_start.strftime("%m/%d/%Y")},
                          field='startdate')
@@ -1137,10 +1205,15 @@ class PromoteApiController(ApiController):
         dates = (start, end)
         if campaign:
             promote.edit_campaign(link, campaign, dates, bid, cpm, target,
-                                  priority, location, platform, mobile_os)
+                                  frequency_cap[0], frequency_cap[1], priority,
+                                  location, platform, mobile_os, ios_devices,
+                                  ios_versions, android_devices, android_versions)
         else:
             campaign = promote.new_campaign(link, dates, bid, cpm, target,
-                                            priority, location, platform, mobile_os)
+                                            frequency_cap[0], frequency_cap[1],
+                                            priority, location, platform, mobile_os,
+                                            ios_devices, ios_versions, android_devices,
+                                            android_versions)
         rc = RenderableCampaign.from_campaigns(link, campaign)
         jquery.update_campaign(campaign._fullname, rc.render_html())
 
@@ -1167,7 +1240,7 @@ class PromoteApiController(ApiController):
         jquery.update_campaign(campaign._fullname, rc.render_html())
 
     @validatedForm(
-        VSponsor('link'),
+        VVerifiedSponsor('link'),
         VModhash(),
         link=VByName("link"),
         campaign=VPromoCampaign("campaign"),

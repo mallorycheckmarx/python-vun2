@@ -25,9 +25,12 @@ import json
 from collections import OrderedDict
 from decimal import Decimal
 
-from pylons import c, g, request, response
+from pylons import request, response
+from pylons import tmpl_context as c
+from pylons import app_globals as g
 from pylons.i18n import _
 from pylons.controllers.util import abort
+
 from r2.config import feature
 from r2.config.extensions import api_type, is_api
 from r2.lib import utils, captcha, promote, totp, ratelimit
@@ -37,7 +40,7 @@ from r2.lib.db import tdb_cassandra
 from r2.lib.db.operators import asc, desc
 from r2.lib.souptest import (
     SoupError,
-    SoupHostnameLengthError,
+    SoupDetectedCrasherError,
     SoupUnsupportedEntityError,
 )
 from r2.lib.template_helpers import add_sr
@@ -60,28 +63,11 @@ import re, inspect
 from itertools import chain
 from functools import wraps
 
-def visible_promo(article):
-    is_promo = getattr(article, "promoted", None) is not None
-    is_author = (c.user_is_loggedin and
-                 c.user._id == article.author_id)
-
-    # promos are visible only if comments are not disabled and the
-    # user is either the author or the link is live/previously live.
-    if is_promo:
-        return (c.user_is_sponsor or
-                is_author or
-                (not article.disable_comments and
-                 article.promote_status >= PROMOTE_STATUS.promoted))
-    # not a promo, therefore it is visible
-    return True
 
 def can_view_link_comments(article):
     return (article.subreddit_slow.can_view(c.user) and
-            visible_promo(article))
+            article.can_view_promo(c.user))
 
-def can_comment_link(article):
-    return (article.subreddit_slow.can_comment(c.user) and
-            visible_promo(article))
 
 class Validator(object):
     notes = None
@@ -646,7 +632,7 @@ class VMarkdown(Validator):
                 user = c.user.name
 
             # work around CRBUG-464270
-            if isinstance(e, SoupHostnameLengthError):
+            if isinstance(e, SoupDetectedCrasherError):
                 # We want a general idea of how often this is triggered, and
                 # by what
                 g.log.warning("CHROME HAX by %s: %s" % (user, text))
@@ -1069,7 +1055,7 @@ class VSponsorAdmin(VVerifiedUser):
 
 VSponsorAdminOrAdminSecret = make_or_admin_secret_cls(VSponsorAdmin)
 
-class VSponsor(VVerifiedUser):
+class VSponsor(VUser):
     """
     Not intended to be used as a check for c.user_is_sponsor, but
     rather is the user allowed to use the sponsored link system.
@@ -1082,7 +1068,7 @@ class VSponsor(VVerifiedUser):
     def run(self, link_id=None, campaign_id=None):
         assert not (link_id and campaign_id), 'Pass link or campaign, not both'
 
-        VVerifiedUser.run(self)
+        VUser.run(self)
         if c.user_is_sponsor:
             return
         elif campaign_id:
@@ -1108,6 +1094,13 @@ class VSponsor(VVerifiedUser):
             except (NotFound, ValueError):
                 pass
             abort(403, 'forbidden')
+
+
+class VVerifiedSponsor(VSponsor):
+    def run(self, *args, **kwargs):
+        VVerifiedUser().run()
+
+        return super(VVerifiedSponsor, self).run(*args, **kwargs)
 
 
 class VEmployee(VVerifiedUser):
@@ -1206,38 +1199,67 @@ class VSrSpecial(VByName):
 
 class VSubmitParent(VByName):
     def run(self, fullname, fullname2):
-        #for backwards compatability (with iphone app)
+        # for backwards compatibility (with iphone app)
         fullname = fullname or fullname2
-        if fullname:
-            parent = VByName.run(self, fullname)
-            if not isinstance(parent, (Comment, Link, Message)):
-                abort(403, "forbidden")
+        parent = VByName.run(self, fullname) if fullname else None
 
-            if parent:
-                if c.user_is_loggedin and parent.author_id in c.user.enemies:
-                    self.set_error(errors.USER_BLOCKED)
-                if parent._deleted:
-                    if isinstance(parent, Link):
-                        self.set_error(errors.DELETED_LINK)
-                    else:
-                        self.set_error(errors.DELETED_COMMENT)
-                if parent._spam and isinstance(parent, Comment):
-                    # Only author, mod or admin can reply to removed comments
-                    can_reply = (c.user_is_loggedin and
-                                 (parent.author_id == c.user._id or
-                                  c.user_is_admin or
-                                  parent.subreddit_slow.is_moderator(c.user)))
-                    if not can_reply:
-                        self.set_error(errors.DELETED_COMMENT)
-            if isinstance(parent, Message):
+        if not parent:
+            # for backwards compatibility (normally 404)
+            abort(403, "forbidden")
+
+        if not isinstance(parent, (Comment, Link, Message)):
+            # for backwards compatibility (normally 400)
+            abort(403, "forbidden")
+
+        if not c.user_is_loggedin:
+            # in practice this is handled by VUser
+            abort(403, "forbidden")
+
+        if parent.author_id in c.user.enemies:
+            self.set_error(errors.USER_BLOCKED)
+
+        if isinstance(parent, Message):
+            return parent
+
+        elif isinstance(parent, Link):
+            sr = parent.subreddit_slow
+
+            if parent._deleted:
+                self.set_error(errors.DELETED_LINK)
+
+            if parent.archived:
+                self.set_error(errors.TOO_OLD)
+            elif parent.locked and not sr.can_distinguish(c.user):
+                self.set_error(errors.THREAD_LOCKED)
+
+            if self.has_errors or parent.can_comment(c.user):
                 return parent
-            else:
-                link = parent
-                if isinstance(parent, Comment):
-                    link = Link._byID(parent.link_id, data=True)
-                if link and c.user_is_loggedin and can_comment_link(link):
-                    return parent
-        #else
+
+        elif isinstance(parent, Comment):
+            sr = parent.subreddit_slow
+
+            if parent._deleted:
+                self.set_error(errors.DELETED_COMMENT)
+
+            elif parent._spam:
+                # Only author, mod or admin can reply to removed comments
+                can_reply = (c.user_is_loggedin and
+                             (parent.author_id == c.user._id or
+                              c.user_is_admin or
+                              sr.is_moderator(c.user)))
+                if not can_reply:
+                    self.set_error(errors.DELETED_COMMENT)
+
+            link = Link._byID(parent.link_id, data=True)
+
+            if link.archived:
+                self.set_error(errors.TOO_OLD)
+            elif link.locked and not sr.can_distinguish(c.user):
+                self.set_error(errors.THREAD_LOCKED)
+
+            if self.has_errors or link.can_comment(c.user):
+                return parent
+
         abort(403, "forbidden")
 
     def param_docs(self):
@@ -1272,7 +1294,7 @@ class VSubmitSR(Validator):
             self.set_error(errors.SUBREDDIT_NOTALLOWED)
             return
 
-        if sr.hide_ads and self.promotion:
+        if not sr.allow_ads and self.promotion:
             self.set_error(errors.SUBREDDIT_DISABLED_ADS)
             return
 
@@ -1314,7 +1336,7 @@ class VSubscribeSR(VByName):
 
     def param_docs(self):
         return {
-            self.param[0]: "the [fullname](#fullname) of a subreddit",
+            self.param[0]: "the name of a subreddit",
         }
 
 
@@ -1350,6 +1372,58 @@ class VPromoTarget(Validator):
                 return
         else:
             self.set_error(errors.INVALID_TARGET, field="targeting")
+
+
+class VOSVersion(Validator):
+    def __init__(self, param, os, *a, **kw):
+        Validator.__init__(self, param, *a, **kw)
+        self.os = os
+
+    def assign_error(self):
+        self.set_error(errors.INVALID_OS_VERSION, field="os_version")
+
+    def run(self, version_range):
+        if not version_range:
+            return
+
+        # check that string conforms to `min,max` format
+        try:
+            min, max = version_range.split(',')
+        except ValueError:
+            self.assign_error()
+            return
+
+        # check for type errors
+        # (max can be empty string, otherwise both float)
+        type_errors = False
+        if max == '':
+            # check that min is a float
+            try:
+                min = float(min)
+            except ValueError:
+                type_errors = True
+        else:
+            # check that min and max are both floats
+            try:
+                min, max = float(min), float(max)
+                # ensure than min is less-or-equal-to max
+                if min > max:
+                    type_errors = True
+            except ValueError:
+                type_errors = True
+
+        if type_errors == True:
+            self.assign_error()
+            return
+
+        for endpoint in (min, max):
+            if endpoint != '':
+                # check that the version is in the global config
+                if endpoint not in getattr(g, '%s_versions' % self.os):
+                    self.assign_error()
+                    return
+
+        return [str(min), str(max)]
 
 
 MIN_PASSWORD_LENGTH = 6
@@ -1446,23 +1520,52 @@ class AuthenticationFailed(Exception):
     pass
 
 
+class LoginRatelimit(object):
+    def __init__(self, category, key):
+        self.category = category
+        self.key = key
+
+    def __str__(self):
+        return "rl-login-%s-%s" % (self.category, self.key)
+
+    def __hash__(self):
+        return hash(str(self))
+
+
 class VThrottledLogin(VRequired):
     def __init__(self, params):
         VRequired.__init__(self, params, error=errors.WRONG_PASSWORD)
         self.vlength = VLength("user", max_length=100)
         self.seconds = None
 
-    def run(self, username, password):
+    def get_ratelimits(self, account):
         if config["r2.import_private"]:
             from r2admin.lib.ip_events import ip_used_by_account
         else:
             def ip_used_by_account(account_id, ip):
                 return False
 
-        ratelimit_key = None
+        is_previously_seen_ip = ip_used_by_account(account._id, request.ip)
+        if is_previously_seen_ip:
+            ratelimits = {
+                LoginRatelimit("familiar", account._id): g.RL_LOGIN_MAX_REQS,
+            }
+        else:
+            ratelimits = {
+                LoginRatelimit("unfamiliar", account._id): g.RL_LOGIN_MAX_REQS,
+                LoginRatelimit("ip", request.ip): g.RL_LOGIN_IP_MAX_REQS,
+            }
 
-        g.stats.event_count("login_throttle", "checked",
-                            sample_rate=0.1)
+        hooks.get_hook("login.ratelimits").call(
+            ratelimits=ratelimits,
+            familiar=is_previously_seen_ip,
+        )
+
+        return ratelimits
+
+    def run(self, username, password):
+        ratelimits = {}
+
         try:
             if username:
                 username = username.strip()
@@ -1486,27 +1589,24 @@ class VThrottledLogin(VRequired):
             ratelimit_exempt = (account == c.user)
             if not ratelimit_exempt:
                 time_slice = ratelimit.get_timeslice(g.RL_RESET_SECONDS)
-                is_previously_seen_ip = ip_used_by_account(account._id, request.ip)
-                if is_previously_seen_ip:
-                    ratelimit_key = "rl-login-familiar-%d" % account._id
-                else:
-                    ratelimit_key = "rl-login-unknown-%d" % account._id
+                ratelimits = self.get_ratelimits(account)
 
-                try:
-                    failed_logins = ratelimit.get_usage(ratelimit_key, time_slice)
-                    if failed_logins >= g.RL_LOGIN_MAX_REQS:
-                        self.seconds = time_slice.remaining
-                        period_end = datetime.utcfromtimestamp(
-                            time_slice.end).replace(tzinfo=pytz.UTC)
-                        time = utils.timeuntil(period_end)
-                        self.set_error(
-                            errors.RATELIMIT, {'time': time},
-                            field='ratelimit', code=429)
-                        return False
-                except ratelimit.RatelimitError as e:
-                    g.log.info("ratelimitcache error (login): %s", e)
-                    g.stats.event_count("login_throttle", "limited",
-                                        sample_rate=0.1)
+                for rl, max_requests in ratelimits.iteritems():
+                    try:
+                        failed_logins = ratelimit.get_usage(str(rl), time_slice)
+
+                        if failed_logins >= max_requests:
+                            self.seconds = time_slice.remaining
+                            period_end = datetime.utcfromtimestamp(
+                                time_slice.end).replace(tzinfo=pytz.UTC)
+                            time = utils.timeuntil(period_end)
+                            self.set_error(
+                                errors.RATELIMIT, {'time': time},
+                                field='ratelimit', code=429)
+                            g.stats.event_count('login.throttle', rl.category)
+                            return False
+                    except ratelimit.RatelimitError as e:
+                        g.log.info("ratelimitcache error (login): %s", e)
 
             try:
                 str(password)
@@ -1515,15 +1615,16 @@ class VThrottledLogin(VRequired):
 
             if not valid_password(account, password):
                 raise AuthenticationFailed
+            g.stats.event_count('login', 'success')
             return account
         except AuthenticationFailed:
-            if ratelimit_key:
-                try:
-                    ratelimit.record_usage(ratelimit_key, time_slice)
-                except ratelimit.RatelimitError as e:
-                    g.log.info("ratelimitcache error (login): %s", e)
-                g.stats.event_count("login_throttle", "usage_recorded",
-                                    sample_rate=0.1)
+            g.stats.event_count('login', 'failure')
+            if ratelimits:
+                for rl in ratelimits:
+                    try:
+                        ratelimit.record_usage(str(rl), time_slice)
+                    except ratelimit.RatelimitError as e:
+                        g.log.info("ratelimitcache error (login): %s", e)
             self.error()
             return False
 
@@ -1557,6 +1658,11 @@ class VUrl(VRequired):
         url = utils.sanitize_url(url, require_scheme=self.require_scheme,
                                  valid_schemes=self.valid_schemes)
         if not url:
+            return self.error(errors.BAD_URL)
+
+        try:
+            url.encode('utf-8')
+        except UnicodeDecodeError:
             return self.error(errors.BAD_URL)
 
         if url == 'self':
@@ -1650,6 +1756,8 @@ class VMessageRecipient(VExistingUname):
                     raise NotFound, "fake subreddit"
                 if s._spam:
                     raise NotFound, "banned subreddit"
+                if s.is_muted(c.user) and not c.user_is_admin:
+                    self.set_error(errors.USER_MUTED)
                 return s
             except NotFound:
                 self.set_error(errors.SUBREDDIT_NOEXIST)
@@ -2096,6 +2204,22 @@ class VList(Validator):
         return {self.param: docs}
 
 
+class VFrequencyCap(Validator):
+    def run(self, frequency_capped='false', frequency_cap=None,
+            frequency_cap_duration=None):
+
+        if frequency_capped == 'true':
+            if frequency_cap and frequency_cap_duration:
+                try:
+                    return (int(frequency_cap), int(frequency_cap_duration),)
+                except (ValueError, TypeError):
+                    self.set_error(errors.INVALID_FREQUENCY_CAP, code=400)
+            else:
+                self.set_error(errors.INVALID_FREQUENCY_CAP, code=400)
+        else:
+            return (None, None)
+
+
 class VPriority(Validator):
     def run(self, val):
         if c.user_is_sponsor:
@@ -2292,11 +2416,15 @@ class VDate(Validator):
 
     """
 
-    def __init__(self, param, format="%m/%d/%Y"):
+    def __init__(self, param, format="%m/%d/%Y", required=True):
         self.format = format
+        self.required = required
         Validator.__init__(self, param)
 
     def run(self, datestr):
+        if not datestr and not self.required:
+            return None
+
         try:
             dt = datetime.strptime(datestr, self.format)
             return dt.replace(tzinfo=g.tz)
@@ -2842,10 +2970,16 @@ class VMultiByPath(Validator):
 
     def run(self, path):
         path = VMultiPath.normalize(path)
+
+        name = path.split('/')[-1]
+        if not multi_name_rx.match(name):
+            return self.set_error('MULTI_NOT_FOUND', code=404)
+
         try:
             multi = LabeledMulti._byID(path)
         except tdb_cassandra.NotFound:
             return self.set_error('MULTI_NOT_FOUND', code=404)
+
         if not multi or multi.kind not in self.kinds:
             return self.set_error('MULTI_NOT_FOUND', code=404)
         if not multi or (self.require_view and not multi.can_view(c.user)):
@@ -2910,20 +3044,23 @@ class VResultTypes(Validator):
     """
     def __init__(self, param):
         Validator.__init__(self, param, get_multiple=True)
-        self.options = ('link', 'sr')
+        self.default = []
+        self.options = {'link', 'sr'}
 
     def run(self, result_types):
         if result_types and ',' in result_types[0]:
             result_types = result_types[0].strip(',').split(',')
 
-        result_types = set(result_types) - {''}
+        # invalid values are ignored
+        result_types = set(result_types) & self.options
 
+        # for backwards compatibility, api and legacy default to link results
         if is_api():
             result_types = result_types or {'link'}
-        elif feature.is_enabled('subreddit_search'):
-            result_types = result_types or {'link', 'sr'}
-        else:
+        elif feature.is_enabled('legacy_search') or c.user.pref_legacy_search:
             result_types = {'link'}
+        else:
+            result_types = result_types or {'link', 'sr'}
 
         return result_types
 
