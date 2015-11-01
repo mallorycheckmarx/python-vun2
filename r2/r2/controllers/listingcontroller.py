@@ -1005,20 +1005,13 @@ class MessageController(ListingController):
             return [NavMenu(buttons, base_path = '/message/',
                             default = 'inbox', type = "flatlist")]
         elif not c.default_sr or self.where in ('moderator', 'multi'):
-            buttons = (NavButton(_("all"), "inbox"),
-                       NavButton(_("unread"), "unread"))
-            res = [NavMenu(buttons, base_path = '/message/moderator/',
-                           default = 'inbox', type = "flatlist")]
-            if self.subwhere != "unread" and not c.user.pref_threaded_modmail:
-                if feature.is_enabled('threaded_modmail'):
-                    threadbutton = (QueryButton(_('flat view'), None,
-                                    query_param='feature', css_class='threaded'),)
-                else:
-                    threadbutton = (QueryButton(_('threaded view'), "threaded_view",
-                                    query_param='feature', css_class='threaded'),)
-                res.append(NavMenu(threadbutton, base_path = '/message/moderator/',
-                                   default = 'inbox', type = "flatlist"))
-            return res
+            buttons = (NavButton(_("all"), "inbox"),)
+            if not c.user.pref_threaded_modmail:
+                buttons += (QueryButton(_('all - threaded view'), "threaded_view",
+                            query_param='feature', css_class='threaded'),)
+            buttons += (NavButton(_("unread"), "unread"),)
+            return [NavMenu(buttons, base_path = '/message/moderator/',
+                            default = 'inbox', type = "flatlist")]
         return []
 
 
