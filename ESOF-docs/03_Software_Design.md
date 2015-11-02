@@ -22,7 +22,7 @@ https://github.com/Wargyy/reddit
 ![Packages Diagram](./diagrams/packagesdiagram.png)
 
 ## Components Diagram
-![Components Diagram](/img/components_diagram.jpg)
+![Components Diagram](./diagrams/componentDiagram.png)
 
 ## Deployment
 
