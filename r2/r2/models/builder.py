@@ -109,6 +109,10 @@ class Builder(object):
                 if sr.can_ban(user):
                     can_ban_set.add(sr_id)
 
+        # hasattr check so no errors occur for non comments
+        links = Link._byID(set(l.link_id for l in items if hasattr(l, 'link_id')),
+                           data=True, return_dict=True, stale=self.stale)
+
         #get likes/dislikes
         try:
             likes = queries.get_likes(user, items)
@@ -173,6 +177,12 @@ class Builder(object):
             except AttributeError:
                 pass
 
+            if hasattr(item, "sr_id") and item.sr_id is not None:
+                w.subreddit = subreddits[item.sr_id]
+
+            if hasattr(item, "link_id") and item.link_id is not None:
+                w.link = links[item.link_id]
+
             if isinstance(item, Comment):
                 if not hasattr(w, 'subreddit'):
                     w.subreddit = item.subreddit_slow
@@ -207,9 +217,6 @@ class Builder(object):
                            {"user": w.author.name}),
                     link="/user/%s" % w.author.name,
                 )
-
-            if hasattr(item, "sr_id") and item.sr_id is not None:
-                w.subreddit = subreddits[item.sr_id]
 
             w.likes = likes.get((user, item))
 
