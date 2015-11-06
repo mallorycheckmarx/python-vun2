@@ -884,14 +884,7 @@ class FrontController(RedditController):
         """Get the sidebar for the current subreddit"""
         if isinstance(c.site, FakeSubreddit):
             return self.abort404()
-        if is_api():
-            templ = jsontemplates.SubredditSidebarJsonTemplate()
-            resp = templ.render(c.site).finalize()
-            usertext = self.api_wrapper(resp)
-            return usertext
-        else:
-            usertext = UserText(c.site, c.site.description)
-            return Reddit(content=usertext).render()
+        return SubredditSidebar(c.site).render()
 
     @require_oauth2_scope("read")
     @api_doc(api_section.subreddits, uri='/r/{subreddit}/about/sticky')

@@ -81,6 +81,7 @@ api('flairlist', FlairListJsonTemplate)
 api('flaircsv', FlairCsvJsonTemplate)
 api('flairselector', FlairSelectorJsonTemplate)
 
+api('subredditsidebar', SubredditSidebarJsonTemplate)
 api('subredditstylesheet', StylesheetTemplate)
 api('subredditstylesheetsource', StylesheetTemplate)
 api('createsubreddit', SubredditSettingsTemplate)

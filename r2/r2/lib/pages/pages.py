@@ -4562,6 +4562,16 @@ class UserText(CachedTemplate):
                                 admin_takedown=admin_takedown,
                                )
 
+class SubredditSidebar(Reddit):
+    """The Subreddit Sidebar Page"""
+    def __init__(self, sr):
+        Reddit.__init__(
+            self,
+            content=UserText(sr, sr.description),
+            description=sr.description,
+            description_html=safemarkdown(sr.description)
+        )
+
 class MediaEmbedBody(CachedTemplate):
     """What's rendered inside the iframe that contains media objects"""
     def render(self, *a, **kw):

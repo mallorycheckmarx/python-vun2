@@ -510,6 +510,9 @@ class SubredditSidebarJsonTemplate(SubredditJsonTemplate):
     def kind(self, wrapped):
         return "SubredditSidebar"
 
+    def thing_attr(self, thing, attr):
+        return getattr(thing, attr)
+
 class IdentityJsonTemplate(ThingJsonTemplate):
     _data_attrs_ = ThingJsonTemplate.data_attrs(
         comment_karma="comment_karma",
