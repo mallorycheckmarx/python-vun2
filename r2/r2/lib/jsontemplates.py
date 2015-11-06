@@ -503,8 +503,8 @@ class TrimmedSubredditJsonTemplate(SubredditJsonTemplate):
 
 class SubredditSidebarJsonTemplate(SubredditJsonTemplate):
     _data_attrs_ = dict(
-        usertext_md="description",
-        usertext_html="description_html",
+        description="description",
+        description_html="description_html",
     )
 
     def kind(self, wrapped):
