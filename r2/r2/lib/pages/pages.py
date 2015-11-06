@@ -2875,7 +2875,11 @@ class SubredditStylesheet(Templated):
 class SubredditStylesheetSource(Templated):
     """A view of the unminified source of a subreddit's stylesheet."""
     def __init__(self, stylesheet_contents):
-        Templated.__init__(self, stylesheet_contents=stylesheet_contents)
+        raw_images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
+        images = {name: make_url_protocol_relative(url)
+                  for name, url in raw_images.iteritems()}
+        Templated.__init__(self, images=images,
+            stylesheet_contents=stylesheet_contents)
 
 class AutoModeratorConfig(Templated):
     """A view of a subreddit's AutoModerator configuration."""
