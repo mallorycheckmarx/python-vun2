@@ -25,6 +25,7 @@ https://github.com/Wargyy/reddit
 ![Components Diagram](./diagrams/ComponentDiagram.png)
 
 ## Deployment
+![Deployment Diagram](./diagrams/DeploymentDiagram.png)
 
 ## Activity Diagram
 
