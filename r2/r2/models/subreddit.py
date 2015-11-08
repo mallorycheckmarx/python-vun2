@@ -1232,6 +1232,26 @@ class Subreddit(Thing, Printable, BaseSite):
     def get_tempbans(self, type=None, names=None):
         return SubredditTempBan.search(self.name, type, names)
 
+    def is_permbanned(self, user):
+        ban = self.is_banned(user)
+        if self.get_tempbans('banned', user.name) == {} and ban:
+            return ban
+
+    def is_tempbanned(self, user):
+        ban = self.is_banned(user)
+        if self.get_tempbans('banned', user.name) != {} and ban:
+            return ban
+
+    def is_permwikibanned(self, user):
+        ban = self.is_wikibanned(user)
+        if self.get_tempbans('wikibanned', user.name) == {} and ban:
+            return ban
+
+    def is_tempwikibanned(self, user):
+        ban = self.is_wikibanned(user)
+        if self.get_tempbans('wikibanned', user.name) != {} and ban:
+            return ban
+
     def get_muted_items(self, names=None):
         return MutedAccountsBySubreddit.search(self, names)
 

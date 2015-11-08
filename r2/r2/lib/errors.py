@@ -159,6 +159,8 @@ error_list = dict((
         ('INVALID_LOCATION', _("invalid location")),
         ('INVALID_FREQUENCY_CAP', _("invalid values for frequency cap")),
         ('BANNED_FROM_SUBREDDIT', _('that user is banned from the subreddit')),
+        ('PERMBANNED_FROM_SUBREDDIT', _('that user is already permanently banned from the subreddit')),
+        ('PERMWIKIBANNED_FROM_SUBREDDIT', _('that user is already permanently wikibanned from the subreddit')),
         ('IN_TIMEOUT', _("You can't do that while suspended.")),
         ('GOLD_REQUIRED', _('you must have an active reddit gold subscription to do that')),
         ('INSUFFICIENT_CREDDITS', _("insufficient creddits")),
