@@ -1079,6 +1079,20 @@ class ApiController(RedditController):
         if type == "moderator":
             container.remove_moderator_invite(friend)
 
+        # don't upgrade the ban to permanent if the user is already
+        # permbanned to avoid a duplicate message from the system
+        if (type == "banned" and not duration and
+            container.is_permbanned(friend)):
+            c.errors.add(errors.PERMBANNED_FROM_SUBREDDIT, field="name")
+            form.set_error(errors.PERMBANNED_FROM_SUBREDDIT, "name")
+            return
+
+        if (type == "wikibanned" and not duration and
+            container.is_permwikibanned(friend)):
+            c.errors.add(errors.PERMWIKIBANNED_FROM_SUBREDDIT, field="name")
+            form.set_error(errors.PERMWIKIBANNED_FROM_SUBREDDIT, "name")
+            return
+
         new = fn(friend, permissions=type_and_permissions[1])
 
         if type == "friend" and c.user.gold:
