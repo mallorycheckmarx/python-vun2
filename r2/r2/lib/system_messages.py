@@ -59,6 +59,12 @@ user_added_messages = {
             "msg": N_("you have been added as an approved submitter to [%(title)s](%(url)s)."),
         },
     },
+    "wikicontributor": {
+        "pm": {
+            "subject": N_("you are a wiki contributor"),
+            "msg": N_("you have been added as a contributor to [%(title)s](%(url)s)."),
+        },
+    },
     "traffic": {
         "pm": {
             "subject": N_("you can view traffic on a promoted link"),
@@ -73,10 +79,14 @@ def notify_user_added(rel_type, author, user, target):
     if not msgs:
         return
 
-    srname = target.path.rstrip("/")
+    url = target.path.rstrip("/")
+    title = "%s: %s" % (url, target.title)
+    if rel_type == "wikicontributor":
+        title = "%s's wiki" % url
+        url += "/wiki"
     d = {
-        "url": srname,
-        "title": "%s: %s" % (srname, target.title),
+        "url": url,
+        "title": title,
         "author": "/u/" + author.name,
         "user": "/u/" + user.name,
     }
@@ -85,7 +95,7 @@ def notify_user_added(rel_type, author, user, target):
         subject = msgs["pm"]["subject"] % d
         msg = msgs["pm"]["msg"] % d
 
-        if rel_type in ("moderator_invite", "contributor"):
+        if rel_type in ("moderator_invite", "contributor", "wikicontributor"):
             # send the message from the subreddit
             item, inbox_rel = Message._new(author, user, subject, msg, request.ip,
                                            sr=target, from_sr=True)
@@ -108,21 +118,26 @@ def notify_user_added(rel_type, author, user, target):
         queries.new_message(item, inbox_rel)
 
 
-def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
-    sr_name = "/r/" + subreddit.name
+def send_ban_message(subreddit, mod, user, note=None,
+                     days=None, new=True, wiki=False):
+    location = "/r/" + subreddit.name
+    ban_type = "subreddit"
+    if wiki:
+        location += "'s wiki"
+        ban_type += "'s wiki"
     if days:
-        subject = "you've been temporarily banned from %(subreddit)s"
+        subject = "you've been temporarily banned from %(location)s"
         message = ("you have been temporarily banned from posting to "
-            "%(subreddit)s. this ban will last for %(duration)s days.")
+            "%(location)s. this ban will last for %(duration)s days.")
     else:
-        subject = "you've been banned from %(subreddit)s"
-        message = "you have been banned from posting to %(subreddit)s."
+        subject = "you've been banned from %(location)s"
+        message = "you have been banned from posting to %(location)s."
 
     if not new:
-        subject = "Your ban from %(subreddit)s has changed"
+        subject = "Your ban from %(location)s has changed"
 
-    subject %= {"subreddit": sr_name}
-    message %= {"subreddit": sr_name, "duration": days}
+    subject %= {"location": location}
+    message %= {"location": location, "duration": days}
 
     if note:
         message += "\n\n" + 'note from the moderators:'
@@ -130,9 +145,9 @@ def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
 
     message += "\n\n" + ("you can contact the moderators regarding your ban "
         "by replying to this message. **warning**: using other accounts to "
-        "circumvent a subreddit ban is considered a violation of reddit's "
+        "circumvent a %(ban_type)s ban is considered a violation of reddit's "
         "[site rules](/rules) and can result in being banned from reddit "
-        "entirely.")
+        "entirely." % {"ban_type": ban_type})
 
     item, inbox_rel = Message._new(mod, user, subject, message, request.ip,
         sr=subreddit, from_sr=True)

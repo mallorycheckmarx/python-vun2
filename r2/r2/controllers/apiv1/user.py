@@ -163,6 +163,9 @@ class APIv1UserController(OAuth2OnlyController):
             # The 'name' in the JSON is optional, but if present, must
             # match the username from the URL
             err = errors.RedditError('BAD_USERNAME', fields='name')
+        elif c.user.is_enemy(friend):
+            # you can't befriend a block
+            err = errors.RedditError(errors.errors.ENEMY_OF_USER, fields='name')
         if 'note' in notes_json and not c.user.gold:
             err = errors.RedditError('GOLD_REQUIRED', fields='note')
         if err:

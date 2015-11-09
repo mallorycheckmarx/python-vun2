@@ -48,6 +48,10 @@
             <input type="number" min="1" max="999" name="duration" id="duration">
             <span>${_('days (leave blank for permanent)')}</span>
         </div>
+        <div>
+            <label for="note">${_('note to include in ban PM')}</label>
+            <textarea name="ban_message" id="ban_message"></textarea>
+        </div>
     %elif add_type == "muted":
         <label for="name">${_('who to mute?')} &nbsp;</label>
         <input type="text" class="friend-name" name="name" id="name">
@@ -58,12 +62,6 @@
         </div>
     %else:
         <input type="text" name="name" id="name">
-    %endif
-    %if add_type == "banned":
-      <div>
-          <label for="note">${_('note to include in ban PM')}</label>
-          <textarea name="ban_message" id="ban_message"></textarea>
-      </div>
     %endif
     %if permissions_form:
       ${permissions_form}
@@ -77,11 +75,23 @@
     ${error_field("NO_USER", "name")}
     ${error_field("USER_DOESNT_EXIST", "name")}
     ${error_field("ALREADY_MODERATOR", "name")}
+    ${error_field("ALREADY_PERMBANNED", "name")}
+    ${error_field("ALREADY_PERMWIKIBANNED", "name")}
+    ${error_field("ALREADY_INVITED", "name")}
+    ${error_field("ALREADY_CONTRIBUTOR", "name")}
+    ${error_field("ALREADY_BLOCKED", "name")}
+    ${error_field("ALREADY_WIKICONTRIBUTOR", "name")}
+    ${error_field("ALREADY_MUTED", "name")}
+    ${error_field("ALREADY_FRIENDS", "name")}
     ${error_field("CANT_RESTRICT_MODERATOR", "name")}
+    ${error_field("MODERATOR_INVITE_ON_SUBREDDIT", "name")}
+    ${error_field("CONTRIBUTOR_ON_SUBREDDIT", "name")}
+    ${error_field("WIKICONTRIBUTOR_ON_SUBREDDIT", "name")}
     ${error_field("BANNED_FROM_SUBREDDIT", "name")}
-    ${error_field("PERMBANNED_FROM_SUBREDDIT", "name")}
-    ${error_field("PERMWIKIBANNED_FROM_SUBREDDIT", "name")}
+    ${error_field("WIKIBANNED_FROM_SUBREDDIT", "name")}
     ${error_field("MUTED_FROM_SUBREDDIT", "name")}
+    ${error_field("FRIEND_OF_USER", "name")}
+    ${error_field("ENEMY_OF_USER", "name")}
     %if caller:
       ${caller.body()}
     %endif
