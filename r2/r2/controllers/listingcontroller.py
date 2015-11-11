@@ -1006,8 +1006,11 @@ class MessageController(ListingController):
             return [NavMenu(buttons, base_path = '/message/',
                             default = 'inbox', type = "flatlist")]
         elif not c.default_sr or self.where in ('moderator', 'multi'):
-            buttons = (NavButton(_("all"), "inbox"),
-                       NavButton(_("unread"), "unread"))
+            buttons = (NavButton(_("all"), "inbox"),)
+            if not c.user.pref_threaded_modmail:
+                buttons += (QueryButton(_('all - threaded view'), "threaded_view",
+                            query_param='feature', css_class='threaded'),)
+            buttons += (NavButton(_("unread"), "unread"),)
             return [NavMenu(buttons, base_path = '/message/moderator/',
                             default = 'inbox', type = "flatlist")]
         return []
@@ -1099,7 +1102,8 @@ class MessageController(ListingController):
             enable_threaded = (
                 (self.where == "moderator" or
                     parent and parent.sr_id) and
-                c.user.pref_threaded_modmail
+                (c.user.pref_threaded_modmail or
+                    feature.is_enabled('threaded_modmail'))
             )
 
             return message_cls(
