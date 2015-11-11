@@ -104,10 +104,10 @@
   </div>
 </%def>
 
-<%def name="action_button(name, btn_type, onclick, display)">
+<%def name="action_button(text, name, btn_type, onclick, display)">
   <button type="${btn_type}" onclick="${onclick}" class="${name}"
           ${"style='display:none'" if not display else ""}>
-    ${name}
+    ${text}
   </button>
 </%def>
 
@@ -167,9 +167,9 @@
           ${error_field("MUTED_FROM_SUBREDDIT", "parent", "span")}
         %endif
         <div class="usertext-buttons">
-          ${action_button("save", "submit", "",
+          ${action_button(_("save"), "save", "submit", "",
                           thing.creating and thing.have_form)}
-          ${action_button("cancel", "button", "cancel_usertext(this)", False)}
+          ${action_button(_("cancel"), "cancel", "button", "cancel_usertext(this)", False)}
           %if thing.have_form:
             <span class="status"></span>
           %endif
