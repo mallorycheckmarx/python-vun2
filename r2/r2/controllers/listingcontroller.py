@@ -1752,6 +1752,9 @@ class UserListListingController(ListingController):
         has_mod_access = ((c.user_is_loggedin and
                            c.site.is_moderator_with_perms(c.user, 'access'))
                           or c.user_is_admin)
+        has_wiki_access = ((c.user_is_loggedin and
+                            c.site.is_moderator_with_perms(c.user, 'wiki'))
+                           or c.user_is_admin)
 
         if not c.user_is_loggedin and where not in ['contributors', 'moderators']:
             abort(403)
@@ -1792,18 +1795,30 @@ class UserListListingController(ListingController):
             self.listing_cls = MutedListing
 
         elif where == 'wikibanned':
-            if not c.site.is_moderator_with_perms(c.user, 'wiki'):
+            # disabled wikis can't have wikibans
+            if c.site.hide_wikirelations:
+                abort(403)
+            if not has_wiki_access:
                 abort(403)
             VNotInTimeout().run(action_name="pageview",
                 details_text="wikibanned", target=c.site)
             self.listing_cls = WikiBannedListing
 
         elif where == 'wikicontributors':
-            if not c.site.is_moderator_with_perms(c.user, 'wiki'):
+            # disabled wikis can't have wikicontributors
+            if c.site.hide_wikirelations:
                 abort(403)
+            if not has_wiki_access:
+                if c.site.wikimode == "anyone":
+                    abort(403)
+                elif not c.site.is_wikicontributor(c.user):
+                    # wiki is in fact mod / contributor only
+                    # but the current user is neither
+                    abort(403)
             VNotInTimeout().run(action_name="pageview",
                 details_text="wikicontributors", target=c.site)
             self.listing_cls = WikiMayContributeListing
+            self.editable = self.editable and has_wiki_access
 
         elif where == 'moderators':
             self.editable = ((self.editable and

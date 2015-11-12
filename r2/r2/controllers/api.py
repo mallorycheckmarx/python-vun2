@@ -1031,7 +1031,8 @@ class ApiController(RedditController):
             if c.user_is_admin:
                 has_perms = True
             elif type.startswith('wiki'):
-                has_perms = container.is_moderator_with_perms(c.user, 'wiki')
+                has_perms = (container.is_moderator_with_perms(c.user, 'wiki')
+                                 and not container.hide_wikirelations)
             elif type == 'muted':
                 has_perms = container.can_mute(c.user, friend)
             elif type == 'moderator_invite':

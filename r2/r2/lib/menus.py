@@ -142,7 +142,7 @@ menu =   MenuHandler(hot          = _('hot'),
                      automod      = _("automoderator config"),
                      
                      wikibanned        = _("ban wiki contributors"),
-                     wikicontributors  = _("add wiki contributors"),
+                     wikicontributors  = _("wiki contributors"),
                      
                      wikirecentrevisions = _("recent wiki revisions"),
                      wikipageslist = _("wiki page list"),

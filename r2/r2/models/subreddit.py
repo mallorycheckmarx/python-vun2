@@ -599,6 +599,10 @@ class Subreddit(Thing, Printable, BaseSite):
         return self.type in {'employees_only', 'gold_only'}
 
     @property
+    def hide_wikirelations(self):
+        return self.wikimode == 'disabled'
+
+    @property
     def hide_num_users_info(self):
         return self.quarantine
 

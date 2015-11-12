@@ -460,13 +460,18 @@ class WikiApiController(WikiController):
              uri_variants=['/api/wiki/alloweditor/%s' % act for act in ('del', 'add')])
     def POST_wiki_allow_editor(self, act, page, user):
         """Allow/deny `username` to edit this wiki `page`"""
+        can_add = not (c.site.is_banned(user) or
+                       c.site.is_wikibanned(user) or
+                       c.site.is_wikicontributor(user) or
+                       c.site.is_moderator_with_perms(user, 'wiki') or
+                       user._id36 in page.get_editors())
         if not user:
             self.handle_error(404, 'UNKNOWN_USER')
-        elif act == 'del':
+        elif act == 'del' and user._id36 in page.get_editors():
             VNotInTimeout().run(action_name="wikipermlevel",
                 details_text="del_editor", target=user)
             page.remove_editor(user._id36)
-        elif act == 'add':
+        elif act == 'add' and can_add:
             VNotInTimeout().run(action_name="wikipermlevel",
                 details_text="allow_editor", target=user)
             page.add_editor(user._id36)
