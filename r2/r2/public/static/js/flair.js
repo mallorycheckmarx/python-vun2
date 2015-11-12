@@ -44,19 +44,53 @@ $(function() {
         var form = $(this).parent().parent().siblings("form")[0];
         $(form).children('input[name="flair_template_id"]').val(this.id);
         var customizer = $(form).children(".customizer");
-        var input = customizer.children("input");
+        var textinput = customizer.children('input[name="text"]');
+        var classinput = customizer.children('input[name="css_class"]');
+        if ($(customizer).hasClass('mod')) {
+            classinput.removeAttr("disabled");
+            customizer.children('span').css("display", "block")
+            classinput.css("display", "block")
+            classinput.val($(this).data('css'));
+            // css preview updates need to be different for a userflair vs a linkflair
+            if ($(form).parents('div').hasClass('side')) {
+                classinput.keyup(function() {
+                    var user_css = $(classinput).val().split(" ").filter(Boolean);
+                    for (i in user_css) {
+                        user_css[i] = "flair-".concat(user_css[i]);
+                    }
+                    user_css.unshift("flair");
+                    $(".flairselection .flair")
+                        .attr("class", user_css.join(" "));
+                });
+            } else {
+                classinput.keyup(function() {
+                    var link_css = $(classinput).val().split(" ").filter(Boolean);
+                    for (i in link_css) {
+                        link_css[i] = "linkflair-".concat(link_css[i]);
+                    }
+                    link_css.unshift("linkflair");
+                    $(".flairselection .linkflairlabel").parent()
+                        .attr("class", link_css.join(" "));
+                });
+            }
+        } else {
+            classinput.attr("disabled", "disabled").hide();
+        }
         if ($(this).hasClass("texteditable")) {
+            //undo hiding within removeFlairInSelector if it happened
+            customizer.removeAttr("style");
+            //continue
             customizer.addClass("texteditable");
-            input.removeAttr("disabled");
-            input.css("display", "block");
-            input.val($.trim($(this).find(".flair, .linkflairlabel").text())).select();
-            input.keyup(function() {
+            textinput.removeAttr("disabled");
+            textinput.css("display", "block");
+            textinput.val($.trim($(this).find(".flair, .linkflairlabel").text())).select();
+            textinput.keyup(function() {
                 $(".flairselection .flair, .flairselection .linkflairlabel")
-                    .text($(input).val()).attr("title", $(input).val());
+                    .text($(textinput).val()).attr("title", $(textinput).val());
             });
         } else {
             customizer.removeClass("texteditable");
-            input.attr("disabled", "disabled").hide();
+            textinput.attr("disabled", "disabled").hide();
         }
         var remover = $(".flairselector .flairremove").detach();
         $(".flairselection").html($(this).first().children().clone())
@@ -78,7 +112,12 @@ $(function() {
     function postFlairSelection(e) {
         $(this).find(".status").html(reddit.status_msg.submitting).show()
         var $btn = $(this.parentNode.parentNode).find('.flairselectbtn')
-        simple_post_form(this, "selectflair", getFlairAttrs($btn));
+        if ($(this).find('.customizer').hasClass('mod')) {
+            var endpoint = "flair"
+        } else {
+            var endpoint = "selectflair"
+        }
+        simple_post_form(this, endpoint, getFlairAttrs($btn));
         return false;
     }
 

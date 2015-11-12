@@ -31,26 +31,48 @@
               li_class += ' texteditable'
           if choice.flair_template_id == thing.matching_template:
               li_class += ' selected'
+          choice.flair_css = choice.flair_css_class if thing.target_type == "link" else choice.flair_css_class[6:]
         %>
-        <li class="${li_class}" id="${choice.flair_template_id}">
+        <li class="${li_class}" id="${choice.flair_template_id}" data-css="${choice.flair_css}">
           ${choice}
         </li>
       %endfor
     </ul>
   </div>
-  <form action="/post/selectflair" method="post">
-    <div class="flairselection">
-      <div class="flairremove">
-        (<a href="javascript://void(0)">${_('remove flair')}</a>)
+  %if thing.admin:
+    <form action="/post/flair" method="post">
+      <div class="flairselection">
+        <div class="flairremove">
+          (<a href="javascript://void(0)">${_('remove flair')}</a>)
+        </div>
       </div>
-    </div>
-    <input type="hidden" name="flair_template_id">
-    <div class="customizer">
-      <input type="text" size="16" maxlength="64" name="text">
-    </div>
-    <button type="submit">${_('save')}</button>
-    <span class="status"></span>
-  </form>
+      <div class="mod customizer">
+        <span class="text-customizer">text: </span>
+        <input type="text" size="16" maxlength="64" name="text">
+        <br/>
+        <span class="class-customizer">class: </span>
+        <input type="text" size="16" maxlength="1000" name="css_class">
+      </div>
+      <br/>
+      <button type="submit">${_('save')}</button>
+      <span class="status"></span>
+    </form>
+  %else:
+    <form action="/post/selectflair" method="post">
+      <div class="flairselection">
+        <div class="flairremove">
+          (<a href="javascript://void(0)">${_('remove flair')}</a>)
+        </div>
+      </div>
+      <input type="hidden" name="flair_template_id">
+      <div class="customizer">
+        <input type="text" size="16" maxlength="64" name="text">
+      </div>
+      </br>
+      <button type="submit">${_('save')}</button>
+      <span class="status"></span>
+    </form>
+  %endif
 %else:
   <div class="error">${_("flair selection unavailable")}</div>
 %endif

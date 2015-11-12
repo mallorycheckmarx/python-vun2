@@ -3997,6 +3997,7 @@ class FlairSelector(CachedTemplate):
         if link:
             flair_type = LINK_FLAIR
             target = link
+            target_type = "link"
             target_name = link._fullname
             attr_pattern = 'flair_%s'
             position = getattr(site, 'link_flair_position', 'right')
@@ -4009,6 +4010,7 @@ class FlairSelector(CachedTemplate):
         else:
             flair_type = USER_FLAIR
             target = user
+            target_type = "user"
             target_name = user.name
             position = getattr(site, 'flair_position', 'right')
             attr_pattern = 'flair_%s_%%s' % c.site._id
@@ -4029,6 +4031,11 @@ class FlairSelector(CachedTemplate):
         else:
             choices = []
 
+        if admin:
+            admintempl = FlairTemplate()
+            admintempl.text = "ModFlair"
+            choices.append(target_wrapper(admintempl))
+            
         # If one of the templates is already selected, modify its text to match
         # the user's current flair.
         if matching_template:
@@ -4038,10 +4045,10 @@ class FlairSelector(CachedTemplate):
                         choice.flair_text = text
                     break
 
-        Templated.__init__(self, text=text, css_class=css_class,
+        Templated.__init__(self, admin=admin, text=text, css_class=css_class,
                            position=position, choices=choices,
                            matching_template=matching_template,
-                           target_name=target_name)
+                           target_name=target_name, target_type=target_type)
 
     def render(self, *a, **kw):
         return responsive(CachedTemplate.render(self, *a, **kw), True)
