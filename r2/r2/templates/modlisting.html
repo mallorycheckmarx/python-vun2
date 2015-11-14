@@ -22,7 +22,6 @@
 
 <%namespace file="printablebuttons.html" import="ynbutton" />
 <%namespace file="userlisting.html" import="add_form, listing"/>
-<%namespace file="utils.html" import="error_field"/>
 
 <div class="${thing._class} usertable">
   %if thing.can_remove_self:
@@ -52,11 +51,7 @@
   %endif
 
   %if thing.addable and thing.has_add_form:
-    <%call expr="add_form(thing.form_title, thing.destination, thing.type, thing.container_name, verb=_('add'))">
-      ${error_field("ALREADY_MODERATOR", "name")}
-      ${error_field("BANNED_FROM_SUBREDDIT", "name")}
-      ${error_field("MUTED_FROM_SUBREDDIT", "name")}
-    </%call>
+    ${add_form(thing.form_title, thing.destination, thing.type, thing.container_name)}
   %endif
   ${listing()}
 </div>
