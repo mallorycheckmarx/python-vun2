@@ -26,7 +26,6 @@ r2/r2/public/static/*.css
 r2/r2/public/static/sprite*.png
 r2/r2/public/static/*.gzip
 r2/r2/public/static/js/lib/*.gzip
-Thumbs.db
 
 # cython
 r2/r2/lib/mr_tools/_mr_tools.c
