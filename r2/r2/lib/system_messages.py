@@ -131,8 +131,9 @@ def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
     message += "\n\n" + ("you can contact the moderators regarding your ban "
         "by replying to this message. **warning**: using other accounts to "
         "circumvent a subreddit ban is considered a violation of reddit's "
-        "[site rules](/help/contentpolicy#section_prohibited_behavior) and can "
-        "result in the [suspension](https://reddit.zendesk.com/hc/articles/205687686) "
+        "[site rules](/help/contentpolicy#section_prohibited_behavior) "
+        "and can result in the "
+        "[suspension](https://reddit.zendesk.com/hc/articles/205687686) "
         "of your reddit account.")
 
     item, inbox_rel = Message._new(mod, user, subject, message, request.ip,
