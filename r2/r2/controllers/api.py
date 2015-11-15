@@ -1036,7 +1036,8 @@ class ApiController(RedditController):
         else:
             permissions = None
 
-        if type == "moderator_invite" and container.is_moderator(friend):
+        if (type in ("moderator_invite", "moderator") and
+                container.is_moderator(friend)):
             c.errors.add(errors.ALREADY_MODERATOR, field="name")
             form.set_error(errors.ALREADY_MODERATOR, "name")
             return
