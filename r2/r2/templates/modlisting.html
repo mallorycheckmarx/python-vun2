@@ -51,7 +51,7 @@
   %endif
 
   %if thing.addable and thing.has_add_form:
-    ${add_form(thing.form_title, thing.destination, thing.type, thing.container_name)}
+    ${add_form(thing.form_title, thing.destination, thing.type, thing.container_name, permissions_form=thing.permissions_form)}
   %endif
   ${listing()}
 </div>
