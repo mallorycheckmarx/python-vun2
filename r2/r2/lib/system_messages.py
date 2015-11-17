@@ -152,3 +152,63 @@ def send_ban_message(subreddit, mod, user, note=None,
     item, inbox_rel = Message._new(mod, user, subject, message, request.ip,
         sr=subreddit, from_sr=True)
     queries.new_message(item, inbox_rel, update_modmail=False)
+
+
+def send_mod_permission_message(subreddit, changer, mod, oldperms,
+                                newperms=None, demod=False):
+    data = {
+        'srname': "/r/" + subreddit.name,
+        'changername': "/u/" + changer.name,
+    }
+    if demod:
+        subject = "you've been demodded from %(srname)s" % data
+        message = "you have been demodded from %(srname)s by %(changername)s" % data
+        send_from_sr = ('mail', True) in oldperms.iteritems() or oldperms.is_superuser()
+    else:
+        assert newperms
+        oldnegative = [perm for perm, status in oldperms.iteritems() if not status]
+        newnegative = [perm for perm, status in newperms.iteritems() if not status]
+        oldpositive = [perm for perm, status in oldperms.iteritems() if status]
+        newpositive = [perm for perm, status in newperms.iteritems() if status]
+
+        netnegative = [perm for perm in newnegative if perm not in oldnegative]
+        netpositive = [perm for perm in newpositive if perm not in oldpositive]
+
+        if oldperms.is_superuser():
+            # only can get demoted from here :(
+            netnegative = newnegative
+            netpositive = []
+
+        # mod used to have mail perms, but now doesn't.
+        # might want to be discussed with the rest of the mods
+        send_from_sr = 'mail' in netnegative
+
+        subject = "your permissions on %(srname)s have changed" % data
+        message = ("%(changername)s has changed your moderator permissions on "
+            "%(srname)s. here's a summary of the change in your permissions:\n"
+            "\n---" % data)
+
+        if newperms.is_superuser():
+            message += '\n\n**you now have full permissions:**\n\n'
+            for perm in newperms.info.keys():
+                message += ("* %(permission)s: %(description)s\n\n" %
+                    dict(permission=newperms.info[perm]['title'],
+                         description=newperms.info[perm]['description']))
+        else:
+            if netnegative != []:
+                message += '\n\n**you have lost the following permissions:**\n\n'
+                for perm in netnegative:
+                    message += ("* %(permission)s: %(description)s\n\n" %
+                        dict(permission=newperms.info[perm]['title'],
+                             description=newperms.info[perm]['description']))
+            if netpositive != []:
+                message += '\n\n**you have gained the following permissions:**\n\n'
+                for perm in netpositive:
+                    message += ("* %(permission)s: %(description)s\n\n" %
+                        dict(permission=newperms.info[perm]['title'],
+                             description=newperms.info[perm]['description']))
+
+    sr = subreddit if send_from_sr else None
+    item, inbox_rel = Message._new(changer, mod, subject, message, request.ip,
+                                   sr=sr, from_sr=send_from_sr)
+    queries.new_message(item, inbox_rel, update_modmail=send_from_sr)
