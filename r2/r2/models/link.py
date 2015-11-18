@@ -1999,7 +1999,7 @@ class Message(Thing, Printable):
         # also, only global admins can be message spammed.
         if not skip_inbox and to and (not m._spam or to.name in g.admins):
             # if "to" is not a sr moderator they need to be notified
-            if not sr_id or not sr.is_moderator(to):
+            if not sr_id or not sr.is_moderator_with_perms(to, 'mail'):
                 # Record the inbox relation, but don't give the user
                 # an orangered, if they PM themselves.
                 # Don't notify on PMs from blocked users, either
