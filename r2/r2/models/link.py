@@ -2311,7 +2311,8 @@ class Message(Thing, Printable):
                     item.body = _('[unblock user to see this message]')
 
             if item.sr_id and item.to:
-                item.to_is_moderator = item.to._id in mods_by_srid[item.sr_id]
+                item.to_is_moderator = (item.to._id in mods_by_srid[item.sr_id]
+                                        and item.subreddit.is_moderator_with_perms(item.to, 'mail'))
 
         if to_set_unread:
             unread_by_class = defaultdict(list)
