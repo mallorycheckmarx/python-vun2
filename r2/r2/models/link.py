@@ -2202,7 +2202,8 @@ class Message(Thing, Printable):
                 item.user_is_recipient = not user_is_sender
                 item.user_is_moderator = item.sr_id in user_mod_sr_ids
 
-                if sr_colors and item.user_is_moderator:
+                if (sr_colors and item.user_is_moderator and
+                    item.subreddit.is_moderator_with_perms(c.user, 'mail')):
                     item.accent_color = sr_colors.get(item.sr_id)
 
                 if item.subreddit.is_muted(item.author):
