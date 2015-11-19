@@ -1987,7 +1987,7 @@ class Message(Thing, Printable):
             if parent or to_subreddit or from_sr:
                 inbox_rel.append(ModeratorInbox._add(sr, m, 'inbox'))
 
-            if sr.is_moderator(author):
+            if sr.is_moderator_with_perms(author, 'mail'):
                 m.distinguished = 'yes'
                 m._commit()
 
