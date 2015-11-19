@@ -106,7 +106,11 @@ from r2.lib.media import str_to_image
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope, allow_oauth2_access
 from r2.lib.template_helpers import add_sr, get_domain, make_url_protocol_relative
-from r2.lib.system_messages import notify_user_added, send_ban_message
+from r2.lib.system_messages import (
+    notify_user_added,
+    send_ban_message,
+    send_mod_permission_message,
+)
 from r2.controllers.ipn import generate_blob, update_blob
 from r2.lib.lock import TimeoutExpired
 from r2.lib.csrf import csrf_exempt
@@ -895,12 +899,18 @@ class ApiController(RedditController):
         # be the current user.
         if type in ("friend", "enemy") and container != c.user:
             abort(403, 'forbidden')
+        was_mod = container.is_moderator(victim) if type == "moderator" else None
+        was_mod_perms = was_mod.get_permissions() if was_mod else None
         fn = getattr(container, 'remove_' + type)
         new = fn(victim)
 
         # Log this action
         if new and type in self._sr_friend_types:
             ModAction.create(container, c.user, action, target=victim)
+
+        if was_mod:
+            send_mod_permission_message(container, c.user, victim,
+                                        was_mod_perms, demod=True)
 
         if type == "friend" and c.user.gold:
             c.user.friend_rels_cache(_update=True)
@@ -945,12 +955,21 @@ class ApiController(RedditController):
                 rel = c.site.get_moderator(target)
             if type == "moderator_invite":
                 rel = c.site.get_moderator_invite(target)
+            oldperms = rel.get_permissions()
+            if oldperms == permissions:
+                # no change in perms
+                c.errors.add(errors.NO_CHANGE_IN_PERMISSIONS, field="permissions")
+                form.set_error(errors.NO_CHANGE_IN_PERMISSIONS, "permissions")
+                return
             rel.set_permissions(permissions)
             rel._commit()
             update = rel.encoded_permissions
             ModAction.create(c.site, c.user, action='setpermissions',
                              target=target, details='permission_' + type,
                              description=update)
+            if type == 'moderator':
+                send_mod_permission_message(c.site, c.user, target,
+                                            oldperms, permissions)
 
         if update:
             row = form.closest('tr')

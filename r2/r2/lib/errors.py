@@ -152,6 +152,7 @@ error_list = dict((
         ('BAD_JSONP_CALLBACK', _('that jsonp callback contains invalid characters')),
         ('INVALID_PERMISSION_TYPE', _("permissions don't apply to that type of user")),
         ('INVALID_PERMISSIONS', _('invalid permissions string')),
+        ('NO_CHANGE_IN_PERMISSIONS', _("you haven't changed that user's permissions")),
         ('BAD_MULTI_PATH', _('invalid multi path')),
         ('BAD_MULTI_NAME', _('%(reason)s')),
         ('MULTI_NOT_FOUND', _('that multireddit doesn\'t exist')),
