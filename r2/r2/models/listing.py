@@ -309,6 +309,27 @@ class ModListing(InvitedModListing):
         return c.user_is_loggedin and c.site.is_moderator_invite(c.user)
 
     @property
+    def invite_title_str(self):
+        if self.has_invite:
+            if self.invite_info == []:
+                return _("upon accepting you will receive no permissions")
+            decider = c.site.is_moderator_invite(c.user).is_superuser()
+            data = "all" if decider else "the following"
+            return _("upon accepting you will receive %s permissions:" % data)
+
+    @property
+    def invite_info(self):
+        if self.has_invite:
+            perms = c.site.is_moderator_invite(c.user).get_permissions()
+            fullinfo = list(perms.info.iteritems())
+            if perms.is_superuser():
+                return fullinfo
+            else:
+                perms = [p for p, s in perms.iteritems() if s]
+                partialinfo = [(p, i) for p, i in fullinfo if p in perms]
+                return partialinfo
+
+    @property
     def title(self):
         return _("moderators of /r/%(subreddit)s") % dict(subreddit=c.site.name)
 

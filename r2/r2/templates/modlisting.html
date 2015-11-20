@@ -49,6 +49,20 @@
                format_arg='action',
                _class=thing.type + ' accept-invite',
                access_required=False)}
+    <br/>
+    <div class="moderator-invite-info">
+      ${thing.invite_title_str}
+      %if thing.invite_info != []:
+        <br/>
+        <ul>
+          %for perm, info in thing.invite_info:
+            ## use the iteritems for loop format for
+            ## consistent order of permissions
+            <li>${info['title']}: ${info['description']}</li>
+          %endfor
+        </ul>
+      %endif
+    </div>
   %endif
 
   %if thing.addable and thing.has_add_form:
