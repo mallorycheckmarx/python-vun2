@@ -568,7 +568,7 @@ class Subreddit(Thing, Printable, BaseSite):
         hook = hooks.get_hook("subreddit.remove_moderator")
         hook.call(subreddit=self, user=user)
 
-        top_mod_id = self.moderators[0]
+        top_mod_id = self.moderators[0] if self.moderators else None
 
         ret = super(Subreddit, self).remove_moderator(user, **kwargs)
 
