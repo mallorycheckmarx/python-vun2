@@ -1163,6 +1163,11 @@ class ApiController(RedditController):
             table = jquery("." + type + "-table").show().find("table")
             table.insert_table_rows(user_row, index=index)
             table.find(".notfound").hide()
+            # hide the listing in the invite table if it exists
+            if type == 'moderator':
+                table = jquery(".moderator_invite-table")
+                userspan = table.find('a[href$="/user/%s/"]' % friend.name)
+                userspan.parent().parent().parent().hide()
 
         if type == "banned":
             # If the ban is new or has had the duration changed,
