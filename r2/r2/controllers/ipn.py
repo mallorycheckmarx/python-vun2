@@ -590,9 +590,9 @@ class IpnController(RedditController):
                         "supports the site and makes future development "
                         "possible. For example, one month of reddit gold "
                         "pays for 5 instance hours of reddit's servers.")
-            message += "\n\n" + strings.gold_benefits_msg
+            message += "\n\n" + _(strings.gold_benefits_msg)
             if g.lounge_reddit:
-                message += "\n* " + strings.lounge_msg
+                message += "\n* " + _(strings.lounge_msg)
         elif payment_blob['goldtype'] == 'creddits':
             buyer._incr("gold_creddits", months)
             buyer._commit()
@@ -604,7 +604,7 @@ class IpnController(RedditController):
                         "possible. To spend your creddits and spread reddit "
                         "gold, visit [/gold](/gold) or your favorite "
                         "person's user page.")
-            message += "\n\n" + strings.gold_benefits_msg + "\n\n"
+            message += "\n\n" + _(strings.gold_benefits_msg) + "\n\n"
             message += _("Thank you again for your support, and have fun "
                          "spreading gold!")
         elif payment_blob['goldtype'] == 'gift':
@@ -626,7 +626,7 @@ class IpnController(RedditController):
                         "Thank you for gifting reddit gold. Your patronage "
                         "supports the site and makes future development "
                         "possible.") % recipient.name
-            message += "\n\n" + strings.gold_benefits_msg + "\n\n"
+            message += "\n\n" + _(strings.gold_benefits_msg) + "\n\n"
             message += _("Thank you again for your support, and have fun "
                          "spreading gold!")
         elif payment_blob['goldtype'] == 'code':
