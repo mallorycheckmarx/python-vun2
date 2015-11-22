@@ -319,6 +319,7 @@ class ModAction(tdb_cassandra.UuidThing):
         for item in wrapped:
             item.moderator = moderators[item.mod_id36]
             item.subreddit = srs[item.sr_id36]
+            item.sr_name = item.subreddit.name
             item.text = cls._text.get(item.action, '')
             item.target = None
             item.target_author = None
