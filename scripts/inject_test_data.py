@@ -143,6 +143,21 @@ def fetch_listing(path, limit=1000, batch_size=100):
         # see: https://github.com/reddit/reddit/wiki/API#rules
         time.sleep(2)
 
+def fetch_subreddits(modeler, num_subreddits):
+    if num_subreddits > 1000:
+        raise ValueError("Can't fetch more than 1000 subs")
+    srs = fetch_listing('/subreddits', num_subreddits)
+    sorted_srs = sorted(srs, key=lambda sr: sr['created_utc'])
+    models = []
+    extra_info = {}
+    for sr in sorted_srs:
+        if len(models) >= num_subreddits:
+            break
+        if sr['submission_type'] == 'link':
+            extra_info[sr['display_name']] = {"show_media": True}
+        models.append(modeler.model_subreddit(sr['display_name']))
+    print "Modeled {0} subreddits".format(len(models))
+    return models, extra_info
 
 class Modeler(object):
     def __init__(self):
@@ -254,7 +269,7 @@ def ensure_subreddit(name, author):
         return sr
 
 
-def inject_test_data(num_links=25, num_comments=25, num_votes=5):
+def inject_test_data(num_subreddits=10, num_links=25, num_comments=25, num_votes=5):
     """Flood your reddit install with test data based on reddit.com."""
 
     print ">>>> Ensuring configured objects exist"
@@ -270,19 +285,6 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
 
     print ">>>> Fetching real data from reddit.com"
     modeler = Modeler()
-    subreddits = [
-        modeler.model_subreddit("pics"),
-        modeler.model_subreddit("videos"),
-        modeler.model_subreddit("askhistorians"),
-    ]
-    extra_settings = {
-        "pics": {
-            "show_media": True,
-        },
-        "videos": {
-            "show_media": True,
-        },
-    }
 
     print
     print
@@ -295,8 +297,10 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
         ensure_account(modeler.generate_username())
         for i in xrange(50 - len(accounts)))
 
-    print ">>> Content"
+    print ">>> Subreddits and Content"
     things = []
+    subreddits, extra_settings = fetch_subreddits(modeler, num_subreddits)
+
     for sr_model in subreddits:
         sr_author = random.choice(accounts)
         sr = ensure_subreddit(sr_model.name, sr_author)
