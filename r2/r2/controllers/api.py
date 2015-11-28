@@ -3721,6 +3721,7 @@ class ApiController(RedditController):
         VModhash(),
         sr=VSRByName('sr_name'),
     )
+    @api_doc(api_section.subreddits)
     def POST_quarantine_optout(self, sr):
         """Opt out from a quarantined subreddit"""
         if not sr:
@@ -3737,6 +3738,7 @@ class ApiController(RedditController):
         VModhash(),
         sr=VSRByName('sr_name'),
     )
+    @api_doc(api_section.subreddits)
     def POST_quarantine_optin(self, sr):
         """Opt in to a quarantined subreddit"""
         if not sr:
