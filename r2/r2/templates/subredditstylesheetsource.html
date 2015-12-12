@@ -27,13 +27,18 @@
 %>
 <%namespace file="subredditstylesheetbase.html" import="make_li"/>
 
-<link rel="stylesheet" type="text/css" href="${static("highlight.css")}">
 
-<pre class="subreddit-stylesheet-source">
-<code class="language-css">${unsafe(SC_OFF)}${thing.stylesheet_contents}${unsafe(SC_ON)}</code>
-</pre>
+%if thing.stylesheet_contents:
+  <link rel="stylesheet" type="text/css" href="${static("highlight.css")}">
 
-${unsafe(js.use("highlight"))}
+  <pre class="subreddit-stylesheet-source">
+  <code class="language-css">${unsafe(SC_OFF)}${thing.stylesheet_contents}${unsafe(SC_ON)}</code>
+  </pre>
+
+  ${unsafe(js.use("highlight"))}
+%else:
+  <p class="error">${_("there doesn't seem to be anything here")}</p>
+%endif
 
 %if thing.images:
   <div id="images">
