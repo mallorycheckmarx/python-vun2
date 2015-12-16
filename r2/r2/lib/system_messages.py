@@ -59,6 +59,12 @@ user_added_messages = {
             "msg": N_("you have been added as an approved submitter to [%(title)s](%(url)s)."),
         },
     },
+    "wikicontributor": {
+        "pm": {
+            "subject": N_("you are a wiki contributor"),
+            "msg": N_("you have been added as a contributor to [%(title)s](%(url)s)."),
+        },
+    },
     "traffic": {
         "pm": {
             "subject": N_("you can view traffic on a promoted link"),
@@ -73,10 +79,14 @@ def notify_user_added(rel_type, author, user, target):
     if not msgs:
         return
 
-    srname = target.path.rstrip("/")
+    url = target.path.rstrip("/")
+    title = "%s: %s" % (url, target.title)
+    if rel_type == "wikicontributor":
+        title = "%s's wiki" % url
+        url += "/wiki"
     d = {
-        "url": srname,
-        "title": "%s: %s" % (srname, target.title),
+        "url": url,
+        "title": title,
         "author": "/u/" + author.name,
         "user": "/u/" + user.name,
     }
@@ -85,7 +95,7 @@ def notify_user_added(rel_type, author, user, target):
         subject = msgs["pm"]["subject"] % d
         msg = msgs["pm"]["msg"] % d
 
-        if rel_type in ("moderator_invite", "contributor"):
+        if rel_type in ("moderator_invite", "contributor", "wikicontributor"):
             # send the message from the subreddit
             item, inbox_rel = Message._new(author, user, subject, msg, request.ip,
                                            sr=target, from_sr=True)
@@ -108,21 +118,26 @@ def notify_user_added(rel_type, author, user, target):
         queries.new_message(item, inbox_rel)
 
 
-def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
-    sr_name = "/r/" + subreddit.name
+def send_ban_message(subreddit, mod, user, note=None,
+                     days=None, new=True, wiki=False):
+    location = "/r/" + subreddit.name
+    ban_type = "subreddit"
+    if wiki:
+        location += "'s wiki"
+        ban_type += "'s wiki"
     if days:
-        subject = "you've been temporarily banned from %(subreddit)s"
+        subject = "you've been temporarily banned from %(location)s"
         message = ("you have been temporarily banned from posting to "
-            "%(subreddit)s. this ban will last for %(duration)s days.")
+            "%(location)s. this ban will last for %(duration)s days.")
     else:
-        subject = "you've been banned from %(subreddit)s"
-        message = "you have been banned from posting to %(subreddit)s."
+        subject = "you've been banned from %(location)s"
+        message = "you have been banned from posting to %(location)s."
 
     if not new:
-        subject = "Your ban from %(subreddit)s has changed"
+        subject = "Your ban from %(location)s has changed"
 
-    subject %= {"subreddit": sr_name}
-    message %= {"subreddit": sr_name, "duration": days}
+    subject %= {"location": location}
+    message %= {"location": location, "duration": days}
 
     if note:
         message += "\n\n" + 'note from the moderators:'
@@ -130,10 +145,70 @@ def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
 
     message += "\n\n" + ("you can contact the moderators regarding your ban "
         "by replying to this message. **warning**: using other accounts to "
-        "circumvent a subreddit ban is considered a violation of reddit's "
+        "circumvent a %(ban_type)s ban is considered a violation of reddit's "
         "[site rules](/rules) and can result in being banned from reddit "
-        "entirely.")
+        "entirely." % {"ban_type": ban_type})
 
     item, inbox_rel = Message._new(mod, user, subject, message, request.ip,
         sr=subreddit, from_sr=True)
     queries.new_message(item, inbox_rel, update_modmail=False)
+
+
+def send_mod_permission_message(subreddit, changer, mod, oldperms,
+                                newperms=None, demod=False):
+    data = {
+        'srname': "/r/" + subreddit.name,
+        'changername': "/u/" + changer.name,
+    }
+    if demod:
+        subject = "you've been demodded from %(srname)s" % data
+        message = "you have been demodded from %(srname)s by %(changername)s" % data
+        send_from_sr = ('mail', True) in oldperms.iteritems() or oldperms.is_superuser()
+    else:
+        assert newperms
+        oldnegative = [perm for perm, status in oldperms.iteritems() if not status]
+        newnegative = [perm for perm, status in newperms.iteritems() if not status]
+        oldpositive = [perm for perm, status in oldperms.iteritems() if status]
+        newpositive = [perm for perm, status in newperms.iteritems() if status]
+
+        netnegative = [perm for perm in newnegative if perm not in oldnegative]
+        netpositive = [perm for perm in newpositive if perm not in oldpositive]
+
+        if oldperms.is_superuser():
+            # only can get demoted from here :(
+            netnegative = newnegative
+            netpositive = []
+
+        # mod used to have mail perms, but now doesn't.
+        # might want to be discussed with the rest of the mods
+        send_from_sr = 'mail' in netnegative
+
+        subject = "your permissions on %(srname)s have changed" % data
+        message = ("%(changername)s has changed your moderator permissions on "
+            "%(srname)s. here's a summary of the change in your permissions:\n"
+            "\n---" % data)
+
+        if newperms.is_superuser():
+            message += '\n\n**you now have full permissions:**\n\n'
+            for perm in newperms.info.keys():
+                message += ("* %(permission)s: %(description)s\n\n" %
+                    dict(permission=newperms.info[perm]['title'],
+                         description=newperms.info[perm]['description']))
+        else:
+            if netnegative != []:
+                message += '\n\n**you have lost the following permissions:**\n\n'
+                for perm in netnegative:
+                    message += ("* %(permission)s: %(description)s\n\n" %
+                        dict(permission=newperms.info[perm]['title'],
+                             description=newperms.info[perm]['description']))
+            if netpositive != []:
+                message += '\n\n**you have gained the following permissions:**\n\n'
+                for perm in netpositive:
+                    message += ("* %(permission)s: %(description)s\n\n" %
+                        dict(permission=newperms.info[perm]['title'],
+                             description=newperms.info[perm]['description']))
+
+    sr = subreddit if send_from_sr else None
+    item, inbox_rel = Message._new(changer, mod, subject, message, request.ip,
+                                   sr=sr, from_sr=send_from_sr)
+    queries.new_message(item, inbox_rel, update_modmail=send_from_sr)

@@ -106,7 +106,11 @@ from r2.lib.media import str_to_image
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope, allow_oauth2_access
 from r2.lib.template_helpers import add_sr, get_domain, make_url_protocol_relative
-from r2.lib.system_messages import notify_user_added, send_ban_message
+from r2.lib.system_messages import (
+    notify_user_added,
+    send_ban_message,
+    send_mod_permission_message,
+)
 from r2.controllers.ipn import generate_blob, update_blob
 from r2.lib.lock import TimeoutExpired
 from r2.lib.csrf import csrf_exempt
@@ -762,6 +766,23 @@ class ApiController(RedditController):
         'moderator_invite',
     )
 
+    duplicate_friends_error_no_duration_types = (
+        'banned',
+        'wikibanned',
+    )
+
+    duplicate_friends_errors = {
+        'moderator': errors.ALREADY_MODERATOR,
+        'moderator_invite': errors.ALREADY_INVITED,
+        'contributor': errors.ALREADY_CONTRIBUTOR,
+        'permbanned': errors.ALREADY_PERMBANNED,
+        'muted': errors.ALREADY_MUTED,
+        'permwikibanned': errors.ALREADY_PERMWIKIBANNED,
+        'wikicontributor': errors.ALREADY_WIKICONTRIBUTOR,
+        'friend': errors.ALREADY_FRIENDS,
+        'enemy': errors.ALREADY_BLOCKED,
+    }
+
     # Changes to this dict should also update docstrings for
     # POST_friend and POST_unfriend
     api_friend_scope_map = {
@@ -878,12 +899,18 @@ class ApiController(RedditController):
         # be the current user.
         if type in ("friend", "enemy") and container != c.user:
             abort(403, 'forbidden')
+        was_mod = container.is_moderator(victim) if type == "moderator" else None
+        was_mod_perms = was_mod.get_permissions() if was_mod else None
         fn = getattr(container, 'remove_' + type)
         new = fn(victim)
 
         # Log this action
         if new and type in self._sr_friend_types:
             ModAction.create(container, c.user, action, target=victim)
+
+        if was_mod:
+            send_mod_permission_message(container, c.user, victim,
+                                        was_mod_perms, demod=True)
 
         if type == "friend" and c.user.gold:
             c.user.friend_rels_cache(_update=True)
@@ -928,12 +955,21 @@ class ApiController(RedditController):
                 rel = c.site.get_moderator(target)
             if type == "moderator_invite":
                 rel = c.site.get_moderator_invite(target)
+            oldperms = rel.get_permissions()
+            if oldperms == permissions:
+                # no change in perms
+                c.errors.add(errors.NO_CHANGE_IN_PERMISSIONS, field="permissions")
+                form.set_error(errors.NO_CHANGE_IN_PERMISSIONS, "permissions")
+                return
             rel.set_permissions(permissions)
             rel._commit()
             update = rel.encoded_permissions
             ModAction.create(c.site, c.user, action='setpermissions',
                              target=target, details='permission_' + type,
                              description=update)
+            if type == 'moderator':
+                send_mod_permission_message(c.site, c.user, target,
+                                            oldperms, permissions)
 
         if update:
             row = form.closest('tr')
@@ -985,6 +1021,14 @@ class ApiController(RedditController):
             if not container:
                 return
 
+        # if we are (strictly) friending/blocking, the container
+        # had better be the current user and elsewise the subreddit.
+
+        if ((type == "friend" and container != c.user) or
+            (type in self._sr_friend_types and not
+                 isinstance(container, Subreddit))):
+            abort(403,'forbidden')
+
         if type == "moderator" and not c.user_is_admin:
             # attempts to add moderators now create moderator invites.
             type = "moderator_invite"
@@ -1006,9 +1050,16 @@ class ApiController(RedditController):
             if c.user_is_admin:
                 has_perms = True
             elif type.startswith('wiki'):
-                has_perms = container.is_moderator_with_perms(c.user, 'wiki')
+                has_perms = (container.is_moderator_with_perms(c.user, 'wiki')
+                                 and not container.hide_wikirelations)
+            elif type == 'muted':
+                has_perms = container.can_mute(c.user, friend)
             elif type == 'moderator_invite':
                 has_perms = container.is_unlimited_moderator(c.user)
+            elif type == 'contributor':
+                has_perms = (container.is_moderator_with_perms(c.user, 'access')
+                                 and not (container.hide_subscribers or
+                                     container.hide_contributors))
             else:
                 has_perms = container.is_moderator_with_perms(c.user, 'access')
 
@@ -1038,55 +1089,91 @@ class ApiController(RedditController):
                 form.set_error(errors.SUBREDDIT_RATELIMIT, None)
                 return
 
-        # if we are (strictly) friending, the container
-        # had better be the current user.
-        if type == "friend" and container != c.user:
-            abort(403,'forbidden')
-
-        elif form.has_errors("name", errors.USER_DOESNT_EXIST, errors.NO_USER):
-            return
-        elif form.has_errors("note", errors.TOO_LONG):
+        if (form.has_errors("name", errors.USER_DOESNT_EXIST, errors.NO_USER) or
+            form.has_errors("note", errors.TOO_LONG)):
             return
 
-        if type == "banned":
+        if type in ("banned", "wikibanned"):
             if form.has_errors("ban_message", errors.TOO_LONG):
                 return
 
         if type in self._sr_friend_types_with_permissions:
-            if form.has_errors('type', errors.INVALID_PERMISSION_TYPE):
-                return
-            if form.has_errors('permissions', errors.INVALID_PERMISSIONS):
+            if (form.has_errors('type', errors.INVALID_PERMISSION_TYPE) or
+                form.has_errors('permissions', errors.INVALID_PERMISSIONS)):
                 return
         else:
             permissions = None
 
-        if type == "moderator_invite" and container.is_moderator(friend):
-            c.errors.add(errors.ALREADY_MODERATOR, field="name")
-            form.set_error(errors.ALREADY_MODERATOR, "name")
-            return
-        elif type in ("banned", "muted") and container.is_moderator(friend):
-            c.errors.add(errors.CANT_RESTRICT_MODERATOR, field="name")
-            form.set_error(errors.CANT_RESTRICT_MODERATOR, "name")
-            return
-
-        if type == "muted" and not container.can_mute(c.user, friend):
-            abort(403)
-
-        # don't allow increasing privileges of banned or muted users
-        unbanned_types = ("moderator", "moderator_invite",
+        # don't allow the opposite relationships if the
+        # given friend is in a reverse relationship
+        banned_types = ("banned", "muted", "wikibanned")
+        elevated_types = ("moderator", "moderator_invite",
                           "contributor", "wikicontributor")
-        if type in unbanned_types:
-            if container.is_banned(friend):
-                c.errors.add(errors.BANNED_FROM_SUBREDDIT, field="name")
-                form.set_error(errors.BANNED_FROM_SUBREDDIT, "name")
+
+        if type in elevated_types:
+            for reverse_type in banned_types:
+                if getattr(container, 'is_' + reverse_type)(friend):
+                    reverse_error = getattr(errors, reverse_type.upper() + "_FROM_SUBREDDIT")
+                    c.errors.add(reverse_error, field="name")
+                    form.set_error(reverse_error, "name")
+                    return
+        if type in banned_types:
+            if container.is_moderator(friend):
+                reverse_error = errors.CANT_RESTRICT_MODERATOR
+                c.errors.add(reverse_error, field="name")
+                form.set_error(reverse_errors, "name")
                 return
-            elif container.is_muted(friend):
-                c.errors.add(errors.MUTED_FROM_SUBREDDIT, field="name")
-                form.set_error(errors.MUTED_FROM_SUBREDDIT, "name")
+            if container.is_moderator_invite(friend):
+                reverse_error = errors.MODERATOR_INVITE_ON_SUBREDDIT
+                c.errors.add(reverse_error, field="name")
+                form.set_error(reverse_error, "name")
+                return
+            if (type == "banned" and container.is_contributor(friend) and
+                container.type != "private"):
+                # contributors can be banned on private surbeddits
+                reverse_error = errors.CONTRIBUTOR_ON_SUBREDDIT
+                c.errors.add(reverse_error, field="name")
+                form.set_error(reverse_error, "name")
+                return
+            if type == "wikibanned" and container.is_wikicontributor(friend):
+                reverse_error = errors.WIKICONTRIBUTOR_ON_SUBREDDIT
+                c.errors.add(reverse_error, field="name")
+                form.set_error(reverse_error, "name")
+                return
+        if type == "friend" and container.is_enemy(friend):
+                reverse_error = errors.ENEMY_OF_USER
+                c.errors.add(reverse_error, field="name")
+                form.set_error(reverse_error, "name")
                 return
 
         if type == "moderator":
             container.remove_moderator_invite(friend)
+
+        # check for exactly duplicate relationships, and don't allow them
+        dupe_check = type
+        if type in self.duplicate_friends_error_no_duration_types and not duration:
+            dupe_check = 'perm' + type
+        dupe_error = self.duplicate_friends_errors.get(dupe_check)
+        duplicate_fn = getattr(container, 'is_' + dupe_check)
+        if duplicate_fn(friend) and dupe_error:
+            c.errors.add(dupe_error, field="name")
+            form.set_error(dupe_error, "name")
+            return
+        # can't invite a moderator, nor can we make them wiki contributors
+        if (type in ("moderator_invite", "wikicontributor") and
+            container.is_moderator(friend)):
+            c.errors.add(errors.ALREADY_MODERATOR, field="name")
+            form.set_error(errors.ALREADY_MODERATOR, "name")
+            return
+
+        if type in banned_types:
+            # don't delete the note upon changing lengths of bans
+            try:
+                oldnote = getattr(container, 'is_' + type)(friend).note
+            except AttributeError:
+                oldnote = None
+            if not note:
+                note = oldnote
 
         new = fn(friend, permissions=type_and_permissions[1])
 
@@ -1102,7 +1189,7 @@ class ApiController(RedditController):
         log_details = None
         log_description = None
 
-        if type in ('banned', 'wikibanned', 'muted'):
+        if type in banned_types:
             container.add_rel_note(type, friend, note)
             log_description = note
 
@@ -1177,6 +1264,10 @@ class ApiController(RedditController):
             if friend.has_interacted_with(container):
                 send_ban_message(container, c.user, friend,
                     ban_message, duration, new)
+        elif type == "wikibanned":
+            if friend.has_interacted_with(container):
+                send_ban_message(container, c.user, friend,
+                    ban_message, duration, new, wiki=True)
         elif new:
             notify_user_added(type, c.user, friend, container)
 
@@ -1782,6 +1873,8 @@ class ApiController(RedditController):
         display_author = getattr(thing, "display_author", None)
         if block_acct.name in g.admins or display_author:
             return
+        if c.user.is_friend(block_acct):
+            abort(403, errors.FRIEND_OF_USER)
         c.user.add_enemy(block_acct)
 
     @require_oauth2_scope("privatemessages")

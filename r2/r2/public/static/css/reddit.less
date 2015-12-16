@@ -3491,7 +3491,8 @@ label + #moresearchinfo {
 .usertable td, .usertable th { padding: 0 .7em }
 .usertable { white-space: nowrap }
 
-.usertable > .toggle {
+.usertable > .toggle,
+.usertable > .moderator-invite-info {
     display: inline-block;
     margin: 1em 0 .5em;
     padding: 11px 15px;
@@ -3523,6 +3524,11 @@ label + #moresearchinfo {
 
 .usertable > .toggle .error.active {
     display: inline;
+}
+
+.moderator-invite-info ul {
+    list-style-type: disc;
+    margin-left: 25px;
 }
 
 .usertable tr:hover {
@@ -8120,7 +8126,8 @@ body:not(.gold) .allminus-link {
     width: 100%;
 }
 
-form#banned textarea {
+form#banned textarea,
+form#wikibanned textarea {
     display: block;
     margin-left: 0;
 }
