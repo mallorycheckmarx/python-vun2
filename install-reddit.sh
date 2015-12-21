@@ -48,7 +48,8 @@ set -e
 # Configuration
 ###############################################################################
 # which user to install the code for; defaults to the user invoking this script
-REDDIT_USER=${REDDIT_USER:-$SUDO_USER}
+CURRENT_USER=${SUDO_USER:-$USER}
+REDDIT_USER=${REDDIT_USER:-$CURRENT_USER}
 
 # the group to run reddit code as; must exist already
 REDDIT_GROUP=${REDDIT_GROUP:-nogroup}
