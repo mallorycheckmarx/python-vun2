@@ -23,8 +23,8 @@
 <%inherit file="printable.html"/>
 <%namespace file="utils.html" import="plain_link" />
 
-<%def name="midcol(display=True, cls = '')">
-  ${parent.midcol(display=display, cls = cls)}
+<%def name="midcol(cls = '')">
+  ${parent.midcol(display=getattr(thing, "votable", True), cls = cls)}
 </%def>
 
 <%def name="tagline()">
