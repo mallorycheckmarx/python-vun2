@@ -283,6 +283,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         collapse_deleted_comments="collapse_deleted_comments",
         comment_score_hide_mins="comment_score_hide_mins",
         # community_rules="community_rules",
+        creator="author",
         description="description",
         description_html="description_html",
         display_name="name",
@@ -397,6 +398,12 @@ class SubredditJsonTemplate(ThingJsonTemplate):
                 return c.user.use_subreddit_style(thing)
             else:
                 return True
+        elif attr == 'author':
+            if not thing.author:
+                return thing.author
+            elif thing.author._deleted:
+                return '[deleted]'
+            return thing.author.name
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
