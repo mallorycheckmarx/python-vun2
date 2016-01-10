@@ -29,7 +29,7 @@ from r2.lib.menus import (
   Styled,
 )
 from r2.lib.wrapped import Wrapped
-from r2.models import Comment, LinkListing, Link, Message, PromotedLink, Report
+from r2.models import Account, Comment, LinkListing, Link, Message, PromotedLink, Report
 from r2.models import make_wrapper, IDBuilder, Thing
 from r2.lib.utils import tup
 from r2.lib.strings import Score
@@ -38,6 +38,8 @@ from datetime import datetime
 from pylons import tmpl_context as c
 from pylons import app_globals as g
 from pylons.i18n import _, ungettext
+
+automoderator_account = Account.automoderator_user()
 
 class PrintableButtons(Styled):
     cachable = False
@@ -87,16 +89,20 @@ class LinkButtons(PrintableButtons):
         # is the current user the author?
         is_author = (c.user_is_loggedin and thing.author and
                      c.user.name == thing.author.name)
+        # can a mod edit the comment? (automod only)
+        is_mod_editable = (c.user_is_loggedin and thing.author and automoderator_account and
+                           automoderator_account.name == thing.author.name and
+                           (c.user_is_admin or thing.subreddit.is_moderator_with_perms(c.user, 'posts')))
         # do we show the report button?
         show_report = not is_author and not thing._deleted and report
 
         show_share = ((c.user_is_loggedin or not g.read_only_mode) and
                       not thing.subreddit.quarantine)
 
-        # if they are the author, can they edit it?
+        # if they are the author or the link is mod editable, can they edit it?
         thing_editable = getattr(thing, 'editable', True)
         thing_takendown = getattr(thing, 'admin_takedown', False)
-        editable = is_author and thing_editable and not thing_takendown
+        editable = (is_author or is_mod_editable) and thing_editable and not thing_takendown
 
         show_lock = show_unlock = False
         lockable = thing.can_ban and not thing.archived
@@ -192,10 +198,14 @@ class CommentButtons(PrintableButtons):
         # is the current user the author?
         is_author = thing.is_author
 
-        # if they are the author, can they edit it?
+        # can a mod edit the comment? (automod only)
+        is_mod_editable = (c.user_is_loggedin and thing.author and automoderator_account and
+                           automoderator_account.name == thing.author.name and
+                           (c.user_is_admin or thing.subreddit.is_moderator_with_perms(c.user, 'posts')))
+        # if they are the author or the comment is mod editable, can they edit it?
         thing_editable = getattr(thing, 'editable', True)
         thing_takendown = getattr(thing, 'admin_takedown', False)
-        editable = is_author and thing_editable and not thing_takendown
+        editable = (is_author or is_mod_editable) and thing_editable and not thing_takendown
 
         # do we show the report button?
         show_report = not is_author and report and thing.can_reply
@@ -245,6 +255,7 @@ class CommentButtons(PrintableButtons):
                                   parent_permalink = thing.parent_permalink, 
                                   can_reply = thing.can_reply,
                                   locked = thing.link.locked,
+                                  mod_editable = is_mod_editable,
                                   suppress_reply_buttons = suppress_reply_buttons,
                                   show_report=show_report,
                                   mod_reports=thing.mod_reports,

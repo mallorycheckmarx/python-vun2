@@ -428,6 +428,12 @@
             hidden_data=dict(id=thing.thing._fullname, state=True), access_required=False)}
         %endif
       </li>
+    %elif thing.mod_editable:
+      %if thing.editable:
+        <li>
+          ${self.simple_button(_("edit"), "edit_usertext", css_class="edit-usertext")}
+        </li>
+      %endif
     %endif
 
     ${self.banbuttons()}

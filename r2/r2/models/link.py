@@ -1507,6 +1507,8 @@ class Comment(Thing, Printable):
         authors = Account._byID(set(l.author_id for l in links.values()), data=True,
                                 return_dict=True, stale=True)
 
+        # store automod's id
+        automod_id = getattr(Account.automoderator_user(), '_id', None)
         #get srs for comments that don't have them (old comments)
         for cm in wrapped:
             if not hasattr(cm, 'sr_id'):
@@ -1762,8 +1764,10 @@ class Comment(Thing, Printable):
 
             #will seem less horrible when add_props is in pages.py
             from r2.lib.pages import UserText
+            mod_editable = (item.author_id == automod_id and c.user_is_loggedin and
+                            (c.user_is_admin or item.subreddit.is_moderator_with_perms(c.user)))
             item.usertext = UserText(item, item.body,
-                                     editable=item.is_author,
+                                     editable=(item.is_author or mod_editable),
                                      nofollow=item.nofollow,
                                      target=item.target,
                                      extra_css=extra_css,
