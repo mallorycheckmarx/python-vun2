@@ -157,6 +157,7 @@
 
         %if thing.include_errors:
           ${error_field("TOO_LONG", thing.name, "span")}
+          ${error_field("AUTOMOD_DISCLAIMER_REQUIRED", thing.name, "span")}
           ${error_field("RATELIMIT", "ratelimit", "span")}
           ${error_field("NO_TEXT", thing.name, "span")}
           ${error_field("TOO_OLD", "parent", "span")}

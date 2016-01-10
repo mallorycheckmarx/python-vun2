@@ -1923,7 +1923,8 @@ class ApiController(RedditController):
                 from r2.lib.automoderator import DISCLAIMER
                 disclaimer_check = '\n\n' + DISCLAIMER.replace('{{subreddit}}', sr.name)
                 if not text.endswith(disclaimer_check):
-                    form.set_error('text', errors.AUTOMOD_DISCLAIMER_REQUIRED)
+                    c.errors.add(errors.AUTOMOD_DISCLAIMER_REQUIRED, field='text')
+                    form.set_error(errors.AUTOMOD_DISCLAIMER_REQUIRED, 'text')
                     return
             item.body = text
         elif isinstance(item, Link):
@@ -1940,11 +1941,13 @@ class ApiController(RedditController):
 
         if item._age > timedelta(minutes=3) or item.num_votes > 2:
             item.editted = c.start_time
-        elif (item.author_id == getattr(automod_account, '_id', None)
-              and item.author_id != c.user._id):
+        if (item.author_id == getattr(automod_account, '_id', None) and
+                item.author_id != c.user._id):
             # This is an item by automod, not being edited by automod.
-            # Force the editted asterisk and make a ModAction
+            # Force the editted asterisk, set the editor's id,
+            # and make a ModAction
             item.editted = c.start_time
+            item.mod_editor_id = c.user._id
             ModAction.create(sr, c.user, 'editautomoditem', target=item)
 
         item.ignore_reports = False

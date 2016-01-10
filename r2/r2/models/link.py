@@ -124,6 +124,7 @@ class Link(Thing, Printable):
                      disable_comments=False,
                      locked=False,
                      selftext='',
+                     mod_editor_id=None,
                      sendreplies=True,
                      ip='0.0.0.0',
                      flair_text=None,
@@ -913,6 +914,14 @@ class Link(Thing, Printable):
         return Account._byID(self.author_id, data=True, return_dict=False)
 
     @property
+    def mod_editor_slow(self):
+        """Returns the link's mod editor if it exists."""
+        # The mod editor is often already on the wrapped link as .mod_editor
+        # If available, that should be used instead of calling this
+        if self.mod_editor_id is not None:
+            return Account._byID(self.mod_editor_id, data=True, return_dict=False)
+
+    @property
     def responder_ids(self):
         """Returns an iterable of the OP and other official responders in a
         thread.
@@ -1185,6 +1194,7 @@ class Comment(Thing, Printable):
                      parent_id=None,
                      moderator_banned=False,
                      new=False,
+                     mod_editor_id=None,
                      gildings=0,
                      banned_before_moderator=False,
                      parents=None,
@@ -1344,6 +1354,14 @@ class Comment(Thing, Printable):
         # The author is often already on the wrapped comment as .author
         # If available, that should be used instead of calling this
         return Account._byID(self.author_id, data=True, return_dict=False)
+
+    @property
+    def mod_editor_slow(self):
+        """Returns the comment's mod editor if it exists."""
+        # The mod editor is often already on the wrapped comment as .mod_editor
+        # If available, that should be used instead of calling this
+        if self.mod_editor_id is not None:
+            return Account._byID(self.mod_editor_id, data=True, return_dict=False)
 
     @property
     def archived(self):

@@ -670,7 +670,12 @@ ${unsafe(txt)}
 
 <%def name="edited(thing, lastedited=None)">
   %if isinstance(thing.editted, datetime):
-    <time class="edited-timestamp" title="${_('last edited')} ${unsafe(lastedited or simplified_timesince(thing.editted))}" datetime="${html_datetime(thing.editted)}">*</time>
+    <%
+        editor_tagline = ''
+        if thing.mod_editor_name:
+            editor_tagline = _(" by %(name)s") % dict(name=thing.mod_editor_name)
+    %>
+    <time class="edited-timestamp" title="${_('last edited')} ${unsafe(lastedited or simplified_timesince(thing.editted))}${editor_tagline}" datetime="${html_datetime(thing.editted)}">*</time>
   %elif thing.editted:
     <em>*</em>
   %endif
