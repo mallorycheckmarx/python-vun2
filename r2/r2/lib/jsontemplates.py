@@ -755,6 +755,9 @@ class LinkJsonTemplate(ThingJsonTemplate):
 
         d['suggested_sort'] = thing.sort_if_suggested()
 
+        if getattr(thing, 'mod_editor_name', None):
+            d['mod_editor'] = thing.mod_editor_name
+
         preview_object = thing.preview_image
         if preview_object:
             d['preview'] = {}
@@ -841,6 +844,9 @@ class CommentJsonTemplate(ThingTemplate):
             "subreddit_id": item.subreddit._fullname,
             "ups": item.score,
         })
+
+        if getattr(item, 'mod_editor_name', None):
+            data['mod_editor'] = item.mod_editor_name
 
         if getattr(item, "admin_takedown", None):
             data["removal_reason"] = "legal"
