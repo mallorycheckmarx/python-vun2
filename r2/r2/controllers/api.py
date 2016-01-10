@@ -1909,6 +1909,8 @@ class ApiController(RedditController):
             form.set_error(errors.TOO_LONG, 'text')
             return
 
+        automod_account = Account.automoderator_user()
+        sr = c.site if isinstance(c.site, Subreddit) else item.subreddit_slow
         removed_mentions = None
         original_text = item.body
         if isinstance(item, Comment):
@@ -1916,6 +1918,13 @@ class ApiController(RedditController):
             prev_mentions = extract_user_mentions(original_text)
             new_mentions = extract_user_mentions(text)
             removed_mentions = prev_mentions - new_mentions
+            if item.author_id == getattr(automod_account, '_id', None):
+                # This is a comment by automoderator. Enforce automod's disclaimer
+                from r2.lib.automoderator import DISCLAIMER
+                disclaimer_check = '\n\n' + DISCLAIMER.replace('{{subreddit}}', sr.name)
+                if not text.endswith(disclaimer_check):
+                    form.set_error('text', errors.AUTOMOD_DISCLAIMER_REQUIRED)
+                    return
             item.body = text
         elif isinstance(item, Link):
             kind = 'link'
@@ -1930,6 +1939,11 @@ class ApiController(RedditController):
             return abort(403, "forbidden")
 
         if item._age > timedelta(minutes=3) or item.num_votes > 2:
+            item.editted = c.start_time
+        elif (item.author_id == getattr(automod_account, '_id', None)
+              and item.author_id != c.user._id):
+            # This is an item by automod, not being edited by automod.
+            # Force the editted asterisk
             item.editted = c.start_time
 
         item.ignore_reports = False
