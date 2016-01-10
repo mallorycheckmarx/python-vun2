@@ -1877,7 +1877,7 @@ class ApiController(RedditController):
     @validatedForm(
         VUser(),
         VModhash(),
-        item=VByNameIfAuthor('thing_id'),
+        item=VByNameIfCanEdit('thing_id'),
         text=VMarkdown('text'),
     )
     @api_doc(api_section.links_and_comments)
