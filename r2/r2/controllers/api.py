@@ -1943,8 +1943,9 @@ class ApiController(RedditController):
         elif (item.author_id == getattr(automod_account, '_id', None)
               and item.author_id != c.user._id):
             # This is an item by automod, not being edited by automod.
-            # Force the editted asterisk
+            # Force the editted asterisk and make a ModAction
             item.editted = c.start_time
+            ModAction.create(sr, c.user, 'editautomoditem', target=item)
 
         item.ignore_reports = False
 
