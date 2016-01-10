@@ -91,6 +91,7 @@ def _oembed_comment(thing, **embed_options):
                            title=title,
                            author_name=author_name,
                            html=html,
+                           width=640,
                            )
 
     if author_name:
