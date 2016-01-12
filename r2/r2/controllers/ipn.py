@@ -284,9 +284,9 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage,
         md_sender = "/u/%s" % sender
         repliable = True
     else:
-        sender = _("An anonymous redditor")
-        md_sender = _("An anonymous redditor")
-        
+        sender = "An anonymous redditor"
+        md_sender = "An anonymous redditor"
+
         if buyer.name in g.live_config["proxy_gilding_accounts"]:
             repliable = False
         else:    
@@ -300,16 +300,16 @@ def send_gift(buyer, recipient, months, days, signed, giftmessage,
         amount = "%d months" % months
 
     if not thing:
-        subject = _('Let there be gold! %s just sent you reddit gold!') % sender
+        subject = 'Let there be gold! %s just sent you reddit gold!' % sender
         message = strings.youve_got_gold % dict(sender=md_sender, amount=amount)
     else:
         url = thing.make_permalink_slow()
         if isinstance(thing, Comment):
-            subject = _('Your comment has been gilded!')
+            subject = 'Your comment has been gilded!'
             message = strings.youve_been_gilded_comment 
             message %= {'sender': md_sender, 'url': url}
         else:
-            subject = _('Your submission has been gilded!')
+            subject = 'Your submission has been gilded!'
             message = strings.youve_been_gilded_link 
             message %= {'sender': md_sender, 'url': url}
 
@@ -590,9 +590,9 @@ class IpnController(RedditController):
                         "supports the site and makes future development "
                         "possible. For example, one month of reddit gold "
                         "pays for 5 instance hours of reddit's servers.")
-            message += "\n\n" + strings.gold_benefits_msg
+            message += "\n\n" + _(strings.gold_benefits_msg)
             if g.lounge_reddit:
-                message += "\n* " + strings.lounge_msg
+                message += "\n* " + _(strings.lounge_msg)
         elif payment_blob['goldtype'] == 'creddits':
             buyer._incr("gold_creddits", months)
             buyer._commit()
@@ -604,7 +604,7 @@ class IpnController(RedditController):
                         "possible. To spend your creddits and spread reddit "
                         "gold, visit [/gold](/gold) or your favorite "
                         "person's user page.")
-            message += "\n\n" + strings.gold_benefits_msg + "\n\n"
+            message += "\n\n" + _(strings.gold_benefits_msg) + "\n\n"
             message += _("Thank you again for your support, and have fun "
                          "spreading gold!")
         elif payment_blob['goldtype'] == 'gift':
@@ -626,7 +626,7 @@ class IpnController(RedditController):
                         "Thank you for gifting reddit gold. Your patronage "
                         "supports the site and makes future development "
                         "possible.") % recipient.name
-            message += "\n\n" + strings.gold_benefits_msg + "\n\n"
+            message += "\n\n" + _(strings.gold_benefits_msg) + "\n\n"
             message += _("Thank you again for your support, and have fun "
                          "spreading gold!")
         elif payment_blob['goldtype'] == 'code':
