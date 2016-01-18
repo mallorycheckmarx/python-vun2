@@ -83,6 +83,7 @@ r.saved.SaveDialog = r.ui.Bubble.extend({
         if (this.category) {
             r.saved.categories.add({category: this.category})
             r.saved.categories.sort()
+            this.$parent.thing().removeClass("saved-no-category").addClass("saved-" + this.category)
         }
         this.hide()
     },
@@ -160,11 +161,14 @@ r.saved.SaveButton = {
         var $category = $el.parents('.thing').find('.save-category').hide()
         $el.text(r._('save'))
         $el.thing().removeClass('saved')
+        $el.thing().attr('class', function(i, c) {
+            return (c.replace(/(^|\s)saved\S+/g, ''));
+        });
     },
 
     setSaved: function($el) {
         $el.text(r._('unsave'))
-        $el.thing().addClass('saved')
+        $el.thing().addClass('saved').addClass('saved-no-category')
     }
 }
 
