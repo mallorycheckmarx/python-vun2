@@ -168,7 +168,10 @@ r.saved.SaveButton = {
 
     setSaved: function($el) {
         $el.text(r._('unsave'))
-        $el.thing().addClass('saved').addClass('saved-no-category')
+        $el.thing().addClass('saved')
+        if (r.config.gold) {
+            $el.thing().addClass('saved-no-category')
+        }
     }
 }
 
