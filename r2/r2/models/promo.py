@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -465,7 +465,7 @@ class PromoCampaign(Thing):
     @classmethod
     def _by_user(cls, account_id):
         '''
-        Returns an iterable of all campaigns owned by account_id or an empty 
+        Returns an iterable of all campaigns owned by account_id or an empty
         list if there are none.
         '''
         return cls._query(PromoCampaign.c.owner_id == account_id, data=True)

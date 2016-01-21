@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -465,7 +465,7 @@ class HotController(ListingWithPromos):
                 # returning a list of all the hot links after this if we
                 # modify it directly
                 link_list = sticky_fullnames[:]
-                
+
                 wrapped = wrap_links(link_list,
                                      wrapper=self.builder_wrapper,
                                      keep_fn=self.keep_fn(),
@@ -478,7 +478,7 @@ class HotController(ListingWithPromos):
                         self.count -= len(sticky_fullnames)
                         self.num += len(sticky_fullnames)
                     return link_list
-            
+
             # no sticky or sticky hidden
             return c.site.get_links('hot', 'all')
 
@@ -916,7 +916,7 @@ class UserController(ListingController):
                 if query_string:
                     path += "?" + query_string
                 return self.redirect(path, code=301)
-        
+
         self.where = where
         self.sort = sort
         self.time = time
@@ -1878,7 +1878,7 @@ class UserListListingController(ListingController):
             if c.site.hide_contributors:
                 abort(403)
             self.listing_cls = ContributorListing
-            self.editable = self.editable and has_mod_access 
+            self.editable = self.editable and has_mod_access
 
         elif where == 'banned':
             if not has_mod_access:

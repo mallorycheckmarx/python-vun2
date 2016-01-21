@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 """Read config from an INI file and put it in ZooKeeper for instant use."""
@@ -145,7 +145,7 @@ def print_dict_diff(old, new):
         if key in added_keys:
             print "+ {key:<{length}s} = {value!r}".format(
                 key=key, value=new[key], length=max_key_length)
-            
+
         if key in changed_keys:
             print "! {key:<{length}s} :".format(key=key, length=max_key_length)
 

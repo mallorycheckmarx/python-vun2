@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -28,7 +28,7 @@
   %if is_author:
     <div class="thing_suboption_popup_container hidden">
       <div class="thing_suboption_popup">
-       <a href="#" 
+       <a href="#"
           onclick="return change_state(this, 'del', hide_thing, true)">
         yes
        </a>
@@ -39,7 +39,7 @@
   %endif
   <div class="thing_suboption_popup_container hidden">
     <div class="thing_suboption_popup">
-      <a href="#" 
+      <a href="#"
         onclick="return change_state(this, 'report', hide_thing, true)">
         yes
       </a>

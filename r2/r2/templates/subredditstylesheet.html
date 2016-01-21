@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -35,7 +35,7 @@
      name="subreddit_stylesheet" id="subreddit_stylesheet"
      class="pretty-form sr-form"
      action="/post/subreddit_stylesheet" method="post" >
-    
+
   <input type="hidden" name="r"  value="${thing.site.name}" />
   <input type="hidden" name="op"  value="" />
 
@@ -62,11 +62,11 @@
     </div>
     <div class="clearleft"></div>
     <div class="buttons">
-      <button class="btn" name="save" type="submit" 
+      <button class="btn" name="save" type="submit"
              onclick="this.form.op.value='save'; return true;">
         ${_('save')}
       </button>
-      <button class="btn" name="preview" type="submit" 
+      <button class="btn" name="preview" type="submit"
              onclick="this.form.op.value='preview'; return true;">
         ${_('preview')}
       </button>
@@ -79,7 +79,7 @@
       <!-- populated from AJAX requests to /api/subreddit_stylesheet -->
     </ul>
   </div>
-  
+
   </form>
 
   <div id="preview-table" style="display:none">
@@ -116,10 +116,10 @@
     <div id="images">
       <h2><a name="images">${_("images")}</a></h2>
 
-    <%call expr="image_upload('/api/upload_sr_img', '', 
+    <%call expr="image_upload('/api/upload_sr_img', '',
                                 onchange='return file_changed(this)',
                                 label = _('image file'), ask_type=True)">
-      
+
       <br/>
       <label for="img-name">${_("new image name:")}</label>
       <input id="img-name" name="name" value="" type="text"/>
@@ -142,12 +142,12 @@
                     .find(".img-url").html("url(%%" + name + "%%)").end()
                     .find("form input[name=img_name]").val(name).end()
                     .find("img").attr("id", "img-preview-" + name).end();
-                
+
                 list.append(new_li);
                 img = new_li.find("img");
-                
+
                 $("#old-names").append("<option>" + name + "</option>");
-                return img;           
+                return img;
           }
 
           function on_image_success(img) {
@@ -158,7 +158,7 @@
           function paste_url(source) {
               var txt = $(source).siblings("pre:first").html();
               $("#stylesheet_contents").insertAtCursor(txt);
-              return false; 
+              return false;
           }
           function delete_img(button) {
               $(button).parents("li:first").fadeOut(function() {
@@ -191,7 +191,7 @@
         <%def name="make_li(name='', img=None, prototype=False)">
           <li ${"style='display:none'" if img is None else ""}>
             <a href="${img}" class="preview">
-              <img id="img-preview-${name}" src="${img}" 
+              <img id="img-preview-${name}" src="${img}"
                    alt="Image ${name}" title="click to preview"/>
             </a>
             <div class="description">
@@ -220,8 +220,7 @@
 
       <iframe src="about:blank" width="600" height="200" style="display: none;"
               name="upload-iframe" id="upload-iframe"></iframe>
-      
+
     </div>
   %endif
 </div>
-

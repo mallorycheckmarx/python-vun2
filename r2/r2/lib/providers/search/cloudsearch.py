@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 import cPickle as pickle
@@ -113,7 +113,7 @@ class CloudSearchUploader(object):
     def delete_xml(self, thing, version=None):
         '''Return the cloudsearch XML representation of
         "delete this from the index"
-        
+
         '''
         version = str(version or self._version())
         delete = etree.Element("delete", id=thing._fullname, version=version)
@@ -122,7 +122,7 @@ class CloudSearchUploader(object):
     def delete_ids(self, ids):
         '''Delete documents from the index.
         'ids' should be a list of fullnames
-        
+
         '''
         version = self._version()
         deletes = [etree.Element("delete", id=id_, version=str(version))
@@ -134,7 +134,7 @@ class CloudSearchUploader(object):
     def xml_from_things(self):
         '''Generate a <batch> XML tree to send to cloudsearch for
         adding/updating/deleting the given things
-        
+
         '''
         batch = etree.Element("batch")
         self.batch_lookups()
@@ -181,7 +181,7 @@ class CloudSearchUploader(object):
     def inject(self, quiet=False):
         '''Send things to cloudsearch. Return value is time elapsed, in seconds,
         of the communication with the cloudsearch endpoint
-        
+
         '''
         xml_things = self.xml_from_things()
 
@@ -218,7 +218,7 @@ class CloudSearchUploader(object):
         '''Open a connection to the cloudsearch endpoint, and send the documents
         for indexing. Multiple requests are sent if a large number of documents
         are being sent (see chunk_xml())
-        
+
         Raises SearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
@@ -300,7 +300,7 @@ class SubredditUploader(CloudSearchUploader):
 
 def chunk_xml(xml, depth=0):
     '''Chunk POST data into pieces that are smaller than the 20 MB limit.
-    
+
     Ideally, this never happens (if chunking is necessary, would be better
     to avoid xml'ifying before testing content_length)'''
     data = etree.tostring(xml)
@@ -326,7 +326,7 @@ def chunk_xml(xml, depth=0):
 def _run_changed(msgs, chan):
     '''Consume the cloudsearch_changes queue, and print reporting information
     on how long it took and how many remain
-    
+
     '''
     start = datetime.now(g.tz)
 
@@ -356,7 +356,7 @@ def run_changed(drain=False, min_size=500, limit=1000, sleep_time=10,
                 use_safe_get=False, verbose=False):
     '''Run by `cron` (through `paster run`) on a schedule to send Things to
         Amazon CloudSearch
-    
+
     '''
     if use_safe_get:
         CloudSearchUploader.use_safe_get = True
@@ -663,9 +663,9 @@ class CloudSearchQuery(object):
                     faceting=None, start=0, num=1000, _update=False):
         '''Query the cloudsearch API. _update parameter allows for supposed
         easy memoization at later date.
-        
+
         Example result set:
-        
+
         {u'facets': {u'reddit': {u'constraints':
                                     [{u'count': 114, u'value': u'politics'},
                                     {u'count': 42, u'value': u'atheism'},
@@ -693,7 +693,7 @@ class CloudSearchQuery(object):
                    u'time-ms': 9},
                    u'match-expr': u"(label 'my query')",
                    u'rank': u'-text_relevance'}
-        
+
         '''
         try:
             response = basic_query(query=query, bq=bq, size=num, start=start,
@@ -777,7 +777,7 @@ class LinkSearchQuery(CloudSearchQuery):
     def _restrict_sr(sr):
         '''Return a cloudsearch appropriate query string that restricts
         results to only contain results from self.sr
-        
+
         '''
         if isinstance(sr, MultiReddit):
             if not sr.sr_ids:
@@ -836,7 +836,7 @@ class CloudSearchProvider(SearchProvider):
 
     SubredditSearchQuery = CloudSearchSubredditSearchQuery
 
-    def run_changed(self, drain=False, min_size=int(getattr(g, 'SOLR_MIN_BATCH', 500)), limit=1000, sleep_time=10, 
+    def run_changed(self, drain=False, min_size=int(getattr(g, 'SOLR_MIN_BATCH', 500)), limit=1000, sleep_time=10,
             use_safe_get=False, verbose=False):
         '''Run by `cron` (through `paster run`) on a schedule to send Things to Cloud
         '''
@@ -845,7 +845,7 @@ class CloudSearchProvider(SearchProvider):
         amqp.handle_items('cloudsearch_changes', _run_changed, min_size=min_size,
                           limit=limit, drain=drain, sleep_time=sleep_time,
                           verbose=verbose)
-    
+
     def get_related_query(self, query, article, start, end, nsfw):
         '''build related query in cloudsearch syntax'''
         query = _force_unicode(query)
@@ -854,6 +854,6 @@ class CloudSearchProvider(SearchProvider):
         query = u"title:'%s'" % query
         nsfw = nsfw and u"nsfw:0" or u""
         query = u"(and %s timestamp:%s..%s %s)" % (query, start, end, nsfw)
-        return g.search.SearchQuery(query, 
+        return g.search.SearchQuery(query,
                                     raw_sort="-text_relevance",
                                     syntax="cloudsearch")

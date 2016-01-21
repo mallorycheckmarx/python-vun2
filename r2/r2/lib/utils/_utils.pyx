@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -49,13 +49,13 @@ def tup(item, ret_is_single=False):
         return ((item,), True) if ret_is_single else (item,)
 
 cdef _strips(str direction, text, remove):
-    if direction == 'l': 
-        if text.startswith(remove): 
+    if direction == 'l':
+        if text.startswith(remove):
             return text[len(remove):]
     elif direction == 'r':
-        if text.endswith(remove):   
+        if text.endswith(remove):
             return text[:-len(remove)]
-    else: 
+    else:
         raise ValueError, "Direction needs to be r or l."
     return text
 
@@ -65,17 +65,17 @@ cpdef rstrips(text, remove):
 
         >>> rstrips("foobar", "bar")
         'foo'
-    
+
     """
     return _strips('r', text, remove)
 
 cpdef lstrips(text, remove):
     """
     removes the string `remove` from the left of `text`
-    
+
         >>> lstrips("foobar", "foo")
         'bar'
-    
+
     """
     return _strips('l', text, remove)
 
@@ -84,7 +84,7 @@ def strips(text, remove):
 
         >>> strips("foobarfoo", "foo")
         'bar'
-    
+
     """
     return rstrips(lstrips(text, remove), remove)
 
@@ -267,7 +267,7 @@ def flatten(list lists):
     """[[1,2], [3], [4,5,6]] -> [1,2,3,4,5,6]"""
     cdef list ret = []
     cdef list l
-    
+
     for l in lists:
         ret.extend(l)
 

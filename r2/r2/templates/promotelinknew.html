@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -65,7 +65,7 @@ ${unsafe(js.use('sponsored'))}
           </footer>
         </div>
       </form>
-      <iframe src="about:blank" width="600" height="200" 
+      <iframe src="about:blank" width="600" height="200"
               style="display: none;"
               name="upload-iframe" id="upload-iframe"></iframe>
     </div>
@@ -74,7 +74,7 @@ ${unsafe(js.use('sponsored'))}
 
 <%def name="username_field()">
   <%utils:line_field title="${_('create as user')}" id="username-field" css_class="rounded">
-    <input id="username" name="username" type="text" 
+    <input id="username" name="username" type="text"
            class="rounded">
     ${error_field("NO_EMAIL_FOR_USER", "username", "div")}
     ${error_field("NO_VERIFIED_EMAIL", "username", "div")}

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -44,7 +44,7 @@
 </%def>
 
 <%def name="entry()">
-<% 
+<%
    from r2.lib.strings import Score
    domain = get_domain(subreddit=False)
    permalink = "%s://%s%s" % (g.default_scheme, domain, thing.permalink)
@@ -52,7 +52,7 @@
    two_col = request.GET.has_key("twocolumn") if l else False
  %>
   ${self.arrows(thing)}
-  <div class="reddit-entry entry ${thing.like_cls}" 
+  <div class="reddit-entry entry ${thing.like_cls}"
        %if expanded:
          ${optionalstyle("margin-left: 58px;")}
        %else:
@@ -84,7 +84,7 @@
     %if not expanded:
       <br />
     %endif
-    <small 
+    <small
        %if expanded:
          ${optionalstyle("color:gray;margin-left:5px;")}
        %else:

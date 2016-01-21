@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -32,13 +32,13 @@
 %if thing.nextprev and (thing.prev or thing.next):
   <p class="nextprev"> ${_("view more:")}&#32;
   %if thing.prev:
-    ${plain_link(_("prev"), thing.prev)}  
+    ${plain_link(_("prev"), thing.prev)}
   %endif
   %if thing.prev and thing.next:
     &#32;|&#32;
   %endif
   %if thing.next:
-    ${plain_link(_("next"), thing.next)}  
+    ${plain_link(_("next"), thing.next)}
   %endif
   </p>
 %endif

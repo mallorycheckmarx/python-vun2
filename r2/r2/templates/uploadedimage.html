@@ -16,11 +16,11 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
-<%! 
+<%!
    import simplejson
  %>
 <html>
@@ -30,7 +30,7 @@
          errors = simplejson.dumps(thing.errors)
        %>
       parent.completedUploadImage('${thing.status}','${thing.img_src or ""}',
-                                  '${thing.name or ""}', ${unsafe(errors)},'${thing.form_id}');    
+                                  '${thing.name or ""}', ${unsafe(errors)},'${thing.form_id}');
     </script>
   </head>
   <body>

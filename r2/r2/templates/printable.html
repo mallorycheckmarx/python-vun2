@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -41,7 +41,7 @@ ${self.RenderPrintable()}
       %endif
       <b>[
         %if c.user_is_admin:
-          ${"auto" if thing.autobanned else ""}${strings.banned} 
+          ${"auto" if thing.autobanned else ""}${strings.banned}
           ${("by %s" % thing.banner) if thing.banner else ""}
         %elif thing.moderator_banned and thing.banner:
           ${strings.banned_by % thing.banner}
@@ -215,7 +215,7 @@ ${self.RenderPrintable()}
 </%def>
 
 <%def name="arrow(this, dir, mod)">
-<% 
+<%
    arrow_type = "up" if dir > 0 else "down"
    arrow_class = arrow_type + ("mod" if mod else "")
    login_class = "login-required" if not g.read_only_mode else ""
@@ -247,7 +247,7 @@ ${self.RenderPrintable()}
 
 
 <%def name="midcol(display=True, cls = '')">
-  <div class="midcol ${cls}" 
+  <div class="midcol ${cls}"
        ${not display and "style='display:none'" or ''}>
     ${self.arrow(thing, 1, thing.likes)}
     ${self.arrow(thing, 0, thing.likes == False)}

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -63,13 +63,13 @@
        "for promotion.")}
   </p>
     <input type="hidden" name="customer_id" value="${thing.customer_id}" />
-    
+
     ${profile_info(None, disabled=bool(thing.profiles))}
     %for profile in thing.profiles:
       ${profile_info(profile, disabled=True)}
     %endfor
   </form>
-  
+
   <script type="text/javascript">
     function enable_all(elem) {
        $(elem).parents("div.pay-form").addBack()
@@ -91,7 +91,7 @@
                        .each(function() { disable_all(this); })
                        .end()
                        .filter("#form-option-" + val).show();
-       if (val == "" || inputs.find("[name=edit]").val() == "on") 
+       if (val == "" || inputs.find("[name=edit]").val() == "on")
             enable_all(inputs);
     }
 
@@ -137,7 +137,7 @@
    <table class="content preftable ${'disabled' if disabled else ''}">
      %for fields, data, error_name in ((address, bill_to, "BAD_ADDRESS"), (cc, credit, "BAD_CARD")):
      %for label, field, optional in fields:
-     <tr class="payment-${field.lower()}" 
+     <tr class="payment-${field.lower()}"
          id="payment-${field.lower()}-${prof_id}">
        <th><label for="input-${field}-${prof_id}">
          ${label}
@@ -163,7 +163,7 @@
            %endif
          %else:
            <input ${disabled}
-                  id="input-${field}-${prof_id}" type="text" name="${field}" 
+                  id="input-${field}-${prof_id}" type="text" name="${field}"
                   value="${getattr(data, field, '')}" />
          %endif
          %if optional:
@@ -186,7 +186,7 @@
             </button>
          %endif
        </td>
-     </tr>       
+     </tr>
      <tr>
        <td></td>
        <td>

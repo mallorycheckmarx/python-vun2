@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -312,9 +312,9 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
             secure_media_object = None
 
         # If thumbnail can't be found, attempt again using _ThumbnailOnlyScraper
-        # This should fix bugs that occur when embed.ly caches links before the 
+        # This should fix bugs that occur when embed.ly caches links before the
         # thumbnail is available
-        if (not thumbnail_image and 
+        if (not thumbnail_image and
                 not isinstance(scraper, _ThumbnailOnlyScraper)):
             scraper = _ThumbnailOnlyScraper(url)
             try:

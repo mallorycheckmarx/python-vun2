@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -247,7 +247,7 @@ def add_trackers(items, sr, adserver_click_urls=None):
             "r": random.randint(0, 2147483647), # cachebuster
         }
         item.imp_pixel = update_query(g.adtracker_url, pixel_query)
-        
+
         if item.third_party_tracking:
             item.third_party_tracking_url = item.third_party_tracking
         if item.third_party_tracking_2:
@@ -512,7 +512,7 @@ def auth_campaign(link, campaign, user, pay_id=None, freebie=False):
         user can have more than one payment profile if, for instance, they have
         more than one credit card on file.) Set pay_id to -1 for freebies.
 
-    Returns: (True, "") if successful or (False, error_msg) if not. 
+    Returns: (True, "") if successful or (False, error_msg) if not.
     """
     void_campaign(link, campaign, reason='changed_payment')
 
@@ -727,7 +727,7 @@ def is_accepted_promo(date, link, campaign):
 
 
 def is_scheduled_promo(date, link, campaign):
-    return (is_accepted_promo(date, link, campaign) and 
+    return (is_accepted_promo(date, link, campaign) and
             charged_or_not_needed(campaign))
 
 
@@ -911,7 +911,7 @@ def finalize_completed_campaigns(daysago=1):
                 text %= (camp, billable_amount, billable_impressions, camp.cpm)
             else:
                 text = '%s completed with $%s billable (pre-CPM).'
-                text %= (camp, billable_amount) 
+                text %= (camp, billable_amount)
             PromotionLog.add(link, text)
             camp.refund_amount = 0.
             camp._commit()

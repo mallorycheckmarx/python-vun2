@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,18 +29,18 @@
 
 <%def name="submiturl(url, title='')">${("%s://%s/submit" % (g.default_scheme, get_domain(subreddit=True))) + query_string(dict(url=url, title=title))}</%def>
 
-<% 
+<%
     if thing._fullname:
         path = thing.make_permalink_slow(force_domain=True)
     else:
         path = capture(submiturl, thing.url, thing.title)
 %>
 (function() {
-       
+
     var styled_submit = '<a style="color: #369; text-decoration: none;" href="${path}" target="${thing.target}">';
     var unstyled_submit = '<a href="${submiturl(thing.url)}" target="${path}">';
     var write_string='<span class="reddit_button" style="';
-%if thing.styled:    
+%if thing.styled:
     write_string += 'color: grey;';
 %endif
     write_string += '">';
@@ -49,7 +49,7 @@
 %endif
 %if thing._fullname:
     write_string += '${jssafe(websafe(Score.safepoints(thing.score)))}';
-    %if thing.styled:  
+    %if thing.styled:
         write_string += ' on ' + styled_submit + 'reddit</a>';
     %else:
         write_string += ' on ' + unstyled_submit + 'reddit</a>';

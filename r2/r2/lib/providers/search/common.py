@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -47,7 +47,7 @@ class SearchHTTPError(httplib.HTTPException):
 def safe_xml_str(s, use_encoding="utf-8"):
     '''Replace invalid-in-XML unicode control characters with '\uFFFD'.
     Also, coerces result to unicode
-    
+
     '''
     illegal_xml = re.compile(u'[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]')
 

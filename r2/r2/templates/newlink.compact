@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,7 +29,7 @@
 <%namespace file="utils.html" import="error_field, submit_form, plain_link"/>
 <%namespace name="utils" file="utils.html"/>
 
-<%utils:submit_form onsubmit="return post_form(this, 'submit', linkstatus, null, true)" 
+<%utils:submit_form onsubmit="return post_form(this, 'submit', linkstatus, null, true)"
                     action=${add_sr("/submit")},
                     _class="submit content",
                     _id="newlink">
@@ -103,7 +103,7 @@ ${thing.formtabs_menu}
 </div>
 
 ${thing.captcha}
-    
+
 </div>
 <input name="resubmit" value="${thing.resubmit}" type="hidden"/>
 <div class="spacer">

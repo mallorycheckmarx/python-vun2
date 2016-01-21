@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -24,7 +24,7 @@
 
 <%def name="dropdown()">
   ## caching comment:
-  ##  see caching comment for plain_link.  In addition to the args, 
+  ##  see caching comment for plain_link.  In addition to the args,
   ##  this function depends on c.site.name and c.render_style
   <% css_class = str(thing.css_class) if thing.css_class else "" %>
   %if thing:
@@ -35,7 +35,7 @@
     <div class="dropdown ${css_class}"
          ${"id='%s'" % thing._id if thing._id else ""}
          onclick="open_menu(this)">
- 
+
       %if thing.selected:
           <span class="selected">${thing.selected.selected_title()}</span>
       %elif thing.title:
@@ -70,7 +70,7 @@
            ##option.title isn't the title, option.render() is the entire link
            if option == thing.selected:
              class_name = "class='selected'"
-             option.selected = True                                           
+             option.selected = True
            else:
              class_name = ""
         %>

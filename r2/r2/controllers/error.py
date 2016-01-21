@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -130,7 +130,7 @@ class ErrorController(RedditController):
         if not request.environ.get('pylons.error_call'):
             abort(403, "direct access to error controller disallowed")
 
-    def __after__(self): 
+    def __after__(self):
         try:
             RedditController.__after__(self)
         except Exception as e:
@@ -186,7 +186,7 @@ class ErrorController(RedditController):
     def GET_document(self):
         try:
             c.errors = c.errors or ErrorSet()
-            # clear cookies the old fashioned way 
+            # clear cookies the old fashioned way
             c.cookies = Cookies()
 
             code =  request.GET.get('code', '')

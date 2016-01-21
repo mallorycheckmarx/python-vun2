@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -34,7 +34,7 @@
 <% fullname = thing._fullname %>
 <p class="subreddit">
   ${plain_link(thing.title, thing.path, _class="title")}
-  &#32;<span class="domain">(${thing.path})</span> 
+  &#32;<span class="domain">(${thing.path})</span>
 </p>
 </%def>
 
@@ -50,7 +50,7 @@
 </%def>
 
 <%def name="leave_button(name, where)">
-${self.yes_no_button("leave", name, _("leave"), 
+${self.yes_no_button("leave", name, _("leave"),
   "return deletetoggle(this, 'leave');", _("left"),
   location = where)}
 </%def>

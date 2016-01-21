@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -108,7 +108,7 @@ class CacheStub(object):
 
     This class is suitable as a stub object (in the case of API calls)
     and wil render in a string form suitable for replacement with
-    StringTemplate in the case of normal rendering. 
+    StringTemplate in the case of normal rendering.
     """
     def __init__(self, item, style):
         self.name = "h%s%s" % (id(item), str(style).replace('-', '_'))
@@ -148,7 +148,7 @@ class Templated(object):
 
     def __repr__(self):
         return "<Templated: %s>" % self.__class__.__name__
-    
+
     def __init__(self, **context):
         """
         uses context to init __dict__ (making this object a bit like a storage)
@@ -172,7 +172,7 @@ class Templated(object):
 
     def cache_key(self, *a):
         """
-        if cachable, this function is used to generate the cache key. 
+        if cachable, this function is used to generate the cache key.
         """
         raise NotImplementedError
 
@@ -244,7 +244,7 @@ class Templated(object):
         timer.start()
 
         style = style or c.render_style or 'html'
-        # prepare (and store) the list of cachable items. 
+        # prepare (and store) the list of cachable items.
         primary = False
         if not isinstance(c.render_tracker, dict):
             primary = True
@@ -281,7 +281,7 @@ class Templated(object):
                 # any of the subsequent render()s call cached objects.
                 current = c.render_tracker
                 c.render_tracker = {}
-    
+
                 # do a multi-get.  NOTE: cache keys are the first item
                 # in the tuple that is the current dict's values.
                 # This dict cast will generate a new dict of cache_key
@@ -318,7 +318,7 @@ class Templated(object):
 
                 # update the updates so that when we can do the
                 # replacement in one pass.
-                
+
                 # NOTE: keep kw, but don't update based on them.
                 # We might have to cache these later, and we want
                 # to have things like $child present.
@@ -328,7 +328,7 @@ class Templated(object):
                     updates[k] = cache_key, (value, kw)
 
                 updates.update(new_updates)
-    
+
             # at this point, we haven't touched res, but updates now
             # has the list of all the updates we could conceivably
             # want to make, and to_cache is the list of cache keys
@@ -354,7 +354,7 @@ class Templated(object):
             updates = _updates
 
             # update the response to use these values
-            # replace till we can't replace any more. 
+            # replace till we can't replace any more.
             npasses = 0
             while True:
                 npasses += 1
@@ -372,7 +372,7 @@ class Templated(object):
             # we're done.  Update the template based on the args passed in
             res = res.finalize(kwargs)
             # timings for non-primary templates will not be sent.
-        
+
         return res
 
     def _cache_key(self, key):
@@ -496,7 +496,7 @@ class Wrapped(CachedTemplate):
     # default to false, evaluate
     cachable = False
     cache_ignore = set(['lookups'])
-    
+
     def cache_key(self, style):
         if self.cachable:
             for i, l in enumerate(self.lookups):
@@ -518,14 +518,14 @@ class Wrapped(CachedTemplate):
         # this shouldn't be too surprising
         self.cache_ignore = self.cache_ignore.union(
             set(['cachable', 'render', 'cache_ignore', 'lookups']))
-        if (not self._any_hasattr(lookups, 'cachable') and 
+        if (not self._any_hasattr(lookups, 'cachable') and
             self._any_hasattr(lookups, 'wrapped_cache_key')):
             self.cachable = True
         if self.cachable:
             for l in lookups:
                 if hasattr(l, "cache_ignore"):
                     self.cache_ignore = self.cache_ignore.union(l.cache_ignore)
-            
+
         Templated.__init__(self, **context)
 
     def _any_hasattr(self, lookups, attr):

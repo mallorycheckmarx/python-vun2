@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -398,4 +398,3 @@ class ApiFunctionTest(TestCase):
         self.assertRaises(TransactionError, refund_transaction,
                           self.customer_id, self.payment_profile_id,
                           self.amount, self.transaction_id)
-

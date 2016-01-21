@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -74,9 +74,9 @@ class S3MediaProvider(MediaProvider):
         'icons': 's3_media_buckets',
         'previews': 's3_image_buckets',
     }
- 
+
     def _get_bucket(self, bucket_name, validate=False):
-     
+
         s3 = boto.connect_s3(g.S3KEY_ID or None, g.S3SECRET_KEY or None)
         bucket = s3.get_bucket(bucket_name, validate=validate)
 
@@ -92,7 +92,7 @@ class S3MediaProvider(MediaProvider):
         key_name = url.split('/')[-1]
 
         return bucket_name, key_name
-     
+
     def make_inaccessible(self, url):
         """Make the content unavailable, but do not remove."""
         bucket_name, key_name = self._get_bucket_key_from_url(url)

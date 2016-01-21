@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -44,7 +44,7 @@
       ${demo(capture(draw_point_button, 1))}
       ${demo(capture(draw_interactive, 1))}
     </ul>
-      
+
 
     <h2>${_("buttons with points")}</h2>
     <ul class="buttons">
@@ -139,11 +139,11 @@
 
 <script type="text/javascript">
 $(function() {
- $(".view-code").click(function(evt) { 
-    $(this).parent().addClass("show-demo"); 
+ $(".view-code").click(function(evt) {
+    $(this).parent().addClass("show-demo");
  });
- $(".hide-code").click(function(evt) { 
-    $(this).parent().removeClass("show-demo"); 
+ $(".hide-code").click(function(evt) {
+    $(this).parent().removeClass("show-demo");
  });
 });
 </script>
@@ -169,18 +169,18 @@ $(function() {
 </%def>
 
 <%def name="draw_point_button(image)">
-  <script type="text/javascript" 
+  <script type="text/javascript"
           src="//${domain}/buttonlite.js?i=${image}"></script>
 </%def>
 
 <%def name="point_option_example()" buffered="True">
-   <script type="text/javascript" 
+   <script type="text/javascript"
         src="//${domain}/buttonlite.js?i=1&styled=off&url=foo.com&newwindow=1"></script>
 </%def>
 
 <%def name="draw_interactive(type)">
 %if type:
-  <script type="text/javascript" 
+  <script type="text/javascript"
           src="//${g.static_domain}/button/button${type}.js"></script>
 %else:
   <script type="text/javascript" src="//${g.static_domain}/button/button1.js"></script>
@@ -199,4 +199,3 @@ $(function() {
 </script>
 <script type="text/javascript" src="//${g.static_domain}/button/button3.js"></script>
 </%def>
-
