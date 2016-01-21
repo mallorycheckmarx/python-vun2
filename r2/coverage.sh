@@ -1,11 +1,11 @@
 #!/bin/bash
 set -e
 
-BASEDIR=$(dirname $0)
+BASEDIR=$(readlink -f $(dirname $0))
 cd $BASEDIR
 
 VERSION=$(git rev-parse HEAD)
-COVERDIR="/tmp/cover-$VERSION"
+COVERDIR="$BASEDIR/build/cover-$VERSION"
 
 function usage() {
     echo "Run unit tests and coverage reports on reddit codebase with optional"
