@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -142,7 +142,7 @@ class CachedResults(object):
         filtered_item = self.filter(item)
         lst = [filtered_item._fullname]
         for col in self.sort_cols:
-            #take the property of the original 
+            #take the property of the original
             attr = getattr(item, col)
             #convert dates to epochs to take less space
             if isinstance(attr, datetime):
@@ -717,8 +717,8 @@ def get_user_reported(user_id):
 
 
 def set_promote_status(link, promote_status):
-    all_queries = [promote_query(link.author_id) for promote_query in 
-                   (get_unpaid_links, get_unapproved_links, 
+    all_queries = [promote_query(link.author_id) for promote_query in
+                   (get_unpaid_links, get_unapproved_links,
                     get_rejected_links, get_live_links, get_accepted_links)]
     all_queries.extend([get_all_unpaid_links(), get_all_unapproved_links(),
                         get_all_rejected_links(), get_all_live_links(),
@@ -1115,7 +1115,7 @@ def new_vote(vote):
             update_comment_votes([vote.thing])
 
         add_queries(results, insert_items=vote.thing)
-    
+
     if isinstance(vote.thing, Link):
         with CachedQueryMutator() as m:
             # if this is a changed vote, remove from the previous cached query
@@ -1171,7 +1171,7 @@ def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
     amqp.add_item('new_message', message._fullname)
     add_message(message, update_recipient=update_recipient,
                 update_modmail=update_modmail, add_to_user=add_to_user)
-    
+
     # light up the modmail icon for all other mods with mail access
     if update_modmail:
         mod_perms = message.subreddit_slow.moderators_with_perms()

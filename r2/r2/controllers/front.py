@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -186,7 +186,7 @@ class FrontController(RedditController):
                           show_chooser=True,
                           page_classes=['explore-page'],
                           content=content).render()
- 
+
     @validate(article=VLink('article'))
     def GET_shirt(self, article):
         if not can_view_link_comments(article):
@@ -1907,7 +1907,7 @@ class FormsController(RedditController):
                              not c.user.has_gold_subscription)
             if not can_subscribe and goldtype == "autorenew":
                 self.redirect("/creddits", code=302)
-                
+
             return BoringPage(_("reddit gold"),
                               show_sidebar=False,
                               content=Gold(goldtype, period, months, signed,

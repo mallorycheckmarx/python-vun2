@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -41,7 +41,7 @@ class ModAction(tdb_cassandra.UuidThing):
     mod_id - Account id36 of moderator
     action - specific name of action, must be in ModAction.actions
     target_fullname - optional fullname of the target of the action
-    details - subcategory available for some actions, must show up in 
+    details - subcategory available for some actions, must show up in
     description - optional user
     """
 
@@ -49,11 +49,11 @@ class ModAction(tdb_cassandra.UuidThing):
     _use_db = True
     _connection_pool = 'main'
     _ttl = timedelta(days=120)
-    _str_props = ('sr_id36', 'mod_id36', 'target_fullname', 'action', 'details', 
+    _str_props = ('sr_id36', 'mod_id36', 'target_fullname', 'action', 'details',
                   'description')
     _defaults = {}
 
-    actions = ('banuser', 'unbanuser', 'removelink', 'approvelink', 
+    actions = ('banuser', 'unbanuser', 'removelink', 'approvelink',
                'removecomment', 'approvecomment', 'addmoderator',
                'invitemoderator', 'uninvitemoderator', 'acceptmoderatorinvite',
                'removemoderator', 'addcontributor', 'removecontributor',
@@ -207,10 +207,10 @@ class ModAction(tdb_cassandra.UuidThing):
         # Split this off into separate function to check for valid actions?
         if not action in cls.actions:
             raise ValueError("Invalid ModAction: %s" % action)
-        
+
         # Front page should insert modactions into the base sr
         sr = sr._base if isinstance(sr, DefaultSR) else sr
-        
+
         kw = dict(sr_id36=sr._id36, mod_id36=mod._id36, action=action)
 
         if target:
@@ -232,7 +232,7 @@ class ModAction(tdb_cassandra.UuidThing):
         Update all Views.
         """
 
-        views = (ModActionBySR, ModActionBySRMod, ModActionBySRAction, 
+        views = (ModActionBySR, ModActionBySRMod, ModActionBySRAction,
                  ModActionBySRActionMod)
 
         for v in views:

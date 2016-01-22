@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,11 +25,11 @@
    from r2.models.subreddit import DefaultSR
    from r2.lib.template_helpers import get_domain, add_sr, header_url
 %>
-<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" 
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:media="http://search.yahoo.com/mrss/"
     xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>${self.Title()}</title>        
+    <title>${self.Title()}</title>
     <link>${add_sr("/", force_hostname = True)}</link>
     <description>${c.site.public_description or ''}</description>
     <image>
@@ -48,9 +48,8 @@
     <atom:link rel="self" href="${add_sr(request.fullpath, sr_path=False, force_hostname=True)}" type="application/rss+xml" />
     ${next.body()}
   </channel>
-</rss>  
+</rss>
 
 <%def name="Title()">
 ${c.site.title}
 </%def>
-

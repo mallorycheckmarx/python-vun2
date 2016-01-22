@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -171,7 +171,7 @@ class WikiController(RedditController):
                 message = _("viewing revision from %s ago") % timesince(version.date)
                 content = version.content
 
-        renderer = RENDERERS_BY_PAGE.get(page.name, 'wiki') 
+        renderer = RENDERERS_BY_PAGE.get(page.name, 'wiki')
 
         return WikiPageView(content, alert=message, v=version, diff=diffcontent,
                             may_revise=this_may_revise(page), edit_by=edit_by,
@@ -232,7 +232,7 @@ class WikiController(RedditController):
         error = c.errors.get(('MAY_NOT_REVISE', 'page'))
         if error:
             self.handle_error(403, **(error.msg_params or {}))
-        
+
         previous = kw.get('previous', wp._get('revision'))
         content = kw.get('content', wp.content)
         if not message and wp.name in page_descriptions:
@@ -541,4 +541,3 @@ class WikiApiController(WikiController):
         WikiController.pre(self)
         c.render_style = 'api'
         set_extension(request.environ, 'json')
-

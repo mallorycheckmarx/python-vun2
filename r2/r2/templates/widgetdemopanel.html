@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -24,7 +24,7 @@
    from r2.lib.template_helpers import get_domain, _wsf
 %>
 
-<% 
+<%
    domain = get_domain(subreddit=False)
    sr_domain = get_domain(subreddit=True)
  %>
@@ -40,7 +40,7 @@ function escapeHTML(text) {
 function getrval(r) {
     for (var i=0; i < r.length; i++) {
         if (r[i].checked) return r[i].value;
-    } 
+    }
 }
 
 function showPreview(val) {
@@ -59,13 +59,13 @@ function update() {
     } else if (which == "one") {
         if (!f.who.value) return;
         url = "${g.default_scheme}://${domain}/user/"+f.who.value+"/"+
-                      f.where2.value+".embed?limit=" + f.num.value + 
+                      f.where2.value+".embed?limit=" + f.num.value +
                       "&sort="+f.what.value;
 
     } else if (which == "two") {
         if(!f.domain.value) return;
          url = "${g.default_scheme}://${domain}/domain/" + f.domain.value + "/" +
-                      f.what.value + "/.embed?limit=" 
+                      f.what.value + "/.embed?limit="
                       + f.num.value  + "&t=" + f.when.value;
         if(f.what.value == "new") {
            url += "&sort=new";
@@ -95,17 +95,17 @@ function update() {
       }
     }
 
-    script = '<script src="' + 
-                      escapeHTML(url).replace(/&amp;/g, '&') + 
+    script = '<script src="' +
+                      escapeHTML(url).replace(/&amp;/g, '&') +
                       '" type="text/javascript"><'+'/script>';
     $("#codebox").html(escapeHTML(script));
     $.getScript(url+'&callback=showPreview');
-                      
+
     }
 </script>
 
 <div class="instructions">
-  
+
   <div id="preview">
     <span>preview</span>
     <div id="previewbox">
@@ -114,11 +114,11 @@ function update() {
   </div>
 
   <h1>${_("get live %(site)s headlines on your site") % dict(site=c.site.name)}</h1>
-  
+
   <p>${_("just cut and paste the generated code into your site and your specified %(site)s feed will be displayed and updated as new stories bubble up") % dict(site=c.site.name)}</p>
 
   <h2>${_("which links do you want to display?")}</h2>
-  
+
   <form name="widget" action="" onsubmit="update(); return false" id="widget"
         class="pretty-form">
     <%def name="when()" buffered="True">
@@ -137,10 +137,10 @@ function update() {
         <option value="saved">${_("saved by")}</option>
         <option value="liked">${_("upvoted by")}</option>
         <option value="disliked">${_("downvoted by")}</option>
-      </select> 
+      </select>
     </%def>
     <%def name="text_input(name)" buffered="True">
-      <input type="text" name="${name}" value="" 
+      <input type="text" name="${name}" value=""
              onfocus="this.parentNode.firstChild.checked='checked'"
              onchange="update()" onblur="update()" />
     </%def>
@@ -151,16 +151,16 @@ function update() {
        </th>
        <td class="prefright">
          <p>
-           <input type="radio" name="which" value="all" checked="checked" 
-                  onclick="update()" /> 
+           <input type="radio" name="which" value="all" checked="checked"
+                  onclick="update()" />
            ${_("links from %(domain)s") % dict(domain = get_domain())}
          </p>
          <p>
-          <input type="radio" name="which" value="one" onclick="update()" /> 
+          <input type="radio" name="which" value="one" onclick="update()" />
            ${_wsf("links %(submitted_by)s the user %(who)s", submitted_by=unsafe(where2()), who=unsafe(text_input("who")))}
          </p>
          <p>
-           <input type="radio" name="which" value="two" onclick="update()" /> 
+           <input type="radio" name="which" value="two" onclick="update()" />
           ${_wsf("links from the domain %(domain)s", domain=unsafe(text_input("domain")))}
          </p>
        </td>
@@ -202,7 +202,7 @@ function update() {
            <input name="nostyle" id="nostyle" type="checkbox"
                   onchange="update()"/>
            <label for="nostyle">
-             ${_("remove css styling")}  
+             ${_("remove css styling")}
              &#32;<span class="little gray">
                ${_("(the widget will inherit all styles from the page)")}
              </span>
@@ -212,7 +212,7 @@ function update() {
            <input name="expanded" id="expanded" type="checkbox"
                   onchange="update()"/>
            <label for="expanded">
-             ${_("enable in-widget voting")}  
+             ${_("enable in-widget voting")}
              &#32;<span class="little gray">
                ${_("(will slow down the rendering)")}
              </span>
@@ -238,9 +238,9 @@ function update() {
            </span>
          </p>
          <p>
-           <input name="border" id="border" type="checkbox" 
+           <input name="border" id="border" type="checkbox"
                   onchange="update()"/>
-           <label for="border"> 
+           <label for="border">
              ${_("border color")}
            </label>
            &nbsp;#${unsafe(text_input("bord_color"))}

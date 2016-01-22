@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -115,10 +115,10 @@
     %if thing.sr.author:
       ${_wsf("created by %(user)s", user=unsafe(thing.creator_text))}
     %endif
-    
+
     <span class="age">
       ${_("a community for")}&#32;${thing_timestamp(thing.sr)}
-    </span>  
+    </span>
   </div>
 
   %if c.user_is_admin:
@@ -128,14 +128,14 @@
           ${strings.times_banned % thing.sr.ban_count}
         </p>
       %endif
-      
+
       %if thing.sr._spam:
         ${ynbutton(op='approve',
-                   title=_('approve this subreddit'), 
+                   title=_('approve this subreddit'),
                    executed=_('approved'),
                    hidden_data = dict(id = thing.sr._fullname),
         )}
-        
+
         <form id="banmessage-form" method="post" onsubmit="return post_form(this, 'admin/add_ban_message')">
           <input type="hidden" name="thing" value="${thing.sr._fullname}">
           <input type="hidden" name="system" value="subreddit">
@@ -144,10 +144,10 @@
               ${thing.sr.ban_info['message'] or ''}
             %endif
           </textarea>
-          <input type="submit" class="notes-button" 
+          <input type="submit" class="notes-button"
             value="Set public ban message (blank for default)">
         </form>
-        
+
         %if hasattr(thing.sr, "banner"):
           <p>
            ${strings.banned_by % thing.sr.banner}
@@ -161,7 +161,7 @@
 
       %else:
         ${ynbutton(op='remove',
-                   title=_('ban this subreddit'), 
+                   title=_('ban this subreddit'),
                    executed=_('banned'),
                    hidden_data = dict(id = thing.sr._fullname),
         )}
@@ -215,7 +215,6 @@
   %endif
 
   <div class="clear"> </div>
-  
+
 
 </div>
-

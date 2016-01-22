@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -76,7 +76,7 @@ class PrintableButtons(Styled):
                         show_rescrape=show_rescrape,
                         show_givegold=show_givegold,
                         **kw)
-        
+
 class BanButtons(PrintableButtons):
     def __init__(self, thing,
                  show_delete = False, show_report = True):
@@ -156,7 +156,7 @@ class LinkButtons(PrintableButtons):
                 kw["hide_after_seen"] = getattr(thing, "hide_after_seen", False)
                 kw["show_approval"] = thing.promoted and not thing._deleted
 
-        PrintableButtons.__init__(self, 'linkbuttons', thing, 
+        PrintableButtons.__init__(self, 'linkbuttons', thing,
                                   # user existence and preferences
                                   is_loggedin = c.user_is_loggedin,
                                   # comment link params
@@ -165,8 +165,8 @@ class LinkButtons(PrintableButtons):
                                   permalink  = permalink,
                                   # button visibility
                                   saved = thing.saved,
-                                  editable = editable, 
-                                  hidden = thing.hidden, 
+                                  editable = editable,
+                                  hidden = thing.hidden,
                                   ignore_reports = thing.ignore_reports,
                                   show_delete = show_delete,
                                   show_report = show_report and c.user_is_loggedin,
@@ -216,7 +216,7 @@ class CommentButtons(PrintableButtons):
         show_givegold = thing.can_gild
 
         embed_button = False
-        
+
         show_admin_context = c.user_is_admin
 
         if thing.can_embed:
@@ -233,7 +233,7 @@ class CommentButtons(PrintableButtons):
             embed_button.build()
 
         PrintableButtons.__init__(self, "commentbuttons", thing,
-                                  is_author = is_author, 
+                                  is_author = is_author,
                                   profilepage = c.profilepage,
                                   permalink = thing.permalink,
                                   saved = thing.saved,
@@ -242,7 +242,7 @@ class CommentButtons(PrintableButtons):
                                   full_comment_path = thing.full_comment_path,
                                   full_comment_count = thing.full_comment_count,
                                   deleted = thing.deleted,
-                                  parent_permalink = thing.parent_permalink, 
+                                  parent_permalink = thing.parent_permalink,
                                   can_reply = thing.can_reply,
                                   locked = thing.link.locked,
                                   suppress_reply_buttons = suppress_reply_buttons,
@@ -333,7 +333,7 @@ def default_thing_wrapper(**params):
 
 # TODO: move this into lib somewhere?
 def wrap_links(links, wrapper = default_thing_wrapper(),
-               listing_cls = LinkListing, 
+               listing_cls = LinkListing,
                num = None, show_nums = False, nextprev = False, **kw):
     links = tup(links)
     if not all(isinstance(x, basestring) for x in links):

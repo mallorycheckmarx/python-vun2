@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -35,36 +35,36 @@
         deleted
     %endif
     ">
-    
+
         %if thing.show_compare:
             <td style="white-space: nowrap;">
                 <input type="radio" name="v1" value="${thing._id}" checked="yes">
                 <input type="radio" name="v2" value="${thing._id}" checked="yes">
             </td>
         %endif
-    
+
     <td style="white-space: nowrap;">
         ${timestamp(thing.date, live=True, include_tense=True)}
     </td>
-    
+
     %if not thing.show_extended:
         <td>
             <a href="${c.wiki_base_url}/${thing.page}">${thing.page}</a>
         </td>
     %endif
-    
+
     <td>
         <a href="${c.wiki_base_url}/${thing.page}?v=${thing._id}">view</a>
     </td>
-    
+
     <td>
         ${thing.printable_author}
     </td>
-    
+
     <td style="font-style: italic;">
         ${thing._get('reason')}
     </td>
-   
+
     %if thing.show_extended:
         <td>
             <a href="#" class="revision_hide access-required"
@@ -75,10 +75,10 @@
                >hide</a>
         </td>
         <td class="wiki_revert" style="white-space: nowrap;">
-            ${ynbutton(_("revert here"), 
+            ${ynbutton(_("revert here"),
                        _("done"),
-                       quote("..%s/revert" % c.wiki_api_url), 
-                       hidden_data=dict(revision=thing._id, page=thing.page), 
+                       quote("..%s/revert" % c.wiki_api_url),
+                       hidden_data=dict(revision=thing._id, page=thing.page),
                        post_callback="$.refresh",
                        event_target='wikipage',
                        event_action='wikirevise',

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -99,7 +99,7 @@ class DataThing(object):
     def __setattr__(self, attr, val, make_dirty=True):
         if attr.startswith('__') or self.__safe__:
             object.__setattr__(self, attr, val)
-            return 
+            return
 
         if attr.startswith('_'):
             #assume baseprops has the attr
@@ -183,7 +183,7 @@ class DataThing(object):
             g.log.error("thing.py: Doppleganger on read: got %s for %s",
                         (l, self))
             self._cache.delete(self._cache_key())
-            return 
+            return
         return l
 
     def _cache_myself(self):
@@ -452,7 +452,7 @@ class DataThing(object):
 
     @classmethod
     def _by_fullname(cls, names,
-                     return_dict = True, 
+                     return_dict = True,
                      ignore_missing=False,
                      **kw):
         names, single = tup(names, True)
@@ -547,7 +547,7 @@ class ThingMeta(type):
         thing_types[cls._type_id] = cls
 
         super(ThingMeta, cls).__init__(name, bases, dct)
-    
+
     def __repr__(cls):
         return '<thing: %s>' % cls._type_name
 
@@ -589,7 +589,7 @@ class Thing(DataThing):
         #new way
         for k, v in attrs.iteritems():
             self.__setattr__(k, v, not self._created)
-        
+
     def __repr__(self):
         return '<%s %s>' % (self.__class__.__name__,
                             self._id if self._created else '[unsaved]')
@@ -970,7 +970,7 @@ class Query(object):
         self._filter_primary_sort_only = kw.get('filter_primary_sort_only', False)
 
         self._filter(*rules)
-    
+
     def _setsort(self, sorts):
         sorts = tup(sorts)
         #make sure sorts are wrapped in a Sort obj
@@ -1009,7 +1009,7 @@ class Query(object):
     def _dir(self, thing, reverse):
         ors = []
 
-        # this fun hack lets us simplify the query on /r/all 
+        # this fun hack lets us simplify the query on /r/all
         # for postgres-9 compatibility. please remove it when
         # /r/all is precomputed.
         sorts = range(len(self._sort))
@@ -1214,9 +1214,9 @@ class MultiCursor(object):
     def fetchone(self):
         if not self._cursor:
             self._cursor = self._execute(*self._execute_params)
-            
+
         return self._cursor.next()
-                
+
     def fetchall(self):
         if not self._cursor:
             self._cursor = self._execute(*self._execute_params)

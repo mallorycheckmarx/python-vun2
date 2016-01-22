@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -167,7 +167,7 @@ error_list = dict((
         ('NO_SR_TO_SR_MESSAGE', _("can't send a message from a subreddit to another subreddit")),
         ('USER_BLOCKED_MESSAGE', _("can't send message to that user")),
         ('ADMIN_REQUIRED', _("you must be in admin mode for this")),
-        ('CANT_CONVERT_TO_GOLD_ONLY', _("to convert an existing subreddit to gold only, send a message to %(admin_modmail)s") 
+        ('CANT_CONVERT_TO_GOLD_ONLY', _("to convert an existing subreddit to gold only, send a message to %(admin_modmail)s")
             % dict(admin_modmail=g.admin_message_acct)),
         ('GOLD_ONLY_SR_REQUIRED', _("this subreddit must be 'gold only' to select this")),
         ('CANT_CREATE_SR', _("your account is too new to create a subreddit. please contact the admins to request an exemption.")),

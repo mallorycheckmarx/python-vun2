@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -227,7 +227,7 @@ class JQueryResponse(JsonResponse):
         if not self._new_captcha:
             self.captcha(get_iden())
             self._new_captcha = True
-        
+
     def get_input(self, name):
         return self.find("*[name=%s]" % name)
 
@@ -259,4 +259,3 @@ class JQueryResponse(JsonResponse):
 
     def refresh(self):
         return self.top_node.transform(self, "refresh", [])
-

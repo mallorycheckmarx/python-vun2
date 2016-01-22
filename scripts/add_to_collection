@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -33,7 +33,7 @@ def run(collection, sr):
     collection = Collection.by_name(collection)
     if not collection:
         raise ValueError("specified collection does not exist")
-    
+
     srs = Target(collection).subreddits_slow
 
     if sr not in srs:
@@ -43,7 +43,7 @@ def run(collection, sr):
 
     srs.sort(key=lambda sr: sr._downs, reverse=True)
     sr_names = [sr.name for sr in srs]
-    sr_names_column = {'sr_names': 
+    sr_names_column = {'sr_names':
                        CollectionStorage.SR_NAMES_DELIM.join(sr_names)}
 
     CollectionStorage._set_values(collection.name, sr_names_column)

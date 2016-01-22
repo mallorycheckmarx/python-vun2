@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -34,7 +34,7 @@ apt-get update
 # file will trigger install_cassandra.sh to rerun this script)
 echo deb http://debian.datastax.com/community stable main | \
     sudo tee $CASSANDRA_SOURCES_LIST
-    
+
 wget -qO- -L https://debian.datastax.com/debian/repo_key | \
     sudo apt-key add -
 

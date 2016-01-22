@@ -17,7 +17,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -354,7 +354,7 @@ class Reddit(Templated):
                 if getattr(self, "show_newsletterbar", True):
                     self.newsletterbar = NewsletterBar()
 
-            if (c.render_style == "compact" and 
+            if (c.render_style == "compact" and
                     getattr(self, "show_mobilewebredirectbar", True)):
                 self.mobilewebredirectbar = MobileWebRedirectBar()
 
@@ -3122,7 +3122,7 @@ class GoldPayment(Templated):
             user_creddits = 50
         else:
             user_creddits = c.user.gold_creddits
-            
+
         if (goldtype in ("gift", "code", "onetime") and
                 months <= user_creddits):
             can_use_creddits = True
@@ -4305,7 +4305,7 @@ class PromoteLinkBase(Templated):
         self.mobile_targeting_enabled = feature.is_enabled("mobile_targeting")
         Templated.__init__(self, **kw)
 
-    def get_locations(self): 
+    def get_locations(self):
         # geotargeting
         def location_sort(location_tuple):
             code, name, default = location_tuple
@@ -4403,7 +4403,7 @@ class PromoteLinkEdit(PromoteLinkBase):
         self.max_start = max_start.strftime("%m/%d/%Y")
         self.max_end = max_end.strftime("%m/%d/%Y")
         self.default_start = default_start.strftime("%m/%d/%Y")
-        self.default_end = default_end.strftime("%m/%d/%Y") 
+        self.default_end = default_end.strftime("%m/%d/%Y")
 
         self.link = link
         self.listing = listing
@@ -4717,7 +4717,7 @@ class UserText(CachedTemplate):
 
         if text is None:
             text = ''
-            
+
         # set the attribute for admin takedowns
         if getattr(item, 'admin_takedown', False):
             admin_takedown = True
@@ -5139,7 +5139,7 @@ class PromoteReport(PromoteLinkBase):
             })
         crt = self.campaign_report_totals
         crt['total_clicks'] = crt['sr_clicks'] + crt['fp_clicks']
-        crt['total_imps'] = crt['sr_imps'] + crt['fp_imps']   
+        crt['total_imps'] = crt['sr_imps'] + crt['fp_imps']
         crt['bid'] = format_currency(crt['bid'], 'USD', locale=c.locale)
         # make the link report
         traffic_by_key = group_and_combine(
@@ -5533,7 +5533,7 @@ class ExploreItem(Templated):
             useful for comparing performance of data sources or algorithms
         sr and link are required
         comment is optional
-        
+
         See r2.lib.recommender for valid values of item_type and rec_src.
 
         """

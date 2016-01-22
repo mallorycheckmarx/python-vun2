@@ -16,12 +16,12 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%!
-  from r2.lib.template_helpers import static 
+  from r2.lib.template_helpers import static
   from r2.lib.filters import unsafe, safemarkdown
 %>
 
@@ -32,7 +32,7 @@
        ${self.interstitial_image_attrs()}
        height="150"
        width="150">
-  
+
   <div class="interstitial-message md-container">
     <div class="md">
       <h3>${self.interstitial_title()}</h3>
@@ -47,7 +47,7 @@
       ${self.interstitial_message()}
     </div>
   </div>
-  
+
   ${self.interstitial_buttons()}
 </div>
 

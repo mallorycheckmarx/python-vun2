@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -25,8 +25,8 @@ import requests
 
 from pylons import app_globals as g
 
-def post_takedown_notice_to_external_site(title, 
-                          request_type, 
+def post_takedown_notice_to_external_site(title,
+                          request_type,
                           date_sent,
                           date_received,
                           source,
@@ -40,9 +40,9 @@ def post_takedown_notice_to_external_site(title,
                           sender_kind,
                           sender_country,
                           ):
-    """This method publicly posts a copy of the takedown notice to 
-    https://chillingeffects.org. Posting notices to Chilling Effects is free, 
-    and needs to be arranged by contacting their team. Read more about Chilling 
+    """This method publicly posts a copy of the takedown notice to
+    https://chillingeffects.org. Posting notices to Chilling Effects is free,
+    and needs to be arranged by contacting their team. Read more about Chilling
     Effects at https://www.chillingeffects.org/pages/about
     """
     # API documentation for ChillingEffects.org found here:
@@ -79,7 +79,7 @@ def post_takedown_notice_to_external_site(title,
                         'kind': sender_kind,
                         'address_line_1': '',
                         'city': '',
-                        'state': '', 
+                        'state': '',
                         'zip': '',
                         'country_code': sender_country,
                     }
@@ -87,7 +87,7 @@ def post_takedown_notice_to_external_site(title,
             ]
         }
     }
-        
+
     timer = g.stats.get_timer('chillingeffects.takedown_create')
     timer.start()
     response = requests.post(

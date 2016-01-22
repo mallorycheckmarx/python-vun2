@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -382,7 +382,7 @@ class Globals(object):
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
             'ticket_groups',
-            'ticket_user_fields', 
+            'ticket_user_fields',
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.float): [
             'pennies_per_server_second',
@@ -418,7 +418,7 @@ class Globals(object):
             section in the config file for your application.
 
         ``extra``
-            The configuration returned from ``load_config`` in 
+            The configuration returned from ``load_config`` in
             ``config/middleware.py`` which may be of use in the setup of
             your global variables.
 
@@ -451,7 +451,7 @@ class Globals(object):
         self.paths = paths
 
         self.running_as_script = global_conf.get('running_as_script', False)
-        
+
         # turn on for language support
         self.lang = getattr(self, 'site_lang', 'en')
         self.languages, self.lang_name = get_active_langs(
@@ -460,11 +460,11 @@ class Globals(object):
         all_languages = self.lang_name.keys()
         all_languages.sort()
         self.all_languages = all_languages
-        
+
         # set default time zone if one is not set
         tz = global_conf.get('timezone', 'UTC')
         self.tz = pytz.timezone(tz)
-        
+
         dtz = global_conf.get('display_timezone', tz)
         self.display_tz = pytz.timezone(dtz)
 
@@ -477,15 +477,7 @@ class Globals(object):
             raise AttributeError("g has no attr %r" % name)
 
     def setup(self):
-        self.env = ''
-        if (
-            # handle direct invocation of "nosetests"
-            "test" in sys.argv[0] or
-            # handle "setup.py test" and all permutations thereof.
-            "setup.py" in sys.argv[0] and "test" in sys.argv[1:]
-        ):
-            self.env = "unit_test"
-
+        self.env = 'unit_test' if 'test' in sys.argv[0] else ''
         self.queues = queues.declare_queues(self)
 
         self.extension_subdomains = dict(
@@ -520,7 +512,7 @@ class Globals(object):
             self.config,
             self.pkg_resources_working_set,
             "r2.provider.support",
-            # TODO: fix this later, it refuses to pick up 
+            # TODO: fix this later, it refuses to pick up
             # g.config['ticket_provider'] value, so hardcoding for now.
             # really, the next uncommented line should be:
             #self.ticket_provider,
@@ -1065,7 +1057,7 @@ class Globals(object):
 
     def __del__(self):
         """
-        Put any cleanup code to be run when the application finally exits 
+        Put any cleanup code to be run when the application finally exits
         here.
         """
         pass

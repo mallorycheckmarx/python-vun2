@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -37,7 +37,7 @@
            ##option.title isn't the title, option.render() is the entire link
            if option == thing.selected:
              class_name = "class='selected'"
-             option.selected = True                                           
+             option.selected = True
            else:
              class_name = ""
         %>

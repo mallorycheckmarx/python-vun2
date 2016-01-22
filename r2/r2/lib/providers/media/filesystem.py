@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -53,7 +53,7 @@ class FileSystemMediaProvider(MediaProvider):
     def make_inaccessible(self, url):
         # When it comes to file system, there isn't really the concept of
         # "making a file inaccessible" separate from deletion without
-        # losing track of it. For the sake of not creating orphaned files, 
+        # losing track of it. For the sake of not creating orphaned files,
         # not implementing this method
         g.log.warning(
             'FileSystemMediaProvider.make_inaccessible is consciously '
@@ -67,7 +67,7 @@ class FileSystemMediaProvider(MediaProvider):
         with open(path, "w") as f:
             f.write(contents)
         return urlparse.urljoin(g.media_fs_base_url_http, name)
-        
+
     def purge(self, url):
         """Remove the content from disk. Content can not be recovered."""
 

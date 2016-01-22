@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -51,7 +51,7 @@
             header_size = d.header_size
             header_title = d.header_title
     %>
-    
+
     % if header_img != g.default_header_url:
         ${img_link(c.site.name, header_url(header_img),
             '/', _id="header-img-a", img_id='header-img',
@@ -59,7 +59,7 @@
     % else:
         <a href="/" id="header-img" class="default-header" title="${header_title}">${g.domain}</a>
     % endif
-    
+
     ##keeps the height of the header from varying when there isnt any content
     &nbsp;
 
@@ -125,7 +125,7 @@
               mail_img_class = 'nohavemail'
               mail_img_title = "no new mod mail"
               mail_path = "/message/moderator/"
-            
+
             css_class = "%s access-required" % mail_img_class
             data_attrs = {'event-action': 'pageview', 'event-detail': 'modmail'}
           %>

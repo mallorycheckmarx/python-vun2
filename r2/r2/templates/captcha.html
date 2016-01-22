@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -38,9 +38,9 @@ ${rounded_captcha()}
   <img class="capimage"
        alt="visual CAPTCHA"
        %if hasattr(thing, "iden"):
-       src="/captcha/${thing.iden}.png" 
+       src="/captcha/${thing.iden}.png"
        %else:
-       src="${static('kill.png')}" 
+       src="${static('kill.png')}"
        %endif
        />
 </%def>
@@ -102,4 +102,3 @@ ${rounded_captcha()}
 </table>
 %endif
 </%def>
-

@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -29,14 +29,14 @@
 %>
 
 <div class="rembeddit"
-     ${optionalstyle("font-family:verdana,arial,helvetica,sans-serif;" + 
+     ${optionalstyle("font-family:verdana,arial,helvetica,sans-serif;" +
                      style_line(bgcolor="FFFFFF", bordercolor="336699"))}>
   %if not request.GET.get("nobranding"):
-  <div class="reddit-header" 
-       ${optionalstyle("padding: 5px; padding-bottom:1px;" + 
+  <div class="reddit-header"
+       ${optionalstyle("padding: 5px; padding-bottom:1px;" +
                     ("background-color:#CEE3F8" if not c.bgcolor else ""))}>
-  <h4 class="reddit-title" 
-      ${optionalstyle("margin:0;" + 
+  <h4 class="reddit-title"
+      ${optionalstyle("margin:0;" +
                       "padding-bottom:3px")}
       >
     <a href="${g.default_scheme}://${get_domain()}/" ${optionalstyle("margin:5px;")}
@@ -45,7 +45,7 @@
       %endif
        >
       <img src="${g.default_scheme}://${get_domain(subreddit=False)}/static/spreddit1.gif"
-           alt="" 
+           alt=""
            ${optionalstyle("border:none")} />
     </a>
     <%
@@ -66,7 +66,7 @@
   <p ${optionalstyle("margin: 0px 30px 5px 30px; color: gray;")}
      class="powered-by-reddit">
     <small>
-      powered by&#32; 
+      powered by&#32;
       <a href="${g.default_scheme}://${g.domain}"
          ${optionalstyle("text-decoration:none;color:#336699")}
         %if c.link_target:

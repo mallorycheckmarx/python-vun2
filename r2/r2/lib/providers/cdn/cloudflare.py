@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -33,9 +33,9 @@ class CloudFlareCdnProvider(CdnProvider):
     """A provider for reddit's configuration of CloudFlare.
 
     """
- 
-    def _do_content_purge(self, url):  
-        """Does the purge of the content from CloudFlare."""      
+
+    def _do_content_purge(self, url):
+        """Does the purge of the content from CloudFlare."""
         data = {
             'files': [
                 url,
@@ -86,9 +86,9 @@ class CloudFlareCdnProvider(CdnProvider):
 
         # per the CloudFlare docs:
         #    https://www.cloudflare.com/docs/client-api.html#s4.5
-        #    The full URL of the file that needs to be purged from 
-        #    CloudFlare's  cache. Keep in mind, that if an HTTP and 
-        #    an HTTPS version of the file exists, then both versions 
+        #    The full URL of the file that needs to be purged from
+        #    CloudFlare's  cache. Keep in mind, that if an HTTP and
+        #    an HTTPS version of the file exists, then both versions
         #    will need to be purged independently
         # create the "alternate" URL for http or https
         if 'https://' in url:

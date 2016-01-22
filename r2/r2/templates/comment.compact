@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -36,7 +36,7 @@
     <p class="parent"><a name="${thing._id36}"></a></p>
   %endif
   %if c.profilepage:
-    %if thing.link: 
+    %if thing.link:
       %if thing.link.title:
            %if thing.link.is_self:
              <a href="${add_sr(thing.link.url)}" class="title">
@@ -64,7 +64,7 @@
     ${arrow(thing, 1, thing.likes)}
     ${arrow(thing, 0, thing.likes == False)}
   </div>
-  <% 
+  <%
      like_cls = "unvoted"
      if getattr(thing, "likes", None):
          like_cls = "likes"

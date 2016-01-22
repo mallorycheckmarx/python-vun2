@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -31,7 +31,7 @@
 <%namespace file="captcha.html" import="captchagen"/>
 <%namespace file="utils.html" import="error_field, img_link, form_group, text_with_links"/>
 
-## default content 
+## default content
 %if c.user_is_loggedin:
   <p class="error">${_("You are logged in. Go use the site!")}</p>
 %else:
@@ -41,8 +41,8 @@
     </h3>
   %endif
   <div id="login">
-    ${login_panel(login_form, 
-                  user_reg = thing.user_reg, user_login = thing.user_login, 
+    ${login_panel(login_form,
+                  user_reg = thing.user_reg, user_login = thing.user_login,
                   dest=thing.dest,
                   registration_info=thing.registration_info)}
   </div>
@@ -55,7 +55,7 @@
       base = g.https_endpoint
       tabindex = 2 if register else 3
     %>
-    <form id="${'register' if register else 'login'}-form" method="post" 
+    <form id="${'register' if register else 'login'}-form" method="post"
           action="${add_sr(base + '/post/' + op)}"
           class="form-v2">
       <input type="hidden" name="op" value="${op}">
@@ -150,7 +150,7 @@
       base = g.https_endpoint
       tabindex = 2 if register else 3
     %>
-    <form id="login_${op}" method="post" 
+    <form id="login_${op}" method="post"
           action="${add_sr(base + '/post/' + op)}"
           class="user-form ${'register-form' if register else 'login-form'}">
       <input type="hidden" name="op" value="${op}" />
@@ -161,7 +161,7 @@
         <ul>
           <li class="name-entry">
             <label for="user_${op}">${_('username')}:</label>
-            <input value="${user}" name="user" id="user_${op}" 
+            <input value="${user}" name="user" id="user_${op}"
                    type="text" maxlength="20" tabindex="${tabindex}" autofocus />
             %if register:
               <span class="throbber"></span>
@@ -177,7 +177,7 @@
             <label for="email_${op}">
               ${_('account recovery email')}: &nbsp;<i>(${_('optional')})
             </i></label>
-            <input value="" name="email" id="email_${op}" 
+            <input value="" name="email" id="email_${op}"
                    type="email" maxlength="50" tabindex="${tabindex}"/>
             <label for="email_${op}" class="note">${_('we only send email at your request')}</label>
             %if register:
@@ -187,7 +187,7 @@
         %endif
           <li>
             <label for="passwd_${op}">${_('password')}:</label>
-            <input id="passwd_${op}" name="passwd" type="password" 
+            <input id="passwd_${op}" name="passwd" type="password"
                    tabindex="${tabindex}"/>
             %if register:
               ${error_field("BAD_PASSWORD", "passwd", kind="span")}
@@ -198,7 +198,7 @@
         %if register:
           <li>
             <label for="passwd2_${op}">${_('verify password')}:</label>
-            <input name="passwd2" id="passwd2_${op}" 
+            <input name="passwd2" id="passwd2_${op}"
                    type="password" tabindex="${tabindex}"/>
             ${error_field("BAD_PASSWORD_MATCH", "passwd2", kind="span")}
           </li>

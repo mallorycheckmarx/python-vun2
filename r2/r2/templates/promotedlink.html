@@ -16,7 +16,7 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
@@ -36,9 +36,9 @@
 <%def name="tagline()">
 <%
    if (c.user_is_sponsor or thing.is_author) and not promote.is_promoted(thing):
-     taglinetext = _("to be promoted by %(author)s") 
+     taglinetext = _("to be promoted by %(author)s")
    else:
-     taglinetext = _("promoted by %(author)s") 
+     taglinetext = _("promoted by %(author)s")
    taglinetext = conditional_websafe(taglinetext).replace(" ", "&#32;")
    author = WrappedUser(thing.author, thing.attribs, thing,
                         force_show_flair=False).render()
@@ -47,9 +47,9 @@ ${unsafe(taglinetext % dict(author=author))}
 </%def>
 
 <%def name="buttons(comments=True, delete=True, report=True, additional='')">
-  ${LinkButtons(thing, 
-                comments = not getattr(thing, "disable_comments", False), 
-                delete = delete, 
+  ${LinkButtons(thing,
+                comments = not getattr(thing, "disable_comments", False),
+                delete = delete,
                 report = report)}
 </%def>
 
@@ -87,4 +87,3 @@ ${unsafe(taglinetext % dict(author=author))}
   </div>
   %endif
 </%def>
-

@@ -16,13 +16,13 @@
 ## The Original Developer is the Initial Developer.  The Initial Developer of
 ## the Original Code is reddit Inc.
 ##
-## All portions of the code written by reddit are Copyright (c) 2006-2015
+## All portions of the code written by reddit are Copyright (c) 2006-2016
 ## reddit Inc. All Rights Reserved.
 ###############################################################################
 
 <%namespace file="translatedstring.html" import="text_input"/>
 
-<% 
+<%
  highlight = lambda x: ("<span class='orangered' style='padding: 0px 1ex 0px 1ex'>" + x + "</span>")
  singular = unsafe(thing._singular(highlight))
  plural = unsafe(thing._plural(highlight))
@@ -38,7 +38,7 @@
   </td>
   <td></td>
   <td style="padding-bottom: 5px">
-    ${text_input(header[1], True, index = indx, 
+    ${text_input(header[1], True, index = indx,
                  len=len(header[1]))}
   </td>
 </tr>

@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -583,7 +583,7 @@ class RuleTarget(object):
         target_type -- the type of object this will apply to
         values -- a dict of the values for each rule component
         approve_banned -- whether to approve banned users' posts
-        
+
         """
         self.target_type = target_type
         self.parent = parent
@@ -627,7 +627,7 @@ class RuleTarget(object):
                             "invalid value for `%s`: `%s`" % (key, value),
                             self.parent.yaml,
                         )
-                            
+
                     setattr(self, key, value)
 
                     if component.component_type == "check":
@@ -717,7 +717,7 @@ class RuleTarget(object):
         """Generate the regexes used to match against fields."""
         self.match_fields = set()
         match_patterns = {}
-        
+
         for key in values:
             parsed_key = self.parse_match_fields_key(key)
 
@@ -797,7 +797,7 @@ class RuleTarget(object):
 
         if not self.check_match_patterns(item, data):
             return False
-            
+
         return True
 
     def check_nonpattern_conditions(self, item, data):
@@ -964,7 +964,7 @@ class RuleTarget(object):
         # been removed by a moderator
         ban_info = getattr(item, "ban_info", {})
         mod_banned = ban_info.get("moderator_banned")
-        should_approve = ((item._spam and not mod_banned) or 
+        should_approve = ((item._spam and not mod_banned) or
             (self.reports and item.reported))
         if self.action == "approve" and should_approve:
             approvable_author = not data["author"]._spam or self.approve_banned
@@ -1499,7 +1499,7 @@ def run():
                 return
 
             subreddit = item.subreddit_slow
-            
+
             wiki_page_id = wiki_id(subreddit._id36, "config/automoderator")
             wiki_page_fullname = "WikiPage_%s" % wiki_page_id
             last_edited = LastModified.get(wiki_page_fullname, "Edit")

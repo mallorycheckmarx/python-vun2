@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2016 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -24,7 +24,7 @@ from r2.lib.providers.image_resizing import ImageResizingProvider
 
 class NoOpImageResizingProvider(ImageResizingProvider):
     """A passthrough solution that won't actually resize any images.
-    
+
     Combines well with the filesystem media provider for an entirely local
     setup.
     """
