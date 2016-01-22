@@ -108,6 +108,7 @@ error_list = dict((
         ('BAD_CARD', _('card problem: %(message)s')),
         ('TOO_LONG', _("this is too long (max: %(max_length)s)")),
         ('NO_TEXT', _('we need something here')),
+        ('AUTOMOD_DISCLAIMER_REQUIRED', _("you're not allowed to move, modify, or remove the disclaimer made by automoderator")),
         ('TOO_SHORT', _("this is too short (min: %(min_length)s)")),
         ('INVALID_CODE', _("we've never seen that code before")),
         ('CLAIMED_CODE', _("that code has already been claimed -- perhaps by you?")),

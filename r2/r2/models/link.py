@@ -124,6 +124,7 @@ class Link(Thing, Printable):
                      disable_comments=False,
                      locked=False,
                      selftext='',
+                     mod_editor_id=None,
                      sendreplies=True,
                      ip='0.0.0.0',
                      flair_text=None,
@@ -913,6 +914,14 @@ class Link(Thing, Printable):
         return Account._byID(self.author_id, data=True, return_dict=False)
 
     @property
+    def mod_editor_slow(self):
+        """Returns the link's mod editor if it exists."""
+        # The mod editor is often already on the wrapped link as .mod_editor
+        # If available, that should be used instead of calling this
+        if self.mod_editor_id is not None:
+            return Account._byID(self.mod_editor_id, data=True, return_dict=False)
+
+    @property
     def responder_ids(self):
         """Returns an iterable of the OP and other official responders in a
         thread.
@@ -1185,6 +1194,7 @@ class Comment(Thing, Printable):
                      parent_id=None,
                      moderator_banned=False,
                      new=False,
+                     mod_editor_id=None,
                      gildings=0,
                      banned_before_moderator=False,
                      parents=None,
@@ -1346,6 +1356,14 @@ class Comment(Thing, Printable):
         return Account._byID(self.author_id, data=True, return_dict=False)
 
     @property
+    def mod_editor_slow(self):
+        """Returns the comment's mod editor if it exists."""
+        # The mod editor is often already on the wrapped comment as .mod_editor
+        # If available, that should be used instead of calling this
+        if self.mod_editor_id is not None:
+            return Account._byID(self.mod_editor_id, data=True, return_dict=False)
+
+    @property
     def archived(self):
         link = getattr(self, 'link', None)
         if link and getattr(link, 'subreddit', None):
@@ -1489,6 +1507,8 @@ class Comment(Thing, Printable):
         authors = Account._byID(set(l.author_id for l in links.values()), data=True,
                                 return_dict=True, stale=True)
 
+        # store automod's id
+        automod_id = getattr(Account.automoderator_user(), '_id', None)
         #get srs for comments that don't have them (old comments)
         for cm in wrapped:
             if not hasattr(cm, 'sr_id'):
@@ -1744,8 +1764,10 @@ class Comment(Thing, Printable):
 
             #will seem less horrible when add_props is in pages.py
             from r2.lib.pages import UserText
+            mod_editable = (item.author_id == automod_id and c.user_is_loggedin and
+                            (c.user_is_admin or item.subreddit.is_moderator_with_perms(c.user)))
             item.usertext = UserText(item, item.body,
-                                     editable=item.is_author,
+                                     editable=(item.is_author or mod_editable),
                                      nofollow=item.nofollow,
                                      target=item.target,
                                      extra_css=extra_css,

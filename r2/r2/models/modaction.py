@@ -62,7 +62,8 @@ class ModAction(tdb_cassandra.UuidThing):
                'removewikicontributor', 'wikirevise', 'wikipermlevel',
                'ignorereports', 'unignorereports', 'setpermissions',
                'setsuggestedsort', 'sticky', 'unsticky', 'setcontestmode',
-               'unsetcontestmode', 'lock', 'unlock', 'muteuser', 'unmuteuser')
+               'unsetcontestmode', 'lock', 'unlock', 'muteuser', 'unmuteuser',
+               'editautomoditem')
 
     _menu = {'banuser': _('ban user'),
              'unbanuser': _('unban user'),
@@ -100,6 +101,7 @@ class ModAction(tdb_cassandra.UuidThing):
              'unlock': _('unlock post'),
              'muteuser': _('mute user'),
              'unmuteuser': _('unmute user'),
+             'editautomoditem': _('edit item by Automoderator'),
             }
 
     _text = {'banuser': _('banned'),
@@ -138,6 +140,7 @@ class ModAction(tdb_cassandra.UuidThing):
              'unlock': _('unlocked'),
              'muteuser': _('muted'),
              'unmuteuser': _('unmuted'),
+             'editautomoditem': _('edited item by Automoderator'),
             }
 
     _details_text = {# approve comment/link

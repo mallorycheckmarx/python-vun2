@@ -102,8 +102,11 @@ class Builder(object):
         user = c.user if c.user_is_loggedin else None
         aids = set(l.author_id for l in items if hasattr(l, 'author_id')
                    and l.author_id is not None)
+        meids = set(l.mod_editor_id for l in items if hasattr(l, 'mod_editor_id')
+                    and l.mod_editor_id is not None)
 
         authors = Account._byID(aids, data=True, stale=self.stale)
+        mod_editors = Account._byID(meids, data=True, stale=self.stale)
         now = datetime.datetime.now(g.tz)
         cakes = {a._id for a in authors.itervalues()
                        if a.cake_expiration and a.cake_expiration >= now}
@@ -136,6 +139,7 @@ class Builder(object):
             types.setdefault(w.render_class, []).append(w)
 
             w.author = None
+            w.mod_editor_name = None
             w.friend = False
 
             w.distinguished = None
@@ -148,6 +152,10 @@ class Builder(object):
 
             if getattr(item, "author_id", None):
                 w.author = authors.get(item.author_id)
+
+            if getattr(item, 'mod_editor_id', None):
+                mod_editor = mod_editors.get(item.mod_editor_id)
+                w.mod_editor_name = mod_editor.name if not mod_editor._deleted else '[deleted]'
 
             if hasattr(item, "sr_id") and item.sr_id is not None:
                 w.subreddit = subreddits[item.sr_id]

@@ -907,6 +907,19 @@ class VByNameIfAuthor(VByName):
             self.param: "[fullname](#fullnames) of a thing created by the user",
         }
 
+class VByNameIfCanEdit(VByNameIfAuthor):
+    def run(self, fullname):
+        thing = VByName.run(self, fullname)
+        if thing:
+            if not thing._loaded: thing._load()
+            if c.user_is_loggedin and thing.author_id == c.user._id:
+                return thing
+            elif c.user_is_loggedin and thing.author_id == getattr(Account.automoderator_user(), '_id', None):
+                sr = c.site if isinstance(c.site, Subreddit) else thing.subreddit_slow
+                if c.user_is_admin or sr.is_moderator_with_perms(c.user, 'posts'):
+                    return thing
+        return self.set_error(errors.NOT_AUTHOR)
+
 class VCaptcha(Validator):
     default_param = ('iden', 'captcha')
 

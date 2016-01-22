@@ -4640,8 +4640,12 @@ def make_link_child(item):
 
         expand = getattr(item, 'expand_children', False)
 
+        mod_editable = (c.user_is_loggedin and
+                        (c.user_is_admin or item.subreddit.is_moderator_with_perms(c.user, 'posts')) and
+                        item.author._id == getattr(Account.automoderator_user(), '_id', None))
+
         editable = (expand and
-                    item.author == c.user and
+                    (item.author == c.user or mod_editable) and
                     not item._deleted)
         link_child = SelfTextChild(item, expand = expand,
                                    nofollow = item.nofollow)
@@ -4679,8 +4683,11 @@ class SelfTextChild(LinkChild):
     css_style = "selftext"
 
     def content(self):
+        mod_editable = (c.user_is_loggedin and
+                        (c.user_is_admin or self.link.subreddit.is_moderator_with_perms(c.user, 'posts')) and
+                        self.link.author._id == getattr(Account.automoderator_user(), '_id', None))
         u = UserText(self.link, self.link.selftext,
-                     editable = c.user == self.link.author,
+                     editable = (c.user == self.link.author or mod_editable),
                      nofollow = self.nofollow,
                      expunged=self.link.expunged)
         return u.render()
