@@ -737,8 +737,14 @@ class UserController(ListingController):
                 else:
                     res.append(TimeMenu(default = self.time))
         if self.where == 'saved' and c.user.gold:
-            srnames = LinkSavesBySubreddit.get_saved_subreddits(self.vuser)
-            srnames += CommentSavesBySubreddit.get_saved_subreddits(self.vuser)
+            link_srnames = LinkSavesBySubreddit.get_saved_subreddits(self.vuser)
+            comment_srnames = CommentSavesBySubreddit.get_saved_subreddits(self.vuser)
+            if not self.only:
+                srnames = link_srnames + comment_srnames
+            elif self.only == 'links':
+                srnames = link_srnames
+            elif self.only == 'comments':
+                srnames = comment_srnames
             srs = Subreddit._by_name(srnames)
             srnames = [name for name, sr in srs.iteritems()
                             if sr.can_view(c.user)]
@@ -755,8 +761,14 @@ class UserController(ListingController):
                                   title=_('filter by subreddit'),
                                   type='lightdrop')
                 res.append(sr_menu)
-            categories = LinkSavesByCategory.get_saved_categories(self.vuser)
-            categories += CommentSavesByCategory.get_saved_categories(self.vuser)
+            link_categories = LinkSavesByCategory.get_saved_categories(self.vuser)
+            comment_categories = CommentSavesByCategory.get_saved_categories(self.vuser)
+            if not self.only:
+                categories = link_categories + comment_categories
+            elif self.only == 'links':
+                categories = link_categories
+            elif self.only == 'comments':
+                categories = comment_categories
             categories = sorted(set(categories))
             if len(categories) >= 1:
                 cat_buttons = [NavButton(_('all'), '/', css_class='primary')]
@@ -769,6 +781,17 @@ class UserController(ListingController):
                                    title=_('filter by category'),
                                    type='lightdrop')
                 res.append(cat_menu)
+
+            only_buttons = [QueryButton(_('links and comments'), None, query_param='only', css_class='primary'),
+                            QueryButton(_('links'), 'links', query_param='only'),
+                            QueryButton(_('comments'), 'comments', query_param='only')]
+            base_path = '/user/%s/saved' % self.vuser.name
+            if self.savedcategory:
+                base_path += '/%s' % urllib.quote(self.savedcategory)
+            only_menu = NavMenu(only_buttons, base_path=base_path,
+                                title=_('only'),
+                                type='lightdrop')
+            res.append(only_menu)
         elif (self.where == 'gilded' and
                 (c.user == self.vuser or c.user_is_admin)):
             path = '/user/%s/gilded/' % self.vuser.name
@@ -859,9 +882,25 @@ class UserController(ListingController):
         elif self.where == 'saved':
             if not self.savedcategory and c.user.gold:
                 self.builder_cls = SavedBuilder
-            sr_id = self.savedsr._id if self.savedsr else None
-            q = queries.get_saved(self.vuser, sr_id,
-                                  category=self.savedcategory)
+            # yes, 'none' instead of None.
+            # It allows proper use in the individual cached queries
+            # when people are using ?/&only
+            sr_id = self.savedsr._id if self.savedsr else 'none'
+            if not self.only:
+                q = queries.get_saved(self.vuser, sr_id,
+                                      category=self.savedcategory)
+            elif self.only == 'links':
+                if self.savedcategory:
+                    q = queries.get_categorized_saved_links(self.vuser._id, sr_id,
+                                                            self.savedcategory)
+                else:
+                    q = queries.get_saved_links(self.vuser._id, sr_id)
+            elif self.only == 'comments':
+                if self.savedcategory:
+                    q = queries.get_categorized_saved_comments(self.vuser._id, sr_id,
+                                                               self.savedcategory)
+                else:
+                    q = queries.get_saved_comments(self.vuser._id, sr_id)
         elif self.where == 'actions':
             if not votes_visible(self.vuser):
                 q = queries.get_overview(self.vuser, self.sort, self.time)
@@ -957,6 +996,7 @@ class UserController(ListingController):
 
         if where == 'saved':
             self.show_chooser = True
+            only = VOneOf('only', ('links', 'comments')).run(request.GET.get('only'))
             category = VSavedCategory('category').run(env.get('category'))
             srname = request.GET.get('sr')
             if srname and c.user.gold:
@@ -966,9 +1006,11 @@ class UserController(ListingController):
                     sr = None
             else:
                 sr = None
-            if category and not c.user.gold:
+            if not c.user.gold:
                 category = None
+                only = None
             self.savedsr = sr
+            self.only = only
             self.savedcategory = category
 
         self.vuser = vuser
