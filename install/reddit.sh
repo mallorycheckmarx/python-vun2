@@ -20,6 +20,7 @@
 #    sudo REDDIT_DOMAIN=example.com ./install/reddit.sh
 #
 ###############################################################################
+set -e -x
 
 # load configuration
 RUNDIR=$(dirname $0)
