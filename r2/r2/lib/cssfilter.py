@@ -84,6 +84,7 @@ SAFE_PROPERTIES = {
     "animation-play-state",
     "animation-timing-function",
     "appearance",
+    "backdrop-filter",
     "backface-visibility",
     "background",
     "background-attachment",
@@ -465,7 +466,7 @@ class StylesheetValidator(object):
 
         keyword = strip_vendor_prefix(rule.lower_at_keyword)
 
-        if keyword in ("media", "keyframes"):
+        if keyword in ("media", "keyframes", "support"):
             rules = tinycss2.parse_rule_list(rule.content)
             rule_errors = self.validate_rule_list(rules)
         elif keyword == "page":
