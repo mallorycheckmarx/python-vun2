@@ -398,17 +398,18 @@ class StylesheetValidator(object):
         self.images = images
 
     def validate_url(self, url_node):
-        m = SUBREDDIT_IMAGE_URL_PLACEHOLDER.match(url_node.value)
-        if not m:
-            return ValidationError(url_node.source_line, "NON_PLACEHOLDER_URL")
+        if not url_node.value.startswith(("'data:font/opentype", "'data:application/font-woff", "'data:image/jpg", "'data:image/png")):
+            m = SUBREDDIT_IMAGE_URL_PLACEHOLDER.match(url_node.value)
+            if not m:
+                return ValidationError(url_node.source_line, "NON_PLACEHOLDER_URL")
 
-        image_name = m.group(1)
-        if image_name not in self.images:
-            return ValidationError(url_node.source_line, "IMAGE_NOT_FOUND",
-                                   {"name": image_name})
+            image_name = m.group(1)
+            if image_name not in self.images:
+                return ValidationError(url_node.source_line, "IMAGE_NOT_FOUND",
+                                       {"name": image_name})
 
-        # rewrite the url value to the actual url of the image
-        url_node.value = self.images[image_name]
+            # rewrite the url value to the actual url of the image
+            url_node.value = self.images[image_name]
 
     def validate_function(self, function_node):
         function_name = strip_vendor_prefix(function_node.lower_name)
@@ -465,7 +466,7 @@ class StylesheetValidator(object):
 
         keyword = strip_vendor_prefix(rule.lower_at_keyword)
 
-        if keyword in ("media", "keyframes"):
+        if keyword in ("font-face", "media", "keyframes"):
             rules = tinycss2.parse_rule_list(rule.content)
             rule_errors = self.validate_rule_list(rules)
         elif keyword == "page":
