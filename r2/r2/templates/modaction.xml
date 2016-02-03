@@ -29,7 +29,7 @@
 <%
   title = '%(subreddit)s: %(mod)s %(action)s'
   title %= {
-    'subreddit': thing.subreddit.name,
+    'subreddit': thing.sr_name,
     'mod': thing.moderator.name,
     'action': thing.text,
   }
@@ -44,9 +44,9 @@
   if thing.details_text:
     title += ' (%s)' % thing.details_text
 
-  if isinstance(thing, Comment):
+  if hasattr(thing, "target") and isinstance(thing.target, Comment):
     permalink = thing.target.make_permalink(thing.parent_link, thing.subreddit)
-  elif isinstance(thing, Link):
+  elif hasattr(thing, "target") and isinstance(thing.target, Link):
     permalink = thing.target.make_permalink(thing.subreddit)
   else:
     permalink = None
@@ -59,5 +59,5 @@
   %if permalink:
     <link>${add_sr(permalink)}</link>
   %endif
-  <category>${thing.subreddit.name}</category>
+  <category>${thing.sr_name}</category>
 </item>
