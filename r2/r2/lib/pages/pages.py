@@ -563,7 +563,8 @@ class Reddit(Templated):
             buttons.append(NamedButton(
                 "modqueue",
                 css_class="reddit-modqueue access-required",
-                data=data_attrs('modqueue')))
+                data=dict(data_attrs('modqueue'),
+                          **{'special-modqueue-count': len(list(c.site.get_modqueue()))})))
             buttons.append(NamedButton(
                 "reports",
                 css_class="reddit-reported access-required",
