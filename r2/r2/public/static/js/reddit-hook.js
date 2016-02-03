@@ -23,6 +23,7 @@
         r.newsletter.ui.init();
         r.cachePoisoning.init();
         r.locked.init();
+        r.interval_events.init();
     } catch (err) {
         r.sendError('Error during reddit.js init', err.toString());
     }
