@@ -101,6 +101,9 @@ ${self.RenderPrintable()}
       rowclass += " deleted"
     if hasattr(what, "saved") and what.saved:
       rowclass += " saved"
+      if c.user.gold and hasattr(what, "saved_category"):
+        item_saved_category = "no-category" if not what.saved_category else what.saved_category
+        rowclass += " saved-" + item_saved_category
     if hasattr(what, "hidden") and what.hidden:
       rowclass += " hidden"
     if hasattr(what, "gildings") and what.gildings > 0:

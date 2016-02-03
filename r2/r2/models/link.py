@@ -646,12 +646,14 @@ class Link(Thing, Printable):
             if user_is_loggedin:
                 item.user_gilded = (user, item) in user_gildings
                 item.saved = (user, item) in saved
+                item.saved_category = saved.get((user, item))
                 item.hidden = (user, item) in hidden
                 item.visited = (user, item) in visited
 
             else:
                 item.user_gilded = False
                 item.saved = item.hidden = item.visited = False
+                item.saved_category = None
 
             if c.permalink_page or c.profilepage:
                 item.gilded_message = make_gold_message(item, item.user_gilded)
@@ -1590,9 +1592,11 @@ class Comment(Thing, Printable):
             if user_is_loggedin:
                 item.user_gilded = (user, item) in user_gildings
                 item.saved = (user, item) in saved
+                item.saved_category = saved.get((user, item))
             else:
                 item.user_gilded = False
                 item.saved = False
+                item.saved_category = None
             item.gilded_message = make_gold_message(item, item.user_gilded)
 
             item.can_gild = (

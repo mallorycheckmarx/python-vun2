@@ -750,6 +750,9 @@ class LinkJsonTemplate(ThingJsonTemplate):
     def raw_data(self, thing):
         d = ThingJsonTemplate.raw_data(self, thing)
 
+        if c.user.gold and thing.saved:
+            d["saved_category"] = thing.saved_category if thing.saved_category else None
+
         if c.permalink_page:
             d["upvote_ratio"] = thing.upvote_ratio
 
@@ -846,6 +849,9 @@ class CommentJsonTemplate(ThingTemplate):
             data["removal_reason"] = "legal"
         else:
             data["removal_reason"] = None
+
+        if c.user.gold and item.saved:
+            data["saved_category"] = item.saved_category if item.saved_category else None
 
         if not item.author._deleted:
             author = item.author
