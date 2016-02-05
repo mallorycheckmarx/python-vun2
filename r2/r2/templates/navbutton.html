@@ -52,7 +52,7 @@
 </%def>
 
 <%def name="special_data(key)">
-  %if key == "special-modqueue-count":
+  %if key in ("special-modqueue-count", "special-unmoderated-count"):
     &nbsp;[${plain_link(thing.data[key], thing.path, thing.sr_path, target=thing.target,
                         _class="%s access-required choice" % key, _id=thing._id, data=thing.data)}]
   %endif
