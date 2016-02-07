@@ -45,13 +45,23 @@
       func: function() {
         r.ajax({
           type: 'GET',
-          url: r.config.site_path.concat('/about/modqueue.json'),
+          url: r.config.site_path.concat('/about/modqueue.json?limit=100'),
           success: function(data) {
             var button = $('.reddit-modqueue');
             var counter = $('.special-modqueue-count');
             var newcount = data.data.children.length;
-            counter.text(newcount).attr('data-special-modqueue-count', newcount);
-            button.attr('data-special-modqueue-count', newcount);
+            var newtext = newcount;
+            if (data.data.after) {
+              newtext += '+';
+              if (counter.attr('data-special-modqueue-count') < newcount) {
+                button.attr('data-special-modqueue-count', newcount);
+                counter.attr('data-special-modqueue-count', newcount);
+              }
+            } else if (counter.attr('data-special-modqueue-count') != newcount) {
+              button.attr('data-special-modqueue-count', newcount);
+              counter.attr('data-special-modqueue-count', newcount);
+            }
+            counter.text(newtext);
           },
           error: function(errorObj) {
             if (errorObj.status == 403) {
@@ -71,13 +81,23 @@
       func: function() {
         r.ajax({
           type: 'GET',
-          url: r.config.site_path.concat('/about/unmoderated.json'),
+          url: r.config.site_path.concat('/about/unmoderated.json?limit=100'),
           success: function(data) {
             var button = $('.reddit-unmoderated');
             var counter = $('.special-unmoderated-count');
             var newcount = data.data.children.length;
-            counter.text(newcount).attr('data-special-unmoderated-count', newcount);
-            button.attr('data-special-unmoderated-count', newcount);
+            var newtext = newcount;
+            if (data.data.after) {
+              newtext += '+';
+              if (counter.attr('data-special-modqueue-count') < newcount) {
+                button.attr('data-special-modqueue-count', newcount);
+                counter.attr('data-special-modqueue-count', newcount);
+              }
+            } else if (counter.attr('data-special-modqueue-count') != newcount) {
+              button.attr('data-special-modqueue-count', newcount);
+              counter.attr('data-special-modqueue-count', newcount);
+            }
+            counter.text(newtext);
           },
           error: function(errorObj) {
             if (errorObj.status == 403) {
