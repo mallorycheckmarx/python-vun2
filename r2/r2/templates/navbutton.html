@@ -28,7 +28,7 @@
                target = thing.target, 
                _class = thing.css_class, _id = thing._id,
                data=thing.data)}
-  %if thing.data and any(key.startswith('special') for key in thing.data):
+  %if thing.data:
     %for item in filter(lambda x: x.startswith('special'), thing.data):
       ${special_data(item)}
     %endfor
