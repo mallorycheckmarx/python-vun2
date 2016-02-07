@@ -3281,6 +3281,26 @@ class ApiController(RedditController):
         return {'categories': categories}
 
     @require_oauth2_scope("save")
+    @json_validate(VUser())
+    @api_doc(api_section.links_and_comments)
+    def GET_saved_subreddits(self, responder):
+        """Get a list of subreddits in which things are currently saved.
+
+        See also: [/api/save](#POST_api_save).
+
+        """
+        if not c.user.gold:
+            abort(403)
+        srnames = LinkSavesByCategory.get_saved_subreddits(c.user)
+        srnames += CommentSavesByCategory.get_saved_subreddits(c.user)
+        srs = Subreddit._by_name(set(srnames))
+        srnames = [name for name, sr in srs.iteritems()
+                   if sr.can_view(c.user)]
+        srnames = sorted(set(srnames), key=lambda name: name.lower())
+        srnames = [dict(subreddit=subreddit) for subreddit in srnames]
+        return {'subreddits': srnames}
+
+    @require_oauth2_scope("save")
     @noresponse(
         VUser(),
         VModhash(),
