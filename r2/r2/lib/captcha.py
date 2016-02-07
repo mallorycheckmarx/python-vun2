@@ -26,7 +26,6 @@ import random, string
 
 from pylons import app_globals as g
 
-from Captcha.Base import randomIdentifier
 from Captcha.Visual import Text, Backgrounds, Distortions, ImageCaptcha
 
 from r2.lib.cache import make_key
@@ -48,10 +47,10 @@ class RandCaptcha(ImageCaptcha):
                  Distortions.SineWarp()))
 
 def get_iden():
-    return self.randomIdentifier(length=IDEN_LENGTH)
+    return randomIdentifier(length=IDEN_LENGTH)
 
 def make_solution():
-    return self.randomIdentifier(alphabet=string.ascii_letters, length = SOL_LENGTH).upper()
+    return randomIdentifier(alphabet=string.ascii_letters, length = SOL_LENGTH).upper()
 
 def randomIdentifier(alphabet = string.ascii_letters + string.digits,
                      length = 24):
