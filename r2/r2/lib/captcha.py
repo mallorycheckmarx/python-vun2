@@ -48,10 +48,14 @@ class RandCaptcha(ImageCaptcha):
                  Distortions.SineWarp()))
 
 def get_iden():
-    return randomIdentifier(length=IDEN_LENGTH)
+    return self.randomIdentifier(length=IDEN_LENGTH)
 
 def make_solution():
-    return randomIdentifier(alphabet=string.ascii_letters, length = SOL_LENGTH).upper()
+    return self.randomIdentifier(alphabet=string.ascii_letters, length = SOL_LENGTH).upper()
+
+def randomIdentifier(alphabet = string.ascii_letters + string.digits,
+                     length = 24):
+    return "".join([random.SecureRandom.choice(alphabet) for i in xrange(length)])
 
 def get_image(iden):
     key = make_key(iden)
