@@ -19,7 +19,7 @@ look like a bug, but they are not.  If you're not sure, make a post in
 
 3. **DO NOT PUBLICLY REPORT SECURITY BUGS**.
 If you have found a bug that can in some way compromise the security of the
-site or its users, please exercise [responsible
+site or its users, please exercise [coordinated
 disclosure](http://www.reddit.com/wiki/whitehat) and e-mail
 security@reddit.com. We will respond to you as soon as possible. Please note
 that e-mails which do not pertain to security vulnerabilities in reddit's code
