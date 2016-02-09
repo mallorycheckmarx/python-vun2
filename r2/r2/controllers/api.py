@@ -3264,9 +3264,12 @@ class ApiController(RedditController):
             ModAction.create(sr, c.user, 'distinguish', target=thing, **log_kw)
 
     @require_oauth2_scope("save")
-    @json_validate(VUser())
+    @json_validate(
+        VUser(),
+        only=VOneOf('only', ('links', 'comments'), optional=True)
+    )
     @api_doc(api_section.links_and_comments)
-    def GET_saved_categories(self, responder):
+    def GET_saved_categories(self, responder, only):
         """Get a list of categories in which things are currently saved.
 
         See also: [/api/save](#POST_api_save).
@@ -3274,8 +3277,14 @@ class ApiController(RedditController):
         """
         if not c.user.gold:
             abort(403)
-        categories = LinkSavesByCategory.get_saved_categories(c.user)
-        categories += CommentSavesByCategory.get_saved_categories(c.user)
+        linkcategories = LinkSavesByCategory.get_saved_categories(c.user)
+        commentcategories = CommentSavesByCategory.get_saved_categories(c.user)
+        if not only:
+            categories = linkcategories + commentcategories
+        elif only == 'links':
+            categories = linkcategories
+        elif only == 'comments':
+            categories = commentcategories
         categories = sorted(set(categories), key=lambda name: name.lower())
         categories = [dict(category=category) for category in categories]
         return {'categories': categories}
