@@ -28,6 +28,11 @@
                target = thing.target, 
                _class = thing.css_class, _id = thing._id,
                data=thing.data)}
+  %if thing.data:
+    %for item in filter(lambda x: x.startswith('special'), thing.data):
+      ${special_data(item)}
+    %endfor
+  %endif
 </%def>
 
 <%def name="js()">
@@ -44,4 +49,11 @@
               _sr_path=thing.sr_path,
               target=thing.target, _class=thing.css_class, _id=thing._id,
               data=thing.data)}
+</%def>
+
+<%def name="special_data(key)">
+  %if key in ("special-modqueue-count", "special-unmoderated-count"):
+    &nbsp;[${plain_link((thing.data[key] if thing.data[key] <= 100 else "100+"), thing.path, thing.sr_path, target=thing.target,
+                        _class="%s access-required choice" % key, _id=thing._id, data=thing.data)}]
+  %endif
 </%def>

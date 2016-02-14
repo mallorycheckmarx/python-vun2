@@ -141,6 +141,24 @@ def header_url(url):
         return make_url_protocol_relative(url)
 
 
+def jsintervals_config(mainconfig):
+    intervals_config = {}
+    should_run_modqueue = mainconfig["logged"] and c.site.is_moderator_with_perms(c.user, 'posts')
+    if feature.is_enabled('timeouts'):
+        should_run_modqueue = should_run_modqueue and not mainconfig["user_in_timeout"]
+    should_run_unmoderated = should_run_modqueue
+    intervals_config['shouldRun'] = {
+        "modqueueCounter": should_run_modqueue,
+        "unmoderatedCounter": should_run_unmoderated,
+    }
+    # javascript uses milliseconds, so times 1000
+    # warning, individual fallbacks are 0 seconds
+    intervals_config['timers'] = {name: (int(g.live_config.get("jsinterval_timer_%s" % name, 0)) * 1000)
+                                  for name in intervals_config['shouldRun']}
+    intervals_config['timers']['default'] = int(g.live_config['jsinterval_timer_default']) * 1000
+    return intervals_config
+
+
 def js_config(extra_config=None):
     logged = c.user_is_loggedin and c.user.name
     user_id = c.user_is_loggedin and c.user._id
@@ -258,6 +276,7 @@ def js_config(extra_config=None):
         },
         "facebook_app_id": g.live_config["facebook_app_id"],
         "feature_new_report_dialog": feature.is_enabled('new_report_dialog'),
+        "site_path": c.site.path.rstrip('/')
     }
 
     if g.tracker_url:
@@ -272,6 +291,8 @@ def js_config(extra_config=None):
     if feature.is_enabled('timeouts'):
         # is user in timeout?
         config["user_in_timeout"] = user_in_timeout
+
+    config["jsintervals"] = jsintervals_config(config)
 
     hooks.get_hook("js_config").call(config=config)
 

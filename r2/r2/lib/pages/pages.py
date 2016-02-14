@@ -514,6 +514,8 @@ class Reddit(Templated):
             is_admin or c.site.is_moderator_with_perms(c.user, *perms))
         data_attrs = lambda event: (
             {'type': 'subreddit', 'event-action': 'pageview', 'event-detail': event})
+        special_data_attrs = lambda event, special_attr: (
+            dict(data_attrs(event), **special_attr))
 
         if is_single_subreddit and is_moderator_with_perms('config'):
             buttons.append(NavButton(
@@ -560,10 +562,12 @@ class Reddit(Templated):
                 data=data_attrs('traffic')))
 
         if is_moderator_with_perms('posts'):
+            modqueue_count = len(list(c.site.get_modqueue()))
             buttons.append(NamedButton(
                 "modqueue",
                 css_class="reddit-modqueue access-required",
-                data=data_attrs('modqueue')))
+                data=special_data_attrs('modqueue',
+                                        {'special-modqueue-count': modqueue_count})))
             buttons.append(NamedButton(
                 "reports",
                 css_class="reddit-reported access-required",
@@ -616,10 +620,12 @@ class Reddit(Templated):
             css_class="reddit-moderationlog access-required",
             data=data_attrs('moderationlog')))
         if is_moderator_with_perms('posts'):
+            unmoderated_count = len(list(c.site.get_unmoderated()))
             buttons.append(NamedButton(
                     "unmoderated",
                     css_class="reddit-unmoderated access-required",
-                    data=data_attrs('unmoderated')))
+                    data=special_data_attrs('unmoderated',
+                                            {'special-unmoderated-count': unmoderated_count})))
 
         return SideContentBox(_('moderation tools'),
                               [NavMenu(buttons,
