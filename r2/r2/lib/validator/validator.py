@@ -701,7 +701,10 @@ class VSubredditName(VRequired):
             name, allow_language_srs=self.allow_language_srs)
         if not valid_name:
             self.set_error(self._error, code=400)
-        return str(name)
+        # if it's not valid, don't bother returning it
+        # because it could potentially end in a
+        # UnicodeDecodeError, and nothing would use it anyway
+        return str(name) if valid_name else ""
 
     def param_docs(self):
         return {
