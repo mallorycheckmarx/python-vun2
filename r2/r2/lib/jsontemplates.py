@@ -1435,7 +1435,7 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
 
         # remove this when feature is enabled and use _data_attrs instead
         if feature.is_enabled('mobile_settings'):
-            data['key_color'] = self.thing_attr(thing, 'key_color')
+            data['key_color'] = self.thing_attr(thing, 'site.key_color')
         if feature.is_enabled('related_subreddits'):
             data['related_subreddits'] = self.thing_attr(thing, 'related_subreddits')
 
