@@ -39,14 +39,19 @@
 %endif
 
 %if thing.images:
+  ${stylesheet_images(thing.images)}
+%endif
+
+<%def name="stylesheet_images(image_container)">
   <div id="images">
     <h2><a name="images">${_("images")}</a></h2>
     <ul id="image-preview-list" class="image-list">
-      %for name, url in thing.images.iteritems():
+      %for name, url in image_container.iteritems():
          ${make_li(name=name, img=url, mod=False)}
       %endfor
     </ul>
-%endif
+  </div>
+</%def>
 
 %if not (thing.stylesheet_contents or thing.images):
   <p class="error">${_("there doesn't seem to be anything here")}</p>

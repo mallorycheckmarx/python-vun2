@@ -3007,15 +3007,20 @@ class CreateSubreddit(Templated):
 class SubredditStylesheetBase(Templated):
     """Base subreddit stylesheet page."""
     def __init__(self, stylesheet_contents, **kwargs):
-        raw_images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
-        images = {name: make_url_protocol_relative(url)
-                  for name, url in raw_images.iteritems()}
+        images = {}
+        if not kwargs.pop('ignore_images', False):
+            images = self.get_stylesheet_images()
         super(SubredditStylesheetBase, self).__init__(
             images=images,
             stylesheet_contents=stylesheet_contents,
             **kwargs
         )
 
+    @staticmethod
+    def get_stylesheet_images():
+        raw_images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
+        return {name: make_url_protocol_relative(url)
+                for name, url in raw_images.iteritems()}
 
 class SubredditStylesheet(SubredditStylesheetBase):
     """form for editing or creating subreddit stylesheets"""

@@ -36,13 +36,15 @@ from pylons.i18n import _
 class WikiView(Templated):
     def __init__(self, content, edit_by, edit_date, may_revise=False,
                  page=None, diff=None, renderer='wiki'):
+        self.page_images = None
         self.page_content_md = content
         if renderer == 'wiki':
             self.page_content = wikimarkdown(content)
         elif renderer == 'reddit':
             self.page_content = safemarkdown(content)
         elif renderer == 'stylesheet':
-            self.page_content = SubredditStylesheetSource(content).render()
+            self.page_content = SubredditStylesheetSource(content, ignore_images=True).render()
+            self.page_images = SubredditStylesheetSource.get_stylesheet_images()
         elif renderer == "automoderator":
             self.page_content = AutoModeratorConfig(content).render()
         elif renderer == "rawcode":
