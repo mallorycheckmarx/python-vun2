@@ -1964,6 +1964,31 @@ class VFloat(VNumber):
     def cast(self, val):
         return float(val)
 
+    def param_docs(self):
+        # round self.min and self.max for human readable docs
+        min_num = self.round_for_docs(self.min)
+        max_num = self.round_for_docs(self.max)
+        if self.min is not None and self.max is not None:
+            description = "a floating point number or integer between %d and %d" % (min_num, max_num)
+        elif self.min is not None:
+            description = "a floating point number or integer greater than %d" % min_num
+        elif self.max is not None:
+            description = "a floating point number or integer less than %d" % max_num
+        else:
+            description = "a floating point number or integer"
+
+        if self.num_default is not None:
+            description += " (default: %d)" % self.num_default
+
+        return {self.param: description}
+
+    @staticmethod
+    def round_for_docs(num):
+        if num is None:
+            return num
+        ret = round(num, 3)
+        return ret if not ret.is_integer() else int(ret)
+            
 
 class VDecimal(VNumber):
     def cast(self, val):
