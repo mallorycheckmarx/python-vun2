@@ -954,7 +954,7 @@ class ApiController(RedditController):
         type_and_permissions=VPermissions('type', 'permissions'),
         note=VLength('note', 300),
         ban_reason=VLength('ban_reason', 100),
-        duration=VInt('duration', min=1, max=999),
+        duration=VFloat('duration', min=(1.0/24), max=999),
         ban_message=VMarkdownLength('ban_message', max_length=1000,
             empty_error=None),
     )
