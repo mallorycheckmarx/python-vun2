@@ -339,7 +339,7 @@ class Account(Thing):
             return False
 
         return True
-    
+
     @classmethod
     @memoize('account._by_name')
     def _by_name_cache(cls, name, allow_deleted=False):
@@ -364,7 +364,7 @@ class Account(Thing):
         if uid:
             return cls._byID(uid, data=True)
         else:
-            raise NotFound, 'Account %s' % name
+            raise NotFound('Account %s' % name)
 
     @classmethod
     def _names_to_ids(cls, names, ignore_missing=False, allow_deleted=False,
@@ -459,7 +459,7 @@ class Account(Thing):
         friend_ids = self.friend_ids()
         if len(friend_ids) <= limit:
             return friend_ids
-        
+
         with g.stats.get_timer("friends_query.%s" % data_value_name):
             result = self.sort_ids_by_data_value(
                 friend_ids, data_value_name, limit=limit, desc=True)
@@ -511,7 +511,7 @@ class Account(Thing):
             # New PW doesn't matter, they can't log in with it anyway.
             # Even if their PW /was/ 'banned' for some reason, this
             # will change the salt and thus invalidate the cookies
-            change_password(self, 'banned') 
+            change_password(self, 'banned')
 
             # deauthorize all access tokens
             from r2.models.token import OAuth2AccessToken
@@ -1070,7 +1070,7 @@ class AccountsByCanonicalEmail(tdb_cassandra.View):
             return []
         account_id36s = cls.get_time_sorted_columns(canonical).keys()
         return Account._byID36(account_id36s, data=True, return_dict=False)
-    
+
 
 class SubredditParticipationByAccount(tdb_cassandra.DenormalizedRelation):
     _use_db = True
