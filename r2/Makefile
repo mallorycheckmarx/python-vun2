@@ -86,8 +86,8 @@ clean_ini:
 	rm $(INIFILES)
 
 #################### CSS file lists
-SPRITED_STYLESHEETS += reddit.less compact.css modtools.less
-LESS_STYLESHEETS := wiki.less adminbar.less policies.less reddit-embed.less
+SPRITED_STYLESHEETS += reddit.less modtools.less
+LESS_STYLESHEETS := wiki.less adminbar.less policies.less reddit-embed.less compact.css
 OTHER_STYLESHEETS := mobile.css highlight.css
 
 #################### Static Files
@@ -134,7 +134,7 @@ CSS_SOURCE_DIR := $(STATIC_BUILD_DIR)/css
 PROCESSED_SPRITED_STYLESHEETS := $(addprefix $(STATIC_BUILD_DIR)/, $(SPRITED_STYLESHEETS:.less=.css))
 SPRITES := $(addprefix $(STATIC_BUILD_DIR)/, $(patsubst %.css,sprite-%.png, $(SPRITED_STYLESHEETS:.less=.css)))
 
-LESS_OUTPUTS := $(addprefix $(STATIC_BUILD_DIR)/, $(patsubst %.less,%.css, $(LESS_STYLESHEETS)))
+LESS_OUTPUTS := $(addprefix $(STATIC_BUILD_DIR)/, $(patsubst %.less,%.css, $(LESS_STYLESHEETS) $(SPRITED_STYLESHEETS)))
 
 MINIFIED_OTHER_STYLESHEETS := $(addprefix $(STATIC_BUILD_DIR)/, $(OTHER_STYLESHEETS))
 
