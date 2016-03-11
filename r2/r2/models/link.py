@@ -104,7 +104,8 @@ class Link(Thing, Printable):
                      suggested_sort=None,
                      over_18=False,
                      over_18_override=False,
-                     reported=0, num_comments=0,
+                     reported=0, reports_accepted=False,
+                     num_comments=0,
                      moderator_banned=False,
                      banned_before_moderator=False,
                      media_object=None,
@@ -1220,7 +1221,7 @@ class LegacySearchResultLink(Link):
 
 class Comment(Thing, Printable):
     _data_int_props = Thing._data_int_props + ('reported', 'gildings')
-    _defaults = dict(reported=0,
+    _defaults = dict(reported=0, reports_accepted=False,
                      parent_id=None,
                      moderator_banned=False,
                      new=False,
