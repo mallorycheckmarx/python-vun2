@@ -170,9 +170,7 @@
 
 <%def name="ignore_reports_toggle(thing)">
   <%
-    label = _("ignore reports")
-    if thing.ignore_reports and thing.reported > 0:
-      label += " ({0})".format(thing.reported)
+    label = _("ignore reports") if not thing.ignore_reports else _("unignore reports")
     event_action = "unignorereports" if thing.ignore_reports else "ignorereports"
   %>
   ${pretty_button(label, "big_mod_toggle", "'ignore_reports', 'unignore_reports'",
@@ -227,21 +225,25 @@
 </%def>
 
 <%def name="reports_button()">
-<li 
-    %if thing.mod_reports or thing.user_reports:
-      class="rounded reported-stamp stamp has-reasons access-required"
-      title="${_('click to show report reasons')}"
-    %else:
-      class="rounded reported-stamp stamp access-required"
-    %endif
-    data-event-action="viewreports"
-    >
-  ${strings.reports % thing.thing.reported}
-</li>
+  <%
+      if thing.mod_reports or thing.user_reports:
+          css_class = "rounded reported-stamp stamp has-reasons access-required"
+      else:
+          css_class = "rounded reported-stamp stamp access-required"
+      if thing.thing.reported:
+          ## something something cache keys
+          css_class += " new-reports"
+      title_str = _('click to show report reasons')
+      text_str = _("new reports ignored") if thing.ignore_reports else strings.reports % thing.thing.reported
+  %>
+  <li class="${css_class}" title="${title_str}" data-event-action="viewreports">
+    ${text_str}
+  </li>
 </%def>
 
 <%def name="report_reasons()">
-<ul class="report-reasons rounded">
+<% ulclass = "report-reasons rounded" if not thing.thing.reported else "report-reasons rounded new-reports" %>
+<ul class="${ulclass}">
   %if thing.mod_reports:
     <li class="report-reason-title">${_("moderator reports:")}</li>
     %for reason, user in thing.mod_reports:
@@ -362,7 +364,7 @@
     %endif
   %endif
 
-  %if thing.show_reports and not thing.show_spam:
+  %if thing.show_reports:
     ${reports_button()}
   %endif
 
@@ -372,7 +374,7 @@
     ${ignore_reports_toggle(thing.thing)}
   %endif
 
-  %if thing.show_reports and not thing.show_spam and (thing.mod_reports or thing.user_reports):
+  %if thing.show_reports and (thing.mod_reports or thing.user_reports):
     ${report_reasons()}
   %endif
 
@@ -450,7 +452,7 @@
       </li>
     %endif
 
-    %if thing.show_reports and not thing.show_spam:
+    %if thing.show_reports:
       ${reports_button()}
     %endif
 
@@ -460,7 +462,7 @@
       ${ignore_reports_toggle(thing.thing)}
     %endif
 
-    %if thing.show_reports and not thing.show_spam and (thing.mod_reports or thing.user_reports):
+    %if thing.show_reports and (thing.mod_reports or thing.user_reports):
       ${report_reasons()}
     %endif
 
