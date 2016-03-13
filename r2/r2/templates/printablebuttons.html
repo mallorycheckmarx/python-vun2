@@ -234,7 +234,12 @@
           ## something something cache keys
           css_class += " new-reports"
       title_str = _('click to show report reasons')
-      text_str = _("new reports ignored") if thing.ignore_reports else strings.reports % thing.thing.reported
+      if thing.ignore_reports:
+          text_str = _("new reports ignored")
+      elif thing.thing.reported:
+          text_str = strings.new_reports % dict(total=thing.thing.total_reports, new=thing.thing.reported)
+      else:
+          text_str = strings.reports % thing.thing.total_reports
   %>
   <li class="${css_class}" title="${title_str}" data-event-action="viewreports">
     ${text_str}

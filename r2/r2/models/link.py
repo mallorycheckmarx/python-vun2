@@ -704,8 +704,11 @@ class Link(Thing, Printable):
 
             if c.user_is_loggedin and c.user.in_timeout:
                 item.mod_reports, item.user_reports = [], []
+                item.total_reports = 0
             else:
                 item.mod_reports, item.user_reports = Report.get_reports(item)
+                item.total_reports = (len(item.mod_reports) +  # the amount of mod reports
+                                      sum(count for reason, count in item.user_reports))  # the total counts of user reports
 
             item.num = None
             item.permalink = item.make_permalink(item.subreddit)
@@ -1674,8 +1677,12 @@ class Comment(Thing, Printable):
 
             if c.user_is_loggedin and c.user.in_timeout:
                 item.mod_reports, item.user_reports = [], []
+                item.total_reports = 0
             else:
                 item.mod_reports, item.user_reports = Report.get_reports(item)
+                item.total_reports = (len(item.mod_reports) +  # the amount of mod reports
+                                      sum(count for reason, count in item.user_reports))  # the total counts of user reports
+
 
             # not deleted on profile pages,
             # deleted if spam and not author or admin

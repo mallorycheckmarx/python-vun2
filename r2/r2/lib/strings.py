@@ -53,6 +53,8 @@ string_dict = dict(
     time_approved="approved at %s",
     reports   = "reports: %d",
 
+    new_reports = _("reports: %(total)d (%(new)d new)"),
+
     submitting = _("submitting..."),
 
     # this accomodates asian languages which don't use spaces
