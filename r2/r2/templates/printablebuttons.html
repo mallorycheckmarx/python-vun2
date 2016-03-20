@@ -230,8 +230,7 @@
           css_class = "rounded reported-stamp stamp has-reasons access-required"
       else:
           css_class = "rounded reported-stamp stamp access-required"
-      if thing.thing.reported:
-          ## something something cache keys
+      if thing.thing.reported and not thing.ignore_reports:
           css_class += " new-reports"
       title_str = _('click to show report reasons')
       if thing.ignore_reports:
@@ -247,7 +246,7 @@
 </%def>
 
 <%def name="report_reasons()">
-<% ulclass = "report-reasons rounded" if not thing.thing.reported else "report-reasons rounded new-reports" %>
+<% ulclass = "report-reasons rounded" if (thing.ignore_reports or not thing.thing.reported) else "report-reasons rounded new-reports" %>
 <ul class="${ulclass}">
   %if thing.mod_reports:
     <li class="report-reason-title">${_("moderator reports:")}</li>
