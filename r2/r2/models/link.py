@@ -99,12 +99,12 @@ class LinkExists(Exception): pass
 # defining types
 class Link(Thing, Printable):
     _data_int_props = Thing._data_int_props + (
-        'num_comments', 'reported', 'comment_tree_id', 'gildings')
+        'num_comments', 'reported', 'reports_accepted', 'comment_tree_id', 'gildings')
     _defaults = dict(is_self=False,
                      suggested_sort=None,
                      over_18=False,
                      over_18_override=False,
-                     reported=0, reports_accepted=False,
+                     reported=0, reports_accepted=0,
                      num_comments=0,
                      moderator_banned=False,
                      banned_before_moderator=False,
@@ -707,8 +707,7 @@ class Link(Thing, Printable):
                 item.total_reports = 0
             else:
                 item.mod_reports, item.user_reports = Report.get_reports(item)
-                item.total_reports = (len(item.mod_reports) +  # the amount of mod reports
-                                      sum(count for reason, count in item.user_reports))  # the total counts of user reports
+                item.total_reports = item.reported + item.reports_accepted
 
             item.num = None
             item.permalink = item.make_permalink(item.subreddit)
@@ -1223,8 +1222,8 @@ class LegacySearchResultLink(Link):
 
 
 class Comment(Thing, Printable):
-    _data_int_props = Thing._data_int_props + ('reported', 'gildings')
-    _defaults = dict(reported=0, reports_accepted=False,
+    _data_int_props = Thing._data_int_props + ('reported', 'reports_accepted', 'gildings')
+    _defaults = dict(reported=0, reports_accepted=0,
                      parent_id=None,
                      moderator_banned=False,
                      new=False,
@@ -1680,8 +1679,7 @@ class Comment(Thing, Printable):
                 item.total_reports = 0
             else:
                 item.mod_reports, item.user_reports = Report.get_reports(item)
-                item.total_reports = (len(item.mod_reports) +  # the amount of mod reports
-                                      sum(count for reason, count in item.user_reports))  # the total counts of user reports
+                item.total_reports = item.reported + item.reports_accepted
 
 
             # not deleted on profile pages,

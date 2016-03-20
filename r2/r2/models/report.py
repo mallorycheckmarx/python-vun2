@@ -117,9 +117,9 @@ class Report(MultiRelation('report',
 
             for thing in cls_things:
                 if thing.reported > 0:
-                    thing.reported = 0
                     if isinstance(thing, (Link, Comment)):
-                        thing.reports_accepted = True
+                        thing._incr("reports_accepted", thing.reported)
+                    thing.reported = 0
                     thing._commit()
                     to_clear.append(thing)
 
@@ -128,7 +128,7 @@ class Report(MultiRelation('report',
     @classmethod
     def get_reports(cls, wrapped, max_user_reasons=20):
         """Get two lists of mod and user reports on the item."""
-        if ((wrapped.reported > 0 or getattr(wrapped, "reports_accepted", False))and
+        if ((wrapped.reported or getattr(wrapped, "reports_accepted", 0))and
                 (wrapped.can_ban or
                  getattr(wrapped, "promoted", None) and c.user_is_sponsor)):
             from r2.models import SRMember
@@ -178,7 +178,7 @@ class Report(MultiRelation('report',
     @classmethod
     def get_reasons(cls, wrapped):
         """Transition method in case API clients were already using this."""
-        if wrapped.can_ban and (wrapped.reported > 0 or getattr(wrapped, "reports_accepted", False)):
+        if wrapped.can_ban and (wrapped.reported or getattr(wrapped, "reports_accepted", 0)):
             return [("This attribute is deprecated. Please use mod_reports "
                      "and user_reports instead.")]
         else:
