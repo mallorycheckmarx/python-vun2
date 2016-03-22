@@ -3561,6 +3561,7 @@ class ApiController(RedditController):
                 return abort(403,'forbidden')
 
             if children:
+                children = list(set(children))
                 builder = CommentBuilder(link, CommentSortMenu.operator(sort),
                                          children=children,
                                          num=CHILD_FETCH_COUNT)
