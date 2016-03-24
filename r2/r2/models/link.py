@@ -2053,7 +2053,7 @@ class Message(Thing, Printable):
             if parent or to_subreddit or from_sr:
                 inbox_rel.append(ModeratorInbox._add(sr, m, 'inbox'))
 
-            if sr.is_moderator(author):
+            if sr.is_moderator_with_perms(author, 'mail'):
                 m.distinguished = 'yes'
                 m._commit()
 
@@ -2069,7 +2069,7 @@ class Message(Thing, Printable):
         # also, only global admins can be message spammed.
         if not skip_inbox and to and (not m._spam or to.name in g.admins):
             # if "to" is not a sr moderator they need to be notified
-            if not sr_id or not sr.is_moderator(to):
+            if not sr_id or not sr.is_moderator_with_perms(to, 'mail'):
                 # Record the inbox relation, but don't give the user
                 # an orangered, if they PM themselves.
                 # Don't notify on PMs from blocked users, either
@@ -2296,7 +2296,8 @@ class Message(Thing, Printable):
                 item.user_is_recipient = not user_is_sender
                 item.user_is_moderator = item.sr_id in user_mod_sr_ids
 
-                if sr_colors and item.user_is_moderator:
+                if (sr_colors and item.user_is_moderator and
+                    item.subreddit.is_moderator_with_perms(c.user, 'mail')):
                     item.accent_color = sr_colors.get(item.sr_id)
 
                 if item.subreddit.is_muted(item.author):
@@ -2410,7 +2411,8 @@ class Message(Thing, Printable):
                     item.body = _('[unblock user to see this message]')
 
             if item.sr_id and item.to:
-                item.to_is_moderator = item.to._id in mods_by_srid[item.sr_id]
+                item.to_is_moderator = (item.to._id in mods_by_srid[item.sr_id]
+                                        and item.subreddit.is_moderator_with_perms(item.to, 'mail'))
 
         if to_set_unread:
             unread_by_class = defaultdict(list)
