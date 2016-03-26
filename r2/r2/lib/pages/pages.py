@@ -589,8 +589,8 @@ class Reddit(Templated):
                     css_class="reddit-flair access-required",
                     data=data_attrs('flair')))
 
-        if is_single_subreddit and is_moderator_with_perms('config'):
-            # append automod button if they have an AutoMod configuration
+        if g.automoderator_account and is_single_subreddit and is_moderator_with_perms('config'):
+            # append automod button if AutoMod is enabled and they have an AutoMod configuration
             try:
                 WikiPage.get(c.site, "config/automoderator")
                 buttons.append(NamedButton(
