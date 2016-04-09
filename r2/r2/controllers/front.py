@@ -76,15 +76,22 @@ class FrontController(RedditController):
 
     allow_stylesheets = True
 
-    @validate(link=VLink('link_id'))
-    def GET_link_id_redirect(self, link):
-        if not link:
+    def _make_thing_redirect(self, thing, **kwargs):
+        """Return a redirect url for a thing (Link/Comment).
+
+        Sends a 404 if thing is None, 403 if the curret user
+        is not allowed to view the thing. kwargs are passed
+        into thing.make_permalink_slow(). force_domain is
+        set to True if not explicitly passed in kwargs.
+        """
+        if not thing:
             abort(404)
-        elif not link.subreddit_slow.can_view(c.user):
+        elif not thing.subreddit_slow.can_view(c.user):
             # don't disclose the subreddit/title of a post via the redirect url
             abort(403)
         else:
-            redirect_url = link.make_permalink_slow(force_domain=True)
+            kwargs.setdefault('force_domain', True)
+            redirect_url = thing.make_permalink_slow(**kwargs)
 
         query_params = dict(request.GET)
         if query_params:
@@ -93,6 +100,10 @@ class FrontController(RedditController):
             redirect_url = url.unparse()
 
         return self.redirect(redirect_url, code=301)
+
+    @validate(link=VLink('link_id'))
+    def GET_link_id_redirect(self, link):
+        return self._make_thing_redirect(link)
 
     @validate(article=VLink('article'),
               comment=VCommentID('comment'))
@@ -1340,11 +1351,9 @@ class FrontController(RedditController):
 
         return res
 
-    @validate(VAdmin(),
-              comment=VCommentByID('comment_id'))
+    @validate(comment=VCommentByID('comment_id'))
     def GET_comment_by_id(self, comment):
-        href = comment.make_permalink_slow(context=5, anchor=True)
-        return self.redirect(href)
+        return self._make_thing_redirect(comment, context=3, anchor=True)
 
     @validate(url=VRequired('url', None),
               title=VRequired('title', None),
