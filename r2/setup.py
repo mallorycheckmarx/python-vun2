@@ -48,7 +48,7 @@ else:
 try:
     from baseplate.integration.thrift.command import ThriftBuildPyCommand
 except ImportError:
-    print "Cannot find Baseplate. Skipping Thrift build."
+    print ("Cannot find Baseplate. Skipping Thrift build.")
 else:
     commands["build_py"] = ThriftBuildPyCommand
 
