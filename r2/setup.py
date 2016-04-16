@@ -33,7 +33,7 @@ commands = {}
 try:
     from Cython.Build import cythonize
 except ImportError:
-    print "Cannot find Cython. Skipping Cython build."
+    print ("Cannot find Cython. Skipping Cython build.")
     pyx_extensions = []
 else:
     pyx_files = []
