@@ -173,6 +173,8 @@ def set_api_docs(fn, simple_vals, param_vals, extra_vals=None):
         param_docs = validator.param_docs()
         if validator.docs:
             param_docs.update(validator.docs)
+        elif isinstance(validator, VNotInTimeout):
+            continue
         param_info.update(param_docs)
         if validator.notes:
             notes.append(validator.notes)
