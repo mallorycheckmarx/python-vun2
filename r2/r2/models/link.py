@@ -381,10 +381,14 @@ class Link(Thing, Printable):
             # never automatically hide user's own posts or stickies
             allow_auto_hide = (not wrapped.stickied and
                                self.author_id != user._id)
+            hide_if_upvoted = ((user.pref_hide_ups and wrapped.likes == True)
+                and not (is_mod and user.pref_mod_no_hide_ups))
+            hide_if_downvoted = ((user.pref_hide_downs and wrapped.likes == False)
+                and not (is_mod and user.pref_mod_no_hide_downs))
+            hide_if_threshold = (wrapped.score < user.pref_min_link_score
+                and not (is_mod and user.pref_mod_no_min_link_score))
             if (allow_auto_hide and
-                    ((user.pref_hide_ups and wrapped.likes == True) or
-                     (user.pref_hide_downs and wrapped.likes == False) or
-                     wrapped.score < user.pref_min_link_score)):
+                    (hide_if_upvoted or hide_if_downvoted or hide_if_threshold)):
                 return False
 
         # show NSFW to API and RSS users unless obey_over18=true
@@ -1748,7 +1752,9 @@ class Comment(Thing, Printable):
 
             item.collapsed = False
             distinguished = item.distinguished and item.distinguished != "no"
-            prevent_collapse = profilepage or user_is_admin or distinguished
+            item.user_is_moderator = item.sr_id in is_moderator_subreddits
+            mod_prevent_collapse = item.user_is_moderator and user.pref_mod_no_min_comment_score
+            prevent_collapse = profilepage or user_is_admin or distinguished or mod_prevent_collapse
 
             if (item.deleted and item.subreddit.collapse_deleted_comments and
                     not prevent_collapse):
@@ -1788,8 +1794,6 @@ class Comment(Thing, Printable):
                 item.score_hidden = not item.is_author
             else:
                 item.score_hidden = False
-
-            item.user_is_moderator = item.sr_id in is_moderator_subreddits
 
             if item.score_hidden and c.user_is_loggedin:
                 if c.user_is_admin or item.user_is_moderator:
