@@ -30,13 +30,17 @@
 %>
 <%namespace file="utils.html" import="md, error_field, language_tool, plain_link"/>
 
-<%def name="checkbox(text, name, disabled = False, disabled_text = '', prefix = 'pref_')">
+<%def name="checkbox(text, name, disabled=False, disabled_text='', prefix='pref_', is_linker=False, linked_pref=None, onchange='return toggle_linked_pref(this)')">
     <input name="${name}" id="${name}" type="checkbox"
                %if getattr(c.user, prefix + name):
                  checked="checked"
                %endif
                %if disabled:
                  disabled="disabled"
+               %endif
+               %if is_linker and linked_pref:
+                 onchange="${onchange}"
+                 data-linked-pref="${linked_pref}"
                %endif
                />
     <label class="${'disabled' if disabled else ''}" for="${name}">
@@ -77,9 +81,15 @@
   <br/>
 </%def>
 
-<%def name="num_input(s, name)">
-  <input type="text" class="number" size="4" maxlength="4"
-         name="${name}" value="${s if s is not None else ''}">
+<%def name="num_input(s, name, is_linker=False, linked_pref=None, onkeyup='return disable_linked_pref_on_val(this, \'\')')">
+  <input type="number" class="number" size="4" maxlength="4"
+         name="${name}" value="${s if s is not None else ''}"
+         %if is_linker and linked_pref:
+           onkeyup="${onkeyup}"
+           onchange="${onkeyup}"
+           data-linked-pref="${linked_pref}"
+         %endif
+         />
 </%def>
 
 <%def name="text_input(s, name)">
@@ -142,7 +152,7 @@
       ${media_radio("on", _("show thumbnails next to links"))}
       ${media_radio("off", _("don't show thumbnails next to links"))}
       ${media_radio("subreddit", _("show thumbnails based on that subreddit's media preferences"))}
-     ${checkbox(_("make safe(r) for work "), "no_profanity", disabled = not c.user.pref_over_18, disabled_text = "(requires over 18)")}
+     ${checkbox(_("make safe(r) for work "), "no_profanity", disabled = not c.user.pref_over_18, disabled_text="(requires over 18)", is_linker=True, linked_pref='label_nsfw')}
       &#32;
       <span class="details">
         ${_("(Don't show thumbnails next to anything labeled NSFW)")}
@@ -180,11 +190,11 @@
           ${_("(such as the source subreddit or the content author's url/name)")}
         </span>
       </p>
-      <p>${checkbox(_("don't show me submissions after I've upvoted them"), "hide_ups")}
+      <p>${checkbox(_("don't show me submissions after I've upvoted them"), "hide_ups", is_linker=True, linked_pref='mod_no_hide_ups')}
          &#32;
          <span class="details">${_("(except my own)")}</span>
       </p>
-      <p>${checkbox(_("don't show me submissions after I've downvoted them"), "hide_downs")}
+      <p>${checkbox(_("don't show me submissions after I've downvoted them"), "hide_downs", is_linker=True, linked_pref='mod_no_hide_downs')}
          &#32;
          <span class="details">${_("(except my own)")}</span>
       </p>
@@ -193,7 +203,7 @@
       </p>
       <%
          input = unsafe(capture(num_input, c.user.pref_min_link_score,
-         'min_link_score'))
+         'min_link_score', True, 'mod_no_min_link_score'))
          %>
       <p>
       ${_wsf("don't show me submissions with a score less than %(num)s", num=input)}
@@ -217,7 +227,7 @@
     </p>
     <% 
        input = unsafe(capture(num_input, c.user.pref_min_comment_score,
-                              'min_comment_score'))
+                              'min_comment_score', True, 'mod_no_min_comment_score'))
        %>
     <p>
       ${_wsf("don't show me comments with a score less than %(num)s", num=input)}
@@ -266,8 +276,6 @@
         <br>
         ${checkbox(_("send messages as emails"), "email_messages", disabled=(not c.user.email_verified), disabled_text=_("requires a verified email"))}
       %endif
-      <br>
-      ${checkbox(_("enable threaded modmail display"), "threaded_modmail")}
     </td>
   </tr>
   <tr>
@@ -355,6 +363,23 @@
     </td>
   </tr>
   %endif
+  %endif
+
+  %if c.user.is_moderator_somewhere:
+  <tr>
+    <th>${_("mod options")}</th>
+    <td class="prefright">
+      ${checkbox(_("enable threaded modmail display"), "threaded_modmail")}
+      <br>
+      ${checkbox(_("Ignore the \"don't show me submissions after I've upvoted them\" setting for subs I moderate"), "mod_no_hide_ups", disabled=not c.user.pref_hide_ups)}
+      <br>
+      ${checkbox(_("Ignore the \"don't show me submissions after I've downvoted them\" setting for subs I moderate"), "mod_no_hide_downs", disabled=not c.user.pref_hide_downs)}
+      <br>
+      ${checkbox(_("Ignore the \"don't show me submissions with a score less than X\" setting for subs I moderate"), "mod_no_min_link_score", disabled=c.user.pref_min_link_score is None)}
+      <br>
+      ${checkbox(_("Ignore the \"don't show me comments with a score less than X\" setting for subs I moderate"), "mod_no_min_comment_score", disabled=c.user.pref_min_comment_score is None)}
+    </td>
+  </tr>
   %endif
 
   %if c.user.gold:

@@ -878,6 +878,28 @@ function big_mod_toggle(el, press_action, unpress_action) {
     return false
 }
 
+/* preferences */
+function toggle_linked_pref(el) {
+    var $this = $(el);
+    var $other = $('#' + $this.data('linked-pref'));
+    var $otherLabel = $('[for="' + $this.data('linked-pref') + '"]');
+    $other.prop('disabled', !$other.prop('disabled'));
+    $otherLabel.toggleClass('disabled');
+}
+
+function disable_linked_pref_on_val(el, val) {
+    var $this = $(el);
+    var $other = $('#' + $this.data('linked-pref'));
+    var $otherLabel = $('[for="' + $this.data('linked-pref') + '"]');
+    if $this.val() === val {
+        $other.prop('disabled', true)
+        $otherLabel.addClass('disabled');
+    } else {
+        $other.prop('disabled', false)
+        $otherLabel.removeClass('disabled');
+    }
+}
+
 /* The ready method */
 $(function() {
         $("body").click(close_menus);

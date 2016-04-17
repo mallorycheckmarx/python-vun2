@@ -155,6 +155,10 @@ class Account(Thing):
                      pref_threaded_modmail=False,
                      in_timeout=False,
                      has_used_mobile_app=False,
+                     pref_mod_no_hide_ups=False,
+                     pref_mod_no_hide_downs=False,
+                     pref_mod_no_min_link_score=False,
+                     pref_mod_no_min_comment_score=False,
                      )
     _preference_attrs = tuple(k for k in _defaults.keys()
                               if k.startswith("pref_"))
