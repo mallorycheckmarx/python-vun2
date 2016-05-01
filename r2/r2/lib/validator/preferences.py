@@ -90,6 +90,10 @@ PREFS_VALIDATORS = dict(
     pref_beta=VBoolean('beta'),
     pref_legacy_search=VBoolean('legacy_search'),
     pref_threaded_modmail=VBoolean('threaded_modmail', False),
+    pref_mod_no_hide_ups=VBoolean('mod_no_hide_ups', False),
+    pref_mod_no_hide_downs=VBoolean('mod_no_hide_downs', False),
+    pref_mod_no_min_link_score=VBoolean('mod_no_min_link_score', False)
+    pref_mod_no_min_comment_score=VBoolean('mod_no_min_link_score', False),
 )
 
 
