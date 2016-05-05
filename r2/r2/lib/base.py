@@ -44,8 +44,11 @@ logging.getLogger('scgi-wsgi').setLevel(logging.CRITICAL)
 
 
 def is_local_address(ip):
-    # TODO: support the /20 and /24 private networks? make this configurable?
-    return ip.startswith('10.') or ip == "127.0.0.1"
+    if hasattr(g, 'trusted_proxy_ips'):
+        trusted_ips = [x.strip() for x in g.trusted_proxy_ips.split(',')]
+    else:
+        trusted_ips = []
+    return ip.startswith('10.') or ip == "127.0.0.1" or ip in trusted_ips
 
 def abort(code_or_exception=None, detail="", headers=None, comment=None,
           **kwargs):
@@ -104,7 +107,7 @@ class BaseController(WSGIController):
             request.ip = cdn_ip
             request.via_cdn = True
         elif g.trust_local_proxies and forwarded_for and is_local_address(remote_addr):
-            request.ip = forwarded_for.split(',')[-1]
+            request.ip = forwarded_for.split(',')[0].strip()
         else:
             request.ip = environ['REMOTE_ADDR']
 
