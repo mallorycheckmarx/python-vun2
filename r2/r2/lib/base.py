@@ -45,13 +45,10 @@ logging.getLogger('scgi-wsgi').setLevel(logging.CRITICAL)
 
 
 def is_trusted_proxy(ip):
-    ip = ipaddress.IPv4Address(ip)
-    trusted_ips = getattr(g, 'trusted_proxy_ips', '').strip()
-    if not trusted_ips:
+    if not hasattr(g, 'trusted_proxy_ranges'):
         return False
-    trusted_ips = [x.strip() for x in trusted_ips.split(',')]
-    trusted_ips = [ipaddress.IPv4Network(x.strip(), False) for x in trusted_ips]
-    for each in trusted_ips:
+    ip = ipaddress.IPv4Address(ip)
+    for each in g.trusted_proxy_ranges:
         if ip in each:
             return True
     return False

@@ -340,6 +340,10 @@ class Globals(object):
         ConfigValue.baseplate(baseplate_config.Optional(baseplate_config.Endpoint)): [
             "activity_endpoint",
         ],
+
+        ConfigValue.tuple_of(ConfigValue.baseplate(ipaddress.IPv4Network)): [
+            "trusted_proxy_ranges",
+        ],
     }
 
     live_config_spec = {
