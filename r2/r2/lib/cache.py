@@ -275,6 +275,61 @@ class CMemcache(CacheUtils):
         return '<%s(%r)>' % (self.__class__.__name__,
                              self.servers)
 
+
+class Mcrouter(CMemcache):
+    """Wrapper class to make mcrouter appear like a regular memcached client.
+
+    Expected behavior (benefits of mcrouter):
+    * get() with a cache unresponsive will return `None` to be interpreted as a
+      cache miss rather than raising MemcachedError.
+    * get_multi() with a cache unresponsive returns only the values that were
+      retrieved.
+
+    Error cases:
+    * set() with a cache unresponsive will raise a ServerError.
+    * set_multi() with a cache unresponsive will raise a ServerError. Some of
+      the writes may have succeeded, which is the same behavior in mcrouter and
+      memcached.
+    * add() same as set()
+    * add_multi() same as set_multi()
+
+    In all cases where mcrouter raises a ServerError memcached would raise a
+    MemcachedError. This behavior is acceptable because ServerError inherits
+    from MemcachedError.
+
+    Special cases:
+    * set() if we are using prefix routing and the key doesn't match any routes
+      mcrouter will return `False`. This is converted to a MemcachedError but
+      it's possibly more correct to depend on the client checking the return
+      value and deciding how to proceed.
+
+    Unhandled cases:
+    * delete() with a cache unresponsive will return `False`, but memcached will
+      raise a MemcachedError. This can't be simply interpreted as the error case
+      because `False` is the correct return when deleting a key that doesn't
+      exist. The caller must check the return value.
+    * delete_multi() with a cache unresponsive will return `False`, but
+      memcached will raise a MemcachedError. Same logic follows as delete().
+    * incr() with a cache unresponsive will raise a NotFound exception, which is
+      the same error as attempting to incr an un-set key.
+    * incr_multi() with a cache unresponsive will raise a NotFound exception,
+      but memcached will raise a MemcachedError. This can't be interpreted as
+      being the error case and replaced with a MemcachedError because NotFound
+      is a valid exception when attempting to incr keys that don't exist.
+
+    """
+
+    def set(self, key, val, time=0):
+        success = CMemcache.set(self, key, val, time)
+
+        if not success:
+            # If we are using prefix routing and the key doesn't match any
+            # routes mcrouter will return `False`.
+            raise MemcachedError("set failed")
+        else:
+            return True
+
+
 class HardCache(CacheUtils):
     backend = None
     permanent = True
@@ -466,16 +521,20 @@ class TransitionalCache(CacheUtils):
         else:
             return self.replacement.caches
 
-    def transform_memcache_key(self, args):
+    def transform_memcache_key(self, args, kwargs):
         if self.key_transform:
             old_key = args[0]
+            prefix = kwargs.get("prefix", "")
+
             if isinstance(old_key, dict):  # multiget passes a dict
-                new_key = {self.key_transform(k): v for k,v in
-                           old_key.iteritems()}
+                new_key = {
+                    self.key_transform(k, prefix): v
+                    for k, v in old_key.iteritems()
+                }
             elif isinstance(old_key, list):
-                new_key = [self.key_transform(k) for k in old_key]
+                new_key = [self.key_transform(k, prefix) for k in old_key]
             else:
-                new_key = self.key_transform(old_key)
+                new_key = self.key_transform(old_key, prefix)
 
             return (new_key,) + args[1:]
         else:
@@ -486,7 +545,15 @@ class TransitionalCache(CacheUtils):
             if self.read_original:
                 return getattr(self.original, fn_name)(*args, **kwargs)
             else:
-                args = self.transform_memcache_key(args)
+                args = self.transform_memcache_key(args, kwargs)
+
+                # remove the prefix argument because the transform fn has
+                # already tacked that onto the keys
+                try:
+                    kwargs.pop("prefix")
+                except KeyError:
+                    pass
+
                 return getattr(self.replacement, fn_name)(*args, **kwargs)
         return transitional_cache_get_fn
 
@@ -497,7 +564,15 @@ class TransitionalCache(CacheUtils):
     def make_set_fn(fn_name):
         def transitional_cache_set_fn(self, *args, **kwargs):
             ret_original = getattr(self.original, fn_name)(*args, **kwargs)
-            args = self.transform_memcache_key(args)
+            args = self.transform_memcache_key(args, kwargs)
+
+            # remove the prefix argument because the transform fn has
+            # already tacked that onto the keys
+            try:
+                kwargs.pop("prefix")
+            except KeyError:
+                pass
+
             ret_replacement = getattr(self.replacement, fn_name)(*args, **kwargs)
             if self.read_original:
                 return ret_original
