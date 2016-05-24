@@ -274,11 +274,10 @@ class Builder(object):
                         w._spam = False
                         w.use_big_modbuttons = False
 
-                elif (getattr(item, 'reported', 0) > 0
-                      and (not getattr(item, 'ignore_reports', False) or
-                           c.user_is_admin)):
+                if (getattr(item, 'reported', 0) or  # there's new reports
+                        getattr(item, 'reports_accepted', 0)):  # there's old reports
                     w.show_reports = True
-                    w.use_big_modbuttons = True
+                    w.use_big_modbuttons = bool(item.reported) or self.spam_listing # it's new or it's in a spam listing
 
                     # report_count isn't used in any template, but add it to
                     # the Wrapped so it's pulled into the render cache key in

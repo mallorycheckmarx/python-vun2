@@ -99,12 +99,13 @@ class LinkExists(Exception): pass
 # defining types
 class Link(Thing, Printable):
     _data_int_props = Thing._data_int_props + (
-        'num_comments', 'reported', 'comment_tree_id', 'gildings')
+        'num_comments', 'reported', 'reports_accepted', 'comment_tree_id', 'gildings')
     _defaults = dict(is_self=False,
                      suggested_sort=None,
                      over_18=False,
                      over_18_override=False,
-                     reported=0, num_comments=0,
+                     reported=0, reports_accepted=0,
+                     num_comments=0,
                      moderator_banned=False,
                      banned_before_moderator=False,
                      media_object=None,
@@ -708,8 +709,10 @@ class Link(Thing, Printable):
 
             if c.user_is_loggedin and c.user.in_timeout:
                 item.mod_reports, item.user_reports = [], []
+                item.total_reports = 0
             else:
                 item.mod_reports, item.user_reports = Report.get_reports(item)
+                item.total_reports = item.reported + item.reports_accepted
 
             item.num = None
             item.permalink = item.make_permalink(item.subreddit)
@@ -1235,8 +1238,8 @@ class LegacySearchResultLink(Link):
 
 
 class Comment(Thing, Printable):
-    _data_int_props = Thing._data_int_props + ('reported', 'gildings')
-    _defaults = dict(reported=0,
+    _data_int_props = Thing._data_int_props + ('reported', 'reports_accepted', 'gildings')
+    _defaults = dict(reported=0, reports_accepted=0,
                      parent_id=None,
                      moderator_banned=False,
                      new=False,
@@ -1698,8 +1701,11 @@ class Comment(Thing, Printable):
 
             if c.user_is_loggedin and c.user.in_timeout:
                 item.mod_reports, item.user_reports = [], []
+                item.total_reports = 0
             else:
                 item.mod_reports, item.user_reports = Report.get_reports(item)
+                item.total_reports = item.reported + item.reports_accepted
+
 
             # not deleted on profile pages,
             # deleted if spam and not author or admin
