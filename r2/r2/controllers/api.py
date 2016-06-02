@@ -114,8 +114,16 @@ from r2.lib.filters import safemarkdown
 from r2.lib.media import str_to_image
 from r2.controllers.api_docs import api_doc, api_section
 from r2.controllers.oauth2 import require_oauth2_scope, allow_oauth2_access
-from r2.lib.template_helpers import add_sr, get_domain, make_url_protocol_relative
-from r2.lib.system_messages import notify_user_added, send_ban_message
+from r2.lib.template_helpers import (
+    add_sr,
+    get_domain,
+    make_url_protocol_relative,
+)
+from r2.lib.system_messages import (
+    notify_user_added,
+    send_ban_message,
+    send_mod_removal_message,
+)
 from r2.controllers.ipn import generate_blob, update_blob
 from r2.controllers.login import handle_login, handle_register
 from r2.lib.lock import TimeoutExpired
@@ -231,9 +239,11 @@ class ApiController(RedditController):
 
         """
         if c.user_is_loggedin:
-            return Wrapped(c.user).render()
+            user_data = Wrapped(c.user).render()
+            user_data['data'].update({'features': feature.all_enabled(c.user)})
+            return user_data
         else:
-            return {}
+            return {'data': {'features': feature.all_enabled(None)}}
 
     @json_validate(user=VUname(("user",)))
     @api_doc(api_section.users)
@@ -814,20 +824,32 @@ class ApiController(RedditController):
                 if type == 'muted':
                     required_perms.append('mail')
 
-        if (not c.user_is_admin
-            and (type in self._sr_friend_types
-                 and not container.is_moderator_with_perms(
-                     c.user, *required_perms))):
+        if (
+            not c.user_is_admin and
+            type in self._sr_friend_types and
+            not container.is_moderator_with_perms(c.user, *required_perms)
+        ):
             abort(403, 'forbidden')
-        if (type == 'moderator' and not
-            (c.user_is_admin or container.can_demod(c.user, victim))):
+        if (
+            type == "moderator" and
+            not c.user_is_admin and
+            not container.can_demod(c.user, victim)
+        ):
             abort(403, 'forbidden')
+
         # if we are (strictly) unfriending, the container had better
         # be the current user.
         if type in ("friend", "enemy") and container != c.user:
             abort(403, 'forbidden')
+
         fn = getattr(container, 'remove_' + type)
         new = fn(victim)
+
+        # for mod removals, let the now ex-mod know (NOTE: doing this earlier
+        # will make the message show up in their mod inbox, which they will
+        # immediately lose access to.)
+        if new and type == 'moderator':
+            send_mod_removal_message(container, c.user, victim)
 
         # Log this action
         if new and type in self._sr_friend_types:
@@ -1728,6 +1750,31 @@ class ApiController(RedditController):
         thing=VByName('id'),
     )
     @api_doc(api_section.messages)
+    def POST_del_msg(self, thing):
+        """Delete messages from the recipient's view of their inbox."""
+        if not thing:
+            return
+
+        if not isinstance(thing, Message):
+            return
+
+        if thing.to_id != c.user._id:
+            return
+
+        thing.del_on_recipient = True
+        thing._commit()
+
+        # report the message deletion to data pipeline
+        g.events.message_event(thing, event_type="ss.delete_message",
+                               request=request, context=c)
+
+    @require_oauth2_scope("privatemessages")
+    @noresponse(
+        VUser(),
+        VModhash(),
+        thing=VByName('id'),
+    )
+    @api_doc(api_section.messages)
     def POST_block(self, thing):
         '''For blocking via inbox.'''
         if not thing:
@@ -2117,10 +2164,9 @@ class ApiController(RedditController):
     @validatedForm(
         VUser(),
         VModhash(),
-        VRatelimitImproved(prefix='share', max_usage=g.RL_SHARE_MAX_REQS,
-                           rate_user=True, rate_ip=True),
+        VShareRatelimit(),
         share_to=ValidEmailsOrExistingUnames("share_to"),
-        message=VLength("message", max_length=1000), 
+        message=VLength("message", max_length=1000),
         link=VByName('parent', thing_cls=Link),
     )
     def POST_share(self, shareform, jquery, share_to, message, link):
@@ -2216,7 +2262,7 @@ class ApiController(RedditController):
         g.stats.simple_event('share.pm_sent', len(users))
 
         # Set the ratelimiter.
-        VRatelimitImproved.ratelimit('share', rate_user=True, rate_ip=True)
+        VShareRatelimit.ratelimit()
 
     @require_oauth2_scope("vote")
     @noresponse(VUser(),
@@ -2294,11 +2340,21 @@ class ApiController(RedditController):
         `op` should be `save` to update the contents of the stylesheet.
 
         """
-        
-        css_errors, parsed = c.site.parse_css(stylesheet_contents)
 
         if g.css_killswitch:
             return abort(403, 'forbidden')
+
+        css_errors, parsed = c.site.parse_css(stylesheet_contents)
+
+        # The hook passes errors back by setting them on the form.
+        hooks.get_hook('subreddit.css.validate').call(
+            request=request, form=form, op=op,
+            stylesheet_contents=stylesheet_contents,
+            parsed_stylesheet=parsed,
+            css_errors=css_errors,
+            subreddit=c.site,
+            user=c.user
+        )
 
         if css_errors:
             error_items = [CssError(x).render(style='html') for x in css_errors]
@@ -2316,7 +2372,7 @@ class ApiController(RedditController):
         VNotInTimeout().run(action_name="editsettings",
             details_text="%s_stylesheet" % op, target=c.site)
 
-        if op == 'save':
+        if op == 'save' and not form.has_error():
             wr = c.site.change_css(stylesheet_contents, parsed, reason=reason)
             form.find('.errors').hide()
             form.set_text(".status", _('saved'))

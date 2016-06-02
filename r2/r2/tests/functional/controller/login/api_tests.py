@@ -19,5 +19,22 @@
 # All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
+from r2.tests import RedditControllerTestCase
+from common import LoginRegBase
 
-from r2.config.feature.feature import is_enabled, variant, all_enabled
+
+class LoginRegTests(LoginRegBase, RedditControllerTestCase):
+    CONTROLLER = "api"
+
+    def setUp(self):
+        RedditControllerTestCase.setUp(self)
+        LoginRegBase.setUp(self)
+
+    def assert_success(self, res):
+        self.assertEqual(res.status, 200)
+        self.assertTrue("error" not in res)
+
+    def assert_failure(self, res, code=None):
+        self.assertEqual(res.status, 200)
+        self.assertTrue("error" in res)
+        self.assertTrue(code in res)

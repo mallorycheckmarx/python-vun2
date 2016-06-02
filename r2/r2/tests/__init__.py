@@ -37,7 +37,12 @@ import paste.fixture
 import paste.script.appinstall
 from paste.deploy import loadapp
 
-__all__ = ['RedditTestCase']
+from routes.util import url_for
+from r2.lib.utils import query_string
+from r2.lib import eventcollector
+
+
+__all__ = ['RedditTestCase', 'RedditControllerTestCase']
 
 here_dir = os.path.dirname(os.path.abspath(__file__))
 conf_dir = os.path.dirname(os.path.dirname(here_dir))
@@ -102,7 +107,10 @@ class MockAmqp(object):
         if count is None:
             self.test_cls.assertTrue(bool(self.queue.get(name)))
         else:
-            self.test_cls.assertEqual(len(self.queue[name]), count)
+            err = "expected %d events in queue, saw %d" % (
+                count, len(self.queue)
+            )
+            assert len(self.queue) == count, err
 
     def assert_event_item(self, expected_data, name="event_collector"):
         self.assert_item_count(name, count=1)
@@ -146,11 +154,6 @@ class RedditTestCase(TestCase):
             paste.registry.restorer.restoration_begin(request_id)
         paste.registry.restorer.restoration_begin(request_id)
 
-        _app_context = True
-
-    def __init__(self, *args, **kwargs):
-        TestCase.__init__(self, *args, **kwargs)
-
     def assert_same_dict(self, data, expected_data, prefix=None):
         prefix = prefix or []
         for k in set(data.keys() + expected_data.keys()):
@@ -166,6 +169,26 @@ class RedditTestCase(TestCase):
                         ".".join(current_prefix), got, want
                     )
                 )
+
+    def mock_eventcollector(self):
+        """Mock out the parts of the event collector which write to the queue.
+
+        Also mocks `domain` and `_datetime_to_millis` as it makes writing tests
+        easier since we pass in mock data to the events as well.
+        """
+        p = patch.object(eventcollector.json, "dumps", lambda x: x)
+        p.start()
+        self.addCleanup(p.stop)
+
+        amqp = MockAmqp(self)
+        self.amqp = self.autopatch(g.events, "queue", amqp)
+
+        self.domain_mock = self.autopatch(eventcollector, "domain")
+
+        self.created_ts_mock = MagicMock(name="created_ts")
+        self._datetime_to_millis = self.autopatch(
+            eventcollector, "_datetime_to_millis",
+            return_value=self.created_ts_mock)
 
     def autopatch(self, obj, attr, *a, **kw):
         """Helper method to patch an object and automatically cleanup."""
@@ -189,15 +212,6 @@ class RedditTestCase(TestCase):
         g.live_config[k] = v
         self.addCleanup(cleanup)
 
-    def patch_eventcollector(self):
-        """Helper method to patch the event collector (g.events).
-
-        Rather than actually enqueuing data in amqp, this creates and returns a
-        MockAmqp object which stores all items enqueued."""
-        amqp = MockAmqp(self)
-        self.autopatch(g.events, "queue", amqp)
-        return amqp
-
 
 class NonCache(object):
     def get(self, *a, **kw):
@@ -212,8 +226,16 @@ class NonCache(object):
     def set_multi(self, *a, **kw):
         return
 
+    def add(self, *a, **kw):
+        return
+
+    def incr(self, *a, **kw):
+        return
+
 
 class RedditControllerTestCase(RedditTestCase):
+    CONTROLLER = None
+    ACTIONS = {}
 
     def setUp(self):
         super(RedditControllerTestCase, self).setUp()
@@ -240,6 +262,43 @@ class RedditControllerTestCase(RedditTestCase):
             cache=NonCache(),
         )
 
+        self.mock_eventcollector()
+
+        self.simple_event = self.autopatch(g.stats, "simple_event")
+
+        self.user_agent = "Hacky McBrowser/1.0"
+        self.device_id = None
+
         # Lastly, pull the app out of test mode so it'll load controllers on
         # first use
         RedditApp.test_mode = False
+
+    def do_post(self, action, params, headers=None, expect_errors=False):
+
+        assert self.CONTROLLER is not None
+
+        body = self.make_qs(**params)
+
+        headers = headers or {}
+        headers.setdefault('User-Agent', self.user_agent)
+        if self.device_id:
+            headers.setdefault('Client-Vendor-ID', self.device_id)
+        for k, v in self.additional_headers(headers, body).iteritems():
+            headers.setdefault(k, v)
+        headers = {k: v for k, v in headers.iteritems() if v is not None}
+        return self.app.post(
+            url_for(controller=self.CONTROLLER,
+                    action=self.ACTIONS.get(action, action)),
+            extra_environ={"REMOTE_ADDR": "1.2.3.4"},
+            headers=headers,
+            params=body,
+            expect_errors=expect_errors,
+        )
+
+    def make_qs(self, **kw):
+        """Convert the provided kw into a kw string suitable for app.post."""
+        return query_string(kw).lstrip("?")
+
+    def additional_headers(self, headers, body):
+        """Additional generated headers to be added to the request."""
+        return {}

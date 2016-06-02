@@ -214,7 +214,7 @@ class SubredditExists(Exception): pass
 
 
 class Subreddit(Thing, Printable, BaseSite):
-    _cache = g.transitionalcache
+    _cache = g.thingcache
 
     # Note: As of 2010/03/18, nothing actually overrides the static_path
     # attribute, even on a cname. So c.site.static_path should always be
@@ -351,6 +351,10 @@ class Subreddit(Thing, Printable, BaseSite):
     )
 
     MAX_STICKIES = 2
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "sr:"
 
     def __setattr__(self, attr, val, make_dirty=True):
         if attr in self._derived_attrs:
@@ -1287,7 +1291,7 @@ class Subreddit(Thing, Printable, BaseSite):
     @classmethod
     def get_promote_srid(cls):
         try:
-            return cls._by_name(g.promo_sr_name)._id
+            return cls._by_name(g.promo_sr_name, stale=True)._id
         except NotFound:
             return None
 
@@ -1434,11 +1438,11 @@ class SubscribedSubredditsByAccount(tdb_cassandra.DenormalizedRelation):
     @classmethod
     def get_all_sr_ids(cls, user):
         key = cls.__name__ + user._id36
-        sr_ids = g.thing_cache.get(key)
+        sr_ids = g.cassandra_local_cache.get(key)
         if sr_ids is None:
             r = cls._cf.xget(user._id36)
             sr_ids = [int(sr_id36, 36) for sr_id36, val in r]
-            g.thing_cache.set(key, sr_ids)
+            g.cassandra_local_cache.set(key, sr_ids)
 
         return sr_ids
 

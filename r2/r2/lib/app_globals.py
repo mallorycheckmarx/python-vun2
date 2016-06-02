@@ -345,6 +345,10 @@ class Globals(object):
         ConfigValue.tuple_of(ConfigValue.baseplate(ipaddress.IPv4Network)): [
             "trusted_proxy_ranges",
         ],
+
+        ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
+            'emr_traffic_tags',
+        ],
     }
 
     live_config_spec = {
@@ -877,29 +881,14 @@ class Globals(object):
         cache_chains.update(cache=self.cache)
 
         if stalecaches:
-            self.maincache = StaleCacheChain(
+            self.thingcache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
                 self.mcrouter,
             )
         else:
-            self.maincache = CacheChain((localcache_cls(), self.mcrouter))
-        cache_chains.update(maincache=self.maincache)
-
-        def rewrite_subreddit_key(key, prefix=''):
-            old_prefix = "Subreddit_"
-            new_prefix = "sr:"
-            key = prefix + str(key)
-            assert key.startswith(old_prefix)
-            sr_id = key[len(old_prefix):]
-            return new_prefix + sr_id
-
-        self.transitionalcache = TransitionalCache(
-            original_cache=self.cache,
-            replacement_cache=self.maincache,
-            read_original=True,
-            key_transform=rewrite_subreddit_key,
-        )
+            self.thingcache = CacheChain((localcache_cls(), self.mcrouter))
+        cache_chains.update(thingcache=self.thingcache)
 
         if stalecaches:
             self.memoizecache = StaleCacheChain(
@@ -952,21 +941,19 @@ class Globals(object):
         ))
         cache_chains.update(pagecache=self.pagecache)
 
-        # the thing_cache is used in tdb_cassandra.
-        self.thing_cache = CacheChain((localcache_cls(),), check_keys=False)
-        cache_chains.update(thing_cache=self.thing_cache)
+        # cassandra_local_cache is used for request-local caching in tdb_cassandra
+        self.cassandra_local_cache = localcache_cls()
+        cache_chains.update(cassandra_local_cache=self.cassandra_local_cache)
 
         if stalecaches:
             permacache_cache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
                 permacache_memcaches,
-                check_keys=False,
             )
         else:
             permacache_cache = CacheChain(
                 (localcache_cls(), permacache_memcaches),
-                check_keys=False,
             )
         cache_chains.update(permacache=permacache_cache)
 
@@ -994,7 +981,9 @@ class Globals(object):
                     chain = chain.read_chain
 
                 chain.reset()
-                if isinstance(chain, StaleCacheChain):
+                if isinstance(chain, LocalCache):
+                    continue
+                elif isinstance(chain, StaleCacheChain):
                     chain.stats = StaleCacheStats(self.stats, name)
                 else:
                     chain.stats = CacheStats(self.stats, name)

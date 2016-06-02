@@ -53,7 +53,6 @@ connection_pools = g.cassandra_pools
 default_connection_pool = g.cassandra_default_pool
 
 keyspace = 'reddit'
-thing_cache = g.thing_cache
 disallow_db_writes = g.disallow_db_writes
 tz = g.tz
 log = g.log
@@ -299,6 +298,9 @@ class ThingBase(object):
     # the columns in a row when there are more than the per-call maximum.
     _fetch_all_columns = False
 
+    # request-local cache to avoid duplicate lookups from hitting C*
+    _local_cache = g.cassandra_local_cache
+
     def __init__(self, _id = None, _committed = False, _partial = None, **kw):
         # things that have changed
         self._dirties = kw.copy()
@@ -396,8 +398,13 @@ class ThingBase(object):
 
             return l_ret
 
-        ret = cache.sgm(thing_cache, ids, lookup, prefix=cls._cache_prefix(),
-                        found_fn=reject_bad_partials)
+        ret = cache.sgm(
+            cache=cls._local_cache,
+            keys=ids,
+            miss_fn=lookup,
+            prefix=cls._cache_prefix(),
+            found_fn=reject_bad_partials,
+        )
 
         if is_single and not ret:
             raise NotFound("<%s %r>" % (cls.__name__,
@@ -654,7 +661,7 @@ class ThingBase(object):
 
         self._committed = True
 
-        thing_cache.set(self._cache_key(), self)
+        self.__class__._local_cache.set(self._cache_key(), self)
 
     def _revert(self):
         if not self._committed:
@@ -1211,34 +1218,6 @@ class Query(object):
             for col, val in row._t.iteritems():
                 print '\t%s: %r' % (col, val)
 
-    @will_write
-    def _delete_all(self, write_consistency_level = None):
-        # uncomment to use on purpose
-        raise InvariantException("Nice try, FBI")
-
-        # TODO: this could use cf.truncate instead and be *way*
-        # faster, but it wouldn't flush the thing_cache at the same
-        # time that way
-
-        q = self.copy()
-        q.after = q.limit = None
-
-        # since we're just deleting it, we only need enough columns to
-        # avoid reading ghost rows
-        q.max_column_count = 1
-
-        # I'm going to guess that if they are trying to flush out an
-        # entire CF, they aren't that worried about how long it takes
-        # to become consistent. So we'll default to the fastest way
-        wcl = q.cls._wcl(write_consistency_level, CL.ONE)
-
-        for row in q:
-            print row
-
-            # n.b. we're not calling _on_destroy!
-            q.cls._cf.remove(row._id, write_consistency_level = wcl)
-            thing_cache.delete(q.cls._cache_key_id(row._id))
-
     def __iter__(self):
         # n.b.: we aren't caching objects that we find this way in the
         # LocalCache. This may will need to be changed if we ever
@@ -1372,13 +1351,13 @@ class View(ThingBase):
             do_inserts(batch)
 
         # can we be smarter here?
-        thing_cache.delete(cls._cache_key_id(row_key))
+        cls._local_cache.delete(cls._cache_key_id(row_key))
 
     @classmethod
     @will_write
     def _remove(cls, key, columns):
         cls._cf.remove(key, columns)
-        thing_cache.delete(cls._cache_key_id(key))
+        cls._local_cache.delete(cls._cache_key_id(key))
 
 class DenormalizedView(View):
     """Store the entire underlying object inside the View column."""

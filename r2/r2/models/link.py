@@ -96,8 +96,9 @@ NOTIFICATION_EMAIL_DELAY = timedelta(hours=1)
 
 class LinkExists(Exception): pass
 
-# defining types
+
 class Link(Thing, Printable):
+    _cache = g.thingcache
     _data_int_props = Thing._data_int_props + (
         'num_comments', 'reported', 'comment_tree_id', 'gildings')
     _defaults = dict(is_self=False,
@@ -146,6 +147,10 @@ class Link(Thing, Printable):
     SELFTEXT_MAX_LENGTH = 40000
 
     is_votable = True
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "link:"
 
     def __init__(self, *a, **kw):
         Thing.__init__(self, *a, **kw)
@@ -1235,6 +1240,7 @@ class LegacySearchResultLink(Link):
 
 
 class Comment(Thing, Printable):
+    _cache = g.thingcache
     _data_int_props = Thing._data_int_props + ('reported', 'gildings')
     _defaults = dict(reported=0,
                      parent_id=None,
@@ -1250,6 +1256,10 @@ class Comment(Thing, Printable):
     _essentials = ('link_id', 'author_id')
 
     is_votable = True
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "comment:"
 
     def _markdown(self):
         pass
@@ -1982,6 +1992,7 @@ class MoreChildren(MoreComments):
 
 
 class Message(Thing, Printable):
+    _cache = g.thingcache
     _defaults = dict(reported=0,
                      was_comment=False,
                      parent_id=None,
@@ -1996,10 +2007,15 @@ class Message(Thing, Printable):
                      display_to=None,
                      email_id=None,
                      sent_via_email=False,
+                     del_on_recipient=False,
                      )
     _data_int_props = Thing._data_int_props + ('reported',)
     _essentials = ('author_id',)
     cache_ignore = set(["to", "subreddit"]).union(Printable.cache_ignore)
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "message:"
 
     @classmethod
     def _new(cls, author, to, subject, body, ip, parent=None, sr=None,
@@ -2471,7 +2487,13 @@ class Message(Thing, Printable):
         return s
 
     def keep_item(self, wrapped):
-        return c.user_is_admin or not wrapped.enemy
+        if c.user_is_admin:
+            return True
+        # do not keep message which were deleted on recipient
+        if (isinstance(self, Message) and
+                self.to_id == c.user._id and self.del_on_recipient):
+            return False
+        return not wrapped.enemy
 
 
 class _SaveHideByAccount(tdb_cassandra.DenormalizedRelation):
