@@ -89,9 +89,14 @@ def cast_vote(user, thing, direction, **data):
 def consume_vote_queue(queue):
     @g.stats.amqp_processor(queue)
     def process_message(msg):
+		# msg is *PROBABLY* json
         timer = g.stats.get_timer("new_voting.%s" % queue)
         timer.start()
 
+		# json being loaded into a python object
+		# it has the fields "user_id", "thing_fullname"
+		# a thing is a database object
+		# it's a link, comment, post, whatever, everything can be upvoted/downvoted
         vote_data = json.loads(msg.body)
         hook = hooks.get_hook('vote.validate_vote_data')
         if hook.call_until_return(msg=msg, vote_data=vote_data) is False:
@@ -102,11 +107,16 @@ def consume_vote_queue(queue):
                     vote_data)
             return
 
+		# this gets the user from database/cache (either memcached or postgres, whatever)
         user = Account._byID(vote_data.pop("user_id"), data=True)
         thing = Thing._by_fullname(vote_data.pop("thing_fullname"), data=True)
 
         timer.intermediate("preamble")
 
+		# this gets a servers-wide lock
+		# I mean, a bunch of consumers might be consuming items that use the same "thing" (same database object)
+		# so, you want a global lock to avoid them from fucking eachother up 
+		# memcachd stores the lock, atomically
         lock_key = "vote-%s-%s" % (user._id36, thing._fullname)
         with g.make_lock("voting", lock_key, timeout=5):
             print "Processing vote by %s on %s %s" % (user, thing, vote_data)

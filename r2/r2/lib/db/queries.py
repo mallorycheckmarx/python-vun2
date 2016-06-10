@@ -130,6 +130,7 @@ class CachedResults(object):
             return
 
         keys = [cr.iden for cr in unfetched]
+		# cassandra cache
         cached = query_cache.get_multi(keys, allow_local=not force, stale=stale)
         for cr in unfetched:
             cr.data = cached.get(cr.iden) or []

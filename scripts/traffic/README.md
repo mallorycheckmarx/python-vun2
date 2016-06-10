@@ -1,0 +1,1 @@
+This folder contains essencialy Parsers and programs to decryps info and verify it, about users mainly but also dealing with sql queries. 

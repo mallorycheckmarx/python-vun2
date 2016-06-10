@@ -714,6 +714,9 @@ class Thing(DataThing):
 
     @classmethod
     def _query(cls, *all_rules, **kw):
+		# *all_rules is a list, variable argument
+		# **kw is a dictionary (what the fuck does kw stand for?)
+		
         need_deleted = True
         need_spam = True
         #add default spam/deleted

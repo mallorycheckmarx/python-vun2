@@ -1,0 +1,1 @@
+This folder contains java files that receive a String [username] and change its format

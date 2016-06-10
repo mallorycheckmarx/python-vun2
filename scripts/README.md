@@ -1,0 +1,1 @@
+This folder contains Scrips about reddit usage, some apps to include on reddit, tools to use andmanage the reddit server. 

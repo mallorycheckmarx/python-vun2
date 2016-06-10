@@ -50,6 +50,7 @@ def make_map(config):
 
     # Username-relative userpage redirects, need to be defined here in case
     # a plugin defines a `/user/:name` handler.
+	# goes to UserController
     mc('/user/me', controller='user', action='rel_user_redirect')
     mc('/user/me/*rest', controller='user', action='rel_user_redirect')
 

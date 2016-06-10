@@ -36,6 +36,7 @@ CACHE_KEY = "rising"
 def calc_rising():
     link_counts = count.get_link_counts()
 
+	# data=True, but I don't see 'data' being used anywhere
     links = Link._by_fullname(link_counts.keys(), data=True)
 
     def score(link):

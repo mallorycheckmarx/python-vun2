@@ -1,0 +1,1 @@
+This folder contains Scripts that deal with database, such as creating DB, Tuple manipulation to be input of Cassandra DB and others

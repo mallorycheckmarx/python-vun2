@@ -1,0 +1,3 @@
+Due to architectural decisions mentioned earlier, the postgres database can be split into 2 seperate databases, that can be run on seperate machines. This is particularly effective since often in data fetches, only data from one of the databases is needed at a time.
+One of the databases stores "Thing" tables. All "Thing" tables use the same columns (thing_id, upvotes, downvotes, deleted, spam, date). The other database stores attributes pertaining to each "Thing", resembling a key-value store.
+For example, an account is a "Thing" with attributes such as "password", "name", "email". The attribute name serves as key in the key-value store.
