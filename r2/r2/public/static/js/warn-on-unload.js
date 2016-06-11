@@ -8,12 +8,6 @@ $(function() {
      *
      * warn-on-unload - this class will prompt the user if
      * they try to leave a page with a dirty form
-     *
-     * redirect-form - Must use this class in conjunction with
-     * the warn-on-dialog class if the form redirects after
-     * a successful submission. This prevents the beforeunload
-     * event listener from reattaching after a successful form
-     * submission.
      */
     $(window).on('beforeunload', function (e) {
       var form = $("form.warn-on-unload");
@@ -56,7 +50,21 @@ $(function() {
     });
   };
 
-  $("form.warn-on-unload").one("keypress", function(e) {
+  $("form.warn-on-unload").on("keypress", function(e) {
+    $(window).off('beforeunload');
     r.warn_on_unload();
   });
+
+  // Remove beforeunload event handler if a user clears their
+  // comment, exclude the newlink form textareas
+  $(".usertext.warn-on-unload textarea")
+    .not(":hidden")
+    .not("form#newlink .usertext textarea")
+    .on("blur", function(e) {
+
+    if(this.defaultValue === this.value) {
+      $(window).off('beforeunload');
+    }
+  });
+
 });

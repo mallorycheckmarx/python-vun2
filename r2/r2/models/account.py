@@ -20,44 +20,45 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import random
-
-from r2.config import feature
-from r2.lib.db.thing     import Thing, Relation, NotFound
-from r2.lib.db.operators import lower
-from r2.lib.db.userrel   import UserRel
-from r2.lib.db           import tdb_cassandra
-from r2.lib.memoize      import memoize
-from r2.lib.utils        import randstr, timefromnow
-from r2.lib.utils        import UrlParser
-from r2.lib.utils        import constant_time_compare, canonicalize_email
-from r2.lib import amqp, filters, hooks
-from r2.lib.log import log_text
-from r2.models.bans import TempTimeout
-from r2.models.last_modified import LastModified
-from r2.models.modaction import ModAction
-from r2.models.trylater import TryLater
+import bcrypt
+from collections import Counter, OrderedDict
+from datetime import datetime, timedelta
+import hashlib
+import hmac
+import time
 
 from pylons import request
 from pylons import tmpl_context as c
 from pylons import app_globals as g
-from pylons.i18n import _
-import time
-import hashlib
-from collections import Counter, OrderedDict
-from copy import copy
-from datetime import datetime, timedelta
-import bcrypt
-import hmac
-import hashlib
-from pycassa.system_manager import ASCII_TYPE
+
+from r2.config import feature
+from r2.lib import amqp, filters, hooks
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.db.operators import lower
+from r2.lib.db.userrel import UserRel
+from r2.lib.db import tdb_cassandra
+from r2.lib.log import log_text
+from r2.lib.memoize import memoize
+from r2.lib.utils import (
+    randstr,
+    UrlParser,
+    constant_time_compare,
+    canonicalize_email,
+    tup,
+)
+from r2.models.bans import TempTimeout
+from r2.models.last_modified import LastModified
+from r2.models.modaction import ModAction
+from r2.models.trylater import TryLater
 
 
 trylater_hooks = hooks.HookRegistrar()
 COOKIE_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
-class AccountExists(Exception): pass
+class AccountExists(Exception):
+    pass
+
 
 class Account(Thing):
     _cache = g.thingcache
@@ -697,6 +698,38 @@ class Account(Thing):
     def incr_admin_takedown_strikes(self, amt=1):
         return self._incr('admin_takedown_strikes', amt)
 
+    def get_style_override(self):
+        """Return the subreddit selected for reddit theme.
+
+        If the user has a theme selected and enabled and also has
+        the feature flag enabled, return the subreddit name.
+        Otherwise, return None.
+        """
+        # Experiment to change the default style to determine if
+        # engagement metrics change
+        if (feature.is_enabled("default_design") and
+                feature.variant("default_design") == "nautclassic"):
+            return "nautclassic"
+
+        if (feature.is_enabled("default_design") and
+                feature.variant("default_design") == "serene"):
+            return "serene"
+
+        # Reddit themes is not enabled for this user
+        if not feature.is_enabled('stylesheets_everywhere'):
+            return None
+
+        # Make sure they have the theme enabled
+        if not self.pref_enable_default_themes:
+            return None
+
+        return self.pref_default_theme_sr
+
+    def has_been_atoed(self):
+        """Return true if this account has ever been required to reset their password
+        """
+        return 'force_password_reset' in self._t
+
 
 class FakeAccount(Account):
     _nodb = True
@@ -870,7 +903,13 @@ def register(name, password, registration_ip):
             return account
 
 
-class Friend(Relation(Account, Account)): pass
+class Friend(Relation(Account, Account)):
+    _cache = g.thingcache
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "friend:"
+
 
 Account.__bases__ += (UserRel('friend', Friend, disable_reverse_ids_fn=True),
                       UserRel('enemy', Friend, disable_reverse_ids_fn=False))

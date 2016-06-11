@@ -53,6 +53,7 @@ from r2.models.promo import Location
 from r2.lib.authorize import Address, CreditCard
 from r2.lib.utils import constant_time_compare
 from r2.lib.require import require, require_split, RequirementException
+from r2.lib import signing
 
 from r2.lib.errors import errors, RedditError, UserRequiredException
 from r2.lib.errors import VerifiedUserRequiredException
@@ -833,7 +834,7 @@ class VSubredditRule(Validator):
             self.set_error(errors.SR_RULE_DOESNT_EXIST)
         else:
             return rule
-        
+
 
 class VAccountByName(VRequired):
     def __init__(self, param, error = errors.USER_DOESNT_EXIST, *a, **kw):
@@ -2272,16 +2273,6 @@ class VCommentIDs(Validator):
         }
 
 
-class CachedUser(object):
-    def __init__(self, cache_prefix, user, key):
-        self.cache_prefix = cache_prefix
-        self.user = user
-        self.key = key
-
-    def clear(self):
-        if self.key and self.cache_prefix:
-            g.cache.delete(str(self.cache_prefix + "_" + self.key))
-
 class VOneTimeToken(Validator):
     def __init__(self, model, param, *args, **kwargs):
         self.model = model
@@ -3248,3 +3239,24 @@ class VResultTypes(Validator):
                 '(`%s`)' % '`, `'.join(self.options)
             ),
         }
+
+
+class VSigned(Validator):
+    def run(self):
+        ua_signature = signing.valid_ua_signature(request)
+        if not ua_signature.valid:
+            g.stats.simple_event(
+                "signing.ua.invalid.%s" % ua_signature.error.code.lower())
+            abort(403, 'forbidden')
+
+        signature = signing.valid_post_signature(request)
+        if not signature.valid:
+            g.stats.simple_event(
+                "signing.body.invalid.%s" % signature.error.code.lower())
+            abort(403, 'forbidden')
+
+        return signature
+
+
+def need_provider_captcha():
+    return False

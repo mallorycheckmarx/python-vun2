@@ -524,7 +524,6 @@ class ApiController(RedditController):
                 links = listing.things
                 if links:
                     c.errors.add(errors.ALREADY_SUB, field='url')
-                    form.has_errors('url', errors.ALREADY_SUB)
                     u = links[0].already_submitted_link(url, title)
                     if extension:
                         u = UrlParser(u)
@@ -848,7 +847,7 @@ class ApiController(RedditController):
         # for mod removals, let the now ex-mod know (NOTE: doing this earlier
         # will make the message show up in their mod inbox, which they will
         # immediately lose access to.)
-        if new and type == 'moderator':
+        if new and type == 'moderator' and victim != c.user:
             send_mod_removal_message(container, c.user, victim)
 
         # Log this action
@@ -3641,7 +3640,6 @@ class ApiController(RedditController):
 
                 admintools.adjust_gold_expiration(c.user, days=days)
 
-                g.cache.set("recent-gold-" + c.user.name, True, 600)
                 status = 'claimed-gold'
                 jquery(".lounge").show()
 

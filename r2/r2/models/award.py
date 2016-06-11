@@ -20,20 +20,24 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from r2.lib.db.thing import Thing, Relation, NotFound
-from r2.lib.db.userrel import UserRel
-from r2.lib.db.operators import asc, desc, lower
-from r2.lib.memoize import memoize
-from r2.models import Account
-from pylons import request
-from pylons import tmpl_context as c
 from pylons import app_globals as g
 
-class Award (Thing):
+from r2.lib.db.operators import asc, desc, lower
+from r2.lib.db.thing import Thing, Relation, NotFound
+from r2.lib.memoize import memoize
+from r2.models import Account
+
+
+class Award(Thing):
+    _cache = g.thingcache
     _defaults = dict(
-        awardtype = 'regular',
-        api_ok = False
-        )
+        awardtype='regular',
+        api_ok=False,
+    )
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "award:"
 
     @classmethod
     @memoize('award.all_awards')
@@ -119,6 +123,7 @@ class Award (Thing):
         else:
             g.log.debug("%s didn't have %s" % (user, codename))
 
+
 class FakeTrophy(object):
     def __init__(self, recipient, award, description=None, url=None):
         self._thing2 = award
@@ -129,19 +134,20 @@ class FakeTrophy(object):
                                   getattr(self._thing2, "url", None))
         self._id = self._id36 = None
 
+
 class Trophy(Relation(Account, Award)):
+    _cache = g.thingcache
+
     @classmethod
-    def _new(cls, recipient, award, description = None,
-             url = None):
+    def _cache_prefix(cls):
+        return "trophy:"
 
-        # The "name" column of the relation can't be a constant or else a
+    @classmethod
+    def _new(cls, recipient, award, description=None, url=None):
+        # The "name" column of the Relation can't be a constant or else a
         # given account would not be allowed to win a given award more than
-        # once. So we're setting it to the string form of the timestamp.
-        # Still, we won't have that date just yet, so for a moment we're
-        # setting it to "trophy".
-
-        t = Trophy(recipient, award, "trophy")
-
+        # once.
+        t = Trophy(recipient, award, name="trophy")
         t._name = str(t._date)
 
         if description:
