@@ -911,8 +911,14 @@ def get_all_gilded_links():
 
 
 @merged_cached_query
-def get_all_gilded():
-    return [get_all_gilded_comments(), get_all_gilded_links()]
+def get_all_gilded(include_links=True, include_comments=True):
+    queries = []
+    
+    if include_links:
+        queries.append(get_all_gilded_links())
+    if include_comments:
+        queries.append(get_all_gilded_comments())
+    return queries
 
 
 @cached_query(SubredditQueryCache, filter_fn=filter_thing)
@@ -926,8 +932,13 @@ def get_gilded_links(sr_id):
 
 
 @merged_cached_query
-def get_gilded(sr_ids):
-    queries = [get_gilded_links, get_gilded_comments]
+def get_gilded(sr_ids, include_links=True, include_comments=True):
+    queries = []
+    
+    if include_links:
+        queries.append(get_gilded_links)
+    if include_comments:
+        queries.append(get_gilded_comments)
     return [query(sr_id)
             for sr_id, query in itertools.product(tup(sr_ids), queries)]
 
@@ -943,8 +954,13 @@ def get_gilded_user_links(user_id):
 
 
 @merged_cached_query
-def get_gilded_users(user_ids):
-    queries = [get_gilded_user_links, get_gilded_user_comments]
+def get_gilded_users(user_ids, include_links=True, include_comments=True):
+    queries = []
+    
+    if include_links:
+        queries.append(get_gilded_user_links)
+    if include_comments:
+        queries.append(get_gilded_user_comments)
     return [query(user_id)
             for user_id, query in itertools.product(tup(user_ids), queries)]
 
