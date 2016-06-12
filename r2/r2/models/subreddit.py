@@ -192,9 +192,11 @@ class BaseSite(object):
         from r2.lib.db import queries
         return queries.get_sr_comments(self)
 
-    def get_gilded(self):
+    def get_gilded(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
-        return queries.get_gilded(self._id)
+        return queries.get_gilded(self._id,
+                                  include_links=include_links,
+                                  include_comments=include_comments)
 
     @classmethod
     def get_modactions(cls, srs, mod=None, action=None):
@@ -1574,7 +1576,7 @@ class FakeSubreddit(BaseSite):
         from r2.lib.db import queries
         return queries.get_all_comments()
 
-    def get_gilded(self):
+    def get_gilded(self, include_links=True, include_comments=True):
         raise NotImplementedError()
 
     def spammy(self):
@@ -1629,7 +1631,7 @@ class FriendsSR(FakeSubreddit):
                for friend in friends]
         return queries.MergedCachedResults(crs)
 
-    def get_gilded(self):
+    def get_gilded(self, include_links=True, include_comments=True):
         from r2.lib.db.queries import get_gilded_users
 
         friends = c.user.friend_ids()
@@ -1637,7 +1639,8 @@ class FriendsSR(FakeSubreddit):
         if not friends:
             return []
 
-        return get_gilded_users(friends)
+        return get_gilded_users(friends, include_links=include_links,
+                                include_comments=include_comments)
 
 
 class AllSR(FakeSubreddit):
@@ -1667,9 +1670,10 @@ class AllSR(FakeSubreddit):
         from r2.lib.db import queries
         return queries.get_all_comments()
 
-    def get_gilded(self):
+    def get_gilded(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
-        return queries.get_all_gilded()
+        return queries.get_all_gilded(include_links=include_links,
+                                      include_comments=include_comments)
 
     def get_reported(self, include_links=True, include_comments=True):
         from r2.lib.db import queries
@@ -1860,9 +1864,11 @@ class DefaultSR(_DefaultSR):
         results = [_get_sr_comments(sr_id) for sr_id in sr_ids]
         return merge_results(*results)
 
-    def get_gilded(self):
+    def get_gilded(self, include_links=True, include_comments=True):
         from r2.lib.db.queries import get_gilded
-        return get_gilded(Subreddit.user_subreddits(c.user))
+        return get_gilded(Subreddit.user_subreddits(c.user),
+                          include_links=include_links,
+                          include_comments=include_comments)
 
     def get_live_promos(self):
         from r2.lib import promote
@@ -1956,9 +1962,11 @@ class MultiReddit(FakeSubreddit):
         results = [_get_sr_comments(sr_id) for sr_id in self.kept_sr_ids]
         return merge_results(*results)
 
-    def get_gilded(self):
+    def get_gilded(self, include_links=True, include_comments=True):
         from r2.lib.db.queries import get_gilded
-        return get_gilded(self.kept_sr_ids)
+        return get_gilded(self.kept_sr_ids,
+                          include_links=include_links,
+                          include_comments=include_comments)
 
     def get_live_promos(self):
         from r2.lib import promote
