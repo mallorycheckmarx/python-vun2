@@ -1983,6 +1983,17 @@ class GildedController(SubredditListingController):
     @property
     def infotext_class(self):
         return "rounded gold-accent"
+        
+    @property
+    def menus(self):
+        buttons = [
+            QueryButton(_('posts and comments'), None, query_param='only'),
+            QueryButton(_('posts'), 'links', query_param='only'),
+            QueryButton(_('comments'), 'comments', query_param='only'),
+        ]
+        res = [NavMenu(buttons, base_path=request.path, title=_('show'),
+                       type='lightdrop')]
+        return res
 
     def keep_fn(self):
         def keep(item):
@@ -1990,15 +2001,24 @@ class GildedController(SubredditListingController):
         return keep
 
     def query(self):
+        include_links, include_comments = True, True
+        if self.only == 'links':
+            include_comments = False
+        elif self.only == 'comments':
+            include_links = False
+
         try:
-            return c.site.get_gilded()
+            return c.site.get_gilded(include_links=include_links,
+                                     include_comments=include_comments)
         except NotImplementedError:
             abort(404)
 
     @require_oauth2_scope("read")
-    def GET_listing(self, **env):
+    @validate(only=VOneOf('only', ('links', 'comments'))
+    def GET_listing(self, only, **env):
         c.profilepage = True
         self.suppress_reply_buttons = True
+        self.only = only
         if not c.site.allow_gilding:
             self.abort404()
         return ListingController.GET_listing(self, **env)
