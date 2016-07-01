@@ -49,8 +49,12 @@ def add_comments(comments):
     for link_id, link_comments in comments_by_link_id.iteritems():
         link = links[link_id]
 
+        event = g.analytics_provider.new_event()
+        event.add_field("name", "comment_tree.add")
+        event.add_field("version", link.comment_tree_version)
         timer = g.stats.get_timer(
-            'comment_tree.add.%s' % link.comment_tree_version)
+            'comment_tree.add.%s' % link.comment_tree_version,
+            analytics_event=event)
         timer.start()
 
         # write scores before CommentTree because the scores must exist for all
