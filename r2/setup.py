@@ -135,5 +135,8 @@ setup(
     [r2.provider.email]
     null = r2.lib.providers.email.null:NullEmailProvider
     mailgun = r2.lib.providers.email.mailgun:MailgunEmailProvider
+    [r2.provider.analytics]
+    null = r2.lib.providers.analytics.null:NullAnalyticsProvider
+    honeycomb = r2.lib.providers.analytics.honeycomb:HoneycombProvider
     """,
 )
