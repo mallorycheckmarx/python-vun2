@@ -858,8 +858,9 @@ function big_mod_action(elem, dir) {
       };
 
       elem.siblings(".status-msg").hide();
-      if (dir == -1) {
+      if ($.inArray(dir, [-1, -3]) > -1) {
         d.spam = false;
+        d.filter = dir == -3
         $.request("remove", d, null, true);
         elem.siblings(".removed").show();
       } else if (dir == -2) {

@@ -1003,6 +1003,7 @@ class RuleTarget(object):
             admintools.spam(
                 item,
                 auto=keep_in_modqueue,
+                keep_in_modqueue=keep_in_modqueue,
                 moderator_banned=True,
                 banner=ACCOUNT.name,
                 train_spam=spam,
@@ -1022,6 +1023,7 @@ class RuleTarget(object):
                         self.action_reason, data, self.parent.matches)
                 else:
                     reason = "spam" if spam else "remove"
+                    reason = "filter" if keep_in_modqueue else reason
                 ModAction.create(data["subreddit"], ACCOUNT, log_action,
                     target=item, details=reason)
 
