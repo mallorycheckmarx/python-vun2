@@ -699,6 +699,9 @@ class ApiController(RedditController):
 
         """
         if container and container.is_contributor(c.user):
+            if container.is_moderator_with_perms(c.user, 'access'):
+                ModAction.create(container, c.user, 'removecontributor',
+                                 target=c.user, details='remove_self')
             container.remove_contributor(c.user)
 
 
