@@ -26,6 +26,7 @@ from pylons import app_globals as g
 from pylons.controllers import WSGIController
 from pylons.i18n import N_, _, ungettext, get_lang
 from webob.exc import HTTPException, status_map
+from r2.lib.contrib import ipaddress
 from r2.lib.filters import spaceCompress, _force_unicode
 from r2.lib.template_helpers import get_domain
 from utils import string2js, read_http_date
@@ -43,9 +44,14 @@ from r2.lib.utils import UrlParser, query_string
 logging.getLogger('scgi-wsgi').setLevel(logging.CRITICAL)
 
 
-def is_local_address(ip):
-    # TODO: support the /20 and /24 private networks? make this configurable?
-    return ip.startswith('10.') or ip == "127.0.0.1"
+def is_trusted_proxy(ip):
+    if not hasattr(g, 'trusted_proxy_ranges'):
+        return False
+    ip = ipaddress.IPv4Address(ip)
+    for each in g.trusted_proxy_ranges:
+        if ip in each:
+            return True
+    return False
 
 def abort(code_or_exception=None, detail="", headers=None, comment=None,
           **kwargs):
@@ -100,8 +106,8 @@ class BaseController(WSGIController):
         if cdn_ip:
             request.ip = cdn_ip
             request.via_cdn = True
-        elif g.trust_local_proxies and forwarded_for and is_local_address(remote_addr):
-            request.ip = forwarded_for.split(',')[-1]
+        elif g.trust_local_proxies and forwarded_for and is_trusted_proxy(remote_addr):
+            request.ip = forwarded_for.split(',')[0].strip()
         else:
             request.ip = environ['REMOTE_ADDR']
 

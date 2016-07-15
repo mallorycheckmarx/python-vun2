@@ -345,6 +345,10 @@ class Globals(object):
             "activity_endpoint",
         ],
 
+        ConfigValue.tuple_of(ConfigValue.baseplate(ipaddress.IPv4Network)): [
+            "trusted_proxy_ranges",
+        ],
+
         ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
             'emr_traffic_tags',
         ],
