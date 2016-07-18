@@ -50,6 +50,7 @@ POST_EMBED_TEMPLATE = """
       <a href="%(link_url)s">%(title)s</a> from
       <a href="%(subreddit_url)s">%(subreddit_name)s</a>
     </blockquote>
+    %(script)s
 """
 
 def _oembed_for(thing, **embed_options):
@@ -78,7 +79,7 @@ def _oembed_post(thing, **embed_options):
         live = 'data-card-created="{}"'.format(time)
 
     script = ''
-    if embed_options.get('omitscript') == "false":
+    if not embed_options.get('omitscript', False):
         script = format_html(SCRIPT_TEMPLATE,
                              embedly_script=EMBEDLY_SCRIPT,
                              )
@@ -100,9 +101,8 @@ def _oembed_post(thing, **embed_options):
                        title=websafe(thing.title),
                        subreddit_url=make_url_https(subreddit.path),
                        subreddit_name=subreddit.name,
+                       script=script,
                        )
-
-    html += script
 
     oembed_response = dict(_OEMBED_BASE,
                            type="rich",
