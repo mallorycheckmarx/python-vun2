@@ -733,7 +733,7 @@ class ApiController(RedditController):
 
     def check_api_friend_oauth_scope(self, type_):
         if c.oauth_user:
-            needed_scopes = self.api_friend_scope_map[type_]
+            needed_scopes = self.api_friend_scope_map.get(type_)
             if needed_scopes is None:
                 # OAuth2 access not allowed for this friend rel type
                 # via /api/friend
