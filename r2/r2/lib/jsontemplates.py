@@ -649,6 +649,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         banned_by="banned_by",
         visited="visited",
         clicked="clicked",
+        contest_mode="contest_mode",
         distinguished="distinguished",
         domain="domain",
         downs="downvotes",
