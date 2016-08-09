@@ -230,10 +230,11 @@ class Counter:
 class Timer:
     _time = time.time
 
-    def __init__(self, client, name, publish=True):
+    def __init__(self, client, name, publish=True, analytics_event=None):
         self.client = client
         self.name = name
         self.publish = publish
+        self.analytics_event = analytics_event
         self._start = None
         self._last = None
         self._stop = None
@@ -249,6 +250,9 @@ class Timer:
     def flush(self):
         for timing in self._timings:
             self.send(*timing)
+            if self.analytics_event:
+                name, start, end = timing
+                self.analytics_event.add_field(name, end - start)
         self._timings = []
 
     def elapsed_seconds(self):
@@ -282,6 +286,8 @@ class Timer:
         self._stop = self._time()
         self.flush()
         self.send(subname, self._start, self._stop)
+        if self.analytics_event:
+            self.analytics_event.send()
 
 
 class Stats:
@@ -294,8 +300,8 @@ class Stats:
     def __init__(self, addr, sample_rate):
         self.client = StatsdClient(addr, sample_rate)
 
-    def get_timer(self, name, publish=True):
-        return Timer(self.client, name, publish)
+    def get_timer(self, name, publish=True, analytics_event=None):
+        return Timer(self.client, name, publish, analytics_event)
 
     # Just a convenience method to use timers as context managers clearly
     def quick_time(self, *args, **kwargs):
@@ -410,7 +416,7 @@ class Stats:
 
     def count_string(self, key, value, count=1):
         self.client.string_counts.record(key, str(value), count=count)
-   
+
 
 class CacheStats:
     def __init__(self, parent, cache_name):

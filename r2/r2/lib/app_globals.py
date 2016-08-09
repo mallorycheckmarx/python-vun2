@@ -221,6 +221,7 @@ class Globals(object):
             'frequency_cap_min',
             'frequency_cap_default',
             'eu_cookie_max_attempts',
+            'honeycomb_sample_rate',
         ],
 
         ConfigValue.float: [
@@ -313,6 +314,7 @@ class Globals(object):
             'events_collector_url',
             'events_collector_test_url',
             'search_provider',
+            'honeycomb_dataset',
         ],
 
         ConfigValue.choice(ONE=CL_ONE, QUORUM=CL_QUORUM): [
@@ -567,6 +569,12 @@ class Globals(object):
             self.pkg_resources_working_set,
             "r2.provider.email",
             self.email_provider,
+        )
+        self.analytics_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.analytics",
+            self.analytics_provider,
         )
         self.startup_timer.intermediate("providers")
 
