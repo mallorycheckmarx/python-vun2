@@ -234,6 +234,7 @@ class EmailHandler(object):
                                s.c.date : date,
                                s.c.msg_hash : key}).execute()
             hashes.append(key)
+        g.log.info("Queued %r emails to be sent to %r", kind, user.name)
         return hashes
 
 
