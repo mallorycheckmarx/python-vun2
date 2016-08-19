@@ -1025,6 +1025,12 @@ class ApiController(RedditController):
                 return
             if ban_reason and note:
                 note = "%s: %s" % (ban_reason, note)
+                # the note can collectively be 400 chars,
+                # but only 300 are allowed everywhere else
+                if len(note) > 300:
+                    c.errors.add(errors.TOO_LONG, field="note")
+                    form.set_error(errors.TOO_LONG, "note")
+                    return
             elif ban_reason:
                 note = ban_reason
 
