@@ -100,6 +100,7 @@
     ${ynbutton(_('make permanent'), _("made permanent"), "friend",
         hidden_data = dict(type=thing.type,
                            name=thing.user.name,
-                           container=thing.container_name))}
+                           container=thing.container_name,
+                           note=getattr(thing.rel, 'note', '')))}
   %endif
 </%def>
