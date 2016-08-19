@@ -916,7 +916,11 @@ class ApiController(RedditController):
         type=VOneOf('type', ('friend',) + _sr_friend_types),
         type_and_permissions=VPermissions('type', 'permissions'),
         note=VLength('note', 300),
-        ban_reason=VLength('ban_reason', 100),
+        ban_reason=VLength(
+            'ban_reason', 100,
+            docs={'ban_reason': ('a string no longer than 100 characters, and'
+                                 ' in combination with "note", no longer than'
+                                 ' a combined total of 298 characters')}),
         duration=VInt('duration', min=1, max=999),
         ban_message=VMarkdownLength('ban_message', max_length=1000,
             empty_error=None),
