@@ -242,13 +242,16 @@ class ThingJsonTemplate(JsonTemplate):
                 return None
             return distinguished
 
-        if attr in ["num_reports", "report_reasons", "banned_by", "banned_at",
-                    "ban_note", "autobanned", "approved_by", "approved_at"]:
+        if attr in ["num_reports", "report_reasons", "ignore_reports",
+                    "banned_by", "banned_at", "ban_note",
+                    "autobanned", "approved_by", "approved_at"]:
             if c.user_is_loggedin and thing.can_ban:
                 if attr == "num_reports":
                     return thing.reported
                 elif attr == "report_reasons":
                     return Report.get_reasons(thing)
+                elif attr == "ignore_reports":
+                    return thing.ignore_reports
 
                 ban_info = getattr(thing, "ban_info", {})
                 if attr == "banned_by":
@@ -691,6 +694,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         num_comments="num_comments",
         num_reports="num_reports",
         report_reasons="report_reasons",
+        reports_ignored="ignore_reports",
         mod_reports="mod_reports",
         user_reports="user_reports",
         over_18="over_18",
@@ -938,6 +942,7 @@ class CommentJsonTemplate(ThingTemplate):
 
         data["num_reports"] = None
         data["report_reasons"] = None
+        data["reports_ignored"] = None
         data["approved_by"] = None
         data["approved_at"] = None
         data["banned_by"] = None
@@ -947,6 +952,7 @@ class CommentJsonTemplate(ThingTemplate):
         if c.user_is_loggedin and item.can_ban:
             data["num_reports"] = item.reported
             data["report_reasons"] = Report.get_reasons(item)
+            data["reports_ignored"] = item.ignore_reports
 
             ban_info = getattr(item, "ban_info", {})
             if item._spam:
