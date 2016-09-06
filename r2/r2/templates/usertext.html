@@ -27,7 +27,7 @@
 %>
 
 <%namespace file="printablebuttons.html" import="toggle_button" />
-<%namespace file="utils.html" import="error_field, md, _md"/>
+<%namespace file="utils.html" import="data, error_field, md, _md"/>
 
 <%def name="markhelp(show_embed_help=False)">
   <div class="markhelp" style="display:none">
@@ -112,7 +112,7 @@
 </%def>
 
 %if thing.have_form:
-  <form action="#" class="${thing.css_class}"
+  <form action="#" class="${thing.css_class} warn-on-unload"
       %if thing.post_form:
         onsubmit="return post_form(this, '${thing.post_form}')"
       %endif
@@ -124,6 +124,10 @@
 
   ##this is set for both editting selftext and creating new comments
   <input type="hidden" name="thing_id" value="${thing.fullname}"/>
+
+  %if thing.source:
+    <input type="hidden" name="source" value="${thing.source}">
+  %endif
 
   %if not thing.creating:
     <div class="usertext-body may-blank-within md-container ${'admin_takedown' if thing.admin_takedown else ''}">
@@ -144,6 +148,7 @@
         <textarea rows="1" cols="1"
                   name="${thing.name}"
                   class="${thing.textarea_class}"
+                  ${data(**thing.data_attrs)}
                   >${keep_space(thing.text)}</textarea>
       </div>
 
@@ -152,7 +157,7 @@
                         "helpon", "helpoff",
                          style = "" if thing.creating else "display: none")}
 
-        <a href="/wiki/reddiquette" class="reddiquette" target="_blank" tabindex="100">${_('reddiquette')}</a>
+        <a href="/help/contentpolicy" class="reddiquette" target="_blank" tabindex="100">${_('content policy')}</a>
 
         %if thing.include_errors:
           ${error_field("TOO_LONG", thing.name, "span")}
@@ -161,7 +166,6 @@
           ${error_field("TOO_OLD", "parent", "span")}
           ${error_field("THREAD_LOCKED", "parent", "span")}
           ${error_field("DELETED_COMMENT", "parent", "span")}
-          ${error_field("DELETED_LINK", "parent", "span")}
           ${error_field("USER_BLOCKED", "parent", "span")}
           ${error_field("USER_MUTED", "parent", "span")}
           ${error_field("MUTED_FROM_SUBREDDIT", "parent", "span")}
@@ -169,7 +173,7 @@
         <div class="usertext-buttons">
           ${action_button("save", "submit", "",
                           thing.creating and thing.have_form)}
-          ${action_button("cancel", "button", "cancel_usertext(this)", False)}
+          ${action_button("cancel", "button", "return cancel_usertext(this);", False)}
           %if thing.have_form:
             <span class="status"></span>
           %endif

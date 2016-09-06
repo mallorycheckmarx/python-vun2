@@ -36,7 +36,18 @@ from pylons import app_globals as g
 from r2.lib.db import queries
 from r2.lib import amqp
 from r2.lib.utils import weighted_lottery, get_requests_resp_json
-from r2.models import Account, NotFound, register, Subreddit, Link, Comment
+from r2.lib.voting import cast_vote
+from r2.models import (
+    Account,
+    Comment,
+    Link,
+    LocalizedDefaultSubreddits,
+    LocalizedFeaturedSubreddits,
+    NotFound,
+    register,
+    Subreddit,
+    Vote,
+)
 
 
 unescape_htmlentities = HTMLParser.HTMLParser().unescape
@@ -254,6 +265,7 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
     ensure_subreddit(g.default_sr, system_user)
     ensure_subreddit(g.takedown_sr, system_user)
     ensure_subreddit(g.beta_sr, system_user)
+    ensure_subreddit(g.promo_sr_name, system_user)
 
     print
     print
@@ -313,7 +325,6 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
                 sr=sr,
                 ip="127.0.0.1",
             )
-            queries.queue_vote(link_author, link, dir=True, ip="127.0.0.1")
             queries.new_link(link)
             things.append(link)
 
@@ -327,16 +338,23 @@ def inject_test_data(num_links=25, num_comments=25, num_votes=5):
                     body=sr_model.generate_comment_body(),
                     ip="127.0.0.1",
                 )
-                queries.queue_vote(
-                    comment_author, comment, dir=True, ip="127.0.0.1")
                 queries.new_comment(comment, inbox_rel)
                 comments.append(comment)
                 things.append(comment)
 
     for thing in things:
         for i in xrange(fuzz_number(num_votes)):
-            direction = random.choice([True, None, False])
+            direction = random.choice([
+                Vote.DIRECTIONS.up,
+                Vote.DIRECTIONS.unvote,
+                Vote.DIRECTIONS.down,
+            ])
             voter = random.choice(accounts)
-            queries.queue_vote(voter, thing, dir=direction, ip="127.0.0.1")
+
+            cast_vote(voter, thing, direction)
 
     amqp.worker.join()
+
+    srs = [Subreddit._by_name(n) for n in ("pics", "videos", "askhistorians")]
+    LocalizedDefaultSubreddits.set_global_srs(srs)
+    LocalizedFeaturedSubreddits.set_global_srs([Subreddit._by_name('pics')])

@@ -103,6 +103,9 @@ def unsafe(text=''):
 def websafe_json(text=""):
     return c_websafe_json(_force_unicode(text))
 
+def double_websafe(text=""):
+    # RSS requires double escaping on fields that could be interpreted as HTML
+    return unsafe(python_websafe(python_websafe(text)))
 
 def conditional_websafe(text = ''):
     from wrapped import Templated, CacheStub
@@ -199,18 +202,11 @@ def markdown_souptest(text, nofollow=False, target=None, renderer='reddit'):
 
     return smd
 
-#TODO markdown should be looked up in batch?
-#@memoize('markdown')
 def safemarkdown(text, nofollow=False, wrap=True, **kwargs):
     if not text:
         return None
 
-    # this lets us skip the c.cname lookup (which is apparently quite
-    # slow) if target was explicitly passed to this function.
     target = kwargs.get("target", None)
-    if "target" not in kwargs and c.cname:
-        target = "_top"
-
     text = snudown.markdown(_force_utf8(text), nofollow, target)
 
     if wrap:

@@ -51,6 +51,7 @@ api('subreddit',     SubredditJsonTemplate)
 api('labeledmulti',  LabeledMultiJsonTemplate)
 api('reddit',        RedditJsonTemplate)
 api('panestack',     PanestackJsonTemplate)
+api('htmlpanestack', NullJsonTemplate)
 api('listing',       ListingJsonTemplate)
 api('searchlisting', SearchListingJsonTemplate)
 api('userlisting',   UserListingJsonTemplate)
@@ -89,6 +90,7 @@ api('uploadedimage', UploadedImageJsonTemplate)
 api('modaction', ModActionTemplate)
 
 api('trophy', TrophyJsonTemplate)
+api('rules', RulesJsonTemplate)
 
 
 register_api_templates('comment', CommentJsonTemplate)

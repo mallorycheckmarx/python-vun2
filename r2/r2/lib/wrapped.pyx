@@ -20,11 +20,15 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from itertools import chain
-from datetime import datetime
-import re, types
 
+from datetime import datetime
 from hashlib import md5
+from itertools import chain
+import re
+import types
+
+from r2.lib.cache import MemcachedError
+
 
 RENDER_CACHE_SAMPLE_RATE = 0.001
 
@@ -372,8 +376,7 @@ class Templated(object):
         return res
 
     def _cache_key(self, key):
-        return 'render_%s(%s)' % (self.__class__.__name__,
-                                  md5(key).hexdigest())
+        return 'rend:%s(%s)' % (self.__class__.__name__, md5(key).hexdigest())
 
     def _write_cache(self, keys):
         from pylons import app_globals as g
@@ -385,7 +388,11 @@ class Templated(object):
         for key, val in keys.iteritems():
             toset[self._cache_key(key)] = val
 
-        g.rendercache.set_multi(toset)
+        try:
+            g.rendercache.set_multi(toset, time=3600)
+        except MemcachedError as e:
+            g.log.warning("rendercache error: %s", e)
+            return
 
     def _read_cache(self, keys):
         from pylons import app_globals as g
@@ -468,7 +475,6 @@ class CachedTemplate(Templated):
             c.domain_prefix,
             style,
             c.secure,
-            c.cname,
             c.lang,
             c.site.user_path,
             self.template_hash(style),

@@ -76,13 +76,17 @@ $(function() {
     }
 
     function postFlairSelection(e) {
-        $(this).find(".status").html(reddit.status_msg.submitting).show()
+        $(this).find(".status").html(r.config.status_msg.submitting).show()
         var $btn = $(this.parentNode.parentNode).find('.flairselectbtn')
         simple_post_form(this, "selectflair", getFlairAttrs($btn));
         return false;
     }
 
     function openFlairSelector(e) {
+        if (r.access.isLinkRestricted(e.target)) {
+            return false;
+        }
+
         close_menus(e);
 
         var button = this;

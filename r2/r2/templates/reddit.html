@@ -24,13 +24,19 @@
    from r2.config import feature
    from r2.lib.template_helpers import add_sr, static, join_urls, class_dict, get_domain
    from r2.lib.filters import unsafe, scriptsafe_dumps
-   from r2.lib.pages import SearchForm, ClickGadget, SideContentBox, Login, ListingChooser
+   from r2.lib.pages import (
+      SearchForm,
+      ClickGadget,
+      SideContentBox,
+      Login,
+      ListingChooser,
+      InTimeoutInterstitial,
+   )
    from r2.lib import tracking
    from pylons import request
    from r2.lib.strings import strings
    from r2.models import make_feedurl
 %>
-<%namespace file="framebuster.html" import="framebuster"/>
 <%namespace file="less.html" import="less_js, less_stylesheet"/>
 <%namespace file="utils.html" import="tags, classes"/>
 <%namespace file="adminbar.html" import="adminbar_stylesheet"/>
@@ -46,9 +52,6 @@
 
 <%def name="global_stylesheets()">
   ${less_stylesheet("reddit.less")}
-  %if c.site.stylesheet:
-    <link rel="stylesheet" href="${static(c.site.stylesheet)}" type="text/css" >
-  %endif
 </%def>
 
 <%def name="sr_stylesheets()">
@@ -95,7 +98,7 @@
        if thing.extension_handling == "private":
           rss = make_feedurl(c.user, rss)
      %>
-    <link rel="alternate" type="application/rss+xml" title="RSS"
+    <link rel="alternate" type="application/atom+xml" title="RSS"
           href="${rss}" />
   %endif
 </%def>
@@ -124,10 +127,6 @@
   ${unsafe(c.js_preload.use())}
 </%def>
 
-<%def name="javascript_run()">
-   reddit.cur_site = "${c.site._fullname if hasattr(c.site, '_fullname') else ''}";
-</%def>
-
 <%def name="bodyContent()">
   %if thing.header:
     <%include file="adminbar.html"/>
@@ -144,6 +143,19 @@
     ${ListingChooser()}
   %endif
 
+  %if thing.auction_announcement:
+    <div id="auction-announcement-container">
+      <div id="auction-announcement">
+        <h1>
+          ad auctions are launching monday 2/8
+        </h1>
+        <p>
+          for more details, see our&nbsp;<a href="https://www.reddit.com/r/selfserve/comments/434c0x/the_auction_is_coming/" target="_blank">announcement in /r/selfserve</a>
+        </p>
+      </div>
+    </div>
+  %endif
+
   <% content = getattr(self, "content", None) or thing.content %>
   %if content:
     ##<div class="fixedwidth"></div>
@@ -154,26 +166,23 @@
     </div>
   %endif
 
-  %if thing.footer:
+  ${thing.footer}
 
-    ${thing.footer}
-
-    %if not c.user_is_loggedin and not g.read_only_mode:
-      %if thing.enable_login_cover:
-        <script>
-          var BETA_HOST = 'beta.reddit.com';
-          if (location.host === BETA_HOST) {
-            r.config.https_endpoint = 'https://' + BETA_HOST;
-          }
-        </script>
-        <script id="login-popup" type="text/template">
-          ${Login(is_popup=True)}
-        </script>
-      %endif
-      <script id="lang-popup" type="text/template">
-        <%include file="prefoptions.html" />
+  %if not c.user_is_loggedin and not g.read_only_mode:
+    %if thing.enable_login_cover:
+      <script>
+        var BETA_HOST = 'beta.reddit.com';
+        if (location.host === BETA_HOST) {
+          r.config.https_endpoint = 'https://' + BETA_HOST;
+        }
+      </script>
+      <script id="login-popup" type="text/template">
+        ${Login(is_popup=True)}
       </script>
     %endif
+    <script id="lang-popup" type="text/template">
+      <%include file="prefoptions.html" />
+    </script>
   %endif
   % if c.secure:
       ## Pixel to pick up HSTS policies from the base domain
@@ -197,7 +206,6 @@
     }
     </script>
   %endif
-  ${framebuster()}
   ${thing.debug_footer}
 </%def>
 

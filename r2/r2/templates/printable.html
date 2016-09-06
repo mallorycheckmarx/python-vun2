@@ -76,7 +76,9 @@ ${self.RenderPrintable()}
 <%def name="thing_css_class(what)">
   <%
     cssclass = "thing"
-    if not getattr(what, 'deleted', False) or getattr(what, 'can_ban', False):
+    if (not getattr(what, 'deleted', False) or
+            getattr(what, 'can_ban', False) or
+           (getattr(what, 'promoted', False) and c.user_is_sponsor)):
       cssclass += " id-" + what._fullname
   %>
   ${cssclass}
@@ -107,7 +109,7 @@ ${self.RenderPrintable()}
       rowclass += " user-gilded"
     if not getattr(what, "archived", False) and getattr(what, "locked", False):
       rowclass += " locked"
-    if getattr(what, "stickied", False):
+    if getattr(what, "use_sticky_style", False):
       rowclass += " stickied"
     if getattr(what, "is_controversial", False):
       rowclass += " controversial"
@@ -117,8 +119,11 @@ ${self.RenderPrintable()}
 
 <%def name="thing_data_attributes(what)">
     % if not getattr(what, 'deleted', False):
+      <% cls = thing.lookups[0].__class__.__name__.lower() %>
       data-fullname="${what._fullname}"
+      data-type="${unsafe(cls)}"
     % endif
+
     % if hasattr(what, 'campaign'):
       data-cid="${what.campaign}"
     % endif
@@ -215,8 +220,10 @@ ${self.RenderPrintable()}
    arrow_class = arrow_type + ("mod" if mod else "")
    login_class = "login-required" if not g.read_only_mode else ""
    archived_class = "archived" if not getattr(thing, 'votable', True) else ""
+   access_class = "access-required"
 %>
-  <div ${classes("arrow", arrow_class, login_class, archived_class)}
+  <div ${classes("arrow", arrow_class, login_class, archived_class, access_class)}
+    data-event-action="${arrow_type}vote"
     %if not g.read_only_mode:
        role="button"
        % if dir > 0:

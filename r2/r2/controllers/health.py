@@ -33,9 +33,6 @@ from r2.lib import promote, cache
 
 
 class HealthController(MinimalController):
-    def try_pagecache(self):
-        pass
-
     def pre(self):
         pass
 
@@ -69,7 +66,9 @@ class HealthController(MinimalController):
                     # libmemcached doesn't support UDP get/fetch operations
                     continue
                 mc = pylibmc.Client([server], behaviors=behaviors)
-                mc.get("__health_check_%s__" % server)
+                # it's ok that not all caches are mcrouter, we'll just ignore
+                # the miss either way
+                mc.get("__mcrouter__.version")
                 results[server] = "OK"
             except pylibmc.Error as e:
                 g.log.warning("Health check for %s FAILED: %s", server, e)

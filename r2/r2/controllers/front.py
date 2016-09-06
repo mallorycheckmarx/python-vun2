@@ -24,8 +24,6 @@ from pylons.i18n import _, ungettext
 from r2.controllers.reddit_base import (
     base_listing,
     disable_subreddit_css,
-    pagecache_policy,
-    PAGECACHE_POLICY,
     paginated_listing,
     RedditController,
     require_https,
@@ -40,7 +38,6 @@ from r2.lib.pages import *
 from r2.lib.pages.things import hot_links_by_url_listing
 from r2.lib.pages import trafficpages
 from r2.lib.menus import *
-from r2.lib.admin_utils import check_cheating
 from r2.lib.csrf import csrf_exempt
 from r2.lib.utils import to36, sanitize_url, title_to_url
 from r2.lib.utils import query_string, UrlParser, url_links_builder
@@ -70,19 +67,36 @@ from operator import attrgetter
 import string
 import random as rand
 import re
-import time as time_module
 from urllib import quote_plus
 
 class FrontController(RedditController):
 
     allow_stylesheets = True
 
+    @validate(link=VLink('link_id'))
+    def GET_link_id_redirect(self, link):
+        if not link:
+            abort(404)
+        elif not link.subreddit_slow.can_view(c.user):
+            # don't disclose the subreddit/title of a post via the redirect url
+            abort(403)
+        else:
+            redirect_url = link.make_permalink_slow(force_domain=True)
+
+        query_params = dict(request.GET)
+        if query_params:
+            url = UrlParser(redirect_url)
+            url.update_query(**query_params)
+            redirect_url = url.unparse()
+
+        return self.redirect(redirect_url, code=301)
+
     @validate(article=VLink('article'),
               comment=VCommentID('comment'))
     def GET_oldinfo(self, article, type, dest, rest=None, comment=''):
         """Legacy: supporting permalink pages from '06,
            and non-search-engine-friendly links"""
-        if not (dest in ('comments','related','details')):
+        if not (dest in ('comments','details')):
                 dest = 'comments'
         if type == 'ancient':
             #this could go in config, but it should never change
@@ -187,7 +201,7 @@ class FrontController(RedditController):
                           show_chooser=True,
                           page_classes=['explore-page'],
                           content=content).render()
- 
+
     @validate(article=VLink('article'))
     def GET_shirt(self, article):
         if not can_view_link_comments(article):
@@ -233,6 +247,11 @@ class FrontController(RedditController):
         """
         if not sort:
             sort = c.user.pref_default_comment_sort
+
+            # hot sort no longer exists but might still be set as a preference
+            if sort == "hot":
+                sort = "confidence"
+
         if comment and comment.link_id != article._id:
             return self.abort404()
 
@@ -249,15 +268,21 @@ class FrontController(RedditController):
             abort(403, 'forbidden')
 
         # check over 18
-        if article.is_nsfw and not c.over18 and c.render_style == 'html':
+        if (
+            article.is_nsfw and
+            not c.over18 and
+            c.render_style == 'html' and
+            not request.parsed_agent.bot
+        ):
             return self.intermediate_redirect("/over18", sr_path=False)
+
+        canonical_link = article.make_canonical_link(sr)
 
         # Determine if we should show the embed link for comments
         c.can_embed = bool(comment) and article.is_embeddable
 
         is_embed = embeds.prepare_embed_request()
-
-        if is_embed:
+        if is_embed and comment:
             embeds.set_up_comment_embed(sr, comment, showedits=showedits)
 
         # Temporary hook until IAMA app "OP filter" is moved from partners
@@ -296,7 +321,7 @@ class FrontController(RedditController):
             if c.user_is_loggedin and c.site.can_submit(c.user):
                 resubmit_url = add_sr(resubmit_url)
             infotext = strings.already_submitted % resubmit_url
-        elif article.archived and feature.is_enabled('new_info_bar'):
+        elif article.archived:
             infotext = strings.archived_post_message
             infotext_class = 'archived-infobar'
             infotext_show_icon = True
@@ -304,8 +329,6 @@ class FrontController(RedditController):
             infotext = strings.locked_post_message
             infotext_class = 'locked-infobar'
             infotext_show_icon = True
-
-        check_cheating('comments')
 
         if not c.user.pref_num_comments:
             num = g.num_comments
@@ -369,10 +392,13 @@ class FrontController(RedditController):
                 if geotargeted:
                     displayPane.append(GeotargetNotice(city_target=city_target))
 
+            data_attrs = {'type': 'link', 'event-action': 'comment'}
+
             displayPane.append(UserText(item=article, creating=True,
                                         post_form='comment',
                                         display=display,
-                                        cloneable=True))
+                                        cloneable=True,
+                                        data_attrs=data_attrs))
 
         if previous_visits:
             displayPane.append(CommentVisitsBox(previous_visits))
@@ -461,6 +487,31 @@ class FrontController(RedditController):
                     click_hash=click_hash)):
                 click_url = None
 
+        # event target for screenviews
+        if comment:
+            event_target = {
+                'target_type': 'comment',
+                'target_fullname': comment._fullname,
+                'target_id': comment._id,
+            }
+        elif article.is_self:
+            event_target = {
+                'target_type': 'self',
+                'target_fullname': article._fullname,
+                'target_id': article._id,
+                'target_sort': sort,
+            }
+        else:
+            event_target = {
+                'target_type': 'link',
+                'target_fullname': article._fullname,
+                'target_id': article._id,
+                'target_url': article.url,
+                'target_url_domain': article.link_domain(),
+                'target_sort': sort,
+            }
+        extra_js_config = {'event_target': event_target}
+
         res = LinkInfoPage(
             link=article,
             comment=comment,
@@ -476,6 +527,8 @@ class FrontController(RedditController):
             sr_detail=sr_detail,
             campaign_fullname=campaign_fullname,
             click_url=click_url,
+            canonical_link=canonical_link,
+            extra_js_config=extra_js_config,
         )
 
         return res.render()
@@ -502,6 +555,7 @@ class FrontController(RedditController):
               name=nop('name'))
     def GET_newreddit(self, name):
         """Create a subreddit form"""
+        VNotInTimeout().run(action_name="pageview", details_text="newreddit")
         title = _('create a subreddit')
         captcha = Captcha() if c.user.needs_captcha() else None
         content = CreateSubreddit(name=name or '', captcha=captcha)
@@ -511,7 +565,6 @@ class FrontController(RedditController):
                        ).render()
         return res
 
-    @pagecache_policy(PAGECACHE_POLICY.LOGGEDIN_AND_LOGGEDOUT)
     @require_oauth2_scope("modconfig")
     @api_doc(api_section.moderation, uses_site=True)
     def GET_stylesheet(self):
@@ -576,6 +629,7 @@ class FrontController(RedditController):
                                           c.site.is_moderator(c.user)):
             return self.abort404()
 
+        VNotInTimeout().run(action_name="pageview", details_text="modlog")
         if mod:
             if mod == 'a':
                 modnames = g.admins
@@ -734,11 +788,15 @@ class FrontController(RedditController):
 
     def _edit_normal_reddit(self, location, created):
         if (location == 'edit' and
-            c.user_is_loggedin and
-            (c.user_is_admin or c.site.is_moderator_with_perms(c.user, 'config'))):
+                c.user_is_loggedin and
+                (c.user_is_admin or
+                    c.site.is_moderator_with_perms(c.user, 'config'))):
             pane = PaneStack()
+
             if created == 'true':
-                pane.append(InfoBar(message=strings.sr_created))
+                infobar_message = strings.sr_created
+                pane.append(InfoBar(message=infobar_message))
+
             c.allow_styles = True
             c.site = Subreddit._byID(c.site._id, data=True, stale=False)
             pane.append(CreateSubreddit(site=c.site))
@@ -771,9 +829,12 @@ class FrontController(RedditController):
     @require_oauth2_scope("read")
     @base_listing
     @disable_subreddit_css()
-    @validate(VSrModerator(perms='posts'),
-              location=nop('location'),
-              only=VOneOf('only', ('links', 'comments')))
+    @validate(
+        VSrModerator(perms='posts'),
+        location=nop('location'),
+        only=VOneOf('only', ('links', 'comments')),
+        timeout=VNotInTimeout(),
+    )
     @api_doc(
         api_section.moderation,
         uses_site=True,
@@ -781,7 +842,8 @@ class FrontController(RedditController):
         uri_variants=['/about/' + loc for loc in
                       ('reports', 'spam', 'modqueue', 'unmoderated', 'edited')],
     )
-    def GET_spamlisting(self, location, only, num, after, reverse, count):
+    def GET_spamlisting(self, location, only, num, after, reverse, count,
+            timeout):
         """Return a listing of posts relevant to moderators.
 
         * reports: Things that have been reported.
@@ -811,8 +873,8 @@ class FrontController(RedditController):
 
         if location in ('reports', 'spam', 'modqueue', 'edited'):
             buttons = [
-                QueryButton(_('links and comments'), None, query_param='only'),
-                QueryButton(_('links'), 'links', query_param='only'),
+                QueryButton(_('posts and comments'), None, query_param='only'),
+                QueryButton(_('posts'), 'links', query_param='only'),
                 QueryButton(_('comments'), 'comments', query_param='only'),
             ]
             menus = [NavMenu(buttons, base_path=request.path, title=_('show'),
@@ -826,9 +888,12 @@ class FrontController(RedditController):
 
     @base_listing
     @disable_subreddit_css()
-    @validate(VSrModerator(perms='flair'),
-              name=nop('name'))
-    def GET_flairlisting(self, num, after, reverse, count, name):
+    @validate(
+        VSrModerator(perms='flair'),
+        name=nop('name'),
+        timeout=VNotInTimeout(),
+    )
+    def GET_flairlisting(self, num, after, reverse, count, name, timeout):
         user = None
         if name:
             try:
@@ -858,6 +923,8 @@ class FrontController(RedditController):
         if isinstance(c.site, FakeSubreddit):
             return self.abort404()
         else:
+            VNotInTimeout().run(action_name="pageview",
+                details_text="editreddit_%s" % location, target=c.site)
             return self._edit_normal_reddit(location, created)
 
     @require_oauth2_scope("read")
@@ -868,7 +935,16 @@ class FrontController(RedditController):
         Data includes the subscriber count, description, and header image."""
         if not is_api() or isinstance(c.site, FakeSubreddit):
             return self.abort404()
-        item = Wrapped(c.site, accounts_active_count=c.site.accounts_active)
+
+        # we do this here so that item.accounts_active_count is only present on
+        # this one endpoint, and not all the /subreddit listings etc. since
+        # looking up activity across multiple subreddits is more work.
+        accounts_active_count = None
+        activity = c.site.count_activity()
+        if activity:
+            accounts_active_count = activity.logged_in.count
+
+        item = Wrapped(c.site, accounts_active_count=accounts_active_count)
         Subreddit.add_props(c.user, [item])
         return Reddit(content=item).render()
 
@@ -878,6 +954,32 @@ class FrontController(RedditController):
         """Get the sidebar for the current subreddit"""
         usertext = UserText(c.site, c.site.description)
         return Reddit(content=usertext).render()
+
+    @require_oauth2_scope("read")
+    @api_doc(api_section.subreddits, uses_site=True)
+    def GET_rules(self):
+        """Get the rules for the current subreddit"""
+        if not feature.is_enabled("subreddit_rules", subreddit=c.site.name):
+            abort(404)
+        if isinstance(c.site, FakeSubreddit):
+            abort(404)
+
+        kind_labels = {
+            "all": _("Posts & Comments"),
+            "link": _("Posts only"),
+            "comment": _("Comments only"),
+        }
+        title_string = _("Rules for r/%(subreddit)s") % { "subreddit" : c.site.name }
+        content = Rules(
+            title=title_string,
+            kind_labels=kind_labels,
+        )
+        extra_js_config = {"kind_labels": kind_labels}
+        return ModToolsPage(
+            title=title_string,
+            content=content,
+            extra_js_config=extra_js_config,
+        ).render()
 
     @require_oauth2_scope("read")
     @api_doc(api_section.subreddits, uses_site=True)
@@ -894,52 +996,30 @@ class FrontController(RedditController):
 
         """
         sticky_fullnames = c.site.get_sticky_fullnames()
-        if sticky_fullnames:
-            try:
-                fullname = sticky_fullnames[num-1]
-            except IndexError:
-                abort(404)
-            sticky = Link._by_fullname(fullname, data=True)
-            self.redirect(sticky.make_permalink_slow())
-        else:
+
+        if not num or not sticky_fullnames:
             abort(404)
+
+        try:
+            fullname = sticky_fullnames[num-1]
+        except IndexError:
+            abort(404)
+        sticky = Link._by_fullname(fullname, data=True)
+        self.redirect(sticky.make_permalink_slow())
 
     def GET_awards(self):
         """The awards page."""
         return BoringPage(_("awards"), content=UserAwards()).render()
 
-    # filter for removing punctuation which could be interpreted as search syntax
-    related_replace_regex = re.compile(r'[?\\&|!{}+~^()"\':*-]+')
-    related_replace_with = ' '
-
     @base_listing
     @require_oauth2_scope("read")
     @validate(article=VLink('article'))
-    @api_doc(api_section.listings, uri="/related/{article}")
     def GET_related(self, num, article, after, reverse, count):
-        """Related page: performs a search using title of article as
-        the search query.
-
-        """
+        """Related page: removed, redirects to comments page."""
         if not can_view_link_comments(article):
             abort(403, 'forbidden')
 
-        query = self.related_replace_regex.sub(self.related_replace_with,
-                                               article.title)
-
-        rel_range = timedelta(days=3)
-        start = int(time_module.mktime((article._date - rel_range).utctimetuple()))
-        end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
-        nsfw = article.is_nsfw
-
-        q = g.search.get_related_query(query, article, start, end, nsfw)
-
-        content = self._search(q, num=num, after=after, reverse=reverse,
-                               count=count)
-
-        return LinkInfoPage(link=article, content=content,
-                            page_classes=['related-page'],
-                            subtitle=_('related')).render()
+        self.redirect(article.make_permalink_slow(), code=301)
 
     @base_listing
     @require_oauth2_scope("read")
@@ -1006,9 +1086,20 @@ class FrontController(RedditController):
         else:
             content = None
 
+        # event target for screenviews (/subreddits/search)
+        event_target = {}
+        if after:
+            event_target['target_count'] = count
+            if reverse:
+                event_target['target_before'] = after._fullname
+            else:
+                event_target['target_after'] = after._fullname
+        extra_js_config = {'event_target': event_target}
+
         res = SubredditsPage(content=content,
                              prev_search=query,
                              page_classes=['subreddits-page'],
+                             extra_js_config=extra_js_config,
                              # update if we ever add sorts
                              search_params={},
                              title=_("search results"),
@@ -1017,6 +1108,7 @@ class FrontController(RedditController):
 
     search_help_page = "/wiki/search"
     verify_langs_regex = re.compile(r"\A[a-z][a-z](,[a-z][a-z])*\Z")
+
     @base_listing
     @require_oauth2_scope("read")
     @validate(query=VLength('q', max_length=512),
@@ -1168,7 +1260,19 @@ class FrontController(RedditController):
                 content = subreddits
                 subreddits = None
 
-        check_cheating("search")
+        # event target for screenviews (/search)
+        event_target = {
+            'target_sort': sort,
+            'target_filter_time': recent,
+        }
+        if after:
+            event_target['target_count'] = count
+            if reverse:
+                event_target['target_before'] = after._fullname
+            else:
+                event_target['target_after'] = after._fullname
+        extra_js_config = {'event_target': event_target}
+
         res = SearchPage(_('search results'), query,
                          content=content,
                          subreddits=subreddits,
@@ -1182,19 +1286,21 @@ class FrontController(RedditController):
                          facets=subreddit_facets,
                          sort=sort,
                          recent=recent,
+                         extra_js_config=extra_js_config,
                          ).render()
 
         return res
 
     def _search_builder_wrapper(self, q):
         query = q.query
-        recent = q.recent
+        recent = str(q.recent) if q.recent else None
         sort = q.sort
         def wrapper_fn(thing):
-            thing.prev_search = query
-            thing.recent = recent
-            thing.sort = sort
             w = Wrapped(thing)
+            w.prev_search = query
+            w.recent = recent
+            w.sort = sort
+
             if isinstance(thing, Link):
                 w.render_class = SearchResultLink
             elif isinstance(thing, Subreddit):
@@ -1263,7 +1369,14 @@ class FrontController(RedditController):
 
         if url and not resubmit:
             # check to see if the url has already been submitted
-            listing = hot_links_by_url_listing(url, sr=c.site)
+
+            def keep_fn(item):
+                # skip promoted links
+                would_keep = item.keep_item(item)
+                return would_keep and getattr(item, "promoted", None) is None
+
+            listing = hot_links_by_url_listing(
+                url, sr=c.site, num=100, skip=True, keep_fn=keep_fn)
             links = listing.things
 
             if links and len(links) == 1:
@@ -1286,6 +1399,10 @@ class FrontController(RedditController):
 
         if not (c.default_sr or c.site.can_submit(c.user)):
             abort(403, "forbidden")
+
+        target = c.site if not isinstance(c.site, FakeSubreddit) else None
+        VNotInTimeout().run(action_name="pageview", details_text="submit",
+            target=target)
 
         captcha = Captcha() if c.user.needs_captcha() else None
 
@@ -1314,45 +1431,6 @@ class FrontController(RedditController):
                         show_sidebar=True,
                         page_classes=['submit-page'],
                         content=newlink).render()
-
-    def GET_frame(self):
-        """used for cname support.  makes a frame and
-        puts the proper url as the frame source"""
-        sub_domain = request.environ.get('sub_domain')
-        original_path = request.environ.get('original_path')
-        sr = Subreddit._by_domain(sub_domain)
-        return Cnameframe(original_path, sr, sub_domain).render()
-
-
-    def GET_framebuster(self, what=None, blah=None):
-        """
-        renders the contents of the iframe which, on a cname, checks
-        if the user is currently logged into reddit.
-
-        if this page is hit from the primary domain, redirects to the
-        cnamed domain version of the site.  If the user is logged in,
-        this cnamed version will drop a boolean session cookie on that
-        domain so that subsequent page reloads will be caught in
-        middleware and a frame will be inserted around the content.
-
-        If the user is not logged in, previous session cookies will be
-        emptied so that subsequent refreshes will not be rendered in
-        that pesky frame.
-        """
-        if not c.site.domain:
-            return ""
-        elif c.cname:
-            return FrameBuster(login=(what == "login")).render()
-        else:
-            path = "/framebuster/"
-            if c.user_is_loggedin:
-                path += "login/"
-            u = UrlParser(path + str(random.random()))
-            u.mk_cname(require_frame=False, subreddit=c.site,
-                       port=request.port)
-            return self.redirect(u.unparse())
-        # the user is not logged in or there is no cname.
-        return FrameBuster(login=False).render()
 
     def GET_catchall(self):
         return self.abort404()
@@ -1636,8 +1714,10 @@ class FormsController(RedditController):
                                developed_apps=OAuth2Client._by_developer(c.user))
         elif location == 'feeds' and c.user.pref_private_feeds:
             content = PrefFeeds()
+        elif location == 'deactivate':
+            content = PrefDeactivate()
         elif location == 'delete':
-            content = PrefDelete()
+            return self.redirect('/prefs/deactivate', code=301)
         elif location == 'security':
             if c.user.name not in g.admins:
                 return self.redirect('/prefs/')
@@ -1646,7 +1726,6 @@ class FormsController(RedditController):
             return self.abort404()
 
         return PrefsPage(content=content, infotext=infotext).render()
-
 
     @validate(dest=VDestination())
     def GET_login(self, dest):
@@ -1807,10 +1886,12 @@ class FormsController(RedditController):
               thing=VByName("thing"),
               giftmessage=VLength("giftmessage", 10000),
               email=ValidEmail("email"),
-              edit=VBoolean("edit", default=False))
+              edit=VBoolean("edit", default=False),
+    )
     def GET_gold(self, is_payment, goldtype, period, months, num_creddits,
                  signed, recipient, giftmessage, thing, email, edit):
-
+        VNotInTimeout().run(action_name="pageview", details_text="gold",
+            target=thing)
         if thing:
             thing_sr = Subreddit._byID(thing.sr_id, data=True)
             if (thing._deleted or
@@ -1873,7 +1954,7 @@ class FormsController(RedditController):
                              not c.user.has_gold_subscription)
             if not can_subscribe and goldtype == "autorenew":
                 self.redirect("/creddits", code=302)
-                
+
             return BoringPage(_("reddit gold"),
                               show_sidebar=False,
                               content=Gold(goldtype, period, months, signed,

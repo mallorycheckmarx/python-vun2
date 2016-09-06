@@ -49,7 +49,6 @@ DATA_DUMP=$TMPDIR/$THING_CLS-$INTERVAL-data.dump
 function clean_up {
     rm -f $THING_DUMP $DATA_DUMP
 }
-trap clean_up EXIT
 
 if [ -e $THING_DUMP ]; then
     echo cannot start because $THING_DUMP exists
@@ -58,17 +57,46 @@ if [ -e $THING_DUMP ]; then
 fi
 touch $THING_DUMP
 
+# since we're in charge of this run now, we have to clean up afterwards
+trap clean_up EXIT
 
 function run_query {
     psql -F"\t" -A -t -c "$1"
 }
 
 function mrsort {
-    sort -S200m
+    LC_ALL=C sort -S200m
 }
 
 function reddit {
-    paster --plugin=r2 run $REDDIT_INI $REDDIT_ROOT/r2/lib/mr_top.py -c "$1"
+    reddit_usage() {
+        echo "reddit: [-jN] cmd..." 2>&1
+        exit
+    }
+
+    local OPTIND o njobs
+
+    njobs=1
+
+    while getopts ":j:" o; do
+        case "${o}" in
+            j)
+                njobs="${OPTARG}"
+                ;;
+            *)
+                reddit_usage
+                ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+    cmd="paster --plugin=r2 run $REDDIT_INI $REDDIT_ROOT/r2/lib/mr_top.py -c \"$@ # $THING_CLS $INTERVAL $TIMES\""
+
+    if [ "$njobs" = "1" ]; then
+        sh -c "$cmd" # just execute it directly
+    else
+        $REDDIT_ROOT/../scripts/hashdist.py -n"$njobs" -- sh -c "$cmd"
+    fi
 }
 
 # Hack to let pg fetch all things with intervals
@@ -107,6 +135,6 @@ cat $THING_DUMP $DATA_DUMP |
     reddit "join_things('$THING_CLS')" |
     reddit "time_listings($TIMES, '$THING_CLS')" |
     mrsort |
-    reddit "write_permacache()"
+    reddit -j4 "write_permacache()"
 
 echo 'Done.'

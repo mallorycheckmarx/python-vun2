@@ -52,16 +52,12 @@
   %if not compact:
     <%
       op = "reg" if register else "login"
-      base = g.https_endpoint if not c.cname else ''
+      base = g.https_endpoint
       tabindex = 2 if register else 3
     %>
     <form id="${'register' if register else 'login'}-form" method="post" 
-          action="${add_sr(base + '/post/' + op, nocname=not c.authorized_cname)}"
+          action="${add_sr(base + '/post/' + op)}"
           class="form-v2">
-      %if c.cname:
-         <input type="hidden" name="${UrlParser.cname_get}" 
-                value="${random.random()}">
-      %endif
       <input type="hidden" name="op" value="${op}">
       %if dest:
         <input type="hidden" name="dest" value="${dest}">
@@ -88,7 +84,7 @@
                %endif
                >
       </%call>
-      <%call expr="form_group('passwd', 'BAD_PASSWORD', show_errors=True)">
+      <%call expr="form_group('passwd', 'BAD_PASSWORD', 'WRONG_PASSWORD', show_errors=True)">
         <label for="passwd_${op}" class="screenreader-only">${_('password')}:</label>
         <input id="passwd_${op}" class="c-form-control" name="passwd" type="password"
                tabindex="${tabindex}" placeholder="${_('password')}"
@@ -151,16 +147,12 @@
   %else:
     <%
       op = "reg" if register else "login"
-      base = g.https_endpoint if not c.cname else ''
+      base = g.https_endpoint
       tabindex = 2 if register else 3
     %>
     <form id="login_${op}" method="post" 
-          action="${add_sr(base + '/post/' + op, nocname=not c.authorized_cname)}"
+          action="${add_sr(base + '/post/' + op)}"
           class="user-form ${'register-form' if register else 'login-form'}">
-      %if c.cname:
-         <input type="hidden" name="${UrlParser.cname_get}" 
-                value="${random.random()}" />
-      %endif
       <input type="hidden" name="op" value="${op}" />
       %if dest:
         <input type="hidden" name="dest" value="${dest}" />

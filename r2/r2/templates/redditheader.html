@@ -73,7 +73,7 @@
       %if thing.enable_login_cover and not g.read_only_mode:
       <span class="user">
         <%
-          base = g.https_endpoint if not c.cname else ""
+          base = g.https_endpoint
           login_url = add_sr(base + "/login", sr_path=False)
         %>
         ${text_with_links(_("Want to join? %(login_or_register)s in seconds."),
@@ -100,7 +100,7 @@
       %endif
       <span class="user">
          ${plain_link(c.user.name, "/user/%s/" % c.user.name, _sr_path=False)}
-         &nbsp;(<span class="userkarma" title="${_("link karma")}">${format_number(display_link_karma(c.user.link_karma))}</span>)
+         &nbsp;(<span class="userkarma" title="${_("post karma")}">${format_number(display_link_karma(c.user.link_karma))}</span>)
       </span>
 
       ${separator("|")}
@@ -125,10 +125,13 @@
               mail_img_class = 'nohavemail'
               mail_img_title = "no new mod mail"
               mail_path = "/message/moderator/"
+            
+            css_class = "%s access-required" % mail_img_class
+            data_attrs = {'event-action': 'pageview', 'event-detail': 'modmail'}
           %>
          ${plain_link(_("mod messages"), path=mail_path,
                     title = mail_img_title, _sr_path = False,
-                    _id = "modmail", _class=mail_img_class)}
+                    _id = "modmail", _class=css_class, data=data_attrs)}
          ${separator("|")}
       %endif
     %endif

@@ -32,52 +32,9 @@ PENDING = 'PENDING'
 NOTFOUND = 'NOTFOUND'
 
 
-def get_compatible_jobflows(emr_connection, bootstrap_actions=None,
-                            setup_steps=None):
-    """Return jobflows that have specified bootstrap actions and setup steps.
-
-    Assumes there are no conflicts with bootstrap actions or setup steps:
-    a jobflow is compatible if it contains at least the requested
-    bootstrap_actions and setup_steps (may contain additional).
-
-    """
-
-    bootstrap_actions = bootstrap_actions or []
-    setup_steps = setup_steps or []
-
-    jobflows = emr_connection.describe_jobflows(states=LIVE_STATES)
-    if not jobflows:
-        return []
-
-    # format of step objects returned from describe_jobflows differs from those
-    # created locally, so they must be compared carefully
-    def args_tuple_emr(step):
-        return tuple(sorted(arg.value for arg in step.args))
-
-    def args_tuple_local(step):
-        return tuple(sorted(step.args()))
-
-    required_bootstrap_actions = {(step.name, step.path, args_tuple_local(step))
-                                  for step in bootstrap_actions}
-    required_setup_steps = {(step.name, step.jar(), args_tuple_local(step))
-                            for step in setup_steps}
-
-    if not required_bootstrap_actions and not required_setup_steps:
-        return jobflows
-
-    running = []
-    for jf in jobflows:
-        extant_bootstrap_actions = {(step.name, step.path, args_tuple_emr(step))
-                                    for step in jf.bootstrapactions}
-        if not (required_bootstrap_actions <= extant_bootstrap_actions):
-            continue
-
-        extant_setup_steps = {(step.name, step.jar, args_tuple_emr(step))
-                              for step in jf.steps}
-        if not (required_setup_steps <= extant_setup_steps):
-            continue
-        running.append(jf)
-    return running
+def get_live_clusters(emr_connection):
+    ret = emr_connection.list_clusters(cluster_states=LIVE_STATES)
+    return ret.clusters or []
 
 
 @memoize('get_step_states', time=60, timeout=60)
@@ -88,12 +45,18 @@ def get_step_states(emr_connection, jobflowid):
 
     """
 
-    jobflow = emr_connection.describe_jobflow(jobflowid)
+    ret = emr_connection.list_steps(jobflowid)
+    steps = []
+    steps.extend(ret.steps)
+    while hasattr(ret, "marker"):
+        ret = emr_connection.list_steps(jobflowid, marker=ret.marker)
+        steps.extend(ret.steps)
 
-    if jobflow:
-        return [(step.name, step.state) for step in jobflow.steps]
-    else:
-        return []
+    ret = []
+    for step in steps:
+        start_str = step.status.timeline.creationdatetime
+        ret.append((step.name, step.status.state, start_str))
+    return ret
 
 
 def get_step_state(emr_connection, jobflowid, step_name, update=False):
@@ -107,48 +70,50 @@ def get_step_state(emr_connection, jobflowid, step_name, update=False):
     g.reset_caches()
     steps = get_step_states(emr_connection, jobflowid, _update=update)
 
-    for name, state in reversed(steps):
+    for name, state, start in sorted(steps, key=lambda t: t[2], reverse=True):
         if name == step_name:
             return state
     else:
         return NOTFOUND
 
 
-def get_jobflow_by_name(emr_connection, jobflow_name):
-    """Return the most recent jobflow with specified name."""
-    jobflows = emr_connection.describe_jobflows(states=LIVE_STATES)
+def get_jobflow_id(emr_connection, name):
+    """Return id of the live cluster with specified name."""
+    ret = emr_connection.list_clusters(cluster_states=LIVE_STATES)
+    clusters = ret.clusters
 
-    for jobflow in jobflows:
-        if jobflow.name == jobflow_name:
-            return jobflow
-    else:
-        return None
+    try:
+        # clusters appear to be ordered by creation time
+        return [cluster.id for cluster in clusters if cluster.name == name][0]
+    except IndexError:
+        return
 
 
 def terminate_jobflow(emr_connection, jobflow_name):
-    jobflow = get_jobflow_by_name(emr_connection, jobflow_name)
-    if jobflow:
-        emr_connection.terminate_jobflow(jobflow.jobflowid)
+    jobflow_id = get_jobflow_id(emr_connection, jobflow_name)
+    if jobflow_id:
+        emr_connection.terminate_jobflow(jobflow_id)
 
 
 def modify_slave_count(emr_connection, jobflow_name, num_slaves=1):
-    jobflow = get_jobflow_by_name(emr_connection, jobflow_name)
-    if not jobflow:
+    jobflow_id = get_jobflow_id(emr_connection, jobflow_name)
+    if not jobflow_id:
         return
 
-    slave_instancegroupid = None
-    slave_instancerequestcount = 0
-    for instance in jobflow.instancegroups:
-        if instance.name == 'slave':
-            slave_instancegroupid = instance.instancegroupid
-            slave_instancerequestcount = instance.instancerequestcount
-            break
+    ret = emr_connection.list_instance_groups(jobflow_id)
 
-    if slave_instancegroupid and slave_instancerequestcount != num_slaves:
-        print ('Modifying slave instance count of %s (%s -> %s)' %
-               (jobflow_name, slave_instancerequestcount, num_slaves))
-        emr_connection.modify_instance_groups(slave_instancegroupid,
-                                              num_slaves)
+    try:
+        instancegroup = [i for i in ret.instancegroups if i.name == "slave"][0]
+    except IndexError:
+        # no slave instance group
+        return
+
+    if instancegroup.requestedinstancecount != num_slaves:
+        return
+
+    msg = 'Modifying slave instance count of %s (%s -> %s)'
+    print msg % (jobflow_name, instancegroup.requestedinstancecount, num_slaves)
+    emr_connection.modify_instance_groups(instancegroup.id, num_slaves)
 
 
 class EmrJob(object):
@@ -158,7 +123,7 @@ class EmrJob(object):
                  ami_version='latest', master_instance_type='m1.small',
                  slave_instance_type='m1.small', num_slaves=1,
                  visible_to_all_users=True, job_flow_role=None,
-                 service_role=None):
+                 service_role=None, tags=None):
 
         self.jobflowid = None
         self.conn = emr_connection
@@ -178,6 +143,7 @@ class EmrJob(object):
         self.visible_to_all_users = visible_to_all_users
         self.job_flow_role = job_flow_role
         self.service_role = service_role
+        self.tags = tags or {}
 
     def run(self):
         steps = copy(self.setup_steps)
@@ -196,14 +162,12 @@ class EmrJob(object):
             job_flow_role=self.job_flow_role, service_role=self.service_role)
 
         self.jobflowid = self.conn.run_jobflow(**job_flow_args)
-        return
-
-    @property
-    def jobflow_state(self):
-        if self.jobflowid:
-            return self.conn.describe_jobflow(self.jobflowid).state
-        else:
-            return NOTFOUND
+        if self.tags:
+            assert isinstance(self.tags, dict)
+            # The EMR Cluster name is distinct from the Name tag. The latter
+            # is exportable as a cost allocation tag.
+            self.tags["Name"] = self.name
+            self.conn.add_tags(self.jobflowid, self.tags)
 
     def terminate(self):
         terminate_jobflow(self.conn, self.name)

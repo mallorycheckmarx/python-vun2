@@ -39,9 +39,9 @@
 
 <h1>${_wsf("submit to %(sr)s", sr=sr)}</h1>
 
-<%utils:submit_form onsubmit="return post_form(this, 'submit', linkstatus, null, true)" 
+<%utils:submit_form onsubmit="return post_form(this, 'submit', linkstatus, null, true)"
                     action=${add_sr("/submit")},
-                    _class="submit content",
+                    _class="submit content warn-on-unload",
                     _id="newlink">
 
 %if thing.show_link and thing.show_self:
@@ -129,11 +129,11 @@ ${thing.captcha}
     
 </div>
 
-<div class="roundfield info-notice" title="${_('why a brick? read to the bottom of the rules page to find out!')}">
-  ${text_with_links(_("please be mindful of reddit's %(few_rules)s and practice %(good_reddiquette)s."),
-      few_rules=dict(
-        link_text=_("few rules"),
-        path="/rules",
+<div class="roundfield info-notice">
+  ${text_with_links(_("please be mindful of reddit's %(content_policy)s and practice %(good_reddiquette)s."),
+      content_policy=dict(
+        link_text=_("content policy"),
+        path="/help/contentpolicy",
         target="_blank"),
       good_reddiquette=dict(
         link_text=_("good reddiquette"),
@@ -148,6 +148,7 @@ ${thing.captcha}
   <span class="status"></span>
   ${error_field("RATELIMIT", "ratelimit")}
   ${error_field("INVALID_OPTION", "sr")}
+  ${error_field("IN_TIMEOUT", "sr")}
 </div>
 </%utils:submit_form>
 

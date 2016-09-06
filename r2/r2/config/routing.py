@@ -69,6 +69,18 @@ def make_map(config):
     mc('/adminoff', controller='forms', action='adminoff')
     mc('/submit', controller='front', action='submit')
 
+    # redirect old urls to the new
+    ABOUT_BASE = "https://about.reddit.com/"
+    mc('/about', controller='redirect', action='redirect', dest=ABOUT_BASE, 
+       conditions={'function':not_in_sr})
+    mc('/about/values', controller='redirect', action='redirect', dest=ABOUT_BASE)
+    mc('/about/team', controller='redirect', action='redirect',
+       dest=ABOUT_BASE)
+    mc('/about/alien', controller='redirect', action='redirect',
+       dest=ABOUT_BASE + "press")
+    mc('/jobs', controller='redirect', action='redirect',
+       dest=ABOUT_BASE + "careers")
+
     mc('/over18', controller='post', action='over18')
     mc('/quarantine', controller='post', action='quarantine')
     mc('/quarantine_optout', controller='api', action='quarantine_optout')
@@ -87,7 +99,8 @@ def make_map(config):
     mc('/subreddits/login', controller='forms', action='login')
     mc('/subreddits/:where', controller='reddits', action='listing',
        where='popular', conditions={'function':not_in_sr},
-       requirements=dict(where="popular|new|banned|employee|gold|default|quarantine"))
+       requirements=dict(where="popular|new|banned|employee|gold|default|"
+                               "quarantine|featured"))
     # If no subreddit is specified, might as well show a list of 'em.
     mc('/r', controller='redirect', action='redirect', dest='/subreddits')
 
@@ -115,7 +128,6 @@ def make_map(config):
     mc('/buttonlite', controller='buttons', action='button_lite')
 
     mc('/widget', controller='buttons', action='widget_demo_page')
-    mc('/bookmarklets', controller='buttons', action='bookmarklets')
 
     mc('/awards', controller='front', action='awards')
     mc('/awards/confirm/:code', controller='front',
@@ -129,7 +141,7 @@ def make_map(config):
        dest='/contact')
     mc('/contact', controller='front', action='contact_us')
     mc('/jobs', controller='redirect', action='redirect',
-       dest='https://jobs.lever.co/reddit')
+       dest='https://boards.greenhouse.io/reddit')
 
     mc('/admin/awards', controller='awards')
     mc('/admin/awards/:awardcn/:action', controller='awards',
@@ -152,7 +164,6 @@ def make_map(config):
        partial_connect(mc, path_prefix='/user/:username/m/:multipath'),
        partial_connect(mc, path_prefix='/me/m/:multipath', my_multi=True),
        partial_connect(mc, path_prefix='/me/f/:filtername'),
-       partial_connect(mc, path_prefix='/m/:multipath', sr_multi=True),
     )
 
     for connect in multi_prefixes:
@@ -170,8 +181,12 @@ def make_map(config):
 
     mc("/newsletter", controller="newsletter", action="newsletter")
 
+    mc("/gtm/jail", controller="googletagmanager", action="jail")
+    mc("/gtm", controller="googletagmanager", action="gtm")
+
     mc('/oembed', controller='oembed', action='oembed')
 
+    mc('/about/rules', controller='front', action='rules')
     mc('/about/sidebar', controller='front', action='sidebar')
     mc('/about/sticky', controller='front', action='sticky')
     mc('/about/flair', controller='front', action='flairlisting')
@@ -229,10 +244,6 @@ def make_map(config):
     mc('/mail/unsubscribe/:user/:key', controller='forms',
        action='unsubscribe_emails')
     mc('/stylesheet', controller='front', action='stylesheet')
-    mc('/frame', controller='front', action='frame')
-    mc('/framebuster/:blah', controller='front', action='framebuster')
-    mc('/framebuster/:what/:blah',
-       controller='front', action='framebuster')
 
     mc('/share/close', controller='front', action='share_close')
 
@@ -245,8 +256,9 @@ def make_map(config):
     # sponsor listings
     mc('/sponsor/promoted/:sort', controller='sponsorlisting', action='listing',
        requirements=dict(sort="future_promos|pending_promos|unpaid_promos|"
-                              "rejected_promos|live_promos|underdelivered|"
-                              "reported|house|fraud|all"))
+                              "rejected_promos|live_promos|edited_live_promos|"
+                              "underdelivered|reported|house|fraud|all|"
+                              "unapproved_campaigns|by_platform"))
     mc('/sponsor', controller='sponsorlisting', action="listing",
        sort="all")
     mc('/sponsor/promoted/', controller='sponsorlisting', action="listing",
@@ -258,7 +270,8 @@ def make_map(config):
     # listings of user's promos
     mc('/promoted/:sort', controller='promotelisting', action="listing",
        requirements=dict(sort="future_promos|pending_promos|unpaid_promos|"
-                              "rejected_promos|live_promos|all"))
+                              "rejected_promos|live_promos|edited_live_promos|"
+                              "all"))
     mc('/promoted/', controller='promotelisting', action="listing", sort="all")
 
     # editing endpoints
@@ -303,8 +316,7 @@ def make_map(config):
        dest='/gold?goldtype=creddits')
 
     mc('/password', controller='forms', action="password")
-    mc('/:action', controller='front',
-       requirements=dict(action="random|framebuster"))
+    mc('/random', controller='front', action="random")
     mc('/:action', controller='embed',
        requirements=dict(action="blog"))
     mc('/help/gold', controller='redirect', action='redirect',
@@ -341,7 +353,7 @@ def make_map(config):
     mc('/w/*page', controller='wiki', action='wiki_redirect')
 
     mc('/goto', controller='toolbar', action='goto')
-    mc('/tb/:id', controller='toolbar', action='tb')
+    mc('/tb/:link_id', controller='front', action='link_id_redirect')
     mc('/toolbar/*frame', controller='toolbar', action='redirect')
 
     mc('/c/:comment_id', controller='front', action='comment_by_id')
@@ -385,13 +397,15 @@ def make_map(config):
     mc('/api/gadget/click/:ids', controller='api', action='gadget',
        type='click')
     mc('/api/gadget/:type', controller='api', action='gadget')
+    mc('/api/zendeskreply', controller='mailgunwebhook', action='zendeskreply')
     mc('/api/:action', controller='promoteapi',
-       requirements=dict(action=("promote|unpromote|edit_promo|link_thumb|"
-                                 "freebie|promote_note|update_pay|"
+       requirements=dict(action=("promote|unpromote|edit_promo|ad_s3_callback|"
+                                 "ad_s3_params|freebie|promote_note|update_pay|"
                                  "edit_campaign|delete_campaign|"
                                  "add_roadblock|rm_roadblock|check_inventory|"
                                  "refund_campaign|terminate_campaign|"
-                                 "review_fraud|create_promo|link_mobile_ad_image")))
+                                 "review_fraud|create_promo|"
+                                 "toggle_pause_campaign")))
     mc('/api/:action', controller='apiminimal',
        requirements=dict(action="new_captcha"))
     mc('/api/:type', controller='api',
@@ -412,7 +426,6 @@ def make_map(config):
 
     mc("/api/multi/mine", controller="multiapi", action="my_multis")
     mc("/api/multi/user/:username", controller="multiapi", action="list_multis")
-    mc("/api/multi/r/:srname", controller="multiapi", action="list_sr_multis")
     mc("/api/multi/copy", controller="multiapi", action="multi_copy")
     mc("/api/multi/rename", controller="multiapi", action="multi_rename")
     mc("/api/multi/*multipath/r/:srname", controller="multiapi", action="multi_subreddit")
@@ -429,6 +442,8 @@ def make_map(config):
        requirements=dict(action="scopes"))
     mc("/api/v1/user/:username/trophies",
        controller="apiv1user", action="usertrophies")
+    mc("/api/v1/:action", controller="apiv1login",
+       requirements=dict(action="register|login"))
     mc("/api/v1/:action", controller="apiv1user")
     # Same controller/action as /prefs/friends
     mc("/api/v1/me/:where", controller="userlistlisting",
@@ -481,10 +496,9 @@ def make_map(config):
 
     # these should be near the buttom, because they should only kick
     # in if everything else fails. It's the attempted catch-all
-    # reddit.com/http://... and reddit.com/34fr, but these redirect to
-    # the less-guessy versions at /s/ and /tb/
-    mc('/:linkoid', controller='toolbar', action='linkoid',
-       requirements=dict(linkoid='[0-9a-z]{1,6}'))
+    # reddit.com/http://... and reddit.com/34fr
+    mc('/:link_id', controller='front', action='link_id_redirect',
+       requirements=dict(link_id='[0-9a-z]{1,6}'))
     mc('/:urloid', controller='toolbar', action='s',
        requirements=dict(urloid=r'(\w+\.\w{2,}|https?).*'))
 

@@ -71,11 +71,14 @@ class World(object):
         client = self.stacked_proxy_safe_get(c, 'oauth2_client', None)
         return getattr(client, '_id', None)
 
+    def current_loid_obj(self):
+        return self.stacked_proxy_safe_get(c, 'loid')
+
     def current_loid(self):
-        cookies = self.stacked_proxy_safe_get(request, 'cookies')
-        if not cookies:
+        loid = self.current_loid_obj()
+        if not loid:
             return None
-        return cookies.get("loid", None)
+        return loid.loid
 
     def is_admin(self, user):
         if not user or not hasattr(user, 'name'):
@@ -99,10 +102,10 @@ class World(object):
 
         return user.gold
 
-    def is_user_loggedin(self):
-        if self.current_user():
-            return True
-        return False
+    def is_user_loggedin(self, user):
+        if not (user or self.current_user()):
+            return False
+        return True
 
     def url_features(self):
         return set(request.GET.getall('feature'))
@@ -110,3 +113,12 @@ class World(object):
     def live_config(self, name):
         live = self.stacked_proxy_safe_get(g, 'live_config', {})
         return live.get(name)
+
+    def live_config_iteritems(self):
+        live = self.stacked_proxy_safe_get(g, 'live_config', {})
+        return live.iteritems()
+
+    def simple_event(self, name):
+        stats = self.stacked_proxy_safe_get(g, 'stats', None)
+        if stats:
+            return stats.simple_event(name)

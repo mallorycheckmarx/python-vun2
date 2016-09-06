@@ -38,11 +38,7 @@ try:
     # get caught and the stack trace won't be presented to the user in
     # production
     from r2.config import extensions
-    from r2.controllers.reddit_base import (
-        RedditController,
-        pagecache_policy,
-        PAGECACHE_POLICY,
-    )
+    from r2.controllers.reddit_base import RedditController, UnloggedUser
     from r2.lib.cookies import Cookies
     from r2.lib.errors import ErrorSet
     from r2.lib.filters import (
@@ -143,6 +139,16 @@ class ErrorController(RedditController):
             return handle_awful_failure("ErrorController.__call__: %r" % e)
 
 
+    def send400(self):
+        if 'usable_error_content' in request.environ:
+            return request.environ['usable_error_content']
+        else:
+            res = pages.RedditError(
+                title=_("bad request (%(domain)s)") % dict(domain=g.domain),
+                message=_("you sent an invalid request"),
+                explanation=request.GET.get('explanation'))
+            return res.render()
+
     def send403(self):
         c.site = DefaultSR()
         if 'usable_error_content' in request.environ:
@@ -180,9 +186,6 @@ class ErrorController(RedditController):
             response.headers["Retry-After"] = str(retry_after)
         return request.environ['usable_error_content']
 
-    # Misses are both incredibly common and cheap for this endpoint, don't force
-    # more useful things out of the pagecache.
-    @pagecache_policy(PAGECACHE_POLICY.NEVER)
     def GET_document(self):
         try:
             c.errors = c.errors or ErrorSet()
@@ -195,17 +198,31 @@ class ErrorController(RedditController):
             except ValueError:
                 code = 404
             srname = request.GET.get('srname', '')
-            takedown = request.GET.get('takedown', "")
+            takedown = request.GET.get('takedown', '')
+            error_name = request.GET.get('error_name', '')
 
-            # StatusBasedRedirect will override this anyway, but we need this
-            # here for pagecache to see.
-            response.status_int = code
+            if isinstance(c.user, basestring):
+                # somehow requests are getting here with c.user unset
+                c.user_is_loggedin = False
+                c.user = UnloggedUser(browser_langs=None)
 
             if srname:
                 c.site = Subreddit._by_name(srname)
 
             if request.GET.has_key('allow_framing'):
                 c.allow_framing = bool(request.GET['allow_framing'] == '1')
+
+            if (error_name == 'IN_TIMEOUT' and
+                    not 'usable_error_content' in request.environ):
+                timeout_days_remaining = c.user.days_remaining_in_timeout
+
+                errpage = pages.InterstitialPage(
+                    _("suspended"),
+                    content=pages.InTimeoutInterstitial(
+                        timeout_days_remaining=timeout_days_remaining,
+                    ),
+                )
+                request.environ['usable_error_content'] = errpage.render()
 
             if code in (204, 304):
                 # NEVER return a content body on 204/304 or downstream
@@ -215,12 +232,17 @@ class ErrorController(RedditController):
                 return str(code)
             elif c.render_style in extensions.API_TYPES:
                 data = request.environ.get('extra_error_data', {'error': code})
+                message = request.GET.get('message', '')
+                if message:
+                    data['message'] = message
                 if request.environ.get("WANT_RAW_JSON"):
                     return scriptsafe_dumps(data)
                 return websafe_json(json.dumps(data))
             elif takedown and code == 404:
                 link = Link._by_fullname(takedown)
                 return pages.TakedownPage(link).render()
+            elif code == 400:
+                return self.send400()
             elif code == 403:
                 return self.send403()
             elif code == 429:

@@ -20,42 +20,37 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-def get_num_children(list comments, dict tree):
-    """Count the number of children for each comment."""
 
+def get_tree_details(dict tree):
+    cdef:
+        list cids = []
+        dict depth = {}
+        dict parents = {}
+        list child_ids
+
+    for parent_id in sorted(tree):
+        child_ids = tree[parent_id]
+
+        cids.extend(child_ids)
+
+        parents.update({child_id: parent_id for child_id in child_ids})
+
+        child_depth = depth.get(parent_id, -1) + 1
+        depth.update({child_id: child_depth for child_id in child_ids})
+
+    return cids, depth, parents
+
+
+def calc_num_children(dict tree):
     cdef:
         dict num_children = {}
-        list stack = []
-        list children = []
-        list missing = []
-        long comment
-        long current
-        long child
+        list child_ids
 
-    for comment in sorted(comments):
-        stack.append(comment)
-
-    while stack:
-        current = stack[-1]
-
-        if current in num_children:
-            stack.pop()
+    for parent_id in sorted(tree, reverse=True):
+        if parent_id is None:
             continue
 
-        children = tree.get(current, [])
-
-        for child in children:
-            if child not in num_children and not tree.get(child, None):
-                num_children[child] = 0
-
-        missing = [child for child in children if not child in num_children]
-
-        if not missing:
-            num_children[current] = 0
-            stack.pop()
-            for child in children:
-                num_children[current] += 1 + num_children[child]
-        else:
-            stack.extend(missing)
-
+        child_ids = tree[parent_id]
+        num_children[parent_id] = sum(
+            1 + num_children.get(child_id, 0) for child_id in tree[parent_id])
     return num_children

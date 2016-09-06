@@ -56,13 +56,12 @@ you might need to cancel your jobs later, use ``TryLaterBySubject``, which uses
 almost the exact same semantics, but has a useful ``unschedule`` method.
 """
 
-import contextlib
-import datetime
-import json
+from collections import OrderedDict
+from datetime import datetime, timedelta
 import uuid
 
 from pycassa.system_manager import TIME_UUID_TYPE, UTF8_TYPE
-from pycassa.util import convert_time_to_uuid, convert_uuid_to_time
+from pycassa.util import convert_uuid_to_time
 from pylons import app_globals as g
 
 from r2.lib.db import tdb_cassandra
@@ -76,22 +75,84 @@ class TryLater(tdb_cassandra.View):
     _compare_with = TIME_UUID_TYPE
 
     @classmethod
-    def multi_ready(cls, rowkeys, cutoff=None):
-        if cutoff is None:
-            cutoff = datetime.datetime.utcnow()
-        return cls._cf.multiget(rowkeys,
-                                column_finish=cutoff,
-                                column_count=tdb_cassandra.max_column_count)
+    def process_ready_items(cls, rowkey, ready_fn):
+        cutoff = datetime.now(g.tz)
+
+        columns = cls._cf.xget(rowkey, include_timestamp=True)
+        ready_items = OrderedDict()
+        ready_timestamps = []
+        unripe_timestamps = []
+
+        for ready_time_uuid, (data, timestamp) in columns:
+            ready_time = convert_uuid_to_time(ready_time_uuid)
+            ready_datetime = datetime.fromtimestamp(ready_time, tz=g.tz)
+            if ready_datetime <= cutoff:
+                ready_items[ready_time_uuid] = data
+                ready_timestamps.append(timestamp)
+            else:
+                unripe_timestamps.append(timestamp)
+
+        g.stats.simple_event(
+            "trylater.{system}.ready".format(system=rowkey),
+            delta=len(ready_items),
+        )
+        g.stats.simple_event(
+            "trylater.{system}.pending".format(system=rowkey),
+            delta=len(unripe_timestamps),
+        )
+
+        if not ready_items:
+            return
+
+        try:
+            ready_fn(ready_items)
+        except:
+            g.stats.simple_event(
+                "trylater.{system}.failed".format(system=rowkey),
+            )
+
+        cls.cleanup(rowkey, ready_items, ready_timestamps, unripe_timestamps)
 
     @classmethod
-    @contextlib.contextmanager
-    def multi_handle(cls, rowkeys, cutoff=None):
-        if cutoff is None:
-            cutoff = datetime.datetime.utcnow()
-        ready = cls.multi_ready(rowkeys, cutoff)
-        yield ready
-        for system, items in ready.iteritems():
-            cls._remove(system, items.keys())
+    def cleanup(cls, rowkey, ready_items, ready_timestamps, unripe_timestamps):
+        """Remove ALL ready items from the C* row"""
+        if (not unripe_timestamps or
+                min(unripe_timestamps) > max(ready_timestamps)):
+            # do a row/timestamp delete to avoid generating column
+            # tombstones
+            cls._cf.remove(rowkey, timestamp=max(ready_timestamps))
+            g.stats.simple_event(
+                "trylater.{system}.row_delete".format(system=rowkey),
+                delta=len(ready_items),
+            )
+        else:
+            # the columns weren't created with a fixed delay and there are some
+            # unripe items with older (lower) timestamps than the items we want
+            # to delete. fallback to deleting specific columns.
+            cls._cf.remove(rowkey, ready_items.keys())
+            g.stats.simple_event(
+                "trylater.{system}.column_delete".format(system=rowkey),
+                delta=len(ready_items),
+            )
+
+    @classmethod
+    def run(cls):
+        """Run all ready items through their processing hook."""
+        from r2.lib import amqp
+        from r2.lib.hooks import all_hooks
+
+        for hook_name, hook in all_hooks().items():
+            if hook_name.startswith("trylater."):
+                rowkey = hook_name[len("trylater."):]
+
+                def ready_fn(ready_items):
+                    return hook.call(data=ready_items)
+
+                g.log.info("Trying %s", rowkey)
+                cls.process_ready_items(rowkey, ready_fn)
+
+        amqp.worker.join()
+        g.stats.flush()
 
     @classmethod
     def search(cls, rowkey, when):
@@ -112,8 +173,8 @@ class TryLater(tdb_cassandra.View):
                  execution time
         """
         if delay is None:
-            delay = datetime.timedelta(minutes=60)
-        key = datetime.datetime.now(g.tz) + delay
+            delay = timedelta(minutes=60)
+        key = datetime.now(g.tz) + delay
         scheduled = {key: data}
         cls._set_values(system, scheduled)
         return scheduled
@@ -144,7 +205,7 @@ class TryLaterBySubject(tdb_cassandra.View):
 
         # TTL 10 minutes after the TryLater runs just in case TryLater
         # is running late.
-        ttl = (delay + datetime.timedelta(minutes=10)).total_seconds()
+        ttl = (delay + timedelta(minutes=10)).total_seconds()
         coldict = {subject: when}
         cls._set_values(system, coldict, ttl=ttl)
         return scheduled

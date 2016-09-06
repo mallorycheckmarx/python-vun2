@@ -1,5 +1,34 @@
 r.utils = {
 
+    /**
+     * update the given url's query params
+     * @param  {String} url
+     * @param  {Object} newParams
+     * @return {String}
+     */
+    replaceUrlParams: function(url, newParams) {
+      var a = document.createElement('a');
+      var urlObj = $.url(url);
+      var params = urlObj.param();
+
+      Object.keys(newParams).forEach(function(key) {
+        params[key] = newParams[key]
+      });
+
+      a.href = url;
+      a.search = $.param(params);
+      return a.href;
+    },
+
+    // Returns human readable file sizes
+    // http://stackoverflow.com/a/25613067/704286
+    formatFileSize: function(size) {
+      var suffixes = ['bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'EiB', 'ZiB'];
+      var order = size ? parseInt(Math.log2(size) / 10, 10) : 0;
+
+      return (size / (1 << (order * 10))).toFixed(3).replace(/\.?0+$/, '') + ' ' + suffixes[order];
+    },
+
     fullnameToId: function(fullname) {
         var parts = fullname.split('_');
         var id36 = parts && parts[1];

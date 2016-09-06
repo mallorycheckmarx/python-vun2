@@ -20,50 +20,32 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from copy import copy, deepcopy
 import cPickle as pickle
+from datetime import datetime, timedelta
 import hashlib
+import itertools
 import new
 import sys
-import itertools
 
-from copy import copy, deepcopy
-from datetime import datetime, timedelta
-
+from _pylibmc import MemcachedError
 from pylons import app_globals as g
 
 from r2.lib import amqp, hooks
-from r2.lib.cache import sgm
 from r2.lib.db import tdb_sql as tdb, sorts, operators
+from r2.lib.sgm import sgm
 from r2.lib.utils import class_property, Results, tup, to36
 
 
-THING_CACHE_TTL = int(timedelta(days=1).total_seconds())
-QUERY_CACHE_TTL = int(timedelta(days=1).total_seconds())
+class NotFound(Exception):
+    pass
 
 
-class NotFound(Exception): pass
 CreationError = tdb.CreationError
 
 thing_types = {}
 rel_types = {}
 
-def begin():
-    tdb.transactions.begin()
-
-def commit():
-    tdb.transactions.commit()
-
-def rollback():
-    tdb.transactions.rollback()
-
-def obj_id(things):
-    return tuple(t if isinstance(t, (int, long)) else t._id for t in things)
-
-def thing_prefix(cls_name, id=None):
-    p = cls_name + '_'
-    if id:
-        p += str(id)
-    return p
 
 class SafeSetAttr:
     def __init__(self, cls):
@@ -75,6 +57,19 @@ class SafeSetAttr:
     def __exit__(self, type, value, tb):
         self.cls.__safe__ = False
 
+
+class TdbTransactionContext(object):
+    def __enter__(self):
+        tdb.transactions.begin()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type:
+            tdb.transactions.rollback()
+            raise
+        else:
+            tdb.transactions.commit()
+
+
 class DataThing(object):
     _base_props = ()
     _int_props = ()
@@ -84,7 +79,8 @@ class DataThing(object):
     _essentials = ()
     c = operators.Slots()
     __safe__ = False
-    _cache = g.cache
+    _cache = None
+    _cache_ttl = int(timedelta(hours=12).total_seconds())
 
     def __init__(self):
         safe_set_attr = SafeSetAttr(self)
@@ -93,7 +89,6 @@ class DataThing(object):
             self._dirties = {}
             self._t = {}
             self._created = False
-            self._loaded = True
 
     #TODO some protection here?
     def __setattr__(self, attr, val, make_dirty=True):
@@ -138,214 +133,216 @@ class DataThing(object):
             _id = "???"
 
         try:
-            cl = object.__getattribute__(self, "__class__").__name__
+            class_name = object.__getattribute__(self, "__class__").__name__
         except AttributeError:
-            cl = "???"
-
-        if self._loaded:
-            nl = "it IS loaded"
-        else:
-            nl = "it is NOT loaded"
+            class_name = "???"
 
         try:
             id_str = "%d" % _id
         except TypeError:
             id_str = "%r" % _id
 
-        descr = '%s(%s).%s' % (cl, id_str, attr)
+        error_msg = "{cls}({id}).{attr} not found".format(
+            cls=class_name,
+            id=_id,
+            attr=attr,
+        )
 
-        essentials = object.__getattribute__(self, "_essentials")
-        deleted = object.__getattribute__(self, "_deleted")
-
-        if deleted:
-            nl += " and IS deleted."
-        else:
-            nl += " and is NOT deleted."
-
-        if attr in essentials and not deleted:
-            g.log.error("%s not found; %s forcing reload.", descr, nl)
-            self._load()
-
-            try:
-                return self._t[attr]
-            except KeyError:
-                g.log.error("reload of %s didn't help.", descr)
-
-        raise AttributeError, '%s not found; %s' % (descr, nl)
-
-    def _cache_key(self):
-        return thing_prefix(self.__class__.__name__, self._id)
-
-    def _other_self(self):
-        """Load from the cached version of myself. Skip the local cache."""
-        l = self._cache.get(self._cache_key(), allow_local = False)
-        if l and l._id != self._id:
-            g.log.error("thing.py: Doppleganger on read: got %s for %s",
-                        (l, self))
-            self._cache.delete(self._cache_key())
-            return 
-        return l
-
-    def _cache_myself(self):
-        ck = self._cache_key()
-        self._cache.set(ck, self, time=THING_CACHE_TTL)
-
-    def _sync_latest(self):
-        """Load myself from the cache to and re-apply the .dirties
-        list to make sure we don't overwrite a previous commit. """
-        other_self = self._other_self()
-        if not other_self:
-            return self._dirty
-
-        #copy in the cache's version
-        for prop in self._base_props:
-            self.__setattr__(prop, getattr(other_self, prop), False)
-
-        if other_self._loaded:
-            self._t = other_self._t
-
-        #re-apply the .dirties
-        old_dirties = self._dirties
-        self._dirties = {}
-        for k, (old_val, new_val) in old_dirties.iteritems():
-            setattr(self, k, new_val)
-
-        #return whether we're still dirty or not
-        return self._dirty
-
-    def _commit(self, keys=None):
-        lock = None
-
-        try:
-            if not self._created:
-                begin()
-                self._create()
-                just_created = True
-            else:
-                just_created = False
-
-            lock = g.make_lock("thing_commit", 'commit_' + self._fullname)
-            lock.acquire()
-
-            if not just_created and not self._sync_latest():
-                #sync'd and we have nothing to do now, but we still cache anyway
-                self._cache_myself()
-                return
-
-            # begin is a no-op if already done, but in the not-just-created
-            # case we need to do this here because the else block is not
-            # executed when the try block is exited prematurely in any way
-            # (including the return in the above branch)
-            begin()
-
-            to_set = self._dirties.copy()
-            if keys:
-                keys = tup(keys)
-                for key in to_set.keys():
-                    if key not in keys:
-                        del to_set[key]
-
-            data_props = {}
-            thing_props = {}
-            for k, (old_value, new_value) in to_set.iteritems():
-                if k.startswith('_'):
-                    thing_props[k[1:]] = new_value
-                else:
-                    data_props[k] = new_value
-
-            if data_props:
-                self._set_data(self._type_id,
-                               self._id,
-                               just_created,
-                               **data_props)
-
-            if thing_props:
-                self._set_props(self._type_id, self._id, **thing_props)
-
-            if keys:
-                for k in keys:
-                    if self._dirties.has_key(k):
-                        del self._dirties[k]
-            else:
-                self._dirties.clear()
-        except:
-            rollback()
-            raise
-        else:
-            commit()
-            self._cache_myself()
-        finally:
-            if lock:
-                lock.release()
-
-        hooks.get_hook("thing.commit").call(thing=self, changes=to_set)
+        raise AttributeError, error_msg
 
     @classmethod
-    def _load_multi(cls, need):
-        need = tup(need)
-        need_ids = [n._id for n in need]
-        datas = cls._get_data(cls._type_id, need_ids)
-        to_save = {}
+    def _cache_prefix(cls):
+        return cls.__name__ + '_'
+
+    def _cache_key(self):
+        prefix = self._cache_prefix()
+        return "{prefix}{id}".format(prefix=prefix, id=self._id)
+
+    @classmethod
+    def get_things_from_db(cls, ids):
+        """Read props from db and return id->thing dict."""
+        raise NotImplementedError
+
+    @classmethod
+    def get_things_from_cache(cls, ids, stale=False, allow_local=True):
+        """Read things from cache and return id->thing dict."""
+        cache = cls._cache
+        prefix = cls._cache_prefix()
+        things_by_id = cache.get_multi(
+            ids, prefix=prefix, stale=stale, allow_local=allow_local,
+            stat_subname=cls.__name__)
+        return things_by_id
+
+    @classmethod
+    def write_things_to_cache(cls, things_by_id):
+        """Write id->thing dict to cache.
+
+        Used to populate the cache after a cache miss/db read. To ensure we
+        don't clobber a write by another process (we don't have a lock) we use
+        add_multi to only set the values that don't exist.
+
+        """
+
+        cache = cls._cache
+        prefix = cls._cache_prefix()
         try:
-            essentials = object.__getattribute__(cls, "_essentials")
-        except AttributeError:
-            essentials = ()
+            cache.add_multi(things_by_id, prefix=prefix, time=cls._cache_ttl)
+        except MemcachedError as e:
+            g.log.warning("write_things_to_cache error: %s", e)
 
-        for i in need:
-            #if there wasn't any data, keep the empty dict
-            i._t.update(datas.get(i._id, i._t))
-            i._loaded = True
+    def get_read_modify_write_lock(self):
+        """Return the lock to be used when doing a read-modify-write.
 
-            for attr in essentials:
-                if attr not in i._t:
-                    print "Warning: %s is missing %s" % (i._fullname, attr)
-            to_save[i._id] = i
+        When modifying a Thing we must read its current version from cache and
+        update that to avoid clobbering modifications made by other processes
+        after we first read the Thing.
 
-        prefix = thing_prefix(cls.__name__)
+        """
 
-        #write the data to the cache
-        cls._cache.set_multi(to_save, prefix=prefix, time=THING_CACHE_TTL)
+        return g.make_lock("thing_commit", 'commit_' + self._fullname)
 
-    def _load(self):
-        self._load_multi(self)
+    def write_new_thing_to_db(self):
+        """Write the new thing to db and return its id."""
+        raise NotImplementedError
 
-    def _safe_load(self):
-        if not self._loaded:
-            self._load()
+    def write_props_to_db(self, props, data_props, brand_new_thing):
+        """Write the props to db."""
+        raise NotImplementedError
 
-    def _incr(self, prop, amt = 1):
-        if self._dirty:
-            raise ValueError, "cannot incr dirty thing"
+    def write_changes_to_db(self, changes, brand_new_thing=False):
+        """Write changes to db."""
+        if not changes:
+            return
 
-        #make sure we're incr'ing an _int_prop or _data_int_prop.
-        if prop not in self._int_props:
-            if (prop in self._data_int_props or
-                self._int_prop_suffix and prop.endswith(self._int_prop_suffix)):
-                #if we're incr'ing a data_prop, make sure we're loaded
-                if not self._loaded:
-                    self._load()
+        data_props = {}
+        props = {}
+        for prop, (old_value, new_value) in changes.iteritems():
+            if prop.startswith('_'):
+                props[prop[1:]] = new_value
             else:
-                msg = ("cannot incr non int prop %r on %r -- it's not in %r or %r" %
-                       (prop, self, self._int_props, self._data_int_props))
-                raise ValueError, msg
+                data_props[prop] = new_value
 
-        with g.make_lock("thing_commit", 'commit_' + self._fullname):
-            self._sync_latest()
-            old_val = getattr(self, prop)
-            if self._defaults.has_key(prop) and self._defaults[prop] == old_val:
-                #potential race condition if the same property gets incr'd
-                #from default at the same time
-                setattr(self, prop, old_val + amt)
-                self._commit(prop)
-            else:
-                self.__setattr__(prop, old_val + amt, False)
-                #db
-                if prop.startswith('_'):
-                    tdb.incr_thing_prop(self._type_id, self._id, prop[1:], amt)
-                else:
-                    self._incr_data(self._type_id, self._id, prop, amt)
+        self.write_props_to_db(props, data_props, brand_new_thing)
 
-            self._cache_myself()
+    def write_thing_to_cache(self, lock, brand_new_thing=False):
+        """After modifying a thing write the entire object to cache.
+
+        The caller must either pass in the read_modify_write lock or be acting
+        for a newly created thing (that has therefore never been cached before).
+
+        """
+
+        assert brand_new_thing or lock.have_lock
+
+        cache = self.__class__._cache
+        key = self._cache_key()
+        cache.set(key, self, time=self.__class__._cache_ttl)
+
+    def update_from_cache(self, lock):
+        """Read the current value of thing from cache and update self.
+
+        To be used before writing cache to avoid clobbering changes made by a
+        different process. Must be called under write lock.
+
+        """
+
+        assert lock.have_lock
+
+        # disallow reading from local cache because we want to pull in changes
+        # made by other processes since we first read this thing.
+        other_selfs = self.__class__.get_things_from_cache(
+            [self._id], allow_local=False)
+        if not other_selfs:
+            return
+        other_self = other_selfs[self._id]
+
+        # update base_props
+        for base_prop in self._base_props:
+            other_self_val = getattr(other_self, base_prop)
+            self.__setattr__(base_prop, other_self_val, make_dirty=False)
+
+        # update data_props
+        self._t = other_self._t
+
+        # reapply changes made to self
+        self_changes = self._dirties
+        self._dirties = {}
+        for data_prop, (old_val, new_val) in self_changes.iteritems():
+            setattr(self, data_prop, new_val)
+
+    @classmethod
+    def record_cache_write(cls, event, delta=1):
+        raise NotImplementedError
+
+    def _commit(self):
+        """Write changes to db and write the full object to cache.
+
+        When writing to postgres we write only the changes. The data in postgres
+        is the canonical version.
+
+        For a few reasons (speed, decreased load on postgres, postgres
+        replication lag) we want to keep a perfectly consistent copy of the
+        thing in cache.
+
+        To achieve this we read the current value of the thing from cache to
+        pull in any changes made by other processes, apply our changes to the
+        thing, and finally set it in cache. This is done under lock to ensure
+        read/write safety.
+
+        If the cached thing is evicted or expires we must read from postgres.
+
+        Failure cases:
+        * Write to cache fails. The cache now contains stale/incorrect data. To
+          ensure we recover quickly TTLs should be set as low as possible
+          without overloading postgres.
+        * There is long replication lag and high cache pressure. When an object
+          is modified it is written to cache, but quickly evicted, The next
+          lookup might read from a postgres secondary before the changes have
+          been replicated there. To protect against this replication lag and
+          cache pressure should be monitored and kept at acceptable levels.
+        * Near simultaneous writes that create a logical inconsistency. Say
+          request 1 and request 2 both read state 0 of a Thing. Request 1
+          changes Thing.prop from True to False and writes to cache and
+          postgres. Request 2 examines the value of Thing.prop, sees that it is
+          True, and due to logic in the app sets Thing.prop_is_true to True and
+          writes to cache and postgres. Request 2 didn't clobber the change
+          made by request 1, but it made a logically incorrect change--the
+          resulting state is Thing.prop = False and Thing.prop_is_true = True.
+          Logic like this should be identified and avoided wherever possible, or
+          protected against using locks.
+
+        """
+
+        if not self._created:
+            with TdbTransactionContext():
+                _id = self.write_new_thing_to_db()
+                self._id = _id
+                self._created = True
+
+                changes = self._dirties.copy()
+                self.write_changes_to_db(changes, brand_new_thing=True)
+                self._dirties.clear()
+
+            self.write_thing_to_cache(lock=None, brand_new_thing=True)
+            self.record_cache_write(event="create")
+        else:
+            with self.get_read_modify_write_lock() as lock:
+                self.update_from_cache(lock)
+                if not self._dirty:
+                    return
+
+                with TdbTransactionContext():
+                    changes = self._dirties.copy()
+                    self.write_changes_to_db(changes, brand_new_thing=False)
+                    self._dirties.clear()
+
+                self.write_thing_to_cache(lock)
+                self.record_cache_write(event="modify")
+
+        hooks.get_hook("thing.commit").call(thing=self, changes=changes)
+
+    def _incr(self, prop, amt=1):
+        raise NotImplementedError
 
     @property
     def _id36(self):
@@ -363,12 +360,11 @@ class DataThing(object):
     def _fullname(self):
         return self._fullname_from_id36(self._id36)
 
-    #TODO error when something isn't found?
     @classmethod
-    def _byID(cls, ids, data=False, return_dict=True, extra_props=None,
-              stale=False, ignore_missing=False):
-        ids, single = tup(ids, True)
-        prefix = thing_prefix(cls.__name__)
+    def _byID(cls, ids, data=True, return_dict=True, stale=False,
+              ignore_missing=False):
+        # data props are ALWAYS loaded, data keyword is meaningless
+        ids, single = tup(ids, ret_is_single=True)
 
         for x in ids:
             if not isinstance(x, (int, long)):
@@ -378,59 +374,43 @@ class DataThing(object):
             elif x < tdb.MIN_THING_ID:
                 raise NotFound('negative thing_id in %r' % ids)
 
-        def count_found(ret, still_need):
-            cls._cache.stats.cache_report(
-                hits=len(ret), misses=len(still_need),
-                cache_name='sgm.%s' % cls.__name__)
+        if not single and not ids:
+            if return_dict:
+                return {}
+            else:
+                return []
 
-        if not cls._cache.stats:
-            count_found = None
+        things_by_id = cls.get_things_from_cache(ids, stale=stale)
+        missing_ids = [_id
+            for _id in ids
+            if _id not in things_by_id
+        ]
 
-        def items_db(ids):
-            items = cls._get_item(cls._type_id, ids)
-            for i in items.keys():
-                items[i] = cls._build(i, items[i])
+        if missing_ids:
+            from_db_by_id = cls.get_things_from_db(missing_ids)
+        else:
+            from_db_by_id = {}
 
-            return items
+        if from_db_by_id:
+            cls.write_things_to_cache(from_db_by_id)
+            cls.record_cache_write(event="cache", delta=len(from_db_by_id))
 
-        bases = sgm(cls._cache, ids, items_db, prefix, time=THING_CACHE_TTL,
-                    stale=stale, found_fn=count_found,
-                    stat_subname=cls.__name__)
+        things_by_id.update(from_db_by_id)
 
         # Check to see if we found everything we asked for
-        missing = []
-        for i in ids:
-            if i not in bases:
-                missing.append(i)
-            elif bases[i] and bases[i]._id != i:
-                g.log.error("thing.py: Doppleganger on byID: %s got %s for %s" %
-                            (cls.__name__, bases[i]._id, i))
-                bases[i] = items_db([i]).values()[0]
-                bases[i]._cache_myself()
+        missing = [_id for _id in ids if _id not in things_by_id]
         if missing and not ignore_missing:
             raise NotFound, '%s %s' % (cls.__name__, missing)
-        for i in missing:
-            ids.remove(i)
 
-        if data:
-            need = []
-            for v in bases.itervalues():
-                if not v._loaded:
-                    need.append(v)
-            if need:
-                cls._load_multi(need)
-
-        if extra_props:
-            for _id, props in extra_props.iteritems():
-                for k, v in props.iteritems():
-                    bases[_id].__setattr__(k, v, False)
+        if missing:
+            ids = [_id for _id in ids if _id not in missing]
 
         if single:
-            return bases[ids[0]] if ids else None
+            return things_by_id[ids[0]] if ids else None
         elif return_dict:
-            return bases
+            return things_by_id
         else:
-            return filter(None, (bases.get(i) for i in ids))
+            return filter(None, (things_by_id.get(_id) for _id in ids))
 
     @classmethod
     def _byID36(cls, id36s, return_dict = True, **kw):
@@ -509,26 +489,6 @@ class DataThing(object):
     def _query(cls, *a, **kw):
         raise NotImplementedError()
 
-    @classmethod
-    def _build(*a, **kw):
-        raise NotImplementedError()
-
-    def _get_data(*a, **kw):
-        raise NotImplementedError()
-
-    def _set_data(*a, **kw):
-        raise NotImplementedError()
-
-    def _incr_data(*a, **kw):
-        raise NotImplementedError()
-
-    def _get_item(*a, **kw):
-        raise NotImplementedError
-
-    def _create(self):
-        base_props = (getattr(self, prop) for prop in self._base_props)
-        self._id = self._make_fn(self._type_id, *base_props)
-        self._created = True
 
 class ThingMeta(type):
     def __init__(cls, name, bases, dct):
@@ -555,13 +515,9 @@ class Thing(DataThing):
     __metaclass__ = ThingMeta
     _base_props = ('_ups', '_downs', '_date', '_deleted', '_spam')
     _int_props = ('_ups', '_downs')
-    _make_fn = staticmethod(tdb.make_thing)
-    _set_props = staticmethod(tdb.set_thing_props)
-    _get_data = staticmethod(tdb.get_thing_data)
-    _set_data = staticmethod(tdb.set_thing_data)
-    _get_item = staticmethod(tdb.get_thing)
-    _incr_data = staticmethod(tdb.incr_thing_data)
     _type_prefix = 't'
+
+    is_votable = False
 
     def __init__(self, ups = 0, downs = 0, date = None, deleted = False,
                  spam = False, id = None, **attrs):
@@ -571,10 +527,12 @@ class Thing(DataThing):
             if id:
                 self._id = id
                 self._created = True
-                self._loaded = False
 
-            if not date: date = datetime.now(g.tz)
-            
+            if not date:
+                date = datetime.now(g.tz)
+            else:
+                date = date.astimezone(g.tz)
+
             self._ups = ups
             self._downs = downs
             self._date = date
@@ -584,16 +542,132 @@ class Thing(DataThing):
         #new way
         for k, v in attrs.iteritems():
             self.__setattr__(k, v, not self._created)
-        
+
+    @classmethod
+    def record_cache_write(cls, event, delta=1):
+        name = cls.__name__.lower()
+        event_name = "thing.{event}.{name}".format(event=event, name=name)
+        g.stats.simple_event(event_name, delta)
+
     def __repr__(self):
         return '<%s %s>' % (self.__class__.__name__,
                             self._id if self._created else '[unsaved]')
 
-    def _set_id(self, thing_id):
-        if not self._created:
-            with self.safe_set_attr:
-                self._base_props += ('_thing_id',)
-                self._thing_id = thing_id
+    @classmethod
+    def get_things_from_db(cls, ids):
+        """Read props from db and return id->thing dict."""
+        props_by_id = tdb.get_thing(cls._type_id, ids)
+        data_props_by_id = tdb.get_thing_data(cls._type_id, ids)
+
+        things_by_id = {}
+        for _id, props in props_by_id.iteritems():
+            data_props = data_props_by_id.get(_id, {})
+            thing = cls(
+                ups=props.ups,
+                downs=props.downs,
+                date=props.date,
+                deleted=props.deleted,
+                spam=props.spam,
+                id=_id,
+            )
+            thing._t.update(data_props)
+
+            if not all(data_prop in thing._t for data_prop in cls._essentials):
+                # a Thing missing an essential prop is invalid
+                # this can happen if a process looks up the Thing as it's
+                # created but between when the props and the data props are
+                # written
+                g.log.error("%s missing essentials, got %s", thing, thing._t)
+                g.stats.simple_event("thing.load.missing_essentials")
+                continue
+
+            things_by_id[_id] = thing
+
+        return things_by_id
+
+    def write_new_thing_to_db(self):
+        """Write the new thing to db and return its id."""
+        assert not self._created
+
+        _id = tdb.make_thing(
+            type_id=self.__class__._type_id,
+            ups=self._ups,
+            downs=self._downs,
+            date=self._date,
+            deleted=self._deleted,
+            spam=self._spam,
+        )
+        return _id
+
+    def write_props_to_db(self, props, data_props, brand_new_thing):
+        """Write the props to db."""
+        if data_props:
+            tdb.set_thing_data(
+                type_id=self.__class__._type_id,
+                thing_id=self._id,
+                brand_new_thing=brand_new_thing,
+                **data_props
+            )
+
+        if props and not brand_new_thing:
+            # if the thing is brand new its props have just been written by
+            # write_new_thing_to_db
+            tdb.set_thing_props(
+                type_id=self.__class__._type_id,
+                thing_id=self._id,
+                **props
+            )
+
+    def _incr(self, prop, amt=1):
+        """Increment self.prop."""
+        assert not self._dirty
+
+        is_base_prop = prop in self._int_props
+        is_data_prop = (prop in self._data_int_props or
+            self._int_prop_suffix and prop.endswith(self._int_prop_suffix))
+        db_prop = prop[1:] if is_base_prop else prop
+
+        assert is_base_prop or is_data_prop
+
+        with self.get_read_modify_write_lock() as lock:
+            self.update_from_cache(lock)
+            old_val = getattr(self, prop)
+            new_val = old_val + amt
+
+            self.__setattr__(prop, new_val, make_dirty=False)
+
+            with TdbTransactionContext():
+                if is_base_prop:
+                    # can just incr a base prop because it must have been set
+                    # when the object was created
+                    tdb.incr_thing_prop(
+                        type_id=self.__class__._type_id,
+                        thing_id=self._id,
+                        prop=db_prop,
+                        amount=amt,
+                    )
+                elif (prop in self.__class__._defaults and
+                        self.__class__._defaults[prop] == old_val):
+                    # when updating a data prop from the default value assume
+                    # the value was never actually set so it's not safe to incr
+                    tdb.set_thing_data(
+                        type_id=self.__class__._type_id,
+                        thing_id=self._id,
+                        brand_new_thing=False,
+                        **{db_prop: new_val}
+                    )
+                else:
+                    tdb.incr_thing_data(
+                        type_id=self.__class__._type_id,
+                        thing_id=self._id,
+                        prop=db_prop,
+                        amount=amt,
+                    )
+
+                # write to cache within the transaction context so an exception
+                # will cause a transaction rollback
+                self.write_thing_to_cache(lock)
+        self.record_cache_write(event="incr")
 
     @property
     def _age(self):
@@ -615,10 +689,19 @@ class Thing(DataThing):
     def _confidence(self):
         return sorts.confidence(self._ups, self._downs)
 
-    @classmethod
-    def _build(cls, id, bases):
-        return cls(bases.ups, bases.downs, bases.date,
-                   bases.deleted, bases.spam, id)
+    @property
+    def num_votes(self):
+        return self._ups + self._downs
+
+    @property
+    def is_distinguished(self):
+        """Return whether this Thing has a special flag on it (mod, admin, etc).
+
+        Done this way because distinguish is implemented in such a way where it
+        does not exist by default, but can also be set to a string of 'no',
+        which also means it is not distinguished.
+        """
+        return getattr(self, 'distinguished', 'no') != 'no'
 
     @classmethod
     def _query(cls, *all_rules, **kw):
@@ -690,7 +773,7 @@ class RelationMeta(type):
     def __repr__(cls):
         return '<relation: %s>' % cls._type_name
 
-def Relation(type1, type2, denorm1 = None, denorm2 = None):
+def Relation(type1, type2):
     class RelationCls(DataThing):
         __metaclass__ = RelationMeta
         if not (issubclass(type1, Thing) and issubclass(type2, Thing)):
@@ -700,34 +783,93 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
         _type2 = type2
 
         _base_props = ('_thing1_id', '_thing2_id', '_name', '_date')
-        _make_fn = staticmethod(tdb.make_relation)
-        _set_props = staticmethod(tdb.set_rel_props)
-        _get_data = staticmethod(tdb.get_rel_data)
-        _set_data = staticmethod(tdb.set_rel_data)
-        _get_item = staticmethod(tdb.get_rel)
-        _incr_data = staticmethod(tdb.incr_rel_data)
         _type_prefix = Relation._type_prefix
-        _eagerly_loaded_data = False
-        _fast_cache = g.relcache
 
-        # data means, do you load the reddit_data_rel_* fields (the data on the
-        # rel itself). eager_load means, do you load thing1 and thing2
-        # immediately. It calls _byID(xxx, data=thing_data).
+        _cache_ttl = int(timedelta(hours=1).total_seconds())
+
+        _enable_fast_query = True
+        _rel_cache = g.relcache
+        _rel_cache_ttl = int(timedelta(hours=1).total_seconds())
+
         @classmethod
-        def _byID_rel(cls, ids, data=False, return_dict=True, extra_props=None,
-                      eager_load=False, thing_data=False, thing_stale=False):
+        def get_things_from_db(cls, ids):
+            """Read props from db and return id->rel dict."""
+            props_by_id = tdb.get_rel(cls._type_id, ids)
+            data_props_by_id = tdb.get_rel_data(cls._type_id, ids)
+
+            rels_by_id = {}
+            for _id, props in props_by_id.iteritems():
+                data_props = data_props_by_id.get(_id, {})
+                rel = cls(
+                    thing1=props.thing1_id,
+                    thing2=props.thing2_id,
+                    name=props.name,
+                    date=props.date,
+                    id=_id,
+                )
+                rel._t.update(data_props)
+
+                if not all(data_prop in rel._t for data_prop in cls._essentials):
+                    # a Relation missing an essential prop is invalid
+                    # this can happen if a process looks up the Relation as it's
+                    # created but between when the props and the data props are
+                    # written
+                    g.log.error("%s missing essentials, got %s", rel, rel._t)
+                    g.stats.simple_event("thing.load.missing_essentials")
+                    continue
+
+                rels_by_id[_id] = rel
+
+            return rels_by_id
+
+        def write_new_thing_to_db(self):
+            """Write the new rel to db and return its id."""
+            assert not self._created
+
+            _id = tdb.make_relation(
+                rel_type_id=self.__class__._type_id,
+                thing1_id=self._thing1_id,
+                thing2_id=self._thing2_id,
+                name=self._name,
+                date=self._date,
+            )
+            return _id
+
+        def write_props_to_db(self, props, data_props, brand_new_thing):
+            """Write the props to db."""
+            if data_props:
+                tdb.set_rel_data(
+                    rel_type_id=self.__class__._type_id,
+                    thing_id=self._id,
+                    brand_new_thing=brand_new_thing,
+                    **data_props
+                )
+
+            if props and not brand_new_thing:
+                tdb.set_rel_props(
+                    rel_type_id=self.__class__._type_id,
+                    rel_id=self._id,
+                    **props
+                )
+
+        # eager_load means, do you load thing1 and thing2 immediately. It calls
+        # _byID(xxx).
+        @classmethod
+        def _byID_rel(cls, ids, data=True, return_dict=True,
+                      eager_load=False, thing_data=True, thing_stale=False,
+                      ignore_missing=False):
+            # data props are ALWAYS loaded, data and thing_data keywords are
+            # meaningless
 
             ids, single = tup(ids, True)
 
-            bases = cls._byID(ids, data=data, return_dict=True,
-                              extra_props=extra_props)
+            bases = cls._byID(
+                ids, return_dict=True, ignore_missing=ignore_missing)
 
             values = bases.values()
 
             if values and eager_load:
-                for base in bases.values():
-                    base._eagerly_loaded_data = True
-                load_things(values, load_data=thing_data, stale=thing_stale)
+                load_things(values, stale=thing_stale)
 
             if single:
                 return bases[ids[0]]
@@ -749,10 +891,11 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                 if id:
                     self._id = id
                     self._created = True
-                    self._loaded = False
 
-                if not date: date = datetime.now(g.tz)
-
+                if not date:
+                    date = datetime.now(g.tz)
+                else:
+                    date = date.astimezone(g.tz)
 
                 #store the id, and temporarily store the actual object
                 #because we may need it later
@@ -764,22 +907,17 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             for k, v in attrs.iteritems():
                 self.__setattr__(k, v, not self._created)
 
-            def denormalize(denorm, src, dest):
-                if denorm:
-                    setattr(dest, denorm[0], getattr(src, denorm[1]))
-
-            #denormalize
-            if not self._created:
-                denormalize(denorm1, thing2, thing1)
-                denormalize(denorm2, thing1, thing2)
+        @classmethod
+        def record_cache_write(cls, event, delta=1):
+            name = cls.__name__.lower()
+            event_name = "rel.{event}.{name}".format(event=event, name=name)
+            g.stats.simple_event(event_name, delta)
 
         def __getattr__(self, attr):
             if attr == '_thing1':
-                return self._type1._byID(self._thing1_id,
-                                         self._eagerly_loaded_data)
+                return self._type1._byID(self._thing1_id)
             elif attr == '_thing2':
-                return self._type2._byID(self._thing2_id,
-                                         self._eagerly_loaded_data)
+                return self._type2._byID(self._thing2_id)
             elif attr.startswith('_t1'):
                 return getattr(self._thing1, attr[3:])
             elif attr.startswith('_t2'):
@@ -794,45 +932,56 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                      self._type2.__name__,self._thing2_id,
                      '[unsaved]' if not self._created else '\b'))
 
-        @staticmethod
-        def _fast_cache_key_from_parts(class_name, thing1_id, thing2_id, name):
-            return thing_prefix(class_name) + '_'.join([
-                str(thing1_id),
-                str(thing2_id),
-                name]
-            ).replace(' ', '_')
+        @classmethod
+        def _rel_cache_prefix(cls):
+            return "rel:"
 
-        def _fast_cache_key(self):
-            return self._fast_cache_key_from_parts(
-                self.__class__.__name__,
+        @classmethod
+        def _rel_cache_key_from_parts(cls, thing1_id, thing2_id, name):
+            key = "{prefix}{cls}_{t1}_{t2}_{name}".format(
+                prefix=cls._rel_cache_prefix(),
+                cls=cls.__name__,
+                t1=str(thing1_id),
+                t2=str(thing2_id),
+                name=name,
+            )
+            return key
+
+        def _rel_cache_key(self):
+            return self._rel_cache_key_from_parts(
                 self._thing1_id,
                 self._thing2_id,
-                self._name)
+                self._name,
+            )
 
         def _commit(self):
             DataThing._commit(self)
-            #if i denormalized i need to check here
-            if denorm1: self._thing1._commit(denorm1[0])
-            if denorm2: self._thing2._commit(denorm2[0])
-            #set fast query cache
-            self._fast_cache.set(self._fast_cache_key(), self._id)
+
+            if self.__class__._enable_fast_query:
+                ttl = self.__class__._rel_cache_ttl
+                self._rel_cache.set(self._rel_cache_key(), self._id, time=ttl)
 
         def _delete(self):
             tdb.del_rel(self._type_id, self._id)
 
-            #clear cache
             self._cache.delete(self._cache_key())
-            #update fast query cache
-            self._fast_cache.set(self._fast_cache_key(), None)
-            #temporarily set this property so the rest of this request
-            #know it's deleted. save -> unsave, hide -> unhide
+
+            if self.__class__._enable_fast_query:
+                ttl = self.__class__._rel_cache_ttl
+                self._rel_cache.set(self._rel_cache_key(), None, time=ttl)
+
+            # temporarily set this property so the rest of this request
+            # knows it's deleted. save -> unsave, hide -> unhide
             self._name = 'un' + self._name
 
         @classmethod
         def _fast_query(cls, thing1s, thing2s, name, data=True, eager_load=True,
-                        thing_data=False, thing_stale=False):
+                        thing_data=True, thing_stale=False):
             """looks up all the relationships between thing1_ids and
                thing2_ids and caches them"""
+
+            if not cls._enable_fast_query:
+                raise ValueError("%s._fast_query is disabled" % cls.__name__)
 
             cache_key_lookup = dict()
 
@@ -857,12 +1006,12 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                         cls.c._name == names)
 
                 for rel in q:
-                    rel_ids[cls._fast_cache_key_from_parts(
-                        cls.__name__,
+                    rel_cache_key = cls._rel_cache_key_from_parts(
                         rel._thing1_id,
                         rel._thing2_id,
-                        str(rel._name)
-                    )] = rel._id
+                        str(rel._name),
+                    )
+                    rel_ids[rel_cache_key] = rel._id
 
                 for cache_key in uncached_keys:
                     if cache_key not in rel_ids:
@@ -885,24 +1034,28 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             # create cache keys for all permutations and initialize lookup
             for t in rel_tuples:
                 thing1, thing2, name = t
-                cache_key = cls._fast_cache_key_from_parts(
-                    cls.__name__,
+                rel_cache_key = cls._rel_cache_key_from_parts(
                     thing1._id,
                     thing2._id,
-                    name)
-                cache_key_lookup[cache_key] = t
+                    name,
+                )
+                cache_key_lookup[rel_cache_key] = t
 
             # get the relation ids from the cache or query the db
-            res = sgm(cls._fast_cache, cache_key_lookup.keys(), lookup_rel_ids)
+            res = sgm(
+                cache=cls._rel_cache,
+                keys=cache_key_lookup.keys(),
+                miss_fn=lookup_rel_ids,
+                time=cls._rel_cache_ttl,
+                ignore_set_errors=True,
+            )
 
             # get the relation objects
             rel_ids = {rel_id for rel_id in res.itervalues()
                               if rel_id is not None}
             rels = cls._byID_rel(
                 rel_ids,
-                data=data,
                 eager_load=eager_load,
-                thing_data=thing_data,
                 thing_stale=thing_stale)
 
             # Takes aggregated results from cache and db (res) and transforms
@@ -916,36 +1069,34 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             return res_obj
 
         @classmethod
-        def _build(cls, id, bases):
-            return cls(bases.thing1_id, bases.thing2_id, bases.name, bases.date, id)
-
-        @classmethod
         def _query(cls, *a, **kw):
             return Relations(cls, *a, **kw)
 
+        @classmethod
+        def _simple_query(cls, props, *rules, **kw):
+            """Return only the requested props rather than Relation objects."""
+            return RelationsPropsOnly(cls, props, *rules, **kw)
 
     return RelationCls
 Relation._type_prefix = 'r'
 
-class Query(object):
-    _cache = g.cache
 
+class Query(object):
     def __init__(self, kind, *rules, **kw):
         self._rules = []
         self._kind = kind
 
         self._read_cache = kw.get('read_cache')
         self._write_cache = kw.get('write_cache')
-        self._cache_time = kw.get('cache_time', QUERY_CACHE_TTL)
+        self._cache_time = kw.get('cache_time', 86400)
         self._limit = kw.get('limit')
         self._offset = kw.get('offset')
-        self._data = kw.get('data')
         self._stale = kw.get('stale', False)
         self._sort = kw.get('sort', ())
         self._filter_primary_sort_only = kw.get('filter_primary_sort_only', False)
 
         self._filter(*rules)
-    
+
     def _setsort(self, sorts):
         sorts = tup(sorts)
         #make sure sorts are wrapped in a Sort obj
@@ -975,10 +1126,7 @@ class Query(object):
             else:
                 s.__class__ = operators.asc
 
-    def _list(self, data = False):
-        if data:
-            self._data = data
-
+    def _list(self, data=True):
         return list(self)
 
     def _dir(self, thing, reverse):
@@ -1021,67 +1169,69 @@ class Query(object):
     def _after(self, thing):
         return self._dir(thing, False)
 
-    def _count(self):
-        return self._cursor().rowcount()
-
-
     def _filter(*a, **kw):
         raise NotImplementedError
 
     def _cursor(*a, **kw):
         raise NotImplementedError
 
-    def _iden(self):
-        i = str(self._sort) + str(self._kind) + str(self._limit)
-
-        if self._offset:
-            i += str(self._offset)
-
+    def _cache_key(self):
+        fingerprint = str(self._sort) + str(self._limit) + str(self._offset)
         if self._rules:
             rules = copy(self._rules)
             rules.sort()
-            for r in rules:
-                i += str(r)
-        return hashlib.sha1(i).hexdigest()
+            for rule in rules:
+                fingerprint += str(rule)
+
+        cache_key = "query:{kind}.{id}".format(
+            kind=self._kind.__name__,
+            id=hashlib.sha1(fingerprint).hexdigest()
+        )
+        return cache_key
+
+    def _get_results(self):
+        things = self._cursor().fetchall()
+        return things
+
+    def get_from_cache(self, allow_local=True):
+        thing_fullnames = g.gencache.get(
+            self._cache_key(), allow_local=allow_local)
+        if thing_fullnames:
+            things = Thing._by_fullname(thing_fullnames, return_dict=False,
+                                        stale=self._stale)
+            return things
+
+    def set_to_cache(self, things):
+        thing_fullnames = [thing._fullname for thing in things]
+        g.gencache.set(self._cache_key(), thing_fullnames, self._cache_time)
 
     def __iter__(self):
-        used_cache = False
+        if self._read_cache:
+            things = self.get_from_cache()
+        else:
+            things = None
 
-        def _retrieve():
-            return self._cursor().fetchall()
-
-        names = lst = []
-
-        names = self._cache.get(self._iden()) if self._read_cache else None
-        if names is None and not self._write_cache:
-            # it wasn't in the cache, and we're not going to
-            # replace it, so just hit the db
-            lst = _retrieve()
-        elif names is None and self._write_cache:
+        if things is None and not self._write_cache:
+            things = self._get_results()
+        elif things is None:
             # it's not in the cache, and we have the power to
             # update it, which we should do in a lock to prevent
             # concurrent requests for the same data
-            with g.make_lock("thing_query", "lock_%s" % self._iden()):
+            with g.make_lock("thing_query", "lock_%s" % self._cache_key()):
                 # see if it was set while we were waiting for our
                 # lock
                 if self._read_cache:
-                    names = self._cache.get(self._iden(), allow_local=False)
+                    things = self.get_from_cache(allow_local=False)
                 else:
-                    names = None
+                    things = None
 
-                if names is None:
-                    lst = _retrieve()
-                    _names = [x._fullname for x in lst]
-                    self._cache.set(self._iden(), _names, self._cache_time)
+                if things is None:
+                    things = self._get_results()
+                    self.set_to_cache(things)
 
-        if names and not lst:
-            # we got our list of names from the cache, so we need to
-            # turn them back into Things
-            lst = Thing._by_fullname(names, data=self._data, return_dict=False,
-                                     stale=self._stale)
+        for thing in things:
+            yield thing
 
-        for item in lst:
-            yield item
 
 class Things(Query):
     def __init__(self, kind, *rules, **kw):
@@ -1096,43 +1246,27 @@ class Things(Query):
         self._rules += rules
         return self
 
-
     def _cursor(self):
-        #TODO why was this even here?
-        #get_cols = bool(self._sort_param)
-        get_cols = False
-        params = (self._kind._type_id,
-                  get_cols,
-                  self._sort,
-                  self._limit,
-                  self._offset,
-                  self._rules)
         if self._use_data:
-            c = tdb.find_data(*params)
+            find_fn = tdb.find_data
         else:
-            c = tdb.find_things(*params)
+            find_fn = tdb.find_things
 
-        #TODO simplfy this! get_cols is always false?
+        cursor = find_fn(
+            type_id=self._kind._type_id,
+            sort=self._sort,
+            limit=self._limit,
+            offset=self._offset,
+            constraints=self._rules,
+        )
+
         #called on a bunch of rows to fetch their properties in batch
-        def row_fn(rows):
-            #if have a sort, add the sorted column to the results
-            if get_cols:
-                extra_props = {}
-                for r in rows:
-                    for sc in (s.col for s in self._sort):
-                        #dict of ids to the extra sort params
-                        props = extra_props.setdefault(r.thing_id, {})
-                        props[sc] = getattr(r, sc)
-                _ids = extra_props.keys()
-            else:
-                _ids = rows
-                extra_props = {}
-            return self._kind._byID(_ids, data=self._data, return_dict=False,
-                                    stale=self._stale, extra_props=extra_props)
+        def row_fn(ids):
+            return self._kind._byID(ids, return_dict=False, stale=self._stale)
 
-        return Results(c, row_fn, True)
+        return Results(cursor, row_fn, do_batch=True)
 
-def load_things(rels, load_data=False, stale=False):
+def load_things(rels, stale=False):
     rels = tup(rels)
     kind = rels[0].__class__
 
@@ -1141,18 +1275,18 @@ def load_things(rels, load_data=False, stale=False):
         t2_ids = t1_ids
     else:
         t2_ids = set()
+
     for rel in rels:
         t1_ids.add(rel._thing1_id)
         t2_ids.add(rel._thing2_id)
-    kind._type1._byID(t1_ids, data=load_data, stale=stale)
+
+    kind._type1._byID(t1_ids, stale=stale)
     if kind._type1 != kind._type2:
-        t2_items = kind._type2._byID(t2_ids, data=load_data, stale=stale)
+        t2_items = kind._type2._byID(t2_ids, stale=stale)
 
 class Relations(Query):
-    #params are thing1, thing2, name, date
     def __init__(self, kind, *rules, **kw):
         self._eager_load = kw.get('eager_load')
-        self._thing_data = kw.get('thing_data')
         self._thing_stale = kw.get('thing_stale')
         Query.__init__(self, kind, *rules, **kw)
 
@@ -1160,30 +1294,71 @@ class Relations(Query):
         self._rules += rules
         return self
 
-    def _eager(self, eager, thing_data = False):
+    def _eager(self, eager):
         #load the things (id, ups, down, etc.)
         self._eager_load = eager
-        #also load the things' data
-        self._thing_data = thing_data
         return self
 
     def _make_rel(self, rows):
-        rels = self._kind._byID(rows, self._data, False)
+        rel_ids = [row._rel_id for row in rows]
+        rels = self._kind._byID(rel_ids, return_dict=False)
         if rels and self._eager_load:
-            for rel in rels:
-                rel._eagerly_loaded_data = True
-            load_things(rels, load_data=self._thing_data,
-                        stale=self._thing_stale)
+            load_things(rels, stale=self._thing_stale)
         return rels
 
     def _cursor(self):
-        c = tdb.find_rels(self._kind._type_id,
-                          False,
-                          sort = self._sort,
-                          limit = self._limit,
-                          offset = self._offset,
-                          constraints = self._rules)
-        return Results(c, self._make_rel, True)
+        c = tdb.find_rels(
+            ret_props=["_rel_id"],
+            rel_type_id=self._kind._type_id,
+            sort=self._sort,
+            limit=self._limit,
+            offset=self._offset,
+            constraints=self._rules,
+        )
+        return Results(c, self._make_rel, do_batch=True)
+
+
+class RelationsPropsOnly(Relations):
+    def __init__(self, kind, props, *rules, **kw):
+        self.props = props
+        Relations.__init__(self, kind, *rules, **kw)
+
+    def _cursor(self):
+        c = tdb.find_rels(
+            ret_props=self.props,
+            rel_type_id=self._kind._type_id,
+            sort=self._sort,
+            limit=self._limit,
+            offset=self._offset,
+            constraints=self._rules,
+        )
+        return c
+
+    def _cache_key(self):
+        fingerprint = str(self._sort) + str(self._limit) + str(self._offset)
+        if self._rules:
+            rules = copy(self._rules)
+            rules.sort()
+            for rule in rules:
+                fingerprint += str(rule)
+        fingerprint += '|'.join(sorted(self.props))
+
+        cache_key = "query:{kind}.{id}".format(
+            kind=self._kind.__name__,
+            id=hashlib.sha1(fingerprint).hexdigest()
+        )
+        return cache_key
+
+    def _get_results(self):
+        rows = self._cursor().fetchall()
+        return rows
+
+    def get_from_cache(self, allow_local=True):
+        return g.gencache.get(self._cache_key(), allow_local=allow_local)
+
+    def set_to_cache(self, rows):
+        g.gencache.set(self._cache_key(), rows, self._cache_time)
+
 
 class MultiCursor(object):
     def __init__(self, *execute_params):
@@ -1258,13 +1433,20 @@ class MergeCursor(MultiCursor):
             pairs = undone(pairs)
         raise StopIteration
 
+
 class MultiQuery(Query):
     def __init__(self, queries, *rules, **kw):
         self._queries = queries
         Query.__init__(self, None, *rules, **kw)
 
-    def _iden(self):
-        return ''.join(q._iden() for q in self._queries)
+        assert not self._read_cache
+        assert not self._write_cache
+
+    def get_from_cache(self):
+        raise NotImplementedError()
+
+    def set_to_cache(self):
+        raise NotImplementedError()
 
     def _cursor(self):
         raise NotImplementedError()
@@ -1274,12 +1456,10 @@ class MultiQuery(Query):
             q._reverse()
 
     def _setdata(self, data):
-        for q in self._queries:
-            q._data = data
+        return
 
     def _getdata(self):
-        if self._queries:
-            return self._queries[0]._data
+        return True
 
     _data = property(_getdata, _setdata)
 
@@ -1314,6 +1494,7 @@ class MultiQuery(Query):
             q._limit = limit
 
     _limit = property(_getlimit, _setlimit)
+
 
 class Merge(MultiQuery):
     def _cursor(self):
@@ -1360,7 +1541,7 @@ def MultiRelation(name, *relations):
 
         @classmethod
         def _fast_query(cls, sub, obj, name, data=True, eager_load=True,
-                        thing_data=False):
+                        thing_data=True):
             #divide into types
             def type_dict(items):
                 types = {}
@@ -1376,9 +1557,8 @@ def MultiRelation(name, *relations):
             for types, rel in cls.rels.iteritems():
                 t1, t2 = types
                 if sub_dict.has_key(t1) and obj_dict.has_key(t2):
-                    res.update(rel._fast_query(sub_dict[t1], obj_dict[t2], name,
-                                               data = data, eager_load=eager_load,
-                                               thing_data = thing_data))
+                    res.update(rel._fast_query(
+                        sub_dict[t1], obj_dict[t2], name, eager_load=eager_load))
 
             return res
 

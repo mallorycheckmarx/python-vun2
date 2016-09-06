@@ -23,9 +23,7 @@
 <%namespace file="utils.html" import="tags"/>
 <div class="sidecontentbox ${thing.extra_class or ''} ${'collapsible' if thing.collapsible else ''}" ${tags(_id=thing._id)}>
   %if thing.helplink:
-     <a class="helplink" href="${thing.helplink[0]}">
-       ${thing.helplink[1]}
-     </a>
+    ${thing.helplink}
   %endif
   <div class="title">
     <h1>${thing.title.upper()}</h1>

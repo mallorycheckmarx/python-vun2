@@ -36,7 +36,8 @@
                  hidden_data=dict(
                    id=c.user._fullname,
                    type=thing.type,
-                   container=thing.container_name))}
+                   container=thing.container_name),
+                 access_required=False)}
   %endif
 
   %if thing.has_invite:
@@ -46,7 +47,8 @@
                question=_("become a moderator of %s?" % ("/r/" + c.site.name)),
                format=_('you are invited to become a moderator. %(action)s'),
                format_arg='action',
-               _class=thing.type + ' accept-invite')}
+               _class=thing.type + ' accept-invite',
+               access_required=False)}
   %endif
 
   %if thing.addable and thing.has_add_form:

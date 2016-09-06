@@ -33,7 +33,7 @@
     %if thing.user.employee:
       <span class="user-distinction">
         [
-        <a href="/about/team/#user/${thing.user.name.lower()}" class="admin" title="reddit admin">A</a>
+        <span class="admin" title="reddit admin">A</span>
         ]
       </span>
     %endif
@@ -51,7 +51,7 @@
 
   <span class="karma">${format_number(display_link_karma(thing.user.link_karma))}</span>
   &#32;
-  ${_("link karma")}
+  ${_("post karma")}
 
   <br/>
   <span class="karma comment-karma">${format_number(display_comment_karma(thing.user.comment_karma))}</span>
@@ -63,7 +63,7 @@
      <thead>
         <tr>
           <th id="sr-karma-header">subreddit</th>
-          <th>link</th>
+          <th>post</th>
           <th>comment</th>
         </tr>
      </thead>
@@ -158,7 +158,9 @@
 
 %if hasattr(thing, "goldlink"):
   <div class="giftgold">
-    <a href="${thing.goldlink}">
+    <a href="${thing.goldlink}" class="access-required"
+       data-type="account" data-fullname="${thing.user._fullname}"
+       data-event-action="gild">
       ${thing.giftmsg}
     </a>
   </div>
@@ -168,7 +170,11 @@
     %if not thing.viewing_self:
       <img src="${static('mailgray.png')}"/>
       &#32;
-      ${plain_link(_("send a private message"), "/message/compose/?to=%s" % thing.user.name)}
+      <a href="${"/message/compose/?to=%s" % thing.user.name}" class="access-required"
+         data-type="account" data-fullname="${thing.user._fullname}"
+         data-event-action="compose">
+        ${_("send a private message")}
+      </a>
     %endif
 
     <span class="age">

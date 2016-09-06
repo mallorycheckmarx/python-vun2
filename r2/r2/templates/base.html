@@ -26,7 +26,7 @@
    from r2.models import Link, Comment, Subreddit
    from r2.lib import tracking
 %>
-<%namespace file="utils.html" import="js_setup, googleanalytics, classes"/>
+<%namespace file="utils.html" import="js_setup, googleanalytics, googletagmanager, classes"/>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="${c.lang}" 
       xml:lang="${c.lang}">
   <head>
@@ -35,6 +35,7 @@
     <meta name="description" content="${getattr(thing, 'short_description', None) or g.short_description}" />
     <meta name="referrer" content="${c.referrer_policy}">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link rel="canonical" href="${thing.canonical_link}" />
     %if hasattr(thing, 'mobile_link'):
         <link rel="alternate" media="only screen and (max-width: 640px)" href="${thing.mobile_link}" />
     %endif
@@ -46,9 +47,6 @@
     ${js_setup(getattr(thing, "extra_js_config", None))}
 
     ##things here may depend on globals, or included js, so we run them last
-    <script type="text/javascript">
-      ${self.javascript_run()}
-    </script>
     <style type="text/css">
       ## <style>s are treated as RAWTEXT segments, so we can't `websafe()` their contents.
       ## According to the HTML spec's RAWTEXT parsing rules, this should work for escaping.
@@ -60,6 +58,7 @@
   </head>
 
   <body ${classes(*thing.page_classes())}>
+    ${googletagmanager()}
     ${self.bodyContent()}
     ${self.javascript_bottom()}
   </body>
@@ -84,9 +83,6 @@ reddit, reddit.com, vote, comment, submit
    %if hasattr(thing, 'robots') and thing.robots:
      <meta name="robots" content="${thing.robots}" />
    %endif
-</%def>
-
-<%def name="javascript_run()">
 </%def>
 
 <%def name="head()">

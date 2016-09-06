@@ -760,12 +760,6 @@ ul.flat-vert {text-align: left;}
 
 /* thing rendering */
 
-.preload {
-    position: absolute;
-    top: -1000px;
-    left: -1000px;
-}
-
 .arrow {
     margin: 2px 0px 0px 0px;
     width: 100%;
@@ -858,7 +852,10 @@ body > .content .link.compressed .midcol {
 .tagline a.author.admin { font-weight: bold }
 .tagline a:hover { text-decoration: underline }
 .tagline .edited-timestamp{ cursor: default }
-.tagline .stickied-tagline { color: @moderator-color }
+.tagline .stickied-tagline { color: @moderator-color; }
+.comment .tagline .stickied-tagline:before {
+  content: "- ";
+}
 
 .tagline .userattrs .cakeday {
     display: inline-block;
@@ -870,6 +867,11 @@ body > .content .link.compressed .midcol {
 }
 
 a.author { margin-right: 0.5em; }
+.tagline .subreddit {
+    .userattrs { margin-left: 0.5em; }
+    .admin-distinguish { color: @admin-color; }
+    .moderator-distinguish { color: @moderator-color; }
+}
 a.banned-user { color: red; }
 
 .thing .parent {
@@ -954,6 +956,16 @@ a.banned-user { color: red; }
 
 .flairrow .flairdeletebtn { display: inline; }
 .flairrow:hover .flairdeletebtn { opacity: 1.0; }
+
+.reportform {
+    position: relative;
+    display: none;
+    max-width: 450px;
+}
+
+.reportform.active {
+    display: block;
+}
 
 .flairselector {
     box-shadow: 4px 4px 4px #ccc;
@@ -1056,7 +1068,10 @@ a.banned-user { color: red; }
 
 .thing .title:visited, .thing.visited .title { color: #551a8b }
 
-.thing.stickied a.title, .thing.stickied a.title:visited, .thing.stickied a.title.visited { font-weight: bold; color: @moderator-color; }
+.thing.stickied.link a.title {
+  font-weight: bold;
+  color: @moderator-color;
+}
 
 body.with-listing-chooser.explore-page #header .pagename {
     position: static;
@@ -1647,6 +1662,7 @@ body.with-listing-chooser.explore-page #header .pagename {
 .link.promotedlink.pending  { background-color: #BFC; }
 .link.promotedlink.promoted { background-color: #EFF7FF; }
 .link.promotedlink.finished { background-color: #DDD; }
+.link.promotedlink.edited_live { background-color: #FFD59A; }
 #promo-form + form #img-preview-container { display: none; }
 
 .profile-page .link.promotedlink.saved {
@@ -4147,43 +4163,6 @@ body.contact-us-page {
     padding: 0px 2px;
 }
 
-.min-body {
-    height: 100%;
-}
-
-.min-body .content {
-    margin-top: 0px;
-    border-right: solid #369 1px;
-    min-height: 100%;
-    max-width: 60em;
-    overflow: auto;
-}
-
-.min-body .content h1, .min-body .content h2 {
-    padding-left: 13px;
-    display: inline-block;
-    margin-bottom: 15px;
-}
-.min-body .content #noresults {
-    margin: 0 0 0 13px;
-}
-
-/* wat is this */
-
-.starkcomment + .clearleft + .starkcomment {
-    margin-top: 10px
-}
-.starkcomment .commentbox {
-    color: black;
-    background-color: #f0f0f0;
-    padding: 5px;
-    margin-left: 0px;
-    margin-right: 10px;
-}
-.starkcomment .tagline {
-    text-align: right;
-}
-
 /* default form styles */
 
 form .blurb {
@@ -4264,26 +4243,26 @@ form input[type=radio] {margin: 2px .5em 0 0; }
     margin-left: 2em;
 }
 
-#pref-delete textarea#delete-message {
+#pref-deactivate textarea#deactivate-message {
     font-size: smaller;
     height: 5em;
 }
 
-#pref-delete .md ul {
+#pref-deactivate .md ul {
     margin-top: 0;
     margin-bottom: 0;
 }
 
-#pref-delete .md ul li {
+#pref-deactivate .md ul li {
     margin: .5em 0;
 }
 
-#pref-delete .credentials input {
+#pref-deactivate .credentials input {
     margin: .2em 0;
 }
 
-#pref-delete .credentials .error,
-#pref-delete .error.RATELIMIT {
+#pref-deactivate .credentials .error,
+#pref-deactivate .error.RATELIMIT {
     margin-left: 5px;
 }
 
@@ -4641,6 +4620,8 @@ ul#image-preview-list .description {
 ul#image-preview-list .description pre {
     display: inline;
     padding: 5px;
+    color: #000;
+    background-color: transparent;
 }
 
 
@@ -4701,13 +4682,13 @@ ul#image-preview-list .description pre {
   max-width: 160px;
 }
 #icon-upload #img-preview-container img {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   margin: 0;
 }
 #banner-upload #img-preview-container img {
   width: 160px;
-  height: 90px;
+  height: 48px;
   margin: 0;
 }
 
@@ -5198,7 +5179,8 @@ ul.tabmenu.formtab {
 .roundfield input[type=text],
 .roundfield input[type=url],
 .roundfield input[type=password],
-.roundfield input[type=number] {
+.roundfield input[type=number],
+#compose-message .roundfield select {
     font-size: 100%;
     width: 492px;
     padding: 3px;
@@ -5239,7 +5221,11 @@ ul.tabmenu.formtab {
 }
 
 .linefield span + span { 
-    margin-left: 10px; 
+    margin-left: 10px;
+}
+
+.linefield .linefield-description {
+    display: block;
 }
 
 ul.colors {
@@ -5402,7 +5388,7 @@ ul.colors {
 }
 
 .existing-campaigns {
-    td.campaign-bid span {
+    td.campaign-total-budget span {
         display: inline-block;
         margin-right: 5px;
         line-height: 20px;
@@ -5410,7 +5396,7 @@ ul.colors {
         vertical-align: top;
     }
 
-    td.campaign-bid.paid {
+    td.campaign-total-budget.paid {
         background: url(../green-check.png) no-repeat scroll center right;
     }
 }
@@ -5422,12 +5408,19 @@ ul.colors {
 
 .frequency-cap-inputs {
     margin-left: 20px;
+    .label {
+        width: 200px;
+    }
 }
 
-.frequency-cap-example {
-    margin: -15px 0 0 20px;
-    font-style: italic;
+.frequency-cap-message {
     font-size: 12px;
+    margin-left: 20px;
+}
+
+.frequency-cap-message.example {
+    margin-top: -15px;
+    font-style: italic;
 }
 
 .frequency-cap-dur-unit {
@@ -5435,9 +5428,15 @@ ul.colors {
     margin-left: 5px;
 }
 
+.minimum-spend, .daily-budget-minimum {
+    margin-left: 10px;
+    font-size: 13px;
+}
+
 .minimum-spend.error {
     font-weight: bold;
     color: red;
+    font-size: 15px;
 }
 
 .existing-campaigns > table {
@@ -5477,6 +5476,10 @@ ul.colors {
          max-width: 100px;
      }
 
+     .campaign-bid {
+        width: 60px;
+     }
+
     .campaign-row,
     .campaign-header-row {
         > td,
@@ -5493,7 +5496,7 @@ ul.colors {
 
     .campaign-end-date,
     .campaign-buttons,
-    .campaign-bid,
+    .campaign-total-budget,
     .campaign-duration,
     .campaign-spent {
         text-align: right;
@@ -5512,7 +5515,7 @@ ul.colors {
         .campaign-duration {
             width: 8%;
         }
-        .campaign-bid {
+        .campaign-total-budget {
             width: 12%;
         }
         .campaign-buttons {
@@ -5527,7 +5530,8 @@ ul.colors {
     padding: 8px 4px 4px;
 }
 .campaign #bid, .campaign #impressions,
-.campaign #cap, .campaign #duration {
+.campaign #cap, .campaign #duration,
+.campaign #daily_budget {
     text-align: right;
     width: auto;
     margin-bottom: 5px;
@@ -6399,10 +6403,19 @@ div #campaign-field {
             color: lighten(black, 40%);
             letter-spacing: 0.6px;
         }
+        > .label.cost-basis-label {
+            width: 150px;
+        }
     }
  
     .radio-group .form-group {
         margin-bottom: 5px;
+    }
+
+    .inline-dollar {
+        position: absolute;
+        margin-left: 10px;
+        margin-top: 5px;
     }
 
     .targeting-field .radio-group {
@@ -6431,6 +6444,7 @@ div #campaign-field {
 
     .lookup-user-field,
     .budget-field,
+    .pricing-field,
     .timing-field,
     .frequency-cap-field {
         .group {
@@ -6444,20 +6458,38 @@ div #campaign-field {
             label, .label {
                 display: block;
             }
+            .cost-basis-label {
+                width: 300px;
+            }
         }
     }
 
+    .display-text:before {
+        content: "\00a0";
+    }
+    
+    .display-text.daily-max-spend:before {
+        content: "\00a0\0024";
+    }
+
     .display-text {
-        font-size: 16px;
         font-weight: bold;
-        line-height: 20px;
-        margin: 5px 0;
     }
 
     .budget-field {
         .group {
             margin-bottom: 10px;
         }
+    }
+
+    .pricing-message,
+    .budget-message {
+        font-size: 13px;
+    }
+
+    .pricing-message {
+        margin-top: 10px;
+        margin-bottom: 10px;
     }
 
     .campaign-set {
@@ -6504,17 +6536,17 @@ div #campaign-field {
     .campaign-option-table {
         width: 100%;
 
-        .impressions {
-            width: 30%;
-        }
-
         .date {
             text-align: left;
             width: 18%;
         }
 
-        .bid {
-            width: 16%;
+        .total-budget {
+            width: 20%;
+        }
+
+        .total-budget + td {
+            width: 35%;
         }
 
         td {
@@ -6689,7 +6721,7 @@ div #campaign-field {
     }
 
     .campaign-buttons,
-    .campaign-bid {
+    .campaign-total-budget {
         button {
             font-size: 10px;
             font-weight: normal;
@@ -6754,6 +6786,10 @@ div #campaign-field {
     .dashboard {
         padding: 20px;
         border-bottom: 2px solid #ccc;
+
+        .help p {
+            margin-bottom: 10px;
+        }
     }
 
     .campaign-editor {
@@ -6875,6 +6911,10 @@ div #campaign-field {
             padding: 5px;
             box-shadow: inset 0 1px 0 1px darken(white, 5%);
             font-size: 15px;
+        }
+
+        input[type=text].total_budget_pennies {
+            padding-left: 20px;
         }
 
         textarea {
@@ -7153,9 +7193,14 @@ dd { margin-left: 20px;  }
     font-size: smaller;
     text-align: right;
     margin-top: 20px;
+    width: 100%;
 
     th, td {
         padding: 3px;
+
+        &:last-child {
+            font-weight: bold;
+        }
     }
 
     th {
@@ -7225,6 +7270,12 @@ dd { margin-left: 20px;  }
 
 #side-mod-list {
     line-height: 1.5;
+
+    .sr-banned {
+        a {
+            color: @color-perma-ban;
+        }
+    }
 }
 
 #side-multi-list {
@@ -7672,6 +7723,7 @@ dd { margin-left: 20px;  }
 .icon-menu .reddit-moderators:before,
 .icon-menu .moderator-mail:before,
 .icon-menu .edit-stylesheet:before,
+.icon-menu .community-rules:before,
 .icon-menu .reddit-contributors:before,
 .icon-menu .reddit-modqueue:before,
 .giftgold a:before,
@@ -7680,7 +7732,6 @@ dd { margin-left: 20px;  }
 .users-online:before,
 .notice-taken:before,
 .notice-available:before,
-.info-notice:before,
 .user-form .error:before {
     height: 16px;
     width: 16px;
@@ -7720,6 +7771,9 @@ dd { margin-left: 20px;  }
 }
 .icon-menu .edit-stylesheet:before {
     background-image: url(../css.png); /* SPRITE */
+}
+.icon-menu .community-rules:before {
+    background-image: url(../reddit_rules.png); /* SPRITE */
 }
 .icon-menu .reddit-traffic:before {
     background-image: url(../reddit_traffic.png); /* SPRITE */
@@ -7788,10 +7842,6 @@ dd { margin-left: 20px;  }
 
 .notice-available:before {
     background-image: url(../icon-circle-check.png);  /* SPRITE */
-}
-
-.info-notice:before {
-    background-image: url(../brick-small.png);  /* SPRITE */
 }
 
 .linkinfo {
@@ -8684,7 +8734,10 @@ form#banned textarea {
 .modactions.setcontestmode,
 .modactions.unsetcontestmode,
 .modactions.lock,
-.modactions.unlock {
+.modactions.unlock,
+.modactions.createrule,
+.modactions.editrule,
+.modactions.deleterule, {
     height: 16px;
     width: 16px;
     display: block;
@@ -8791,6 +8844,15 @@ form#banned textarea {
 }
 .modactions.unlock {
     background-image: url(../modactions_unlock.png); /* SPRITE */
+}
+.modactions.createrule {
+    background-image: url(../modactions_createrule.png); /* SPRITE */
+}
+.modactions.editrule {
+    background-image: url(../modactions_editrule.png); /* SPRITE */
+}
+.modactions.deleterule {
+    background-image: url(../modactions_deleterule.png); /* SPRITE */
 }
 
 .adminpasswordform {
@@ -10538,6 +10600,15 @@ body.with-listing-chooser {
 
       p {
         padding: 5px 0;
+
+        strong {
+            font-weight: bold;
+        }
+      }
+
+      blockquote {
+        font-size: 0.8em;
+        font-style: italic;
       }
     }
 
@@ -10901,11 +10972,15 @@ body.with-listing-chooser {
     }
 }
 
+.report-action-form {
+    max-width: 300px;
+}
+
+.subreddit-report-form,
 .action-form {
     display: none;
     background-color: #f6e69f;
     border: thin solid #d8bb3c;
-    max-width: 300px;
     padding: 5px;
     margin: 5px 0;
     font-size: larger;
@@ -10928,6 +11003,84 @@ body.with-listing-chooser {
 
     ol {
         margin-bottom: 5px;
+    }
+}
+
+.subreddit-report-form {
+    @bg-color: #FBFBFB;
+    @text-color: @color-semi-black;
+
+    font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+    background-color: @bg-color;
+    border: 1px solid darken(@bg-color, 10%);
+    border-radius: 0;
+    color: @text-color;
+    padding: 10px 15px;
+    font-size: 14px;
+    line-height: 20px;
+    position: relative;
+    
+    .report-header {
+        margin-bottom: 10px;
+        font-weight: 500;
+    }
+
+    .report-reason-list {
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+
+    .report-reason-item {
+        margin-top: 5px;
+        margin-bottom: 5px;
+
+        label {
+            cursor: pointer;
+        }
+
+        input[type=radio] {
+            margin-right: 15px;
+            float: left;
+        }
+
+        select {
+            max-width: 100%;
+        }
+
+        .report-reason-display {
+            vertical-align: top;
+            overflow: auto;
+        }
+    }
+
+    .report-reason-other {
+        input[type=text] {
+            width: 100%;
+        }
+    }
+
+    .c-submit-group {
+        text-align: right;
+        margin-top: 10px;
+    }
+
+    .action-icon {
+        width: 16px;
+        height: 16px;
+        display: inline-block;
+    }
+
+    .action-icon-info {
+        .hdpi-bg-image(
+            @1x: url(../action-icon-info-color.png),
+            @2x: url(../action-icon-info-color_2x.png)
+        );
+    }
+
+    .action-icon {
+        position: absolute;
+        top: 12px;
+        right: 15px;
     }
 }
 
@@ -10956,17 +11109,57 @@ ul.report-reasons {
     }
 }
 
-body.banned div#header {
-  background-color: #cf6165;
+#header {
+    @spam-bg: @color-spam;
+    @temp-ban-bg: @color-temp-ban;
+    @perma-ban-bg: @color-perma-ban;
+    @deleted-bg: @color-deleted;
+    @striped-bg-image: repeating-linear-gradient(45deg, transparent,
+                                                        transparent 30px,
+                                                        rgba(255,255,255,0.5) 30px,
+                                                        rgba(255,255,255,0.5) 60px);
+
+    body.deleted &,
+    body.user-deleted & {
+        background-color: @color-deleted;
+        background-image: @striped-bg-image;
+    }
+
+    body.banned &,
+    body.user-banned &,
+    body.user-in-timeout-perma & {
+        background-color: @color-perma-ban;
+    }
+
+    body.user-in-timeout-temp & {
+        background-color: @color-temp-ban;
+    }
+
+    body.user-spam & {
+        background-color: @color-spam;
+    }
 }
 
-body.deleted div#header {
-  background-color: #999;
-}
+.author {
+    &.user-banned {
+        color: @color-perma-ban;
+        font-weight: bold;
+    }
 
-body.banned.deleted div#header {
-  background-color: #999;
-  background-image: repeating-linear-gradient(45deg, transparent, transparent 30px, #cf6165 30px, #cf6165 60px);
+    &.user-in-timeout-temp {
+        color: @color-temp-ban;
+        font-weight: bold;
+    }
+
+    &.user-in-timeout-perma {
+        color: @color-perma-ban;
+        font-weight: bold;
+    }
+
+    &.user-spam {
+        color: @color-spam;
+        font-weight: bold;
+    }
 }
 
 #compose-message select {
@@ -11152,4 +11345,27 @@ body:not(.loggedin) .report-button {
 
 .subreddit .midcol .sr-type-icon {
     margin-left: 3px;
+}
+
+#auction-announcement-container {
+    #auction-announcement {
+        width: 100%;
+        margin: -5px 5px 0 5px;
+        background-color: #336699;
+        height: 86px;
+        text-align: center;
+        color: #FFF;
+        h1 {
+            font-size: 20px;
+            padding-top: 18px;
+            font-weight: bold;
+        }
+        p {
+            font-size: 12px;
+            font-weight: bold;
+            a {
+                color: #B2D6EE;
+            }
+        }
+    }
 }

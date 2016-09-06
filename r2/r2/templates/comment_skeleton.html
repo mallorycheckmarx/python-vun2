@@ -41,7 +41,25 @@
 </%def>
 
 <%def name="thing_css_class(what)">
-  ${parent.thing_css_class(what)} ${"collapsed" if thing.collapsed else "noncollapsed"} ${"collapsed-for-reason" if hasattr(thing, "collapsed_reason") else ""}
+  ${parent.thing_css_class(what)} ${"stickied" if getattr(thing, 'is_sticky', None) else ""} ${"collapsed" if thing.collapsed else "noncollapsed"} ${"collapsed-for-reason" if hasattr(thing, "collapsed_reason") else ""}
+</%def>
+
+<%def name="thing_data_attributes(what)">
+  ${parent.thing_data_attributes(what)}
+
+  %if hasattr(what, 'subreddit'):
+    data-subreddit="${what.subreddit.name}"
+    data-subreddit-fullname="${what.subreddit._fullname}"
+  %endif
+
+  %if not getattr(what, 'deleted', False) and getattr(what, 'author', False):
+    data-author="${what.author.name}"
+    data-author-fullname="${what.author._fullname}"
+  %endif
+
+  %if getattr(what, 'can_ban', False):
+    data-can-ban="true"
+  %endif
 </%def>
 
 <%def name="entry()">
@@ -51,9 +69,6 @@
 
 <p class="tagline">
   ${self.tagline()}
-  %if not getattr(thing, "votable", True):
-    <div class="unvotable-message">${strings.unvotable_message}</div>
-  %endif
 </p>
 
 ${self.commentBody()}
@@ -61,4 +76,5 @@ ${self.commentBody()}
 <ul class="flat-list buttons">
   ${self.buttons()}
 </ul>
+<div class="reportform report-${thing._fullname}"></div>
 </%def>

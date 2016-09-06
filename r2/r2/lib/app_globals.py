@@ -29,6 +29,7 @@ import locale
 import json
 import logging
 import os
+import re
 import signal
 import site
 import socket
@@ -36,12 +37,17 @@ import subprocess
 import sys
 
 from sqlalchemy import engine, event
+from baseplate import Baseplate, config as baseplate_config
+from baseplate.thrift_pool import ThriftConnectionPool
+from baseplate.context.thrift import ThriftContextFactory
+from baseplate.server import einhorn
 
 import pkg_resources
 import pytz
 
 from r2.config import queues
 import r2.lib.amqp
+from r2.lib.baseplate_integration import R2BaseplateObserver
 from r2.lib.cache import (
     CacheChain,
     CL_ONE,
@@ -50,16 +56,17 @@ from r2.lib.cache import (
     HardCache,
     HardcacheChain,
     LocalCache,
+    Mcrouter,
     MemcacheChain,
     Permacache,
     SelfEmptyingCache,
     StaleCacheChain,
     TransitionalCache,
-    validate_size_error,
-    validate_size_warn,
 )
 from r2.lib.configparse import ConfigValue, ConfigValueParser
 from r2.lib.contrib import ipaddress
+from r2.lib.contrib.activity_thrift import ActivityService
+from r2.lib.contrib.activity_thrift.ttypes import ActivityInfo
 from r2.lib.eventcollector import EventQueue
 from r2.lib.lock import make_lock_factory
 from r2.lib.manager import db_manager
@@ -73,6 +80,11 @@ from r2.lib.stats import (
 )
 from r2.lib.translation import get_active_langs, I18N_PATH
 from r2.lib.utils import config_gold_price, thread_dump
+from r2.lib.zookeeper import (
+    connect_to_zookeeper,
+    LiveConfig,
+    IPNetworkLiveList,
+)
 
 
 LIVE_CONFIG_NODE = "/config/live"
@@ -162,7 +174,6 @@ class Globals(object):
         ConfigValue.int: [
             'db_pool_size',
             'db_pool_overflow_size',
-            'page_cache_time',
             'commentpane_cache_time',
             'num_mc_clients',
             'MAX_CAMPAIGNS_PER_LINK',
@@ -188,6 +199,7 @@ class Globals(object):
             'bcrypt_work_factor',
             'cassandra_pool_size',
             'sr_banned_quota',
+            'sr_muted_quota',
             'sr_wikibanned_quota',
             'sr_wikicontributor_quota',
             'sr_moderator_invite_quota',
@@ -203,12 +215,19 @@ class Globals(object):
             'RL_OAUTH_RESET_MINUTES',
             'comment_karma_display_floor',
             'link_karma_display_floor',
+            'mobile_auth_gild_time',
+            'default_total_budget_pennies',
+            'min_total_budget_pennies',
+            'max_total_budget_pennies',
+            'default_bid_pennies',
+            'min_bid_pennies',
+            'max_bid_pennies',
+            'frequency_cap_min',
+            'frequency_cap_default',
+            'eu_cookie_max_attempts',
         ],
 
         ConfigValue.float: [
-            'default_promote_bid',
-            'min_promote_bid',
-            'max_promote_bid',
             'statsd_sample_rate',
             'querycache_prune_chance',
             'RL_AVG_REQ_PER_SEC',
@@ -243,20 +262,14 @@ class Globals(object):
             'ENFORCE_RATELIMIT',
             'RL_SITEWIDE_ENABLED',
             'RL_OAUTH_SITEWIDE_ENABLED',
+            'enable_loggedout_experiments',
         ],
 
         ConfigValue.tuple: [
             'plugins',
             'stalecaches',
-            'memcaches',
             'lockcaches',
             'permacache_memcaches',
-            'rendercaches',
-            'pagecaches',
-            'memoizecaches',
-            'srmembercaches',
-            'relcaches',
-            'ratelimitcaches',
             'hardcache_memcaches',
             'cassandra_seeds',
             'automatic_reddits',
@@ -271,6 +284,7 @@ class Globals(object):
             'autoexpand_media_types',
             'multi_icons',
             'hide_subscribers_srs',
+            'mcrouter_addr',
         ],
 
         ConfigValue.tuple_of(ConfigValue.int): [
@@ -284,7 +298,7 @@ class Globals(object):
         ],
 
         ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
-            'agents',
+            'user_agent_ratelimit_regexes',
         ],
 
         ConfigValue.str: [
@@ -308,6 +322,11 @@ class Globals(object):
              'cassandra_wcl',
         ],
 
+        ConfigValue.choice(zookeeper="zookeeper", config="config"): [
+            "liveconfig_source",
+            "secrets_source",
+        ],
+
         ConfigValue.timeinterval: [
             'ARCHIVE_AGE',
             "vote_queue_grace_period",
@@ -321,11 +340,21 @@ class Globals(object):
             'cpm_selfserve_geotarget_country',
             'cpm_selfserve_collection',
         ],
+
+        ConfigValue.baseplate(baseplate_config.Optional(baseplate_config.Endpoint)): [
+            "activity_endpoint",
+        ],
+
+        ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
+            'emr_traffic_tags',
+        ],
     }
 
     live_config_spec = {
         ConfigValue.bool: [
             'frontend_logging',
+            'mobile_gild_first_login',
+            'precomputed_comment_suggested_sort',
         ],
         ConfigValue.int: [
             'captcha_exempt_comment_karma',
@@ -334,6 +363,10 @@ class Globals(object):
             'create_sr_comment_karma',
             'create_sr_link_karma',
             'cflag_min_votes',
+            'ads_popularity_threshold',
+            'precomputed_comment_sort_min_comments',
+            'comment_vote_update_threshold',
+            'comment_vote_update_period',
         ],
         ConfigValue.float: [
             'cflag_lower_bound',
@@ -346,7 +379,13 @@ class Globals(object):
             'events_collector_poison_sample_rate',
             'events_collector_mod_sample_rate',
             'events_collector_quarantine_sample_rate',
+            'events_collector_modmail_sample_rate',
+            'events_collector_report_sample_rate',
+            'events_collector_submit_sample_rate',
+            'events_collector_comment_sample_rate',
+            'events_collector_use_gzip_chance',
             'https_cert_testing_probability',
+            'precomputed_comment_sort_read_chance',
         ],
         ConfigValue.tuple: [
             'fastlane_links',
@@ -354,13 +393,13 @@ class Globals(object):
             'discovery_srs',
             'proxy_gilding_accounts',
             'mweb_blacklist_expressions',
+            'global_loid_experiments',
+            'precomputed_comment_sorts',
+            'mailgun_domains',
         ],
         ConfigValue.str: [
             'listing_chooser_gold_multi',
             'listing_chooser_explore_sr',
-        ],
-        ConfigValue.dict(ConfigValue.int, ConfigValue.float): [
-            'comment_tree_version_weights',
         ],
         ConfigValue.messages: [
             'welcomebar_messages',
@@ -376,6 +415,8 @@ class Globals(object):
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
             'employee_approved_clients',
+            'modmail_forwarding_email',
+            'modmail_account_map',
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.choice(**PERMISSIONS)): [
             'employees',
@@ -431,6 +472,10 @@ class Globals(object):
         self.startup_timer = self.stats.get_timer("app_startup")
         self.startup_timer.start()
 
+        self.baseplate = Baseplate()
+        self.baseplate.configure_logging()
+        self.baseplate.register(R2BaseplateObserver())
+
         self.paths = paths
 
         self.running_as_script = global_conf.get('running_as_script', False)
@@ -457,10 +502,18 @@ class Globals(object):
         if not name.startswith('_') and name in self.config:
             return self.config[name]
         else:
-            raise AttributeError
+            raise AttributeError("g has no attr %r" % name)
 
     def setup(self):
-        self.env = 'unit_test' if 'test' in sys.argv[0] else ''
+        self.env = ''
+        if (
+            # handle direct invocation of "nosetests"
+            "test" in sys.argv[0] or
+            # handle "setup.py test" and all permutations thereof.
+            "setup.py" in sys.argv[0] and "test" in sys.argv[1:]
+        ):
+            self.env = "unit_test"
+
         self.queues = queues.declare_queues(self)
 
         self.extension_subdomains = dict(
@@ -507,6 +560,12 @@ class Globals(object):
             self.pkg_resources_working_set,
             "r2.provider.image_resizing",
             self.image_resizing_provider,
+        )
+        self.email_provider = select_provider(
+            self.config,
+            self.pkg_resources_working_set,
+            "r2.provider.email",
+            self.email_provider,
         )
         self.startup_timer.intermediate("providers")
 
@@ -610,36 +669,40 @@ class Globals(object):
         self.RL_SHARE_MAX_REQS = int(self.config["RL_SHARE_AVG_PER_SEC"] *
                                      self.RL_RESET_SECONDS)
 
+        # Compile ratelimit regexs
+        user_agent_ratelimit_regexes = {}
+        for agent_re, limit in self.user_agent_ratelimit_regexes.iteritems():
+            user_agent_ratelimit_regexes[re.compile(agent_re)] = limit
+        self.user_agent_ratelimit_regexes = user_agent_ratelimit_regexes
+
         self.startup_timer.intermediate("configuration")
 
         ################# ZOOKEEPER
-        # for now, zookeeper will be an optional part of the stack.
-        # if it's not configured, we will grab the expected config from the
-        # [live_config] section of the ini file
-        zk_hosts = self.config.get("zookeeper_connection_string")
-        if zk_hosts:
-            from r2.lib.zookeeper import (connect_to_zookeeper,
-                                          LiveConfig, LiveList)
-            zk_username = self.config["zookeeper_username"]
-            zk_password = self.config["zookeeper_password"]
-            self.zookeeper = connect_to_zookeeper(zk_hosts, (zk_username,
-                                                             zk_password))
-            self.live_config = LiveConfig(self.zookeeper, LIVE_CONFIG_NODE)
-            self.secrets = fetch_secrets(self.zookeeper)
-            self.throttles = LiveList(self.zookeeper, "/throttles",
-                                      map_fn=ipaddress.ip_network,
-                                      reduce_fn=ipaddress.collapse_addresses)
+        zk_hosts = self.config["zookeeper_connection_string"]
+        zk_username = self.config["zookeeper_username"]
+        zk_password = self.config["zookeeper_password"]
+        self.zookeeper = connect_to_zookeeper(zk_hosts, (zk_username,
+                                                         zk_password))
 
-            # close our zk connection when the app shuts down
-            SHUTDOWN_CALLBACKS.append(self.zookeeper.stop)
+        self.throttles = IPNetworkLiveList(
+            self.zookeeper,
+            root="/throttles",
+            reduced_data_node="/throttles_reduced",
+        )
+
+        parser = ConfigParser.RawConfigParser()
+        parser.optionxform = str
+        parser.read([self.config["__file__"]])
+
+        if self.config["liveconfig_source"] == "zookeeper":
+            self.live_config = LiveConfig(self.zookeeper, LIVE_CONFIG_NODE)
         else:
-            self.zookeeper = None
-            parser = ConfigParser.RawConfigParser()
-            parser.optionxform = str
-            parser.read([self.config["__file__"]])
             self.live_config = extract_live_config(parser, self.plugins)
+
+        if self.config["secrets_source"] == "zookeeper":
+            self.secrets = fetch_secrets(self.zookeeper)
+        else:
             self.secrets = extract_secrets(parser)
-            self.throttles = tuple()  # immutable since it's not real
 
         ################# PRIVILEGED USERS
         self.admins = PermissionFilteredEmployeeList(
@@ -659,67 +722,23 @@ class Globals(object):
         ################# MEMCACHE
         num_mc_clients = self.num_mc_clients
 
-        # the main memcache pool. used for most everything.
-        memcaches = CMemcache(
-            "main",
-            self.memcaches,
-            min_compress_len=1400,
-            num_clients=num_mc_clients,
-            validators=[validate_size_error],
-        )
-
-        # a pool just used for @memoize results
-        memoizecaches = CMemcache(
-            "memoize",
-            self.memoizecaches,
-            min_compress_len=50 * 1024,
-            num_clients=num_mc_clients,
-            validators=[validate_size_error],
-        )
-
-        # a pool just for srmember rels
-        srmembercaches = CMemcache(
-            "srmember",
-            self.srmembercaches,
-            min_compress_len=96,
-            num_clients=num_mc_clients,
-            validators=[validate_size_error],
-        )
-
-        # a pool just for rels
-        relcaches = CMemcache(
-            "rel",
-            self.relcaches,
-            min_compress_len=96,
-            num_clients=num_mc_clients,
-            validators=[validate_size_error],
-        )
-
-        ratelimitcaches = CMemcache(
-            "ratelimit",
-            self.ratelimitcaches,
-            min_compress_len=96,
-            num_clients=num_mc_clients,
-            validators=[validate_size_error],
-        )
-
         # a smaller pool of caches used only for distributed locks.
         self.lock_cache = CMemcache(
             "lock",
             self.lockcaches,
             num_clients=num_mc_clients,
-            validators=[validate_size_error],
         )
         self.make_lock = make_lock_factory(self.lock_cache, self.stats)
 
         # memcaches used in front of the permacache CF in cassandra.
         # XXX: this is a legacy thing; permacache was made when C* didn't have
         # a row cache.
-        permacache_memcaches = CMemcache("perma",
-                                         self.permacache_memcaches,
-                                         min_compress_len=1400,
-                                         num_clients=num_mc_clients,
-                                         validators=[],)
+        permacache_memcaches = CMemcache(
+            "perma",
+            self.permacache_memcaches,
+            min_compress_len=1400,
+            num_clients=num_mc_clients,
+        )
 
         # the stalecache is a memcached local to the current app server used
         # for data that's frequently fetched but doesn't need to be fresh.
@@ -728,32 +747,9 @@ class Globals(object):
                 "stale",
                 self.stalecaches,
                 num_clients=num_mc_clients,
-                validators=[validate_size_error],
             )
         else:
             stalecaches = None
-
-        # rendercache holds rendered partial templates.
-        rendercaches = CMemcache(
-            "render",
-            self.rendercaches,
-            noreply=True,
-            no_block=True,
-            num_clients=num_mc_clients,
-            min_compress_len=480,
-            validators=[],
-        )
-
-        # pagecaches hold fully rendered pages
-        pagecaches = CMemcache(
-            "page",
-            self.pagecaches,
-            noreply=True,
-            no_block=True,
-            num_clients=num_mc_clients,
-            min_compress_len=1400,
-            validators=[],
-        )
 
         # hardcache memcache pool
         hardcache_memcaches = CMemcache(
@@ -762,10 +758,31 @@ class Globals(object):
             binary=True,
             min_compress_len=1400,
             num_clients=num_mc_clients,
-            validators=[validate_size_error],
         )
 
         self.startup_timer.intermediate("memcache")
+
+        ################# MCROUTER
+        self.mcrouter = Mcrouter(
+            "mcrouter",
+            self.mcrouter_addr,
+            min_compress_len=1400,
+            num_clients=num_mc_clients,
+        )
+
+        ################# THRIFT-BASED SERVICES
+        activity_endpoint = self.config.get("activity_endpoint")
+        if activity_endpoint:
+            # make ActivityInfo objects rendercache-key friendly
+            # TODO: figure out a more general solution for this if
+            # we need to do this for other thrift-generated objects
+            ActivityInfo.cache_key = lambda self, style: repr(self)
+
+            activity_pool = ThriftConnectionPool(activity_endpoint, timeout=0.1)
+            self.baseplate.add_to_context("activity_service",
+                ThriftContextFactory(activity_pool, ActivityService.Client))
+
+        self.startup_timer.intermediate("thrift")
 
         ################# CASSANDRA
         keyspace = "reddit"
@@ -803,79 +820,89 @@ class Globals(object):
                           else LocalCache)
 
         if stalecaches:
-            self.cache = StaleCacheChain(
+            self.gencache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                memcaches,
+                self.mcrouter,
             )
         else:
-            self.cache = CacheChain((localcache_cls(), memcaches))
-        cache_chains.update(cache=self.cache)
+            self.gencache = CacheChain((localcache_cls(), self.mcrouter))
+        cache_chains.update(gencache=self.gencache)
+
+        if stalecaches:
+            self.thingcache = StaleCacheChain(
+                localcache_cls(),
+                stalecaches,
+                self.mcrouter,
+            )
+        else:
+            self.thingcache = CacheChain((localcache_cls(), self.mcrouter))
+        cache_chains.update(thingcache=self.thingcache)
 
         if stalecaches:
             self.memoizecache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                memoizecaches,
+                self.mcrouter,
             )
         else:
             self.memoizecache = MemcacheChain(
-                (localcache_cls(), memoizecaches))
+                (localcache_cls(), self.mcrouter))
         cache_chains.update(memoizecache=self.memoizecache)
 
         if stalecaches:
             self.srmembercache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                srmembercaches,
+                self.mcrouter,
             )
         else:
             self.srmembercache = MemcacheChain(
-                (localcache_cls(), srmembercaches))
+                (localcache_cls(), self.mcrouter))
         cache_chains.update(srmembercache=self.srmembercache)
 
         if stalecaches:
             self.relcache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
-                relcaches,
+                self.mcrouter,
             )
         else:
             self.relcache = MemcacheChain(
-                (localcache_cls(), relcaches))
+                (localcache_cls(), self.mcrouter))
         cache_chains.update(relcache=self.relcache)
 
         self.ratelimitcache = MemcacheChain(
-                (localcache_cls(), ratelimitcaches))
+                (localcache_cls(), self.mcrouter))
         cache_chains.update(ratelimitcache=self.ratelimitcache)
 
+        # rendercache holds rendered partial templates.
         self.rendercache = MemcacheChain((
             localcache_cls(),
-            rendercaches,
+            self.mcrouter,
         ))
         cache_chains.update(rendercache=self.rendercache)
 
-        self.pagecache = MemcacheChain((
+        # commentpanecaches hold fully rendered comment panes
+        self.commentpanecache = MemcacheChain((
             localcache_cls(),
-            pagecaches,
+            self.mcrouter,
         ))
-        cache_chains.update(pagecache=self.pagecache)
+        cache_chains.update(commentpanecache=self.commentpanecache)
 
-        # the thing_cache is used in tdb_cassandra.
-        self.thing_cache = CacheChain((localcache_cls(),), check_keys=False)
-        cache_chains.update(thing_cache=self.thing_cache)
+        # cassandra_local_cache is used for request-local caching in tdb_cassandra
+        self.cassandra_local_cache = localcache_cls()
+        cache_chains.update(cassandra_local_cache=self.cassandra_local_cache)
 
         if stalecaches:
             permacache_cache = StaleCacheChain(
                 localcache_cls(),
                 stalecaches,
                 permacache_memcaches,
-                check_keys=False,
             )
         else:
             permacache_cache = CacheChain(
                 (localcache_cls(), permacache_memcaches),
-                check_keys=False,
             )
         cache_chains.update(permacache=permacache_cache)
 
@@ -903,7 +930,9 @@ class Globals(object):
                     chain = chain.read_chain
 
                 chain.reset()
-                if isinstance(chain, StaleCacheChain):
+                if isinstance(chain, LocalCache):
+                    continue
+                elif isinstance(chain, StaleCacheChain):
                     chain.stats = StaleCacheStats(self.stats, name)
                 else:
                     chain.stats = CacheStats(self.stats, name)
@@ -944,6 +973,9 @@ class Globals(object):
                 datetime.now().strftime("%H:%M:%S"),
                 self.startup_timer.elapsed_seconds()
             )
+
+        if einhorn.is_worker():
+            einhorn.ack_startup()
 
     def record_repo_version(self, repo_name, git_dir):
         """Get the currently checked out git revision for a given repository,

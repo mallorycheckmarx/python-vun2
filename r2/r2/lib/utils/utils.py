@@ -31,6 +31,7 @@ import os
 import random
 import re
 import signal
+import time
 import traceback
 
 from collections import OrderedDict
@@ -44,6 +45,7 @@ from urlparse import urlparse, urlunparse
 import pytz
 import snudown
 import unidecode
+from r2.lib.utils import reddit_agent_parser
 
 from babel.dates import TIMEDELTA_UNITS
 from BeautifulSoup import BeautifulSoup, SoupStrainer
@@ -64,6 +66,7 @@ def randstr(length,
             alphabet='abcdefghijklmnopqrstuvwxyz0123456789'):
     """Return a string made up of random chars from alphabet."""
     return ''.join(random.choice(alphabet) for _ in xrange(length))
+
 
 class Storage(dict):
     """
@@ -158,8 +161,11 @@ class Results():
         row = self.rp.fetchone()
         if row:
             if self.do_batch:
-                row = tup(row)
-                return self.fn(row)[0]
+                if isinstance(row, Storage):
+                    rows = (row,)
+                else:
+                    rows = tup(row)
+                return self.fn(rows)[0]
             else:
                 return self.fn(row)
         else:
@@ -181,7 +187,15 @@ def strip_www(domain):
 
 def is_subdomain(subdomain, base):
     """Check if a domain is equal to or a subdomain of a base domain."""
-    return subdomain == base or (subdomain is not None and subdomain.endswith('.' + base))
+    return subdomain == base or (
+        subdomain is not None and subdomain.endswith('.' + base))
+
+
+lang_re = re.compile(r"\A\w\w(-\w\w)?\Z")
+
+
+def is_language_subdomain(subdomain):
+    return lang_re.match(subdomain)
 
 
 def base_url(url):
@@ -378,6 +392,11 @@ def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
     except UnicodeError:
         return None
 
+    # Make sure FQDNs like google.com. (with trailing dot) are allowed. This
+    # is necessary to support linking to bare TLDs.
+    if idna_hostname.endswith('.'):
+        idna_hostname = idna_hostname[:-1]
+
     for label in idna_hostname.split('.'):
         if not re.match(valid_dns, label):
             return None
@@ -474,8 +493,7 @@ class UrlParser(object):
     path can also be set and queried.
 
     The class also contains reddit-specific functions for setting,
-    checking, and getting a path's subreddit.  It also can convert
-    paths between in-frame and out of frame cname'd forms.
+    checking, and getting a path's subreddit.
     """
 
     __slots__ = ['scheme', 'path', 'params', 'query',
@@ -483,7 +501,6 @@ class UrlParser(object):
                  '_orig_url', '_orig_netloc', '_query_dict']
 
     valid_schemes = ('http', 'https', 'ftp', 'mailto')
-    cname_get = "cnameframe"
 
     def __init__(self, url):
         u = urlparse(url)
@@ -582,6 +599,14 @@ class UrlParser(object):
         dirs.append(base)
         self.path =  '/'.join(dirs)
         return self
+
+    def canonicalize(self):
+        subdomain = extract_subdomain(self.hostname)
+        if subdomain == '' or is_language_subdomain(subdomain):
+            self.hostname = 'www.{0}'.format(g.domain)
+        if not self.path.endswith('/'):
+            self.path += '/'
+        self.scheme = 'https'
 
     def switch_subdomain_by_extension(self, extension=None):
         """Change the subdomain to the one that fits an extension.
@@ -775,51 +800,6 @@ class UrlParser(object):
         elif getattr(self, "port", None):
             return self.hostname + ":" + str(self.port)
         return self.hostname
-
-    def mk_cname(self, require_frame = True, subreddit = None, port = None):
-        """
-        Converts a ?cnameframe url into the corresponding cnamed
-        domain if applicable.  Useful for frame-busting on redirect.
-        """
-
-        # make sure the url is indeed in a frame
-        if require_frame and not self.query_dict.has_key(self.cname_get):
-            return self
-
-        # fetch the subreddit and make sure it
-        subreddit = subreddit or self.get_subreddit()
-        if subreddit and subreddit.domain:
-
-            # no guarantee there was a scheme
-            self.scheme = self.scheme or "http"
-
-            # update the domain (preserving the port)
-            self.hostname = subreddit.domain
-            self.port = getattr(self, 'port', None) or port
-
-            # and remove any cnameframe GET parameters
-            if self.query_dict.has_key(self.cname_get):
-                del self._query_dict[self.cname_get]
-
-            # remove the subreddit reference
-            self.path = lstrips(self.path, subreddit.path)
-            if not self.path.startswith('/'):
-                self.path = '/' + self.path
-
-        return self
-
-    def is_in_frame(self):
-        """
-        Checks if the url is in a frame by determining if
-        cls.cname_get is present.
-        """
-        return self.query_dict.has_key(self.cname_get)
-
-    def put_in_frame(self):
-        """
-        Adds the cls.cname_get get parameter to the query string.
-        """
-        self.update_query(**{self.cname_get:random.random()})
 
     def __repr__(self):
         return "<URL %s>" % repr(self.unparse())
@@ -1032,6 +1012,7 @@ def fetch_things(t_class,since,until,batch_fn=None,
         q._after(t)
         things = list(q)
 
+
 def fetch_things2(query, chunk_size = 100, batch_fn = None, chunks = False):
     """Incrementally run query with a limit of chunk_size until there are
     no results left. batch_fn transforms the results for each chunk
@@ -1064,6 +1045,95 @@ def fetch_things2(query, chunk_size = 100, batch_fn = None, chunks = False):
             query._after(after)
             items = list(query)
 
+
+def exponential_retrier(func_to_retry,
+                        exception_filter=lambda *args, **kw: True,
+                        retry_min_wait_ms=500,
+                        max_retries=5):
+    """Call func_to_retry and return it's results.
+    If func_to_retry throws an exception, retry.
+
+    :param Function func_to_retry: Function to execute
+        and possibly retry.
+    :param exception_filter:  Only retry exceptions for
+        which this function returns True.  Always returns True by default.
+    :param int retry_min_wait_ms: Initial wait period
+        if an exception happens in milliseconds.
+        After each retry this value will be multiplied by 2
+        thus achieving exponential backoff algorithm.
+    :param int max_retries:  How many times to wait before
+        just re-throwing last exception.
+        Value of zero would result in no retry attempts.
+    """
+    sleep_time = retry_min_wait_ms
+    num_retried = 0
+    while True:
+        try:
+            return func_to_retry()
+        # StopIteration should never be retried as its part of regular logic.
+        except StopIteration:
+            raise
+        except Exception as e:
+            g.log.exception("%d number retried" % num_retried)
+            num_retried += 1
+            # if we ran out of retries or this Exception
+            # shouldnt be retried then raise the exception instead of sleeping
+            if num_retried > max_retries or not exception_filter(e):
+                raise
+
+            # convert to ms.  Use floating point literal for int -> float
+            time.sleep(sleep_time / 1000.0)
+            sleep_time *= 2
+
+
+def fetch_things_with_retry(query,
+                            chunk_size=100,
+                            batch_fn=None,
+                            chunks=False,
+                            retry_min_wait_ms=500,
+                            max_retries=0):
+    """Incrementally run query with a limit of chunk_size until there are
+    no results left. batch_fn transforms the results for each chunk
+    before returning.
+
+    If a query at some point generates an exception
+    retry it using exponential backoff.
+
+    By default retrying is turned off."""
+
+    assert query._sort, "you must specify the sort order in your query!"
+
+    retrier = functools.partial(exponential_retrier,
+                                retry_min_wait_ms=retry_min_wait_ms,
+                                max_retries=max_retries)
+
+    orig_rules = deepcopy(query._rules)
+    query._limit = chunk_size
+    items = retrier(lambda: list(query))
+
+    done = False
+    while items and not done:
+        # don't need to query again at the bottom if we didn't get enough
+        if len(items) < chunk_size:
+            done = True
+
+        after = items[-1]
+
+        if batch_fn:
+                items = batch_fn(items)
+
+        if chunks:
+            yield items
+        else:
+            for i in items:
+                yield i
+
+        if not done:
+            query._rules = deepcopy(orig_rules)
+            query._after(after)
+            items = retrier(lambda: list(query))
+
+
 def fix_if_broken(thing, delete = True, fudge_links = False):
     from r2.models import Link, Comment, Subreddit, Message
 
@@ -1075,43 +1145,34 @@ def fix_if_broken(thing, delete = True, fudge_links = False):
     if thing.__class__ not in attrs:
         raise TypeError
 
-    tried_loading = False
     for attr in attrs[thing.__class__]:
         try:
             # try to retrieve the attribute
             getattr(thing, attr)
         except AttributeError:
-            # that failed; let's explicitly load it and try again
+            if not delete:
+                raise
 
-            if not tried_loading:
-                tried_loading = True
-                thing._load()
+            if isinstance(thing, Link) and fudge_links:
+                if attr == "sr_id":
+                    thing.sr_id = 6
+                    print "Fudging %s.sr_id to %d" % (thing._fullname,
+                                                      thing.sr_id)
+                elif attr == "author_id":
+                    thing.author_id = 8244672
+                    print "Fudging %s.author_id to %d" % (thing._fullname,
+                                                          thing.author_id)
+                else:
+                    print "Got weird attr %s; can't fudge" % attr
 
-            try:
-                getattr(thing, attr)
-            except AttributeError:
-                if not delete:
-                    raise
-                if isinstance(thing, Link) and fudge_links:
-                    if attr == "sr_id":
-                        thing.sr_id = 6
-                        print "Fudging %s.sr_id to %d" % (thing._fullname,
-                                                          thing.sr_id)
-                    elif attr == "author_id":
-                        thing.author_id = 8244672
-                        print "Fudging %s.author_id to %d" % (thing._fullname,
-                                                              thing.author_id)
-                    else:
-                        print "Got weird attr %s; can't fudge" % attr
+            if not thing._deleted:
+                print "%s is missing %r, deleting" % (thing._fullname, attr)
+                thing._deleted = True
 
-                if not thing._deleted:
-                    print "%s is missing %r, deleting" % (thing._fullname, attr)
-                    thing._deleted = True
+            thing._commit()
 
-                thing._commit()
-
-                if not fudge_links:
-                    break
+            if not fudge_links:
+                break
 
 
 def find_recent_broken_things(from_time = None, to_time = None,
@@ -1751,6 +1812,21 @@ def fuzz_activity(count):
     return count + random.randint(0, jitter)
 
 
+def shuffle_slice(x, start, stop=None):
+    """Given a list, shuffle a portion of the list in-place, returning None.
+
+    This uses a knuth shuffle borrowed from http://stackoverflow.com/a/11706463
+    which is a slightly tweaked version of shuffle from the `random` stdlib:
+    https://hg.python.org/cpython/file/8962d1c442a6/Lib/random.py#l256
+    """
+    if stop is None:
+        stop = len(x)
+
+    for i in reversed(xrange(start + 1, stop)):
+        j = random.randint(start, i)
+        x[i], x[j] = x[j], x[i]
+
+
 # port of https://docs.python.org/dev/library/itertools.html#itertools-recipes
 def partition(pred, iterable):
     "Use a predicate to partition entries into false entries and true entries"
@@ -1836,6 +1912,57 @@ def squelch_exceptions(fn):
 
 EPOCH = datetime(1970, 1, 1, tzinfo=pytz.UTC)
 
+
 def epoch_timestamp(dt):
-    """Returns the number of seconds from the epoch to date."""
+    """Returns the number of seconds from the epoch to date.
+
+    :param datetime dt: datetime (with time zone)
+    :rtype: float
+    """
     return (dt - EPOCH).total_seconds()
+
+
+def to_epoch_milliseconds(dt):
+    """Returns the number of milliseconds from the epoch to date.
+
+    :param datetime dt: datetime (with time zone)
+    :rtype: int
+    """
+    return int(math.floor(1000. * epoch_timestamp(dt)))
+
+
+def from_epoch_milliseconds(ms):
+    """Convert milliseconds from the epoch to UTC datetime.
+
+    :param int ms: milliseconds since the epoch
+    :rtype: :py:class:`datetime.datetime`
+    """
+    seconds = int(ms / 1000.)
+    microseconds = (ms - 1000 * seconds) * 1000.
+    return EPOCH + timedelta(seconds=seconds, microseconds=microseconds)
+
+
+def rate_limiter(max_per_second):
+    """Limit number of calls to returned closure per second to max_per_second
+    algorithm adapted from here:
+        http://blog.gregburek.com/2011/12/05/Rate-limiting-with-decorators/
+    """
+    min_interval = 1.0 / float(max_per_second)
+    # last_time_called needs to be a list so we can do a closure on it
+    last_time_called = [0.0]
+
+    def throttler():
+        elapsed = time.clock() - last_time_called[0]
+        left_to_wait = min_interval - elapsed
+        if left_to_wait > 0:
+            time.sleep(left_to_wait)
+        last_time_called[0] = time.clock()
+    return throttler
+
+
+def rate_limited_generator(rate_limit_per_second, iterable):
+    """Yield from iterable without going over rate limit"""
+    throttler = rate_limiter(rate_limit_per_second)
+    for i in iterable:
+        throttler()
+        yield i

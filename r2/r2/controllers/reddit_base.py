@@ -31,7 +31,7 @@ from Cookie import CookieError
 from copy import copy
 from datetime import datetime, timedelta
 from functools import wraps
-from hashlib import sha1
+from hashlib import sha1, md5
 from urllib import quote, unquote
 from urlparse import urlparse
 
@@ -47,9 +47,16 @@ from pylons.i18n.translation import LanguageError
 
 from r2.config import feature
 from r2.config.extensions import is_api, set_extension
-from r2.lib import filters, pages, utils, hooks, ratelimit
+from r2.lib import (
+    baseplate_integration,
+    filters,
+    geoip,
+    hooks,
+    pages,
+    ratelimit,
+    utils,
+)
 from r2.lib.base import BaseController, abort
-from r2.lib.cache import make_key, MemcachedError
 from r2.lib.cookies import (
     change_user_cookie_security,
     Cookies,
@@ -68,13 +75,13 @@ from r2.lib.errors import (
     reddit_http_error,
 )
 from r2.lib.filters import _force_utf8, _force_unicode, scriptsafe_dumps
+from r2.lib.loid import LoId
 from r2.lib.require import RequirementException, require, require_split
 from r2.lib.strings import strings
 from r2.lib.template_helpers import add_sr, JSPreload
 from r2.lib.tracking import encrypt, decrypt, get_pageview_pixel_url
 from r2.lib.translation import set_lang
 from r2.lib.utils import (
-    Enum,
     SimpleSillyStub,
     UniqueIterator,
     extract_subdomain,
@@ -108,7 +115,6 @@ from r2.models import (
     FakeSubreddit,
     Friends,
     Frontpage,
-    get_request_location,
     LabeledMulti,
     Link,
     Mod,
@@ -130,32 +136,6 @@ from r2.models import (
 from r2.lib.db import tdb_cassandra
 
 
-PAGECACHE_POLICY = Enum(
-    # logged in users may use the pagecache as well.
-    "LOGGEDIN_AND_LOGGEDOUT",
-    # only attempt to use pagecache if the current user is not logged in.
-    "LOGGEDOUT_ONLY",
-    # do not use pagecache.
-    "NEVER",
-)
-
-
-def pagecache_policy(policy):
-    """Decorate a controller method to specify desired pagecache behaviour.
-
-    If not specified, the policy will default to LOGGEDOUT_ONLY.
-
-    """
-
-    assert policy in PAGECACHE_POLICY
-
-    def pagecache_decorator(fn):
-        fn.pagecache_policy = policy
-        return fn
-    return pagecache_decorator
-
-
-cache_affecting_cookies = ('over18', '_options', 'secure_session')
 # Cookies which may be set in a response without making it uncacheable
 CACHEABLE_COOKIES = ()
 
@@ -175,9 +155,7 @@ class UnloggedUser(FakeAccount):
         self._defaults['pref_lang'] = lang
         self._defaults['pref_hide_locationbar'] = False
         self._defaults['pref_use_global_defaults'] = False
-        if feature.is_enabled('new_user_new_window_preference'):
-            self._defaults['pref_newwindow'] = True
-        self._load()
+        self._t.update(self._from_cookie())
 
     @property
     def name(self):
@@ -227,18 +205,11 @@ class UnloggedUser(FakeAccount):
     def _unsubscribe(self, sr):
         pass
 
-    def valid_hash(self, hash):
-        return False
-
     def _commit(self):
         if self._dirty:
             for k, (oldv, newv) in self._dirties.iteritems():
                 self._t[k] = newv
             self._to_cookie(self._t)
-
-    def _load(self):
-        self._t.update(self._from_cookie())
-        self._loaded = True
 
 def read_user_cookie(name):
     uname = c.user.name if c.user_is_loggedin else ""
@@ -428,16 +399,6 @@ def set_multireddit():
             multiurl = "/user/" + username + "/m/" + fullpath
             multi_ids = ["/user/%s/m/%s" % (username, multipath)
                         for multipath in multipaths]
-        elif 'sr_multi' in routes_dict:
-            if isinstance(c.site, FakeSubreddit):
-                abort(404)
-            if (not is_api() and
-                     not feature.is_enabled('multireddit_customizations')):
-                abort(404)
-
-            multiurl = "/r/" + c.site.name.lower() + "/m/" + fullpath
-            multi_ids = ["/r/%s/m/%s" % (c.site.name.lower(), multipath)
-                        for multipath in multipaths]
         elif "m" in request.GET and is_api():
             # Only supported via API as we don't have a valid non-query
             # parameter equivalent for cross-user multis, which means
@@ -516,8 +477,13 @@ def set_content_type():
         if ext in ("mobile", "m", "compact"):
             if request.GET.get("keep_extension"):
                 c.cookies['reddit_mobility'] = Cookie(ext, expires=NEVER)
+
+    # allow content and api calls to set an loid
+    if is_api() or c.render_style in ("html", "mobile", "compact"):
+        c.loid = LoId.load(request, c)
+
     # allow JSONP requests to generate callbacks, but do not allow
-    # the user to be logged in for these 
+    # the user to be logged in for these
     callback = request.GET.get("jsonp")
     if is_api() and request.method.upper() == "GET" and callback:
         if not valid_jsonp_callback(callback):
@@ -569,16 +535,6 @@ def set_iface_lang():
     except (babel.core.UnknownLocaleError, ValueError):
         c.locale = babel.core.Locale.parse(g.lang, sep='-')
 
-def set_cnameframe():
-    hostname = request.host.split(":")[0]
-    if (bool(request.params.get(utils.UrlParser.cname_get))
-        or not (utils.is_subdomain(hostname, g.domain) or
-                utils.is_subdomain(hostname, g.media_domain))):
-        c.cname = True
-        request.environ['REDDIT_CNAME'] = 1
-    c.frameless_cname = request.environ.get('frameless_cname', False)
-    if hasattr(c.site, 'domain'):
-        c.authorized_cname = request.environ.get('authorized_cname', False)
 
 def set_colors():
     theme_rx = re.compile(r'')
@@ -591,9 +547,15 @@ def set_colors():
 
 
 def ratelimit_agent(agent, limit=10, slice_size=10):
+
+    # Ensure the agent regex is a valid memcached key
+    h = md5()
+    h.update(agent)
+    hashed_agent = h.hexdigest()
+
     slice_size = min(slice_size, 60)
     time_slice = ratelimit.get_timeslice(slice_size)
-    usage = ratelimit.record_usage("rl-agent-" + agent, time_slice)
+    usage = ratelimit.record_usage("rl-agent-" + hashed_agent, time_slice)
     if usage > limit:
         request.environ['retry_after'] = time_slice.remaining
         abort(429)
@@ -613,11 +575,12 @@ def ratelimit_agents():
         ratelimit_agent(appid)
         return
 
-    user_agent = user_agent.lower()
-    for agent, limit in g.agents.iteritems():
-        if agent in user_agent:
-            ratelimit_agent(agent, limit)
+    # Search anywhere in the useragent for the given regex
+    for agent_re, limit in g.user_agent_ratelimit_regexes.iteritems():
+        if agent_re.search(user_agent):
+            ratelimit_agent(agent_re.pattern, limit)
             return
+
 
 def ratelimit_throttled():
     ip = request.ip.strip()
@@ -720,6 +683,20 @@ def make_url_https(url):
     return new_url.unparse()
 
 
+def generate_modhash():
+    # OAuth clients should never receive a modhash of any kind as they could
+    # use it in a CSRF attack to bypass their permitted OAuth scopes
+    if c.oauth_user:
+        return None
+
+    modhash = hooks.get_hook("modhash.generate").call_until_return()
+    if modhash is not None:
+        return modhash
+
+    # if no plugins generate a modhash, just use the user name
+    return c.user.name
+
+
 def enforce_https():
     """Enforce policy for forced usage of HTTPS."""
 
@@ -820,37 +797,6 @@ class MinimalController(BaseController):
     allow_stylesheets = False
     defer_ratelimiting = False
 
-    def request_key(self):
-        # note that this references the cookie at request time, not
-        # the current value of it
-        try:
-            cookies_key = [(x, request.cookies.get(x, ''))
-                           for x in cache_affecting_cookies]
-        except CookieError:
-            cookies_key = ''
-
-        if request.host != g.media_domain:
-            location = get_request_location()
-        else:
-            location = None
-
-        return make_key('request',
-                        c.lang,
-                        request.host,
-                        c.secure,
-                        c.cname,
-                        request.fullpath,
-                        c.over18,
-                        c.extension,
-                        c.render_style,
-                        location,
-                        feature.is_enabled("https_redirect"),
-                        request.environ.get("WANT_RAW_JSON"),
-                        cookies_key)
-
-    def cached_response(self):
-        return ""
-
     def run_sitewide_ratelimits(self):
         """Ratelimit users and add ratelimit headers to the response.
 
@@ -926,7 +872,6 @@ class MinimalController(BaseController):
                 event_type = "over"
             if g.ENFORCE_RATELIMIT:
                 # For non-abort situations, the headers will be added in post()
-                # to avoid including them in a pagecache
                 request.environ['retry_after'] = time_slice.remaining
                 response.headers.update(c.ratelimit_headers)
                 abort(429)
@@ -948,6 +893,8 @@ class MinimalController(BaseController):
             c.request_timer = g.stats.get_timer(request_timer_name(key))
         else:
             c.request_timer = SimpleSillyStub()
+
+        baseplate_integration.start_root_span(span_name=key)
 
         c.response_wrapper = None
         c.start_time = datetime.now(g.tz)
@@ -1004,62 +951,6 @@ class MinimalController(BaseController):
 
         hooks.get_hook("reddit.request.minimal_begin").call()
 
-    def can_use_pagecache(self):
-        # Don't allow using pagecache if redirecting from an endpoint
-        # that disallowed it (for ex. redirecting from one that caches loggedin
-        # responses to one that doesn't)
-        if not request.environ.get("CAN_USE_PAGECACHE", True):
-            return False
-
-        handler = self._get_action_handler()
-        policy = getattr(handler, "pagecache_policy",
-                         PAGECACHE_POLICY.LOGGEDOUT_ONLY)
-
-        if policy == PAGECACHE_POLICY.LOGGEDIN_AND_LOGGEDOUT:
-            return True
-        elif policy == PAGECACHE_POLICY.LOGGEDOUT_ONLY:
-            return not c.user_is_loggedin
-
-        return False
-
-    def try_pagecache(self):
-        can_use_pagecache = self.can_use_pagecache()
-        request.environ["CAN_USE_PAGECACHE"] = can_use_pagecache
-
-        # This guards against checking the pagecache twice and possibly
-        # modifying the request key when being redirected from one endpoint
-        # to the other in-request (i.e. when redirected to the error document)
-        if request.environ.get("TRIED_PAGECACHE", False):
-            return
-        request.environ["TRIED_PAGECACHE"] = True
-
-        if request.method.upper() == 'GET' and can_use_pagecache:
-            request.environ["REQUEST_KEY"] = self.request_key()
-            try:
-                r = g.pagecache.get(request.environ["REQUEST_KEY"])
-            except MemcachedError as e:
-                g.log.warning("pagecache error: %s", e)
-                return
-
-            # Store stats on pagecache hits / misses by endpoint
-            controller = request.environ['pylons.routes_dict']['controller']
-            action_name = request.environ['pylons.routes_dict']['action']
-            key = ".".join(("endpoint_pagecache", controller, action_name))
-            g.stats.event_count(key, "hit" if r else "miss", sample_rate=0.01)
-
-            if r:
-                headers, body, status_int, c.cookies = r
-                response.headers = headers
-                response.body = body
-                response.status_int = status_int
-
-                request.environ['pylons.routes_dict']['action'] = 'cached_response'
-                c.request_timer.name = request_timer_name("cached_response")
-
-                c.used_cache = True
-                # response wrappers have already been applied before cache write
-                c.response_wrapper = None
-
     def post(self):
         c.request_timer.intermediate("action")
 
@@ -1072,9 +963,9 @@ class MinimalController(BaseController):
             wrapped_content = c.response_wrapper(content)
             response.content = wrapped_content
 
-        # pagecache stores headers. we need to not add X-Frame-Options to
-        # cached requests (such as media embeds) that intend to allow framing.
-        if not c.allow_framing and not c.used_cache:
+        # we need to not add X-Frame-Options to requests (such as media embeds)
+        # that intend to allow framing.
+        if not c.allow_framing:
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
 
         # set some headers related to client security
@@ -1105,40 +996,12 @@ class MinimalController(BaseController):
             response.headers['Expires'] = '-1'
             response.headers['Cache-Control'] = ', '.join(cache_control)
 
-        # save the result of this page to the pagecache if possible.  we
-        # mustn't cache things that rely on state not tracked by request_key
-        # such as If-Modified-Since headers for 304s or requesting IP for 429s.
-        if (g.page_cache_time
-            and request.method.upper() == 'GET'
-            and request.environ.get("CAN_USE_PAGECACHE", False)
-            and request.environ.get("REQUEST_KEY", None)
-            and not c.used_cache
-            and not would_poison
-            and response.status_int not in (304, 429)
-            and not response.status.startswith("5")
-            and not c.is_exception_response):
-            try:
-                response_pieces = (response.headers.items(), response.body,
-                    response.status_int, c.cookies)
-                g.pagecache.set(request.environ["REQUEST_KEY"],
-                    response_pieces, g.page_cache_time)
-            except MemcachedError as e:
-                # this codepath will actually never be hit as long as
-                # the pagecache memcached client is in no_reply mode.
-                g.log.warning("Ignored exception (%r) on pagecache "
-                              "write for %r", e, request.path)
-
-        pragmas = [p.strip() for p in
-                   request.headers.get("Pragma", "").split(",")]
-        if g.debug or "x-reddit-pagecache" in pragmas:
-            if request.environ.get("CAN_USE_PAGECACHE", False):
-                pagecache_state = "hit" if c.used_cache else "miss"
-            else:
-                pagecache_state = "disallowed"
-            response.headers["X-Reddit-Pagecache"] = pagecache_state
-
         if c.ratelimit_headers:
             response.headers.update(c.ratelimit_headers)
+
+        # write loid cookie if necessary
+        if c.loid:
+            c.loid.save(domain=g.domain)
 
         # send cookies
         secure_cookies = feature.is_enabled("force_https")
@@ -1151,6 +1014,11 @@ class MinimalController(BaseController):
                                     expires=v.expires,
                                     secure=v_secure,
                                     httponly=getattr(v, 'httponly', False))
+
+
+        if not isinstance(c.site, FakeSubreddit) and not g.disallow_db_writes:
+            if c.user_is_loggedin:
+                c.site.record_visitor_activity("logged_in", c.user._fullname)
 
         if self.should_update_last_visit():
             c.user.update_last_visit(c.start_time)
@@ -1166,6 +1034,7 @@ class MinimalController(BaseController):
         c.request_timer.intermediate("post")
 
         # push data to statsd
+        baseplate_integration.stop_root_span()
         c.request_timer.stop()
         g.stats.flush()
 
@@ -1310,15 +1179,9 @@ class OAuth2ResourceController(MinimalController):
                 return None
 
     def set_up_user_context(self):
-        if not c.user._loaded:
-            c.user._load()
-
         if c.user.inbox_count > 0:
             c.have_messages = True
         c.have_mod_messages = bool(c.user.modmsgtime)
-
-        if not isinstance(c.site, FakeSubreddit) and not g.disallow_db_writes:
-            c.user.update_sr_activity(c.site)
 
         c.user_special_distinguish = c.user.special_distinguish()
 
@@ -1336,9 +1199,6 @@ class OAuth2OnlyController(OAuth2ResourceController):
             self.authenticate_with_token()
             self.set_up_user_context()
             self.run_sitewide_ratelimits()
-
-    def can_use_pagecache(self):
-        return False
 
     def on_validation_error(self, error):
         abort_with_error(error, error.code or 400)
@@ -1398,8 +1258,6 @@ class RedditController(OAuth2ResourceController):
 
         MinimalController.pre(self)
 
-        set_cnameframe()
-
         # Set IE to always use latest rendering engine
         response.headers["X-UA-Compatible"] = "IE=edge"
 
@@ -1418,7 +1276,7 @@ class RedditController(OAuth2ResourceController):
 
         delete_obsolete_cookies()
 
-        # the user could have been logged in via one of the feeds 
+        # the user could have been logged in via one of the feeds
         maybe_admin = False
         is_otpcookie_valid = False
 
@@ -1458,7 +1316,7 @@ class RedditController(OAuth2ResourceController):
 
         if c.user_is_loggedin:
             self.set_up_user_context()
-            c.modhash = c.user.modhash()
+            c.modhash = generate_modhash()
             c.user_is_admin = maybe_admin and c.user.name in g.admins
             c.user_is_sponsor = c.user_is_admin or c.user.name in g.sponsors
             c.otp_cached = is_otpcookie_valid
@@ -1562,10 +1420,13 @@ class RedditController(OAuth2ResourceController):
                         request=request, context=c)
                     return self.intermediate_redirect("/quarantine", sr_path=False)
 
-            #check over 18
-            if (c.site.over_18 and not c.over18 and
-                request.path not in ("/frame", "/over18")
-                and c.render_style == 'html'):
+            # check over 18
+            if (
+                c.site.over_18 and not c.over18 and
+                request.path != "/over18" and
+                c.render_style == 'html' and
+                not request.parsed_agent.bot
+            ):
                 return self.intermediate_redirect("/over18", sr_path=False)
 
         #check whether to allow custom styles
@@ -1581,11 +1442,7 @@ class RedditController(OAuth2ResourceController):
         sr_stylesheet_enabled = c.user.use_subreddit_style(c.site)
 
         if (not sr_stylesheet_enabled and
-                not has_style_override and
-                not c.cname):
-            c.can_apply_styles = False
-        #if the site has a cname, but we're not using it
-        elif c.site.domain and c.site.css_on_cname and not c.cname:
+                not has_style_override):
             c.can_apply_styles = False
 
         c.bare_content = request.GET.pop('bare', False)

@@ -21,7 +21,7 @@ $.log = function(message) {
 };
 
 $.debug = function(message) {
-    if ($.with_default(reddit.debug, false)) {
+    if ($.with_default(r.config.debug, false)) {
         return $.log(message);
     }
 }
@@ -124,11 +124,11 @@ function release_ajax_lock(op) {
 };
 
 function handleResponse(action) {
-    return function(r) {
-        if(r.jquery) {
+    return function(res) {
+        if(res.jquery) {
             var objs = {};
             objs[0] = jQuery;
-            $.map(r.jquery, function(q) {
+            $.map(res.jquery, function(q) {
                     var old_i = q[0], new_i = q[1], op = q[2], args = q[3];
                     if (typeof(args) == "string") {
                       args = $.unsafe(args);
@@ -139,6 +139,10 @@ function handleResponse(action) {
                     if (op == "call") 
                         objs[new_i] = objs[old_i].apply(objs[old_i]._obj, args);
                     else if (op == "attr") {
+                        // remove beforeunload event handler if exists for redirects
+                        if(args == 'redirect') {
+                          $(window).off('beforeunload');
+                        }
                         objs[new_i] = objs[old_i][args];
                         if(objs[new_i])
                             objs[new_i]._obj = objs[old_i];
@@ -162,8 +166,8 @@ $.request = function(op, parameters, worker_in, block, type,
     /* 
        Uniquitous reddit AJAX poster.  Automatically addes
        handleResponse(action) worker to deal with the API result.  The
-       current subreddit (reddit.post_site) and the user's modhash
-       (reddit.modhash) are also automatically sent across.
+       current subreddit (r.config.post_site) and the user's modhash
+       (r.config.modhash) are also automatically sent across.
      */
     var action = op;
     var worker = worker_in;
@@ -175,7 +179,7 @@ $.request = function(op, parameters, worker_in, block, type,
         return
     }
 
-    if (window != window.top && !reddit.external_frame) {
+    if (window != window.top) {
         return
     }
 
@@ -185,11 +189,24 @@ $.request = function(op, parameters, worker_in, block, type,
     parameters = $.with_default(parameters, {});
     worker_in  = $.with_default(worker_in, handleResponse(action));
     type  = $.with_default(type, "json");
+
+    var form = $('form.warn-on-unload');
+
     if (typeof(worker_in) != 'function')
         worker_in  = handleResponse(action);
-    var worker = function(r) {
+    var worker = function(res) {
         release_ajax_lock(action);
-        return worker_in(r);
+
+        /*
+         * check if there exists a form that has the
+         * warn-on-unload class. Remove the beforeunload event
+         * listener if the form submission was successful
+         * and we dont warn the user on succesful form submissions
+         */
+        if($(form).length && res.success) {
+          $(window).off('beforeunload');
+        }
+        return worker_in(res);
     };
     /* do the same for the error handler, and make sure to release the lock*/
     errorhandler_in = $.with_default(errorhandler, function() { });
@@ -199,22 +216,21 @@ $.request = function(op, parameters, worker_in, block, type,
     };
 
 
-
     get_only = $.with_default(get_only, false);
 
     /* set the subreddit name if there is one */
-    if (reddit.post_site) 
-        parameters.r = reddit.post_site;
+    if (r.config.post_site) 
+        parameters.r = r.config.post_site;
 
     /* add the modhash if the user is logged in */
-    if (reddit.logged) 
-        parameters.uh = reddit.modhash;
+    if (r.config.logged) 
+        parameters.uh = r.config.modhash;
 
-    parameters.renderstyle = reddit.renderstyle;
+    parameters.renderstyle = r.config.renderstyle;
 
     if(have_lock) {
         op = api_loc + op;
-        /*if( document.location.host == reddit.ajax_domain ) 
+        /*if( document.location.host == r.config.ajax_domain ) 
             /* normal AJAX post */
 
         $.ajax({ type: (get_only) ? "GET" : "POST",
@@ -224,7 +240,7 @@ $.request = function(op, parameters, worker_in, block, type,
                     error: errorhandler,
                     dataType: type});
         /*else { /* cross domain it is... * /
-            op = "http://" + reddit.ajax_domain + op + "?callback=?";
+            op = "http://" + r.config.ajax_domain + op + "?callback=?";
             $.getJSON(op, parameters, worker);
             } */
     }
@@ -262,9 +278,25 @@ rate_limit = (function() {
     };
 })()
 
+$.fn.removeLinkFlairClass = function () {
+  $(this)
+    .removeClass("linkflair")
+    .attr('class', function(i, c) {
+      return (c.replace(/(^|\s)linkflair\S+/g, ''));
+    });
+};
+
 $.fn.updateThing = function(update) {
     var $thing = $(this);
     var $entry = $thing.children('.entry');
+
+    if ('enemy' in update) {
+        // TODO: this will hide comments of enemies along with all of their
+        // children.  The better alternative would be to make it render as
+        // deleted.
+        $thing.remove();
+        return;
+    }
 
     if ('friend' in update) {
         var label = '<a class="friend" title="friend" href="/prefs/friends">F</a>';
@@ -314,8 +346,16 @@ $.fn.updateThing = function(update) {
     }
 }
 
+$.fn.resetInput = function() {
+  var $el = $(this);
+  $el.wrap('<form>').closest('form').get(0).reset();
+  $el.unwrap();
+
+  return this;
+};
+
 $.fn.show_unvotable_message = function() {
-  $(this).thing().find(".entry:first .unvotable-message").css("display", "inline-block");
+  // deprecated
 };
 
 $.fn.thing = function() {

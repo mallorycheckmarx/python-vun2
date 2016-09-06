@@ -55,10 +55,13 @@
 
   ${SubscribeButton(thing.sr)}
   %if not thing.sr.hide_num_users_info:
-    <span class="subscribers">${unsafe(Score.readers(thing.subscribers))}</span>
-    <p class="users-online ${'fuzzed' if thing.accounts_active_fuzzed else ''}" title="${_('logged-in users viewing this subreddit in the past 15 minutes')}">
-        ${unsafe(Score.users_here_now(thing.accounts_active, prepend='~' if thing.accounts_active_fuzzed else ''))}
-    </p>
+  <span class="subscribers">${unsafe(Score.readers(thing.subscribers))}</span>
+
+    %if thing.active_visitors and thing.active_visitors.logged_in:
+  <p class="users-online ${'fuzzed' if thing.active_visitors.logged_in.is_fuzzed else ''}" title="${_('logged-in users viewing this subreddit in the past 15 minutes')}">
+    ${unsafe(Score.users_here_now(thing.active_visitors.logged_in.count, prepend='~' if thing.active_visitors.logged_in.is_fuzzed else ''))}
+  </p>
+    %endif
   %endif
 
   %if thing.sr.moderator:
@@ -80,7 +83,9 @@
                format=_('you are an approved submitter on this subreddit. (%(leave)s)'),
                format_arg='leave',
                hidden_data=dict(
-                 id=thing.sr._fullname))}
+                 id=thing.sr._fullname),
+               access_required=False,
+              )}
   %endif
 
   %if thing.sr_style_toggle:

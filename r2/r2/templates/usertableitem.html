@@ -43,16 +43,25 @@
       </span>
       &nbsp;
   %elif c.user_is_loggedin and cell_type == "sendmessage" and c.user != thing.user:
-    ${plain_link(_("send message"),
-                 "/message/compose?to=%s" % (thing.user.name))}
+
+      <a href="${'/message/compose/?to=%s' % thing.user.name}" class="access-required"
+         data-type="account"
+         data-fullname="${thing.user._fullname}"
+         data-event-action="compose">
+         ${_("send message")}
+      </a>
       &nbsp;
   %elif cell_type == "remove":
     %if thing.editable:
+      <%
+        access_required = getattr(thing, 'remove_access_required', True)
+      %>
       ${ynbutton(_("remove"), "removed", thing.remove_action,
                  callback="deleteRow",
                  hidden_data = dict(type = thing.type,
                                     id = thing.user._fullname,
-                                    container = thing.container_name))}
+                                    container = thing.container_name),
+                 access_required=access_required)}
     %else:
       %if c.user != thing.user:
         <span class="gray">${_("can't remove")}</span>
@@ -77,7 +86,13 @@
   %elif cell_type == "permissionsctl":
     %if thing.editable:
       <span class="permissions-edit">
-        (<a href="javascript:void(0)">${_('change')}</a>)
+        (<a class="access-required"
+            href="javascript:void(0)"
+            data-type="account"
+            data-fullname="${thing.user._fullname}"
+            data-event-action="editsettings"
+            data-event-detail="set_permissions"
+            >${_('change')}</a>)
       </span>
     %endif
   %elif cell_type == "temp" and hasattr(thing, "tempban"):

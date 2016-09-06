@@ -2,6 +2,7 @@
   If the current post is locked, show a modal on restricted actions.
 
   requires r.config (base.js)
+  requires r.access (access.js)
   requires r.ui.Popup (popup.js)
 */
 !function(r) {
@@ -11,33 +12,19 @@
   _.extend(r.locked, {
     init: function() {
       $('body').on('click', '.locked-error', this._handleClick);
-    },
 
-    getPopup: function() {
-      // gets the cached popup instance if available, otherwise creates it.
-      if (this._popup) { return this._popup; }
-
-      var content = $('#locked-popup').html();
-      var popup = new r.ui.Popup({
-        size: 'large',
-        content: content,
+      this._popup = r.ui.createGatePopup({
+        templateId: 'locked-popup',
         className: 'locked-error-modal',
       });
-
-      popup.$.on('click', '.interstitial .c-btn', this._handleModalClick);
-      this._popup = popup;
-      return popup;
     },
 
     _handleClick: function onClick(e) {
-      this.getPopup()
-        .show();
-      return false;
-    }.bind(r.locked),
+      if (r.access.isLinkRestricted(e.target)) {
+        return;
+      }
 
-    _handleModalClick: function onClick(e) {
-      this.getPopup()
-        .hide();
+      this._popup.show();
       return false;
     }.bind(r.locked),
   });

@@ -30,7 +30,7 @@ import urllib2
 
 from pylons import app_globals as g
 
-from r2.lib.cache import sgm
+from r2.lib.sgm import sgm
 from r2.lib.utils import in_chunks, tup
 
 # If the geoip service has nginx in front of it there is a default limit of 8kb:
@@ -90,9 +90,14 @@ def _organization_by_ips(ips):
 
 def location_by_ips(ips):
     ips, is_single = tup(ips, ret_is_single=True)
-    location_by_ip = sgm(g.cache, ips, miss_fn=_location_by_ips,
-                         prefix='location_by_ip',
-                         time=GEOIP_CACHE_TIME)
+    location_by_ip = sgm(
+        cache=g.gencache,
+        keys=ips,
+        miss_fn=_location_by_ips,
+        prefix='geoip:loc_',
+        time=GEOIP_CACHE_TIME,
+        ignore_set_errors=True,
+    )
     if is_single and location_by_ip:
         return location_by_ip[ips[0]]
     else:
@@ -101,10 +106,48 @@ def location_by_ips(ips):
 
 def organization_by_ips(ips):
     ips, is_single = tup(ips, ret_is_single=True)
-    organization_by_ip = sgm(g.cache, ips, miss_fn=_organization_by_ips,
-                             prefix='organization_by_ip',
-                             time=GEOIP_CACHE_TIME)
+    organization_by_ip = sgm(
+        cache=g.gencache,
+        keys=ips,
+        miss_fn=_organization_by_ips,
+        prefix='geoip:org_',
+        time=GEOIP_CACHE_TIME,
+        ignore_set_errors=True,
+    )
     if is_single and organization_by_ip:
         return organization_by_ip[ips[0]]
     else:
         return organization_by_ip
+
+
+def get_request_location(request, context):
+    """Determine country of origin of the `request` for the given `context`
+
+    This is done by:
+     * checking the CDN headers for country of origin if set
+     * falling back on geocoding request.ip address against the geocoder service
+    The resulting location is memoized on context on `context.location`
+
+    request, context: Should be pylons.request & pylons.c respectively;
+    """
+    if context.location != '':
+        # unset context attributes have the value ''
+        return context.location
+
+    context.location = None
+
+    if getattr(request, 'via_cdn', False):
+        g.stats.simple_event('geoip.cdn_request')
+        cdn_geoinfo = g.cdn_provider.get_client_location(request.environ)
+        if cdn_geoinfo:
+            context.location = cdn_geoinfo
+    elif getattr(request, 'ip', None):
+        g.stats.simple_event('geoip.non_cdn_request')
+        timer = g.stats.get_timer("providers.geoip.location_by_ips")
+        timer.start()
+        location = location_by_ips(request.ip)
+        if location:
+            context.location = location.get('country_code', None)
+        timer.stop()
+
+    return context.location

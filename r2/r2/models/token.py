@@ -423,9 +423,8 @@ class OAuth2Client(Token):
     def _developers(self):
         """Returns a list of users who are developers of this client."""
 
-        devs = Account._byID(list(self._developer_ids))
-        return [dev for dev in devs.itervalues()
-                if not (dev._deleted or dev._spam)]
+        devs = Account._byID(list(self._developer_ids), return_dict=False)
+        return [dev for dev in devs if not dev._deleted]
 
     def _developer_colname(self, account):
         """Developer access is granted by way of adding a column with the
@@ -438,7 +437,7 @@ class OAuth2Client(Token):
     def has_developer(self, account):
         """Returns a boolean indicating whether or not the supplied Account is a developer of this application."""
 
-        if account._deleted or account._spam:
+        if account._deleted:
             return False
         else:
             return getattr(self, self._developer_colname(account), False)
@@ -479,7 +478,7 @@ class OAuth2Client(Token):
     def _by_developer(cls, account):
         """Returns a (possibly empty) list of clients for which Account is a developer."""
 
-        if account._deleted or account._spam:
+        if account._deleted:
             return []
 
         try:
@@ -546,6 +545,9 @@ class OAuth2Client(Token):
 
     def is_confidential(self):
         return self.app_type not in self.PUBLIC_APP_TYPES
+
+    def is_first_party(self):
+        return self.has_developer(Account.system_user())
 
 
 class OAuth2ClientsByDeveloper(tdb_cassandra.View):
@@ -624,9 +626,12 @@ class OAuth2AccessToken(Token):
         return OAuth2AccessTokensByUser
 
     def _on_create(self):
-        """Updates the by-user view upon creation."""
+        hooks.get_hook("oauth2.create_token").call(token=self)
+
+        # update the by-user view
         if self.user_id:
             self._by_user_view()._set_values(str(self.user_id), {self._id: ''})
+
         return super(OAuth2AccessToken, self)._on_create()
 
     def check_valid(self):
@@ -641,6 +646,9 @@ class OAuth2AccessToken(Token):
             client = OAuth2Client._byID(self.client_id)
             if getattr(client, 'deleted', False):
                 raise NotFound
+        except AttributeError:
+            g.log.error("bad token %s: %s", self, self._t)
+            raise
         except NotFound:
             return False
 
@@ -707,6 +715,13 @@ class OAuth2RefreshToken(OAuth2AccessToken):
 
     _type_prefix = None
     _ttl = None
+
+    def _on_create(self):
+        if self.user_id:
+            self._by_user_view()._set_values(str(self.user_id), {self._id: ''})
+
+        # skip OAuth2AccessToken._on_create to avoid "oauth2.create_token" hook
+        return Token._on_create(self)
 
     @classmethod
     def _by_user_view(cls):

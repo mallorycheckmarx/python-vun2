@@ -45,7 +45,7 @@ from routes.middleware import RoutesMiddleware
 from r2.config import hooks
 from r2.config.environment import load_environment
 from r2.config.extensions import extension_mapping, set_extension
-from r2.lib.utils import is_subdomain
+from r2.lib.utils import is_subdomain, is_language_subdomain
 from r2.lib import csrf, filters
 
 
@@ -81,16 +81,6 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
 
     from pylons import tmpl_context as c
 
-    # c is not always registered with the paste registry by the time we get to
-    # this error_mapper. if it's not, we can safely assume that we didn't use
-    # the pagecache. one such case where this happens is the
-    # DomainMiddleware-based srname.reddit.com -> reddit.com/r/srname redirect.
-    try:
-        if c.used_cache:
-            return
-    except TypeError:
-        pass
-
     if global_conf is None:
         global_conf = {}
     codes = [304, 400, 401, 403, 404, 409, 415, 429, 503]
@@ -106,13 +96,13 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
             error_data = getattr(exception, 'error_data', None)
             if error_data:
                 environ['extra_error_data'] = error_data
-        
-        if environ.get('REDDIT_CNAME'):
-            d['cnameframe'] = 1
+
         if environ.get('REDDIT_NAME'):
             d['srname'] = environ.get('REDDIT_NAME')
         if environ.get('REDDIT_TAKEDOWN'):
             d['takedown'] = environ.get('REDDIT_TAKEDOWN')
+        if environ.get('REDDIT_ERROR_NAME'):
+            d['error_name'] = environ.get('REDDIT_ERROR_NAME')
 
         # preserve x-frame-options when 304ing
         if code == 304:
@@ -161,7 +151,6 @@ class ProfilingMiddleware(object):
 
 
 class DomainMiddleware(object):
-    lang_re = re.compile(r"\A\w\w(-\w\w)?\Z")
 
     def __init__(self, app, config):
         self.app = app
@@ -180,7 +169,9 @@ class DomainMiddleware(object):
 
         # localhost is exempt so paster run/shell will work
         # media_domain doesn't need special processing since it's just ads
-        if domain == "localhost" or is_subdomain(domain, g.media_domain):
+        is_media_only_domain = (is_subdomain(domain, g.media_domain) and
+                                g.domain != g.media_domain)
+        if domain == "localhost" or is_media_only_domain:
             return self.app(environ, start_response)
 
         # tell reddit_base to redirect to the appropriate subreddit for
@@ -211,7 +202,7 @@ class DomainMiddleware(object):
                 prefix_parts.append(subdomain)
             elif extension:
                 environ['reddit-domain-extension'] = extension
-            elif self.lang_re.match(subdomain):
+            elif is_language_subdomain(subdomain):
                 environ['reddit-prefer-lang'] = subdomain
             else:
                 sr_redirect = subdomain
@@ -251,6 +242,7 @@ class SubredditMiddleware(object):
             environ['PATH_INFO'] = self.sr_pattern.sub('', path) or '/'
         return self.app(environ, start_response)
 
+
 class DomainListingMiddleware(object):
     def __init__(self, app):
         self.app = app
@@ -265,9 +257,10 @@ class DomainListingMiddleware(object):
                 environ['PATH_INFO'] = rest or '/'
         return self.app(environ, start_response)
 
+
 class ExtensionMiddleware(object):
     ext_pattern = re.compile(r'\.([^/]+)\Z')
-    
+
     def __init__(self, app):
         self.app = app
 
@@ -433,6 +426,9 @@ class SafetyMiddleware(object):
 
 
 class RedditApp(PylonsApp):
+
+    test_mode = False
+
     def __init__(self, *args, **kwargs):
         super(RedditApp, self).__init__(*args, **kwargs)
         self._loading_lock = Lock()
@@ -441,20 +437,14 @@ class RedditApp(PylonsApp):
 
     def setup_app_env(self, environ, start_response):
         PylonsApp.setup_app_env(self, environ, start_response)
-        from pylons import app_globals as g
-        # When running tests don't load controllers or register hooks. Loading the
-        # controllers currently causes db initialization and runs queries.
-        if g.env == 'unit_test':
-            return
-        self.load()
 
-    def load(self):
-        if self._controllers and self._hooks_registered:
-            return
+        if not self.test_mode:
+            if self._controllers and self._hooks_registered:
+                return
 
-        with self._loading_lock:
-            self.load_controllers()
-            self.register_hooks()
+            with self._loading_lock:
+                self.load_controllers()
+                self.register_hooks()
 
     def _check_csrf_prevention(self):
         from r2 import controllers

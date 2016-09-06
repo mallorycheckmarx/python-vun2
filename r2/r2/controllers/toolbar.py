@@ -27,10 +27,8 @@ from pylons import app_globals as g
 
 from reddit_base import RedditController
 from r2.lib import utils
-from r2.lib.filters import spaceCompress, safemarkdown
-from r2.lib.menus import CommentSortMenu
 from r2.lib.pages import *
-from r2.lib.pages.things import hot_links_by_url_listing, wrap_links
+from r2.lib.pages.things import hot_links_by_url_listing
 from r2.lib.template_helpers import add_sr
 from r2.lib.validator import *
 from r2.models import *
@@ -59,19 +57,12 @@ def demangle_url(path):
     if need_insert_slash.match(path):
         path = string.replace(path, '/', '//', 1)
 
-    path = utils.sanitize_url(path)
+    try:
+        path = utils.sanitize_url(path)
+    except TypeError:
+        return None
 
     return path
-
-def match_current_reddit_subdomain(url):
-    # due to X-Frame-Options: SAMEORIGIN headers, we can't frame mismatched
-    # reddit subdomains
-    parsed = UrlParser(url)
-    if parsed.is_reddit_url():
-        parsed.hostname = request.host
-        return parsed.unparse()
-    else:
-        return url
 
 def force_html():
     """Because we can take URIs like /s/http://.../foo.png, and we can
@@ -99,31 +90,6 @@ class ToolbarController(RedditController):
             return self.redirect(add_sr("/tb/" + link._id36))
         return self.abort404()
 
-    @validate(link = VLink('id'))
-    def GET_tb(self, link):
-        '''/tb/$id36, former toolbar
-        The reddit toolbar is no longer supported, redirect to comments page.
-        The /tb url is still used as redirect from the linkoid short link.
-        
-        '''
-        if not link:
-            return self.abort404()
-        elif not link.subreddit_slow.can_view(c.user):
-            # don't disclose the subreddit/title of a post via the redirect url
-            self.abort403()
-        elif link.is_self:
-            redirect_url = link.url
-        else:
-            redirect_url = link.make_permalink_slow(force_domain=True)
-        
-        query_params = dict(request.GET)
-        if query_params:
-            url = UrlParser(redirect_url)
-            url.update_query(**query_params)
-            redirect_url = url.unparse()
-
-        return self.redirect(redirect_url)
-
     @validate(urloid=nop('urloid'))
     def GET_s(self, urloid):
         """/s/http://..., show a given URL with the toolbar. if it's
@@ -142,28 +108,6 @@ class ToolbarController(RedditController):
         listing = hot_links_by_url_listing(path, sr=c.site, num=1)
         link = listing.things[0] if listing.things else None
 
-        if c.cname and not c.authorized_cname:
-            # In this case, we make some bad guesses caused by the
-            # cname frame on unauthorised cnames. 
-            # 1. User types http://foo.com/http://myurl?cheese=brie
-            #    (where foo.com is an unauthorised cname)
-            # 2. We generate a frame that points to
-            #    http://www.reddit.com/r/foo/http://myurl?cnameframe=0.12345&cheese=brie
-            # 3. Because we accept everything after the /r/foo/, and
-            #    we've now parsed, modified, and reconstituted that
-            #    URL to add cnameframe, we really can't make any good
-            #    assumptions about what we've done to a potentially
-            #    already broken URL, and we can't assume that we've
-            #    rebuilt it in the way that it was originally
-            #    submitted (if it was)
-            # We could try to work around this with more guesses (by
-            # having demangle_url try to remove that param, hoping
-            # that it's not already a malformed URL, and that we
-            # haven't re-ordered the GET params, removed
-            # double-slashes, etc), but for now, we'll just refuse to
-            # do this operation
-            return self.abort404()
-
         if link:
             # we were able to find it, let's send them to the
             # toolbar (if enabled) or comments (if not)
@@ -175,10 +119,3 @@ class ToolbarController(RedditController):
 
     def GET_redirect(self):
         return self.redirect('/', code=301)
-
-    @validate(link = VLink('linkoid'))
-    def GET_linkoid(self, link):
-        if not link:
-            return self.abort404()
-        return self.redirect(add_sr("/tb/" + link._id36))
-

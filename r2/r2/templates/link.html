@@ -28,6 +28,7 @@
    from r2.lib.template_helpers import (
        get_domain,
        get_linkflair_css_classes,
+       js_timestamp,
        make_url_protocol_relative,
    )
    from r2.lib.pages.things import LinkButtons
@@ -58,9 +59,6 @@
      %if thing.nofollow:
        rel="nofollow"
      %endif
-     %if c.cname:
-       target="_top"
-     %endif
      >
      ${caller.body()}
   </a>
@@ -81,6 +79,7 @@
     ${self.buttons()}
     ${self.admintagline()}
   </ul>
+  <div class="reportform report-${thing._fullname}"></div>
  </%def>
 
 <%def name="flair()">
@@ -135,10 +134,6 @@
     ${bottom_buttons()}
   %endif
 
-%if not getattr(thing, "votable", True):
-  <div class="unvotable-message">${strings.unvotable_message}</div>
-%endif
-
   <div class="expando" ${"style='display: none'" if not expand else ""}
     %if not expand and child_content:
       data-cachedhtml="${websafe(child_content)}"
@@ -162,9 +157,31 @@
   ${get_linkflair_css_classes(thing, on_class="linkflair", off_class="")}
 </%def>
 
+<%def name="thing_data_attributes(what)">
+  ${parent.thing_data_attributes(what)}
+
+  %if not getattr(what, 'deleted', False):
+    data-author="${what.author.name}"
+    data-author-fullname="${what.author._fullname}"
+  %endif
+
+  data-subreddit="${what.subreddit.name}"
+  data-subreddit-fullname="${what.subreddit._fullname}"
+
+  data-timestamp="${js_timestamp(what._date)}"
+
+  data-url="${thing.href_url}"
+  data-domain="${what.domain}"
+  data-rank="${what.num_text}"
+
+  %if getattr(what, 'can_ban', False):
+    data-can-ban="true"
+  %endif
+</%def>
+
 <%def name="subreddit()" buffered="True">
   ${plain_link('/r/' + thing.subreddit.name, thing.subreddit_path, _sr_path=False,
-               nocname=True, _class="subreddit hover may-blank")}
+               _class="subreddit hover may-blank")}
 </%def>
 
 <%def name="midcol(display=True, cls = '')">
@@ -211,8 +228,8 @@
                               lastedited=capture(edited, thing, thing.lastedited)
                               ))}
   ${self.gildings()}
-  %if thing.stickied:
-    &#32;-&#32;<span class="stickied-tagline" title="selected by this subreddit's moderators">stickied post</span>
+  %if thing.use_sticky_style:
+    &#32;-&#32;<span class="stickied-tagline" title="selected by this subreddit's moderators">announcement</span>
   %endif
 
   %if getattr(thing, 'savedcategory', None) is not None:
@@ -239,4 +256,3 @@
   </%call>
   %endif
 </%def>
-

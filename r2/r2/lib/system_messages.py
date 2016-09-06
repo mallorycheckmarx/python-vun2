@@ -85,12 +85,14 @@ def notify_user_added(rel_type, author, user, target):
         subject = msgs["pm"]["subject"] % d
         msg = msgs["pm"]["msg"] % d
 
-        if rel_type == "moderator_invite":
+        if rel_type in ("moderator_invite", "contributor"):
             # send the message from the subreddit
-            item, inbox_rel = Message._new(author, user, subject, msg, request.ip,
-                                           sr=target, from_sr=True)
+            item, inbox_rel = Message._new(
+                author, user, subject, msg, request.ip, sr=target, from_sr=True,
+                can_send_email=False)
         else:
-            item, inbox_rel = Message._new(author, user, subject, msg, request.ip)
+            item, inbox_rel = Message._new(
+                author, user, subject, msg, request.ip, can_send_email=False)
 
         queries.new_message(item, inbox_rel, update_modmail=False)
 
@@ -108,15 +110,40 @@ def notify_user_added(rel_type, author, user, target):
         queries.new_message(item, inbox_rel)
 
 
+def send_mod_removal_message(subreddit, mod, user):
+    sr_name = "/r/" + subreddit.name
+    u_name = "/u/" + user.name
+    subject = "%(user)s has been removed as a moderator from %(subreddit)s"
+    message = (
+        "%(user)s: You have been removed as a moderator from %(subreddit)s.  "
+        "If you have a question regarding your removal, you can "
+        "contact the moderator team for %(subreddit)s by replying to this "
+        "message."
+    )
+    subject %= {"subreddit": sr_name, "user": u_name}
+    message %= {"subreddit": sr_name, "user": user.name}
+
+    item, inbox_rel = Message._new(
+        mod, user, subject, message, request.ip,
+        sr=subreddit,
+        from_sr=True,
+        can_send_email=False,
+    )
+    queries.new_message(item, inbox_rel, update_modmail=True)
+
+
 def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
     sr_name = "/r/" + subreddit.name
     if days:
-        subject = "you've been temporarily banned from %(subreddit)s"
-        message = ("you have been temporarily banned from posting to "
-            "%(subreddit)s. this ban will last for %(duration)s days.")
+        subject = "You've been temporarily banned from participating in %(subreddit)s"
+        message = ("You have been temporarily banned from participating in "
+            "%(subreddit)s. This ban will last for %(duration)s days. ")
     else:
-        subject = "you've been banned from %(subreddit)s"
-        message = "you have been banned from posting to %(subreddit)s."
+        subject = "You've been banned from participating in %(subreddit)s"
+        message = "You have been banned from participating in %(subreddit)s. "
+
+    message += ("You can still view and subscribe to %(subreddit)s, but you "
+                "won't be able to post or comment.")
 
     if not new:
         subject = "Your ban from %(subreddit)s has changed"
@@ -125,15 +152,20 @@ def send_ban_message(subreddit, mod, user, note=None, days=None, new=True):
     message %= {"subreddit": sr_name, "duration": days}
 
     if note:
-        message += "\n\n" + 'note from the moderators:'
+        message += "\n\n" + 'Note from the moderators:'
         message += "\n\n" + blockquote_text(note)
 
-    message += "\n\n" + ("you can contact the moderators regarding your ban "
-        "by replying to this message. **warning**: using other accounts to "
-        "circumvent a subreddit ban is considered a violation of reddit's "
-        "[site rules](/rules) and can result in being banned from reddit "
-        "entirely.")
+    message += "\n\n" + ("If you have a question regarding your ban, you can "
+        "contact the moderator team for %(subreddit)s by replying to this "
+        "message.") % {"subreddit": sr_name}
 
-    item, inbox_rel = Message._new(mod, user, subject, message, request.ip,
-        sr=subreddit, from_sr=True)
+    message += "\n\n" + ("**Reminder from the Reddit staff**: If you use "
+        "another account to circumvent this subreddit ban, that will be "
+        "considered a violation of [the Content Policy](/help/contentpolicy#section_prohibited_behavior) "
+        "and can result in your account being [suspended](https://reddit.zendesk.com/hc/en-us/articles/205687686) "
+        "from the site as a whole.")
+
+    item, inbox_rel = Message._new(
+        mod, user, subject, message, request.ip, sr=subreddit, from_sr=True,
+        can_send_email=False)
     queries.new_message(item, inbox_rel, update_modmail=False)

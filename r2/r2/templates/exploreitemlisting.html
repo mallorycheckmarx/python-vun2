@@ -33,7 +33,7 @@
   <div class="explore-header">
     <span id="explore-settings">
       <form method="POST" action="/post/explore_settings">
-        <input type="hidden" name="uh" value="${c.user.modhash()}">
+        <input type="hidden" name="uh" value="${c.modhash}">
         <span>
           <input type="checkbox" name="pers" value=1 ${"checked" if thing.settings.personalized else ""}>
             ${_("personalized")}
@@ -60,7 +60,7 @@
       %endfor
       <div class="nav-buttons">
         <span class="nextprev">${_("view more:")}&#32;
-          ${plain_link(format_html("%s &rsaquo;", _("reload suggestions")), request.url, _sr_path=False, nocname=True)}
+          ${plain_link(format_html("%s &rsaquo;", _("reload suggestions")), request.url, _sr_path=False)}
         </span>
       </div>
   %else:
@@ -71,7 +71,7 @@
     </div>
     <div class="nav-buttons">
       <span class="nextprev">
-        ${plain_link(format_html("%s &rsaquo;", _("try again")), "/explore", _sr_path=False, nocname=True)}
+        ${plain_link(format_html("%s &rsaquo;", _("try again")), "/explore", _sr_path=False)}
       </span>
     </div>
   %endif

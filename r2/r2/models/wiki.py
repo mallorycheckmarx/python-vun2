@@ -165,7 +165,7 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
         self.hidden = not self.is_hidden
         self._commit()
         return self.hidden
-    
+
     @classmethod
     def create(cls, pageid, content, author=None, reason=None):
         kw = dict(pageid=pageid, content=content)
@@ -175,14 +175,14 @@ class WikiRevision(tdb_cassandra.UuidThing, Printable):
             kw['reason'] = reason
         wr = cls(**kw)
         wr._commit()
-        WikiRevisionsByPage.add_object(wr)
+        WikiRevisionHistoryByPage.add_object(wr)
         WikiRevisionsRecentBySR.add_object(wr)
         return wr
-    
+
     def _on_commit(self):
-        WikiRevisionsByPage.add_object(self)
+        WikiRevisionHistoryByPage.add_object(self)
         WikiRevisionsRecentBySR.add_object(self)
-    
+
     @classmethod
     def get_recent(cls, sr, count=100):
         return WikiRevisionsRecentBySR.query([sr._id36], count=count)
@@ -410,10 +410,11 @@ class WikiPage(tdb_cassandra.Thing):
             raise ValueError('Permlevel not valid')
         self.permlevel = permlevel
         self._commit()
-    
+
     def get_revisions(self, after=None, count=100):
-        return WikiRevisionsByPage.query([self._id], after=after, count=count)
-    
+        return WikiRevisionHistoryByPage.query(
+            rowkeys=[self._id], after=after, count=count)
+
     def _commit(self, *a, **kw):
         if not self._id: # Creating a new page
             pageid = wiki_id(self.sr, self.name)
@@ -424,17 +425,22 @@ class WikiPage(tdb_cassandra.Thing):
                 self._id = pageid   
         return tdb_cassandra.Thing._commit(self, *a, **kw)
 
-class WikiRevisionsByPage(tdb_cassandra.DenormalizedView):
-    """ Associate revisions with pages """
-    
+
+class WikiRevisionHistoryByPage(tdb_cassandra.View):
+    """Create a time ordered index of revisions for a wiki page"""
     _use_db = True
     _connection_pool = 'main'
     _view_of = WikiRevision
     _compare_with = TIME_UUID_TYPE
-    
+
     @classmethod
-    def _rowkey(cls, wr):
-        return wr.pageid
+    def _rowkey(cls, wikirevision):
+        return wikirevision.pageid
+
+    @classmethod
+    def _obj_to_column(cls, wikirevision):
+        return {wikirevision._id: ''}
+
 
 class WikiPagesBySR(tdb_cassandra.DenormalizedView):
     """ Associate revisions with subreddits, store only recent """

@@ -16,6 +16,11 @@ r.actionForm = {
   toggleActionForm: function(e) {
     var el = e.target;
     var $el = $(el);
+
+    if (r.access.isLinkRestricted(el)) {
+      return;
+    }
+
     var $thing = $el.thing();
     var $thingForm = $thing.find('> .entry .action-form');
     var formSelector = $el.data('action-form');
@@ -117,6 +122,10 @@ r.report = {
   },
 
   toggleReasons: function(e) {
+    if (r.access.isLinkRestricted(e.target)) {
+      return;
+    }
+
     $(e.target).parent().find('.report-reasons').toggle();
   },
 

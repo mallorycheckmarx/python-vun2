@@ -29,8 +29,8 @@ from r2.lib.menus import (
   Styled,
 )
 from r2.lib.wrapped import Wrapped
-from r2.models import LinkListing, Link, Message, PromotedLink, Report
-from r2.models import make_wrapper, IDBuilder, Thing
+from r2.models import Comment, LinkListing, Link, Message, PromotedLink, Report
+from r2.models import IDBuilder, Thing
 from r2.lib.utils import tup
 from r2.lib.strings import Score
 from r2.lib.promote import *
@@ -48,7 +48,8 @@ class PrintableButtons(Styled):
                  show_unlock = False, show_marknsfw = False,
                  show_unmarknsfw = False, is_link=False,
                  show_flair=False, show_rescrape=False,
-                 show_givegold=False, **kw):
+                 show_givegold=False, show_sticky_comment=False,
+                 **kw):
         show_ignore = thing.show_reports
         approval_checkmark = getattr(thing, "approval_checkmark", None)
         show_approve = (thing.show_spam or show_ignore or
@@ -66,6 +67,7 @@ class PrintableButtons(Styled):
                         show_approve = show_approve,
                         show_report = show_report,
                         show_distinguish = show_distinguish,
+                        show_sticky_comment=show_sticky_comment,
                         show_lock = show_lock,
                         show_unlock = show_unlock,
                         show_marknsfw = show_marknsfw,
@@ -86,10 +88,12 @@ class LinkButtons(PrintableButtons):
         is_author = (c.user_is_loggedin and thing.author and
                      c.user.name == thing.author.name)
         # do we show the report button?
-        show_report = not is_author and report
+        show_report = not is_author and not thing._deleted and report
 
         show_share = ((c.user_is_loggedin or not g.read_only_mode) and
-                      not thing.subreddit.quarantine)
+                      not thing.subreddit.quarantine and
+                      not thing.disable_comments and
+                      not thing._deleted)
 
         # if they are the author, can they edit it?
         thing_editable = getattr(thing, 'editable', True)
@@ -98,8 +102,7 @@ class LinkButtons(PrintableButtons):
 
         show_lock = show_unlock = False
         lockable = thing.can_ban and not thing.archived
-        if (lockable and feature.is_enabled('thread_locking',
-                                            subreddit=thing.subreddit.name)):
+        if lockable:
             show_lock = not thing.locked
             show_unlock = not show_lock
 
@@ -108,7 +111,7 @@ class LinkButtons(PrintableButtons):
         if thing.can_ban or is_author or (thing.promoted and c.user_is_sponsor):
             if not thing.nsfw:
                 show_marknsfw = True
-            elif thing.nsfw and not thing.nsfw_str:
+            else:
                 show_unmarknsfw = True
 
             if (not thing.is_self and
@@ -153,6 +156,7 @@ class LinkButtons(PrintableButtons):
                 kw["is_awaiting_fraud_review"] = is_awaiting_fraud_review(thing)
                 kw["payment_flagged_reason"] = thing.payment_flagged_reason
                 kw["hide_after_seen"] = getattr(thing, "hide_after_seen", False)
+                kw["show_approval"] = thing.promoted and not thing._deleted
 
         PrintableButtons.__init__(self, 'linkbuttons', thing, 
                                   # user existence and preferences
@@ -164,6 +168,7 @@ class LinkButtons(PrintableButtons):
                                   # button visibility
                                   saved = thing.saved,
                                   editable = editable, 
+                                  deleted = thing._deleted,
                                   hidden = thing.hidden, 
                                   ignore_reports = thing.ignore_reports,
                                   show_delete = show_delete,
@@ -171,6 +176,7 @@ class LinkButtons(PrintableButtons):
                                   mod_reports=thing.mod_reports,
                                   user_reports=thing.user_reports,
                                   show_distinguish = show_distinguish,
+                                  distinguished=thing.distinguished,
                                   show_lock = show_lock,
                                   show_unlock = show_unlock,
                                   show_marknsfw = show_marknsfw,
@@ -201,10 +207,18 @@ class CommentButtons(PrintableButtons):
         show_delete = is_author and delete and not thing._deleted
         suppress_reply_buttons = getattr(thing, 'suppress_reply_buttons', False)
 
+        if thing.link.archived:
+          suppress_reply_buttons = True
+
         show_distinguish = (is_author and
                             (thing.can_ban or  # Moderator distinguish
                              c.user.employee or  # Admin distinguish
                              c.user_special_distinguish))
+
+        show_sticky_comment = (feature.is_enabled('sticky_comments') and
+                               thing.is_stickyable and
+                               is_author and
+                               thing.can_ban)
 
         show_givegold = thing.can_gild
 
@@ -243,6 +257,8 @@ class CommentButtons(PrintableButtons):
                                   mod_reports=thing.mod_reports,
                                   user_reports=thing.user_reports,
                                   show_distinguish = show_distinguish,
+                                  distinguished=thing.distinguished,
+                                  show_sticky_comment=show_sticky_comment,
                                   show_delete = show_delete,
                                   show_givegold=show_givegold,
                                   embed_button=embed_button,
@@ -262,6 +278,10 @@ class MessageButtons(PrintableButtons):
                      valid_recipient)
         can_block = True
         can_mute = False
+        is_admin_message = False
+        show_distinguish = c.user.employee and c.user._id == thing.author_id
+        del_on_recipient = (isinstance(thing, Message) and
+                            thing.del_on_recipient)
 
         if not was_comment:
             first_message = thing
@@ -270,6 +290,8 @@ class MessageButtons(PrintableButtons):
 
             if thing.sr_id:
                 sr = thing.subreddit_slow
+                is_admin_message = '/r/%s' % sr.name == g.admin_message_acct
+
                 if (sr.is_muted(first_message.author_slow) or
                         (first_message.to_id and
                             sr.is_muted(first_message.recipient_slow))):
@@ -302,7 +324,21 @@ class MessageButtons(PrintableButtons):
                                   show_delete = False,
                                   can_block = can_block,
                                   can_mute = can_mute,
+                                  is_admin_message = is_admin_message,
+                                  del_on_recipient=del_on_recipient,
+                                  show_distinguish=show_distinguish,
+                                  distinguished=thing.distinguished,
                                  )
+
+
+def make_wrapper(parent_wrapper = Wrapped, **params):
+    def wrapper_fn(thing):
+        w = parent_wrapper(thing)
+        for k, v in params.iteritems():
+            setattr(w, k, v)
+        return w
+    return wrapper_fn
+
 
 # formerly ListingController.builder_wrapper
 def default_thing_wrapper(**params):

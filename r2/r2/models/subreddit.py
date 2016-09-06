@@ -37,12 +37,14 @@ from pylons import request
 from pylons import tmpl_context as c
 from pylons import app_globals as g
 from pylons.i18n import _, N_
+from thrift.protocol.TProtocol import TProtocolException
+from thrift.Thrift import TApplicationException
+from thrift.transport.TTransport import TTransportException
 
 from r2.config import feature
 from r2.lib.db.thing import Thing, Relation, NotFound
 from account import (
     Account,
-    AccountsActiveBySR,
     FakeAccount,
     QuarantinedSubredditOptInsByAccount,
 )
@@ -50,12 +52,11 @@ from printable import Printable
 from r2.lib.db.userrel import UserRel, MigratingUserRel
 from r2.lib.db.operators import lower, or_, and_, not_, desc
 from r2.lib.errors import RedditError
-from r2.lib.geoip import location_by_ips
+from r2.lib.geoip import get_request_location
 from r2.lib.memoize import memoize
 from r2.lib.permissions import ModeratorPermissionSet
 from r2.lib.utils import (
     UrlParser,
-    fuzz_activity,
     in_chunks,
     summarize_markdown,
     timeago,
@@ -63,7 +64,8 @@ from r2.lib.utils import (
     tup,
     unicode_title_to_ascii,
 )
-from r2.lib.cache import sgm
+from r2.lib.cache import MemcachedError
+from r2.lib.sgm import sgm
 from r2.lib.strings import strings, Score
 from r2.lib.filters import _force_unicode
 from r2.lib.db import tdb_cassandra
@@ -74,6 +76,7 @@ from r2.lib.merge import ConflictException
 from r2.lib.cache import CL_ONE
 from r2.lib import hooks
 from r2.models.query_cache import MergedCachedQuery
+from r2.models.rules import SubredditRules
 import pycassa
 
 from r2.models.keyvalue import NamedGlobals
@@ -94,35 +97,18 @@ def get_links_sr_ids(sr_ids, sort, time):
     return queries.merge_results(*results)
 
 
-def get_request_location():
-    if c.location != '':
-        # unset c attributes have the value ''
-        return c.location
+def get_user_location():
+    """Determine country of origin for the current user
 
-    c.location = None
-
+    This is provided via a call to geoip.get_request_location unless the
+    user has opted into the global default location.
+    """
+    # The default location is just the unset one
     if c.user and c.user.pref_use_global_defaults:
-        pass
-    elif getattr(request, 'via_cdn', False):
-        g.stats.simple_event('geoip.cdn_request')
-        edgescape_info = request.environ.get('HTTP_X_AKAMAI_EDGESCAPE')
-        if edgescape_info:
-            try:
-                items = edgescape_info.split(',')
-                location_dict = dict(item.split('=') for item in items)
-                c.location = location_dict.get('country_code', None)
-            except:
-                pass
-    elif getattr(request, 'ip', None):
-        g.stats.simple_event('geoip.non_cdn_request')
-        timer = g.stats.get_timer("providers.geoip.location_by_ips")
-        timer.start()
-        location = location_by_ips(request.ip)
-        if location:
-            c.location = location.get('country_code', None)
-        timer.stop()
+        return ""
 
-    return c.location
+    # this call has the side effect of memoizing on c.location
+    return get_request_location(request, c)
 
 
 subreddit_rx = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_]{2,20}\Z")
@@ -133,7 +119,6 @@ time_subreddit_rx = re.compile(r"\At:[A-Za-z0-9][A-Za-z0-9_]{2,22}\Z")
 class BaseSite(object):
     _defaults = dict(
         static_path=g.static_path,
-        stylesheet=None,
         header=None,
         header_title='',
         login_required=False,
@@ -230,6 +215,8 @@ class SubredditExists(Exception): pass
 
 
 class Subreddit(Thing, Printable, BaseSite):
+    _cache = g.thingcache
+
     # Note: As of 2010/03/18, nothing actually overrides the static_path
     # attribute, even on a cname. So c.site.static_path should always be
     # the same as g.static_path.
@@ -242,8 +229,6 @@ class Subreddit(Thing, Printable, BaseSite):
         reported=0,
         valid_votes=0,
         show_media=False,
-        show_cname_sidebar=False,
-        css_on_cname=True,
         domain=None,
         suggested_comment_sort=None,
         wikimode="disabled",
@@ -279,7 +264,6 @@ class Subreddit(Thing, Printable, BaseSite):
         icon_size=None,
         banner_img='',
         banner_size=None,
-        community_rules='',
         key_color='',
         hide_ads=False,
         ban_count=0,
@@ -302,9 +286,10 @@ class Subreddit(Thing, Printable, BaseSite):
     gold_limit = 100
     DEFAULT_LIMIT = object()
 
-    ICON_EXACT_SIZE = (240, 240)
-    BANNER_MIN_SIZE = (640, 360)
-    BANNER_MAX_SIZE = (1280, 720)
+    ICON_EXACT_SIZE = (256, 256)
+    BANNER_MIN_SIZE = (640, 192)
+    BANNER_MAX_SIZE = (1280, 384)
+    BANNER_ASPECT_RATIO = 10.0 / 3
 
     valid_types = {
         'archived',
@@ -324,16 +309,25 @@ class Subreddit(Thing, Printable, BaseSite):
         'private',
     }
 
-    # in "rainbow" order
     KEY_COLORS = collections.OrderedDict([
+        ('#ea0027', N_('red')),
         ('#ff4500', N_('orangered')),
         ('#ff8717', N_('orange')),
         ('#ffb000', N_('mango')),
         ('#94e044', N_('lime')),
         ('#46d160', N_('green')),
         ('#0dd3bb', N_('mint')),
+        ('#25b79f', N_('teal')),
         ('#24a0ed', N_('blue')),
         ('#0079d3', N_('alien blue')),
+        ('#ff66ac', N_('pink')),
+        ('#7e53c1', N_('purple')),
+        ('#ddbd37', N_('gold')),
+        ('#a06a42', N_('brown')),
+        ('#efefed', N_('pale grey')),
+        ('#a5a4a4', N_('grey')),
+        ('#545452', N_('dark grey')),
+        ('#222222', N_('semi black')),
     ])
     ACCENT_COLORS = (
         '#f44336', # red
@@ -358,6 +352,10 @@ class Subreddit(Thing, Printable, BaseSite):
     )
 
     MAX_STICKIES = 2
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "sr:"
 
     def __setattr__(self, attr, val, make_dirty=True):
         if attr in self._derived_attrs:
@@ -433,7 +431,11 @@ class Subreddit(Thing, Printable, BaseSite):
         ret = {}
 
         for name in names:
-            ascii_only = str(name.decode("ascii", errors="ignore"))
+            try:
+                ascii_only = str(name.decode("ascii", errors="ignore"))
+            except UnicodeEncodeError:
+                continue
+
             lname = ascii_only.lower()
 
             if lname in cls._specials:
@@ -449,8 +451,8 @@ class Subreddit(Thing, Printable, BaseSite):
 
         if to_fetch:
             if not _update:
-                srids_by_name = g.cache.get_multi(
-                    to_fetch.keys(), prefix='subreddit.byname', stale=True)
+                srids_by_name = g.gencache.get_multi(
+                    to_fetch.keys(), prefix='srid:', stale=True)
             else:
                 srids_by_name = {}
 
@@ -473,8 +475,14 @@ class Subreddit(Thing, Printable, BaseSite):
 
                     still_missing = set(srnames) - set(fetched)
                     fetched.update((name, cls.SRNAME_NOTFOUND) for name in still_missing)
-
-                    g.cache.set_multi(fetched, prefix='subreddit.byname')
+                    try:
+                        g.gencache.set_multi(
+                            keys=fetched,
+                            prefix='srid:',
+                            time=3600,
+                        )
+                    except MemcachedError:
+                        pass
 
             srs = {}
             srids = [v for v in srids_by_name.itervalues() if v != cls.SRNAME_NOTFOUND]
@@ -594,17 +602,6 @@ class Subreddit(Thing, Printable, BaseSite):
         return self.subscriber_ids()
 
     @property
-    def flair(self):
-        return self.flair_ids()
-
-    @property
-    def accounts_active(self):
-        if self.hide_num_users_info:
-            return 0
-
-        return self.get_accounts_active()[0]
-
-    @property
     def wiki_use_subreddit_karma(self):
         return True
 
@@ -640,6 +637,10 @@ class Subreddit(Thing, Printable, BaseSite):
     def discoverable(self):
         return self.allow_top and not self.quarantine
 
+    @property
+    def community_rules(self):
+        return SubredditRules.get_rules(self)
+
     @related_subreddits.setter
     def related_subreddits(self, related_subreddits):
         try:
@@ -662,21 +663,57 @@ class Subreddit(Thing, Printable, BaseSite):
         else:
             multi.delete()
 
-    def get_accounts_active(self):
-        fuzzed = False
-        count = AccountsActiveBySR.get_count(self)
-        key = 'get_accounts_active-' + self._id36
+    activity_contexts = (
+        "logged_in",
+    )
+    SubredditActivity = collections.namedtuple(
+        "SubredditActivity", activity_contexts)
 
-        # Fuzz counts having low values, for privacy reasons
-        if count < 100 and not c.user_is_admin:
-            fuzzed = True
-            cached_count = g.cache.get(key)
-            if not cached_count:
-                count = fuzz_activity(count)
-                g.cache.set(key, count, time=5*60)
-            else:
-                count = cached_count
-        return count, fuzzed
+    def record_visitor_activity(self, context, visitor_id):
+        """Record a visit to this subreddit in the activity service.
+
+        This is used to show "here now" numbers. Multiple contexts allow us
+        to bucket different kinds of visitors (logged-in vs. logged-out etc.)
+
+        :param str context: The category of visitor. Must be one of
+            Subreddit.activity_contexts.
+        :param str visitor_id: A unique identifier for this visitor within the
+            given context.
+
+        """
+        assert context in self.activity_contexts
+
+        # we don't actually support other contexts yet
+        assert self.activity_contexts == ("logged_in",)
+
+        if not c.activity_service:
+            return
+
+        try:
+            c.activity_service.record_activity(self._fullname, visitor_id)
+        except (TApplicationException, TProtocolException, TTransportException):
+            pass
+
+    def count_activity(self):
+        """Count activity in this subreddit in all known contexts.
+
+        :returns: a named tuple of activity information for each context.
+
+        """
+        # we don't actually support other contexts yet
+        assert self.activity_contexts == ("logged_in",)
+
+        if not c.activity_service:
+            return None
+
+        try:
+            # TODO: support batch lookup of multiple contexts (requires changes
+            # to activity service)
+            with c.activity_service.retrying(attempts=4, budget=0.1) as svc:
+                activity = svc.count_activity(self._fullname)
+            return self.SubredditActivity(activity)
+        except (TApplicationException, TProtocolException, TTransportException):
+            return None
 
     def spammy(self):
         return self._spam
@@ -832,9 +869,6 @@ class Subreddit(Thing, Printable, BaseSite):
                      or self.is_moderator(user)
                      or self.is_contributor(user)))
 
-    def can_give_karma(self, user):
-        return self.is_special(user)
-
     def should_ratelimit(self, user, kind):
         if self.is_special(user):
             return False
@@ -972,7 +1006,6 @@ class Subreddit(Thing, Printable, BaseSite):
                 elif rel_name == 'muted':
                     muted_srids.add(item._id)
 
-        target = "_top" if c.cname else None
         for item in wrapped:
             item.subscriber = item._id in subscriber_srids
             item.moderator = item._id in moderator_srids
@@ -1002,9 +1035,7 @@ class Subreddit(Thing, Printable, BaseSite):
             if item.public_description or item.description:
                 text = (item.public_description or
                         summarize_markdown(item.description))
-                item.public_description_usertext = UserText(item,
-                                                            text,
-                                                            target=target)
+                item.public_description_usertext = UserText(item, text)
             else:
                 item.public_description_usertext = None
 
@@ -1025,7 +1056,7 @@ class Subreddit(Thing, Printable, BaseSite):
     @classmethod
     def default_subreddits(cls, ids=True):
         """Return the subreddits a user with no subscriptions would see."""
-        location = get_request_location()
+        location = get_user_location()
         srids = LocalizedDefaultSubreddits.get_defaults(location)
 
         srs = Subreddit._byID(srids, data=True, return_dict=False, stale=True)
@@ -1035,6 +1066,17 @@ class Subreddit(Thing, Printable, BaseSite):
             return [sr._id for sr in srs]
         else:
             return srs
+
+    @classmethod
+    def featured_subreddits(cls):
+        """Return the curated list of subreddits shown during onboarding."""
+        location = get_user_location()
+        srids = LocalizedFeaturedSubreddits.get_featured(location)
+
+        srs = Subreddit._byID(srids, data=True, return_dict=False, stale=True)
+        srs = filter(lambda sr: sr.discoverable, srs)
+
+        return srs
 
     @classmethod
     @memoize('random_reddits', time = 1800)
@@ -1207,12 +1249,15 @@ class Subreddit(Thing, Printable, BaseSite):
     def get_all_mod_ids(srs):
         from r2.lib.db.thing import Merge
         srs = tup(srs)
-        queries = [SRMember._query(SRMember.c._thing1_id == sr._id,
-                                   SRMember.c._name == 'moderator') for sr in srs]
+        queries = [
+            SRMember._simple_query(
+                ["_thing2_id"],
+                SRMember.c._thing1_id == sr._id,
+                SRMember.c._name == 'moderator',
+            ) for sr in srs
+        ]
+
         merged = Merge(queries)
-        # sr_ids = [sr._id for sr in srs]
-        # query = SRMember._query(SRMember.c._thing1_id == sr_ids, ...)
-        # is really slow
         return [rel._thing2_id for rel in list(merged)]
 
     def update_moderator_permissions(self, user, **kwargs):
@@ -1267,9 +1312,9 @@ class Subreddit(Thing, Printable, BaseSite):
 
     @classmethod
     def get_promote_srid(cls):
-        if g.promo_srid36:
-            return int(g.promo_srid36, 36)
-        else:
+        try:
+            return cls._by_name(g.promo_sr_name, stale=True)._id
+        except NotFound:
             return None
 
     def is_subscriber(self, user):
@@ -1300,6 +1345,11 @@ class Subreddit(Thing, Printable, BaseSite):
     @classmethod
     def subscribed_ids_by_user(cls, user):
         return SubscribedSubredditsByAccount.get_all_sr_ids(user)
+
+    @classmethod
+    def reverse_subscriber_ids(cls, user):
+        # This is just for consistency with all the other UserRel types
+        return cls.subscribed_ids_by_user(user)
 
     def get_rgb(self, fade=0.8):
         r = int(256 - (hash(str(self._id)) % 256)*(1-fade))
@@ -1410,11 +1460,11 @@ class SubscribedSubredditsByAccount(tdb_cassandra.DenormalizedRelation):
     @classmethod
     def get_all_sr_ids(cls, user):
         key = cls.__name__ + user._id36
-        sr_ids = g.thing_cache.get(key)
+        sr_ids = g.cassandra_local_cache.get(key)
         if sr_ids is None:
             r = cls._cf.xget(user._id36)
             sr_ids = [int(sr_id36, 36) for sr_id36, val in r]
-            g.thing_cache.set(key, sr_ids)
+            g.cassandra_local_cache.set(key, sr_ids)
 
         return sr_ids
 
@@ -1643,6 +1693,18 @@ class AllSR(FakeSubreddit):
         from r2.lib.db import queries
         return queries.get_all_gilded()
 
+    def get_reported(self, include_links=True, include_comments=True):
+        from r2.lib.db import queries
+        from r2.lib.db.thing import Merge
+        qs = []
+
+        if include_links:
+            qs.append(queries.get_reported_links(None))
+
+        if include_comments:
+            qs.append(queries.get_reported_comments(None))
+
+        return MergedCachedQuery(qs)
 
 class AllMinus(AllSR):
     analytics_name = "all"
@@ -1882,8 +1944,7 @@ class MultiReddit(FakeSubreddit):
         # Get moderator SRMember relations for all in srs
         # if a relation doesn't exist there will be a None entry in the
         # returned dict
-        mod_rels = SRMember._fast_query(self.srs, user,
-                                        'moderator', data=False)
+        mod_rels = SRMember._fast_query(self.srs, user, 'moderator', data=True)
         if None in mod_rels.values():
             return False
         else:
@@ -1932,9 +1993,9 @@ class TooManySubredditsError(Exception):
     pass
 
 
-class LocalizedDefaultSubreddits(tdb_cassandra.View):
+class BaseLocalizedSubreddits(tdb_cassandra.View):
     """Mapping of location to subreddit ids"""
-    _use_db = True
+    _use_db = False
     _compare_with = tdb_cassandra.ASCII_TYPE
     _read_consistency_level = tdb_cassandra.CL.QUORUM
     _write_consistency_level = tdb_cassandra.CL.QUORUM
@@ -1943,7 +2004,6 @@ class LocalizedDefaultSubreddits(tdb_cassandra.View):
         "default_validation_class": tdb_cassandra.ASCII_TYPE,
     }
     GLOBAL = "GLOBAL"
-    CACHE_PREFIX = "localized_defaults"
 
     @classmethod
     def _rowkey(cls, location):
@@ -1961,8 +2021,13 @@ class LocalizedDefaultSubreddits(tdb_cassandra.View):
             return ret
 
         id36s_by_location = sgm(
-            g.cache, keys, miss_fn=_lookup, prefix=cls.CACHE_PREFIX,
-            stale=True, _update=update,
+            cache=g.gencache,
+            keys=keys,
+            miss_fn=_lookup,
+            prefix=cls.CACHE_PREFIX,
+            stale=True,
+            _update=update,
+            ignore_set_errors=True,
         )
         ids_by_location = {location: [int(id36, 36) for id36 in id36s]
                            for location, id36s in id36s_by_location.iteritems()}
@@ -1985,7 +2050,7 @@ class LocalizedDefaultSubreddits(tdb_cassandra.View):
 
         # update cache
         id36s = columns.keys()
-        g.cache.set_multi({rowkey: id36s}, prefix=cls.CACHE_PREFIX)
+        g.gencache.set_multi({rowkey: id36s}, prefix=cls.CACHE_PREFIX)
 
     @classmethod
     def set_global_srs(cls, srs):
@@ -2007,7 +2072,7 @@ class LocalizedDefaultSubreddits(tdb_cassandra.View):
         return cls.get_srids(cls.GLOBAL)
 
     @classmethod
-    def get_defaults(cls, location):
+    def get_localized_srs(cls, location):
         location_key = cls._rowkey(location) if location else None
         global_key = cls._rowkey(cls.GLOBAL)
         keys = filter(None, [location_key, global_key])
@@ -2019,6 +2084,26 @@ class LocalizedDefaultSubreddits(tdb_cassandra.View):
             return ids_by_location[location_key]
         else:
             return ids_by_location[global_key]
+
+
+class LocalizedDefaultSubreddits(BaseLocalizedSubreddits):
+    _use_db = True
+    _type_prefix = "LocalizedDefaultSubreddits"
+    CACHE_PREFIX = "defaultsrs:"
+
+    @classmethod
+    def get_defaults(cls, location):
+        return cls.get_localized_srs(location)
+
+
+class LocalizedFeaturedSubreddits(BaseLocalizedSubreddits):
+    _use_db = True
+    _type_prefix = "LocalizedFeaturedSubreddits"
+    CACHE_PREFIX = "featuredsrs:"
+
+    @classmethod
+    def get_featured(cls, location):
+        return cls.get_localized_srs(location)
 
 
 class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
@@ -2609,7 +2694,15 @@ class SRMember(Relation(Subreddit, Account)):
     _defaults = dict(encoded_permissions=None)
     _permission_class = None
     _cache = g.srmembercache
-    _fast_cache = g.srmembercache
+    _rel_cache = g.srmembercache
+
+    @classmethod
+    def _cache_prefix(cls):
+        return "srmember:"
+
+    @classmethod
+    def _rel_cache_prefix(cls):
+        return "srmemberrel:"
 
     def has_permission(self, perm):
         """Returns whether this member has explicitly been granted a permission.
@@ -2801,9 +2894,9 @@ class MutedAccountsBySubreddit(object):
 
         #if the user has interacted with the subreddit before, message them
         if user.has_interacted_with(sr):
-            subject = _("You have been muted from r/%(subredditname)s")
+            subject = "You have been muted from r/%(subredditname)s"
             subject %= dict(subredditname=sr.name)
-            message = _("You have been [temporarily muted](%(muting_link)s) "
+            message = ("You have been [temporarily muted](%(muting_link)s) "
                 "from r/%(subredditname)s. You will not be able to message "
                 "the moderators of r/%(subredditname)s for %(num_hours)s hours.")
             message %= dict(

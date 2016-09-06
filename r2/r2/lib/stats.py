@@ -31,6 +31,7 @@ import threading
 from pycassa import columnfamily
 from pycassa import pool
 
+from r2.lib import baseplate_integration
 from r2.lib import cache
 from r2.lib import utils
 
@@ -244,7 +245,6 @@ class Timer:
 
     def __exit__(self, type, value, tb):
         self.stop()
-        return self
 
     def flush(self):
         for timing in self._timings:
@@ -354,6 +354,7 @@ class Stats:
                 # Work the same for amqp.consume_items and amqp.handle_items.
                 msg_tup = utils.tup(msgs)
 
+                baseplate_integration.start_root_span("amqp." + queue_name)
                 start = time.time()
                 try:
                     return processor(msgs, *args)
@@ -364,6 +365,7 @@ class Stats:
                         fake_end = fake_start + service_time
                         self.transact('amqp.%s' % queue_name,
                                       fake_start, fake_end)
+                    baseplate_integration.stop_root_span()
                     self.flush()
             return wrap_processor
         return decorator
@@ -446,20 +448,6 @@ class CacheStats:
                     self.total_stat_template % subname: delta,
                 })
             self.parent.cache_count_multi(data)
-
-    def cache_report(self, hits=0, misses=0, cache_name=None, sample_rate=None):
-        if hits or misses:
-            if not cache_name:
-                cache_name = self.cache_name
-            hit_stat_name = '%s.hit' % cache_name
-            miss_stat_name = '%s.miss' % cache_name
-            total_stat_name = '%s.total' % cache_name
-            data = {
-                hit_stat_name: hits,
-                miss_stat_name: misses,
-                total_stat_name: hits + misses,
-            }
-            self.parent.cache_count_multi(data, sample_rate=sample_rate)
 
 
 class StaleCacheStats(CacheStats):

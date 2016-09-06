@@ -37,6 +37,7 @@ support exists for up to two additional RuleTargets, one for the item's
 author, and another for the parent link (if the original item was a comment).
 """
 
+from collections import namedtuple
 from datetime import datetime
 from hashlib import md5
 import re
@@ -47,9 +48,11 @@ from pylons import app_globals as g
 
 from r2.lib import amqp
 from r2.lib.db import queries
+from r2.lib.errors import RedditError
 from r2.lib.filters import _force_unicode
 from r2.lib.menus import CommentSortMenu
 from r2.lib.utils import (
+    SimpleSillyStub,
     TimeoutFunction,
     TimeoutFunctionException,
     lowercase_keys_recursively,
@@ -63,6 +66,7 @@ from r2.models import (
     Comment,
     DeletedUser,
     Frontpage,
+    Inbox,
     LastModified,
     Link,
     Message,
@@ -94,6 +98,10 @@ def replace_placeholders(string, data, matches):
         "{{author}}": data["author"].name,
         "{{body}}": getattr(item, "body", ""),
         "{{subreddit}}": data["subreddit"].name,
+        "{{author_flair_text}}": data["author"].flair_text(
+            data["subreddit"]._id, obey_disabled=True),
+        "{{author_flair_css_class}}": data["author"].flair_css_class(
+            data["subreddit"]._id, obey_disabled=True),
     }
 
     if isinstance(item, Comment):
@@ -177,27 +185,47 @@ class AutoModeratorRuleTypeError(AutoModeratorSyntaxError):
     pass
 
 
+# used in Ruleset.__init__()
+RuleDefinition = namedtuple("RuleDefinition", ["yaml", "values"])
+
+
 class Ruleset(object):
     """A subreddit's collection of Rules."""
-    def __init__(self, yaml_text=""):
+    def __init__(self, yaml_text="", timer=None):
         """Create a collection of Rules from YAML documents."""
+        if timer is None:
+            timer = SimpleSillyStub()
+
         self.init_time = datetime.now(g.tz)
         self.rules = []
 
         if not yaml_text:
             return
 
-        # force loading all the yaml documents to check for errors
-        try:
-            rule_defs = list(yaml.safe_load_all(yaml_text))
-        except Exception as e:
-            raise ValueError("YAML parsing error: %s" % e)
+        # We want to maintain the original YAML source sections, so we need
+        # to manually split up the YAML by the document delimiter (line
+        # starting with "---") and then try to load each section to see if
+        # it's valid
+        yaml_sections = [section.strip("\r\n")
+            for section in re.split("^---", yaml_text, flags=re.MULTILINE)]
 
-        # drop any sections that aren't dicts (generally just comments)
-        rule_defs = [rule_def for rule_def in rule_defs
-            if isinstance(rule_def, dict)]
+        rule_defs = []
 
-        if any("standard" in rule_def for rule_def in rule_defs):
+        for section_num, section in enumerate(yaml_sections, 1):
+            try:
+                parsed = yaml.safe_load(section)
+            except Exception as e:
+                raise ValueError(
+                    "YAML parsing error in section %s: %s" % (section_num, e))
+
+            # only keep the section if the parsed result is a dict (otherwise
+            # it's generally just a comment)
+            if isinstance(parsed, dict):
+                rule_defs.append(RuleDefinition(yaml=section, values=parsed))
+
+        timer.intermediate("yaml_parsing")
+
+        if any("standard" in rule_def.values for rule_def in rule_defs):
             # load standard rules from wiki page
             standard_rules = {}
             try:
@@ -210,10 +238,11 @@ class Ruleset(object):
                 g.log.error("Error while loading automod standards: %s", e)
                 standard_rules = None
 
-        for values in rule_defs:
-            orig_values = values.copy()
+        timer.intermediate("init_standard_rules")
+
+        for rule_def in rule_defs:
             # use standard rule as a base if they defined one
-            standard_name = values.pop("standard", None)
+            standard_name = rule_def.values.pop("standard", None)
             if standard_name:
                 # error while loading the standards, skip this rule
                 if standard_rules is None:
@@ -225,33 +254,35 @@ class Ruleset(object):
                 if not standard_values:
                     raise AutoModeratorSyntaxError(
                         "Invalid standard: `%s`" % standard_name,
-                        yaml.dump(orig_values),
+                        rule_def.yaml,
                     )
 
                 new_values = standard_values.copy()
-                new_values.update(values)
-                values = new_values
+                new_values.update(rule_def.values)
+                rule_def = rule_def._replace(values=new_values)
 
-            type = values.get("type", "any")
+            type = rule_def.values.get("type", "any")
             if type == "any":
                 # try to create two Rules for comments and links
                 rule = None
                 for type_value in ("comment", "submission"):
-                    values["type"] = type_value
+                    rule_def.values["type"] = type_value
                     try:
-                        rule = Rule(values)
+                        rule = Rule(rule_def.values, rule_def.yaml)
                     except AutoModeratorRuleTypeError as type_error:
                         continue
 
                     # only keep the rule if it had any checks
                     if rule.has_any_checks(targets_only=True):
-                        self.rules.append(Rule(values))
+                        self.rules.append(rule)
 
                 # if both types hit exceptions we should actually error
                 if not rule:
                     raise type_error
             else:
-                self.rules.append(Rule(values))
+                self.rules.append(Rule(rule_def.values, rule_def.yaml))
+
+        timer.intermediate("init_rules")
 
         # drop any rules that don't have a check and an action
         self.rules = [rule for rule in self.rules
@@ -476,6 +507,11 @@ class RuleTarget(object):
             valid_targets=(Link, Comment),
             component_type="check",
         ),
+        "set_locked": RuleComponent(
+            valid_types=bool,
+            valid_targets=Link,
+            component_type="action",
+        ),
         "set_sticky": RuleComponent(
             valid_types=(bool, int),
             valid_values=set(
@@ -503,10 +539,11 @@ class RuleTarget(object):
             valid_targets=Account,
             component_type="check",
         ),
-        "link_karma": RuleComponent(
+        "post_karma": RuleComponent(
             valid_regex=_oper_int_regex,
             valid_targets=Account,
             component_type="check",
+            aliases=["link_karma"],
         ),
         "combined_karma": RuleComponent(
             valid_regex=_oper_int_regex,
@@ -830,7 +867,7 @@ class RuleTarget(object):
 
     def check_account_thresholds(self, account, data):
         """Check karma/age thresholds against an account."""
-        thresholds = ["comment_karma", "link_karma", "combined_karma",
+        thresholds = ["comment_karma", "post_karma", "combined_karma",
             "account_age"]
         # figure out which thresholds/values we need to check against
         checks = {}
@@ -1018,6 +1055,15 @@ class RuleTarget(object):
                 item.contest_mode = self.set_contest_mode
                 item._commit()
 
+        if self.set_locked is not None:
+            if item.locked != self.set_locked:
+                item.locked = self.set_locked
+                item._commit()
+
+                log_action = 'lock' if self.set_locked else 'unlock'
+                ModAction.create(data["subreddit"], ACCOUNT, log_action,
+                    target=item)
+
         if self.set_sticky is not None:
             stickied_fullnames = data["subreddit"].get_sticky_fullnames()
             already_stickied = item._fullname in stickied_fullnames
@@ -1110,14 +1156,14 @@ class RuleTarget(object):
                 value = ''
         elif field == "account_age":
             value = item._age
-        elif field == "link_karma":
+        elif field == "post_karma":
             value = max(item.link_karma, g.link_karma_display_floor)
         elif field == "comment_karma":
             value = max(item.comment_karma, g.comment_karma_display_floor)
         elif field == "combined_karma":
-            link = self.get_field_value_from_item(item, data, "link_karma")
+            post = self.get_field_value_from_item(item, data, "post_karma")
             comment = self.get_field_value_from_item(item, data, "comment_karma")
-            value = link + comment
+            value = post + comment
         elif field == "flair_text" and isinstance(item, Account):
             value = item.flair_text(data["subreddit"]._id, obey_disabled=True)
         elif field == "flair_css_class" and isinstance(item, Account):
@@ -1147,6 +1193,7 @@ class Rule(object):
         "priority": RuleComponent(valid_types=int, default=0),
         "moderators_exempt": RuleComponent(valid_types=bool),
         "comment": RuleComponent(valid_types=basestring, component_type="action"),
+        "comment_stickied": RuleComponent(valid_types=bool, default=False),
         "modmail": RuleComponent(valid_types=basestring, component_type="action"),
         "modmail_subject": RuleComponent(
             valid_types=basestring,
@@ -1159,11 +1206,15 @@ class Rule(object):
         ),
     }
 
-    def __init__(self, values):
+    def __init__(self, values, yaml_source=None):
         values = lowercase_keys_recursively(values)
 
-        self.yaml = yaml.dump(values)
-        self.unique_id = md5(self.yaml).hexdigest()
+        if yaml_source:
+            self.yaml = yaml_source
+        else:
+            self.yaml = yaml.dump(values)
+
+        self.unique_id = md5(self.yaml.encode("utf-8")).hexdigest()
 
         self.checks = set()
         self.actions = set()
@@ -1387,9 +1438,22 @@ class Rule(object):
             new_comment.distinguished = "yes"
             new_comment.sendreplies = False
             new_comment._commit()
-            queries.queue_vote(ACCOUNT, new_comment, dir=True, ip=None,
-                send_event=False)
+
+            # If the comment isn't going to be put into the user's inbox
+            # due to them having sendreplies disabled, force it. For a normal
+            # mod, distinguishing the comment would do this, but it doesn't
+            # happen here since we're setting .distinguished directly.
+            if isinstance(item, Link) and not inbox_rel:
+                inbox_rel = Inbox._add(data["author"], new_comment, "selfreply")
+
             queries.new_comment(new_comment, inbox_rel)
+
+            if self.comment_stickied:
+                try:
+                    link.set_sticky_comment(new_comment, set_by=ACCOUNT)
+                except RedditError:
+                    # This comment isn't valid to set to sticky, ignore
+                    pass
 
             g.stats.simple_event("automoderator.comment")
 
@@ -1467,13 +1531,21 @@ def run():
                     need_to_init = True
 
             if need_to_init:
+                timer = g.stats.get_timer("automoderator.init_ruleset")
+                timer.start()
+
                 wp = WikiPage.get(subreddit, "config/automoderator")
+                timer.intermediate("get_wiki_page")
+
                 try:
-                    rules = Ruleset(wp.content)
+                    rules = Ruleset(wp.content, timer)
                 except (AutoModeratorSyntaxError, AutoModeratorRuleTypeError):
                     print "ERROR: Invalid config in /r/%s" % subreddit.name
                     return
+
                 rules_by_subreddit[subreddit._id] = rules
+
+                timer.stop()
 
             if not rules:
                 return

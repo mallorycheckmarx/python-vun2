@@ -30,6 +30,7 @@ from copy import copy
 
 error_list = dict((
         ('USER_REQUIRED', _("Please log in to do that.")),
+        ('MOD_REQUIRED', _("You must be a moderator to do that.")),
         ('HTTPS_REQUIRED', _("this page must be accessed using https")),
         ('WRONG_DOMAIN', _("you can't do that on this domain")),
         ('VERIFIED_USER_REQUIRED', _("you need to set a valid email address to do that.")),
@@ -49,7 +50,6 @@ error_list = dict((
         ('NOT_USER', _("You are not logged in as that user.")),
         ('NOT_FRIEND', _("you are not friends with that user")),
         ('LOGGED_IN', _("You are already logged in.")),
-        ('DELETED_LINK', _('the link you are commenting on has been deleted')),
         ('DELETED_COMMENT', _('that comment has been deleted')),
         ('DELETED_THING', _('that element has been deleted')),
         ('SHORT_PASSWORD', _('the password must be at least %(chars)d characters')),
@@ -69,7 +69,8 @@ error_list = dict((
         ('INVALID_LANG', _("that language is not available")),
         ('BAD_NUMBER', _("that number isn't in the right range (%(range)s)")),
         ('BAD_STRING', _("you used a character here that we can't handle")),
-        ('BAD_BID', _("your budget must be at least $%(min)d and no more than $%(max)d.")),
+        ('BAD_BUDGET', _("your budget must be at least $%(min)d and no more than $%(max)d.")),
+        ('BAD_BID', _('your bid must be at least $%(min)s and no more than $%(max)s.')),
         ('ALREADY_SUB', _("that link has already been submitted")),
         ('SUBREDDIT_EXISTS', _('that subreddit already exists')),
         ('SUBREDDIT_NOEXIST', _('that subreddit doesn\'t exist')),
@@ -80,6 +81,7 @@ error_list = dict((
         ('BAD_SR_NAME', _('that name isn\'t going to work')),
         ('COLLECTION_NOEXIST', _('that collection doesn\'t exist')),
         ('INVALID_TARGET', _('that target type is not valid')),
+        ('INVALID_NSFW_TARGET', _('nsfw ads must target nsfw content')),
         ('INVALID_OS_VERSION', _('that version range is not valid')),
         ('RATELIMIT', _('you are doing that too much. try again in %(time)s.')),
         ('SUBREDDIT_RATELIMIT', _("you are doing that too much. try again later.")),
@@ -103,6 +105,7 @@ error_list = dict((
         ('DATE_TOO_LATE', _('please enter a date %(day)s or earlier')),
         ('DATE_TOO_EARLY', _('please enter a date %(day)s or later')),
         ('START_DATE_CANNOT_CHANGE', _('start date cannot be changed')),
+        ('COST_BASIS_CANNOT_CHANGE', _('this campaign was created prior to auction and cannot be edited')),
         ('BAD_ADDRESS', _('address problem: %(message)s')),
         ('BAD_CARD', _('card problem: %(message)s')),
         ('TOO_LONG', _("this is too long (max: %(max_length)s)")),
@@ -122,9 +125,12 @@ error_list = dict((
         ('BAD_FLAIR_TARGET', _('not a valid flair target')),
         ('OAUTH2_INVALID_CLIENT', _('invalid client id')),
         ('OAUTH2_INVALID_REDIRECT_URI', _('invalid redirect_uri parameter')),
+        ('OAUTH2_INVALID_RESPONSE_TYPE', _('invalid response type')),
         ('OAUTH2_INVALID_SCOPE', _('invalid scope requested')),
         ('OAUTH2_INVALID_REFRESH_TOKEN', _('invalid refresh token')),
         ('OAUTH2_ACCESS_DENIED', _('access denied by the user')),
+        ('OAUTH2_NO_REFRESH_TOKENS_ALLOWED', _('refresh tokens are not allowed for this response_type')),
+        ('OAUTH2_CONFIDENTIAL_TOKEN', _('confidential clients can not request tokens directly')),
         ('CONFIRM', _("please confirm the form")),
         ('CONFLICT', _("conflict error while saving")),
         ('NO_API', _('cannot perform this action via the API')),
@@ -134,11 +140,13 @@ error_list = dict((
         ('BAD_IMAGE', _('image problem')),
         ('DEVELOPER_ALREADY_ADDED', _('already added')),
         ('TOO_MANY_DEVELOPERS', _('too many developers')),
-        ('BAD_HASH', _("i don't believe you.")),
+        ('DEVELOPER_FIRST_PARTY_APP', _('this app can not be modified from this interface')),
+        ('DEVELOPER_PRIVILEGED_ACCOUNT', _('you cannot add this account from this interface')),
+        ('INVALID_MODHASH', _("invalid modhash")),
         ('ALREADY_MODERATOR', _('that user is already a moderator')),
         ('CANT_RESTRICT_MODERATOR', _("You can't perform that action because that user is a moderator.")),
         ('NO_INVITE_FOUND', _('there is no pending invite for that subreddit')),
-        ('BID_LIVE', _('you cannot edit the budget of a live ad')),
+        ('BUDGET_LIVE', _('you cannot edit the budget of a live ad')),
         ('TOO_MANY_CAMPAIGNS', _('you have too many campaigns for that promotion')),
         ('BAD_JSONP_CALLBACK', _('that jsonp callback contains invalid characters')),
         ('INVALID_PERMISSION_TYPE', _("permissions don't apply to that type of user")),
@@ -157,7 +165,9 @@ error_list = dict((
         ('NO_CHANGE_KIND', _("can't change post type")),
         ('INVALID_LOCATION', _("invalid location")),
         ('INVALID_FREQUENCY_CAP', _("invalid values for frequency cap")),
+        ('FREQUENCY_CAP_TOO_LOW', _('frequency cap must be at least %(min)d')),
         ('BANNED_FROM_SUBREDDIT', _('that user is banned from the subreddit')),
+        ('IN_TIMEOUT', _("You can't do that while suspended.")),
         ('GOLD_REQUIRED', _('you must have an active reddit gold subscription to do that')),
         ('INSUFFICIENT_CREDDITS', _("insufficient creddits")),
         ('GILDING_NOT_ALLOWED', _("gilding is not allowed in this subreddit")),
@@ -173,6 +183,12 @@ error_list = dict((
         ('BAD_PROMO_MOBILE_DEVICE', _("you must select at least one device per OS to target")),
         ('USER_MUTED', _("You have been muted from this subreddit.")),
         ('MUTED_FROM_SUBREDDIT', _("This user has been muted from the subreddit.")),
+        ('COMMENT_NOT_STICKYABLE', _("This comment is not stickyable. Ensure that it is a top level comment.")),
+        ('SR_RULE_EXISTS', _("A subreddit rule by that name already exists.")),
+        ('SR_RULE_DOESNT_EXIST', _("No subreddit rule by that name exists.")),
+        ('SR_RULE_TOO_MANY', _("This subreddit already has the maximum number of rules.")),
+        ('COMMENT_NOT_ACCESSIBLE', _("Cannot access this comment.")),
+        ('POST_NOT_ACCESSIBLE', _("Cannot access this post.")),
     ))
 
 errors = Storage([(e, e) for e in error_list.keys()])
@@ -289,6 +305,7 @@ class BadRequestError(HTTPBadRequest):
             'reason': error_name,
             'explanation': error_list[error_name],
         }
+        self.explanation = error_list[error_name]
 
 
 def reddit_http_error(code=400, error_name='UNKNOWN_ERROR', **data):

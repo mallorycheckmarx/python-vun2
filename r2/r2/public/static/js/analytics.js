@@ -21,23 +21,57 @@ r.analytics = {
       r.analytics.fireFunnelEvent('ads', r.config.ads_virtual_page);
     }
 
-    var url = r.config.tracker_url;
-    var params = {};
+    r.analytics.contextData = {
+      dnt: window.DO_NOT_TRACK,
+      language: document.getElementsByTagName('html')[0].getAttribute('lang'),
+      link_id: r.config.cur_link ? r.utils.fullnameToId(r.config.cur_link) : null,
+      loid: null,
+      loid_created: null,
+      referrer_url: document.referrer || '',
+      referrer_domain: null,
+      sr_id: r.config.cur_site ? r.utils.fullnameToId(r.config.cur_site) : null,
+      sr_name: r.config.post_site || null,
+      user_id: null,
+      user_name: null,
+    };
 
-    if (!r.config.user_id) {
+    if (r.config.user_id) {
+      r.analytics.contextData.user_id = r.config.user_id;
+      r.analytics.contextData.user_name = r.config.logged;
+    } else {
       var tracker = new redditlib.Tracker();
       var loggedOutData = tracker.getTrackingData();
       if (loggedOutData && loggedOutData.loid) {
-        params = {
-            loid: loggedOutData.loid
-        };
+        r.analytics.contextData.loid = loggedOutData.loid;
         if (loggedOutData.loidcreated) {
-          params['loidcreated'] = loggedOutData.loidcreated
+          r.analytics.contextData.loid_created = decodeURIComponent(loggedOutData.loidcreated);
         }
       }
     }
 
-    r.analytics.firePageTrackingPixel(url, params, r.analytics.stripAnalyticsParams);
+    if (document.referrer) {
+      var referrerDomain = document.referrer.match(/\/\/([^\/]+)/);
+      if (referrerDomain && referrerDomain.length > 1) {
+        r.analytics.contextData.referrer_domain = referrerDomain[1];
+      }
+    }
+
+    if ($('body').hasClass('comments-page')) {
+      r.analytics.contextData.page_type = 'comments';
+    } else if ($('body').hasClass('listing-page')) {
+      r.analytics.contextData.page_type = 'listing';
+
+      if (r.config.cur_listing) {
+        r.analytics.contextData.listing_name = r.config.cur_listing;
+      }
+    }
+
+    if (r.config.feature_screenview_events) {
+      r.analytics.screenviewEvent();
+    }
+
+    r.analytics.firePageTrackingPixel(r.analytics.stripAnalyticsParams);
+
   },
 
   _eventPredicates: {},
@@ -226,20 +260,30 @@ r.analytics = {
     );
   },
 
-  firePageTrackingPixel: function(url, params, callback) {
-    if (!url) { return; }
+  firePageTrackingPixel: function(callback) {
+    var url = r.config.tracker_url;
+    if (!url) {
+      return;
+    }
+    var params = {
+      dnt: this.contextData.dnt,
+    };
 
-    params = params || {};
+    if (this.contextData.loid) {
+      params.loid = this.contextData.loid;
+    }
+    if (this.contextData.loid_created) {
+      params.loidcreated = decodeURIComponent(this.contextData.loid_created);
+    }
 
     var querystring = [
       'r=' + Math.random(),
     ];
 
-    var referrer = document.referrer || '';
-    var referrerDomain = referrer.match(/\/\/([^\/]+)/);
-
-    if (referrerDomain && referrerDomain.length > 1) {
-      querystring.push('referrer_domain=' + encodeURIComponent(referrerDomain[1]));
+    if (this.contextData.referrer_domain) {
+      querystring.push(
+        'referrer_domain=' + encodeURIComponent(this.contextData.referrer_domain)
+      );
     }
 
     for(var p in params) {
@@ -262,6 +306,13 @@ r.analytics = {
     var hasReplaceState = !!(window.history && window.history.replaceState);
     var params = $.url().param();
     var stripParams = ['ref', 'ref_source', 'ref_campaign'];
+    // strip utm tags as well
+    _.keys(params).forEach(function(paramKey){
+      if (paramKey.indexOf('utm_') === 0){
+        stripParams.push(paramKey);
+      }
+    });
+
     var strippedParams = _.omit(params, stripParams);
 
     if (hasReplaceState && !_.isEqual(params, strippedParams)) {
@@ -271,7 +322,181 @@ r.analytics = {
 
       window.history.replaceState({}, document.title, a.href);
     }
-  }
+  },
+
+  addContextData: function(properties, payload) {
+    /* jshint sub: true */
+    payload = payload || {};
+
+    if (this.contextData.user_id) {
+      payload['user_id'] = this.contextData.user_id;
+      payload['user_name'] = this.contextData.user_name;
+    } else {
+      payload['loid'] = this.contextData.loid;
+      payload['loid_created'] = decodeURIComponent(this.contextData.loid_created);
+    }
+
+    properties.forEach(function(contextProperty) {
+      /* jshint eqnull: true */
+      if (this.contextData[contextProperty] != null) {
+        payload[contextProperty] = this.contextData[contextProperty];
+      }
+    }.bind(this));
+
+    return payload;
+  },
+
+  screenviewEvent: function() {
+    var eventTopic = 'screenview_events';
+    var eventType = 'cs.screenview';
+    var payload = this.addContextData([
+      'sr_name',
+      'sr_id',
+      'listing_name',
+      'language',
+      'dnt',
+      'referrer_domain',
+      'referrer_url',
+    ]);
+
+    if (r.config.event_target) {
+      for (var key in r.config.event_target) {
+        var value = r.config.event_target[key];
+        if (value !== null) {
+          payload[key] = value;
+        }
+      }
+    }
+
+    var rank_by_link = {};
+    $('.linklisting .thing.link').each(function() {
+        var $thing = $(this);
+        var fullname = $thing.data('fullname');
+        var rank = parseInt($thing.data('rank')) || '';
+        rank_by_link[fullname] = rank;
+    });
+    if (!_.isEmpty(rank_by_link)) {
+        payload['rank_by_link'] = rank_by_link;
+    }
+
+    // event collector
+    r.events.track(eventTopic, eventType, payload).send();
+  },
+
+  loginRequiredEvent: function(actionName, actionDetail, targetType, targetFullname) {
+    var eventTopic = 'login_events';
+    var eventType = 'cs.loggedout_' + actionName;
+    var payload = this.addContextData([
+      'sr_name',
+      'sr_id',
+      'listing_name',
+      'referrer_domain',
+      'referrer_url',
+    ]);
+
+    payload['process_notes'] = 'LOGIN_REQUIRED';
+
+    if (actionDetail) {
+      payload['details_text'] = actionDetail;
+    }
+
+    if (targetType) {
+      payload['target_type'] = targetType;
+    }
+
+    if (targetFullname) {
+      payload['target_fullname'] = targetFullname;
+      payload['target_id'] = r.utils.fullnameToId(targetFullname);
+    }
+
+    // event collector
+    r.events.track(eventTopic, eventType, payload).send();
+  },
+
+  timeoutForbiddenEvent: function(actionName, actionDetail, targetType, targetFullname) {
+    var eventTopic = 'forbidden_actions';
+    var eventType = 'cs.forbidden_' + actionName;
+    var payload = this.addContextData([
+      'sr_name',
+      'sr_id',
+    ]);
+
+    payload['process_notes'] = 'IN_TIMEOUT';
+
+    if (actionDetail) {
+      payload['details_text'] = actionDetail;
+    }
+
+    if (targetType) {
+      payload['target_type'] = targetType;
+    }
+
+    if (targetFullname) {
+      payload['target_fullname'] = targetFullname;
+      payload['target_id'] = r.utils.fullnameToId(targetFullname);
+    }
+
+    // event collector
+    r.events.track(eventTopic, eventType, payload).send();
+  },
+
+  expandoEvent: function(actionName, targetData) {
+    var eventTopic = 'expando_events';
+    var eventType = 'cs.' + actionName;
+    var payload = this.addContextData([
+      'page_type',
+      'listing_name',
+      'referrer_domain',
+      'referrer_url',
+    ]);
+
+    if ('linkIsNSFW' in targetData) {
+      payload['nsfw'] = targetData.linkIsNSFW;
+    }
+
+    if ('linkType' in targetData) {
+      payload['target_type'] = targetData.linkType;
+      
+      if (targetData.linkType === 'self' ||
+          targetData.linkDomain === r.config.cur_domain) {
+        // self posts and reddit live embeds
+        payload['provider'] = 'reddit';
+      } else {
+        payload['provider'] = 'embedly';
+      }
+    }
+
+    if ('linkFullname' in targetData) {
+      payload['target_fullname'] = targetData.linkFullname;
+      payload['target_id'] = r.utils.fullnameToId(targetData.linkFullname);
+    }
+
+    if ('linkCreated' in targetData) {
+      payload['target_create_ts'] = targetData.linkCreated;
+    }
+
+    if ('linkURL' in targetData) {
+      payload['target_url'] = targetData.linkURL;
+    }
+
+    if ('linkDomain' in targetData) {
+      payload['target_url_domain'] = targetData.linkDomain;
+    }
+
+    if ('authorFullname' in targetData) {
+      payload['target_author_id'] = r.utils.fullnameToId(targetData.authorFullname);
+    }
+      
+    if ('subredditName' in targetData) {
+      payload['sr_name'] = targetData.subredditName;
+    }
+
+    if ('subredditFullname' in targetData) {
+      payload['sr_id'] = r.utils.fullnameToId(targetData.subredditFullname);
+    }
+
+    r.events.track(eventTopic, eventType, payload).send();
+  },
 };
 
 r.analytics.breadcrumbs = {
@@ -381,3 +606,9 @@ r.analytics.breadcrumbs = {
   },
 
 };
+
+
+r.hooks.get('setup').register(function() {
+  r.analytics.breadcrumbs.init();
+});
+

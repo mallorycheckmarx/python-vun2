@@ -30,6 +30,7 @@ from boto.s3.connection import S3Connection
 from boto.emr.connection import EmrConnection
 from boto.exception import S3ResponseError
 from pylons import app_globals as g
+from sqlalchemy.exc import DataError
 
 from r2.lib.emr_helpers import (EmrException, terminate_jobflow,
     modify_slave_count)
@@ -215,8 +216,14 @@ def _report_interval(interval):
                   'unique_count': uniques, 'pageview_count': pageviews}
             kw.update(_name_to_kw(category_cls, name))
             r = category_cls(**kw)
-            Session.merge(r)
-            Session.commit()
+
+            try:
+                Session.merge(r)
+                Session.commit()
+            except DataError:
+                Session.rollback()
+                continue
+
     Session.remove()
     now = datetime.datetime.now()
     print 'finished reporting %s (%s) - %s' % (pg_interval, interval_type, now)
@@ -243,7 +250,7 @@ def process_pixel_log(log_path, fast=False):
     month_date = '%s-%02d' % (year, month)
 
     # All logs from this day use the same jobflow
-    jobflow_name = 'Traffic Processing (%s)' % day_date
+    jobflow_name = 'Traffic Processing %s' % day_date
 
     output_path = os.path.join(PROCESSED_DIR, 'hour', hour_date)
     extract_hour(emr_connection, jobflow_name, log_path, output_path,
@@ -279,7 +286,7 @@ def process_pixel_log(log_path, fast=False):
 
 
 def aggregate_month(month_date):
-    jobflow_name = 'Traffic Processing (%s)' % month_date
+    jobflow_name = 'Traffic Processing %s' % month_date
     input_path = os.path.join(PROCESSED_DIR, 'day', '%s-*' % month_date)
     output_path = os.path.join(AGGREGATE_DIR, month_date)
     aggregate_interval(emr_connection, jobflow_name, input_path, output_path,

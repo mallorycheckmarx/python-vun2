@@ -468,20 +468,25 @@ def gold_revenue_multi(dates):
                 for truncated_time, pennies in ENGINE.execute(query)}
 
 
-@memoize("gold-revenue-volatile", time=600)
+@memoize("gold-revenue-volatile", time=600, stale=True)
 def gold_revenue_volatile(date):
     return gold_revenue_multi([date]).get(date, 0)
 
 
-@memoize("gold-revenue-steady")
+@memoize("gold-revenue-steady", stale=True)
 def gold_revenue_steady(date):
     return gold_revenue_multi([date]).get(date, 0)
 
 
-@memoize("gold-goal")
+@memoize("gold-goal", stale=True)
 def gold_goal_on(date):
     """Returns the gold revenue goal (in pennies) for a given date."""
-    return GoldRevenueGoalByDate.get(date)
+    goal = GoldRevenueGoalByDate.get(date)
+
+    if not goal:
+        return 0
+
+    return float(goal)
 
 
 def account_from_stripe_customer_id(stripe_customer_id):

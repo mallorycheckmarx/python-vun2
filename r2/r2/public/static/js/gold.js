@@ -75,6 +75,10 @@ r.gold = {
     },
     
     _toggleThingGoldForm: function (e) {
+        if (r.access.isLinkRestricted(e.target)) {
+          return;
+        }
+
         var $link = $(e.target);
         var $thing = $link.thing();
         var thingFullname = $link.thing_id();
@@ -305,7 +309,7 @@ r.gold = {
         } else {
             status
               .removeClass('error')
-              .text(reddit.status_msg.submitting);
+              .text(r.config.status_msg.submitting);
             submit.attr('disabled', 'disabled');
             Stripe.createToken({
                     name: cardName,

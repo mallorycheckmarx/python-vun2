@@ -51,28 +51,32 @@ try participating in other communities on reddit for a little while first before
 
 %if not thing.site:
     <%utils:line_field title="${_('name')}"
-                        description='${_("no spaces, e.g., slashdot")}'>
-     <input type="text" name="name" id="name" class="text"
-            value="${thing.name}"/>
-      %if not thing.site:
-        ${error_field("SUBREDDIT_EXISTS", "name")}
-        ${error_field("BAD_SR_NAME", "name")}
-      %endif
+                        description='${_("no spaces, e.g., \"books\" or \"bookclub\". avoid using solely trademarked names, e.g. use \"FansOfAcme\" instead of \"Acme\". once chosen, this name cannot be changed.")}'>
+      <div class="usertext-edit">
+        <input type="text" name="name" id="name" class="text"
+              value="${thing.name}"/>
+        %if not thing.site:
+          ${error_field("SUBREDDIT_EXISTS", "name")}
+          ${error_field("BAD_SR_NAME", "name")}
+        %endif
+      </div>
     </%utils:line_field>
 %else:
   <input type="hidden" name="sr" id="name" value="${thing.site._fullname}"/>
 %endif
 
   <%utils:line_field title="${_('title')}"
-       description='${_("e.g., slashdot: news for nerds, stuff that matters")}'>
-    %if thing.site:
-      <input id="title" type="text" name="title" class="text"
-             value="${thing.site.title}"/>
-    %else:
-      <input id="title" type="text" name="title" class="text" />
-    %endif
-    ${error_field("NO_TEXT", "title")}
-    ${error_field("TOO_LONG", "title")}
+       description='${_("e.g., books: made from trees or pixels. recommendations, news, or thoughts")}'>
+    <div class="usertext-edit">
+      %if thing.site:
+        <input id="title" type="text" name="title" class="text"
+               value="${thing.site.title}"/>
+      %else:
+        <input id="title" type="text" name="title" class="text" />
+      %endif
+      ${error_field("NO_TEXT", "title")}
+      ${error_field("TOO_LONG", "title")}
+    </div>
   </%utils:line_field>
 
   <%utils:line_field title="${_('description')}" css_class="usertext"
@@ -290,7 +294,7 @@ try participating in other communities on reddit for a little while first before
 		</table>
   	</div>
   </%utils:line_field>
-  
+
   <%utils:line_field title="${_('other options')}">
     <div class="delete-field">
       <ul>
@@ -400,29 +404,6 @@ try participating in other communities on reddit for a little while first before
 
 % if thing.site and thing.site.domain != thing.site._defaults['domain']:
   <%utils:line_field title="${_('domain')}" css_class="usertext">
-    <div class="delete-field">
-      %if thing.site and c.site.domain:
-          <input class="nomargin" type="checkbox" 
-                 name="css_on_cname" id="css_on_cname"
-                 %if thing.site.css_on_cname:
-                   checked="checked"
-                 %endif
-          >
-          <label for="css_on_cname">
-            ${_("make custom CSS styles apply only when accessed from the cname.")}
-          </label>
-          <br/>
-          <input class="nomargin" type="checkbox"
-                 name="show_cname_sidebar" id="show_cname_sidebar"
-                 %if thing.site.show_cname_sidebar:
-                   checked="checked"
-                 %endif
-          >
-          <label for="show_cname_sidebar">
-            ${_("show sidebar when accessed from the cname.")}
-          </label>
-      %endif
-    </div>
     <div class="usertext-edit">
       %if thing.site:
         <input id="domain" type="text" name="domain" class="text"
@@ -488,9 +469,7 @@ try participating in other communities on reddit for a little while first before
     </%utils:line_field>
 %endif
 
-%if feature.is_enabled('mobile_settings'):  # begin feature flag
-
-%if thing.site:
+%if thing.site and feature.is_enabled('related_subreddits'):
   <%utils:line_field title="${_('related subreddits')}">
     <div class="delete-field">
       <p class="little gray">${_('similar or related subreddits.')}</p>
@@ -568,11 +547,12 @@ try participating in other communities on reddit for a little while first before
   </%utils:line_field>
 %endif
 
-%if thing.site:
+%if feature.is_enabled('mobile_settings'):
   <%utils:line_field title="${_('mobile look and feel')}" css_class="mobile">
     <ul class="upload">
+      %if thing.site:
       <li>
-        <p><label>${_('icon image')}</label> <span class="gray">${_('icon must be 240x240 pixels. PNG or JPG only.')}</span></p>
+        <p><label>${_('icon image')}</label> <span class="gray">${_('icon must be 256x256 pixels. PNG or JPG only.')}</span></p>
         <%utils:image_upload post_target="/api/upload_sr_img"
                              current_image="${thing.site.icon_img}"
                              form_id='icon-upload'>
@@ -590,8 +570,8 @@ try participating in other communities on reddit for a little while first before
         </%utils:image_upload>
       </li>
       <li>
-        <p><label>${_('header image')}</label> <span class="gray">${_('header should have 16:9 aspect ratio. PNG or JPG only.')}</span></p>
-        <p class="little gray">${_('minimum size: 640x360px')} / ${_('maximum size: 1280x720px')}</span></p>
+        <p><label>${_('header image')}</label> <span class="gray">${_('header should have 10:3 aspect ratio. PNG or JPG only.')}</span></p>
+        <p class="little gray">${_('minimum size: 640x192px')} / ${_('maximum size: 1280x384px')}</span></p>
         <%utils:image_upload post_target="/api/upload_sr_img"
                              current_image="${thing.site.banner_img}"
                              form_id='banner-upload'>
@@ -608,6 +588,7 @@ try participating in other communities on reddit for a little while first before
           <input type="hidden" name="upload_type" value="banner">
         </%utils:image_upload>
       </li>
+      %endif
       <li>
         <p><label>${_('color')}</label> <span class="gray">${_('used as a thematic color for your subreddit on mobile')}</span></p>
         <ul class="colors">
@@ -616,7 +597,7 @@ try participating in other communities on reddit for a little while first before
             <li>
               <label>
                 <input type="radio" name="key_color" value="${color}"
-                       %if c.site.key_color == color:
+                       %if c.site.key_color.lower() == color.lower():
                          checked="checked"
                        %endif
                 >
@@ -626,75 +607,11 @@ try participating in other communities on reddit for a little while first before
             </li>
             %endif
           %endfor
-          <li class="custom-color">
-            <% has_custom_color = c.site.key_color and c.site.key_color not in thing.color_options %>
-            <label>
-              <p class="little">${_('or pick a custom color:')}</p>
-              <input id="custom-color" type="radio" name="key_color" value=""
-                     %if has_custom_color:
-                       checked="checked"
-                     %endif
-                     onfocus="select_custom_hex()"
-              >
-              <div id="custom-swatch" class="swatch"
-                   %if has_custom_color:
-                     style="background-color: ${c.site.key_color}"
-                   %endif
-              >
-                <input type="color"
-                       %if c.site.key_color:
-                         value="${c.site.key_color}"
-                       %else:  # color input default is black
-                         value="#ffffff"
-                       %endif
-                       onchange="update_custom_color(this.value)"
-                       onfocus="select_custom_color()"
-                >
-              </div>
-              <input id="custom-hex" type="text" placeholder="#cee3f8"
-                     %if has_custom_color:
-                       value="${c.site.key_color}"
-                     %endif
-                     onfocus="select_custom_color()"
-                     onchange="update_custom_color(this.value)"
-              >
-              <script type="text/javascript">
-                function select_custom_hex() {
-                  $('#custom-hex').select();
-                }
-                function select_custom_color() {
-                 $('#custom-color').prop('checked', true);
-                }
-                function update_custom_color(color) {
-                  $('#custom-color, #custom-swatch input, #custom-hex').val(color);
-                  $('#custom-swatch').css('background-color', color);
-                  if (!color) {
-                    $('#custom-color').prop('checked', false);
-                  }
-                }
-              </script>
-            </label>
-          </li>
         </ul>
       </li>
     </ul>
   </%utils:line_field>
 %endif
-
-%if thing.site:
-  <%utils:line_field title="${_('mobile community rules')}" css_class="mobile">
-    <div class="delete-field">
-      <p class="little gray">${_("a concise summary of community rules for mobile.  one rule per line.")}</p>
-      <div class="usertext-edit">
-        <textarea name="community_rules" rows="1" cols="1">
-          ${keep_space(thing.site.community_rules)}
-        </textarea>
-      </div>
-    </div>
-  </%utils:line_field>
-%endif
-
-%endif  # end feature flag
 
 %if not thing.site:
   ${thing.captcha}

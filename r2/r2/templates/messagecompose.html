@@ -25,9 +25,12 @@
 
 <%!
    import simplejson
+   from r2.lib import js
    from r2.lib.pages import UserText
    from r2.lib.template_helpers import static
 %>
+
+${unsafe(js.use("messagecompose"))}
 
 <h1>${_("send a private message")}</h1>
 
@@ -42,6 +45,7 @@ ${message_field()}
   ${clippy_field()}
 %endif
 ${captcha_field()}
+<input type="hidden" name="source" value="compose">
 
 <button id="send" name="send" type="submit">${_("send")}</button>
 <span class="status"></span>
@@ -51,24 +55,37 @@ ${captcha_field()}
 
 <%def name="to_field()">
   <div class="spacer">
-    <%utils:round_field title="${_('to')}", 
-        description="${_('(username, or /r/name for that subreddit\'s moderators)')}">
-      <input type="text" name="to" value="${thing.to or ''}"
-             onchange="${'admincheck(this)' if thing.admin_check else ''}"/>
-      ${error_field("NO_USER", "to")}
-      ${error_field("USER_DOESNT_EXIST", "to")}
-      ${error_field("SUBREDDIT_NOEXIST", "to")}
-      ${error_field("USER_BLOCKED", "to")}
-      ${error_field("USER_BLOCKED_MESSAGE", "to")}
-      ${error_field("USER_MUTED", "to")}
-      ${error_field("MUTED_FROM_SUBREDDIT", "to")}
-    </%utils:round_field>
+    %if thing.restrict_recipient:
+      <%utils:round_field title="${_('to')}">
+        <input type="text" class="access-required" name="to" value="${g.admin_message_acct}"
+               data-event-action="changerecipient" readonly />
+      </%utils:round_field>
+    %else:
+      <%utils:round_field title="${_('to')}",
+          description="${_('(username, or /r/name for that subreddit\'s moderators)')}">
+        <input type="text" name="to" value="${thing.to or ''}"
+               onchange="${'admincheck(this)' if thing.admin_check else ''}"/>
+        ${error_field("NO_USER", "to")}
+        ${error_field("USER_DOESNT_EXIST", "to")}
+        ${error_field("SUBREDDIT_NOEXIST", "to")}
+        ${error_field("USER_BLOCKED", "to")}
+        ${error_field("USER_BLOCKED_MESSAGE", "to")}
+        ${error_field("USER_MUTED", "to")}
+        ${error_field("MUTED_FROM_SUBREDDIT", "to")}
+      </%utils:round_field>
+    %endif
   </div>
 </%def>
 
 <%def name="subject_field()">
   <div class="spacer">
     <%utils:round_field title="${_('subject')}">
+      ## Hidden by default so that the form is reasonable for users with no JS.
+      <select class="rule_subject" style="display:none">
+        <option value="" selected disabled class="blank"></option>
+        <option value="" class="other">Other</option>
+      </select>
+
       <input type="text" name="subject" value="${thing.subject or ''}"/>
       ${error_field("NO_SUBJECT", "subject", "span")}
       ${error_field("TOO_LONG", "subject", "span")}
@@ -90,9 +107,7 @@ ${captcha_field()}
     var admins = ${unsafe(simplejson.dumps(thing.admins))};
 
     if ($.inArray(elem.value, admins) >= 0) {
-      $(".admin-to")
-        .text(elem.value)
-        .attr('href', '/about/team/#user/' + elem.value);
+      $(".admin-to").text(elem.value);
       $(".clippy").show();
     } else {
       $(".clippy").hide();
@@ -107,16 +122,12 @@ ${captcha_field()}
        <p>
          Before you click "send", you might want to make sure that
          &#32;
-         <a class="admin-to" href="/about/team/#user/${thing.to}">${thing.to}</a>
+         <span class="admin-to">${thing.to}</span>
          &#32;
-         is the right admin for the job. The
-         &#32;
-         <a href="/about/team/">team page</a>
-         &#32;
-         has some info about who handles what.
-
-         Also:
+         is the right admin for the job.
        </p>
+
+       <p>In many cases, there is probably a better alternative than messaging an individual admin:</p>
 
        <ul>
          <li>If you'd like to message all the admins at once, send your message to the&#32;<a href="/message/compose?to=${g.admin_message_acct|u}">admin message list.</a></li>
@@ -134,7 +145,7 @@ ${captcha_field()}
          <li>If
            &#32;
            <span class="admin-to">${thing.to}</span>
-           &#32;<i>is</i>&#32; is a moderator of a specific subreddit you're
+           &#32;<i>is</i>&#32; a moderator of a specific subreddit you're
            inquiring about, and that's actually the reason you're writing, please
            message 
            &#32;

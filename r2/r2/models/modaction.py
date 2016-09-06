@@ -62,7 +62,8 @@ class ModAction(tdb_cassandra.UuidThing):
                'removewikicontributor', 'wikirevise', 'wikipermlevel',
                'ignorereports', 'unignorereports', 'setpermissions',
                'setsuggestedsort', 'sticky', 'unsticky', 'setcontestmode',
-               'unsetcontestmode', 'lock', 'unlock', 'muteuser', 'unmuteuser')
+               'unsetcontestmode', 'lock', 'unlock', 'muteuser', 'unmuteuser',
+               'createrule', 'editrule', 'deleterule')
 
     _menu = {'banuser': _('ban user'),
              'unbanuser': _('unban user'),
@@ -100,6 +101,9 @@ class ModAction(tdb_cassandra.UuidThing):
              'unlock': _('unlock post'),
              'muteuser': _('mute user'),
              'unmuteuser': _('unmute user'),
+             'createrule': _('create rule'),
+             'editrule': _('edit rule'),
+             'deleterule': _('delete rule'),
             }
 
     _text = {'banuser': _('banned'),
@@ -138,6 +142,9 @@ class ModAction(tdb_cassandra.UuidThing):
              'unlock': _('unlocked'),
              'muteuser': _('muted'),
              'unmuteuser': _('unmuted'),
+             'createrule': _('created rule'),
+             'editrule': _('edited rule'),
+             'deleterule': _('deleted rule'),
             }
 
     _details_text = {# approve comment/link
@@ -204,13 +211,12 @@ class ModAction(tdb_cassandra.UuidThing):
     def create(cls, sr, mod, action, details=None, target=None, description=None):
         from r2.models import DefaultSR
 
-        # Split this off into separate function to check for valid actions?
         if not action in cls.actions:
             raise ValueError("Invalid ModAction: %s" % action)
-        
+
         # Front page should insert modactions into the base sr
         sr = sr._base if isinstance(sr, DefaultSR) else sr
-        
+
         kw = dict(sr_id36=sr._id36, mod_id36=mod._id36, action=action)
 
         if target:
@@ -223,7 +229,14 @@ class ModAction(tdb_cassandra.UuidThing):
         ma = cls(**kw)
         ma._commit()
 
-        g.events.mod_event(ma, sr, mod, target, request=request, context=c)
+        g.events.mod_event(
+            modaction=ma,
+            subreddit=sr,
+            mod=mod,
+            target=target,
+            request=request if c.user_is_loggedin else None,
+            context=c if c.user_is_loggedin else None,
+        )
 
         return ma
 

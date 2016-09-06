@@ -27,8 +27,9 @@ from wrapped import Wrapped, StringTemplate, CacheStub, Templated
 from mako.template import Template
 from r2.config import feature
 from r2.config.extensions import get_api_subtype
+from r2.lib import hooks
 from r2.lib.filters import spaceCompress, safemarkdown, _force_unicode
-from r2.models import Account, Report, Trophy
+from r2.models import Account, Report, Trophy, Comment, Link
 from r2.models.token import OAuth2Scope, extra_oauth2_scope
 import time, pytz
 from pylons import response
@@ -281,7 +282,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         banner_size="banner_size",
         collapse_deleted_comments="collapse_deleted_comments",
         comment_score_hide_mins="comment_score_hide_mins",
-        # community_rules="community_rules",
+        community_rules="community_rules",
         description="description",
         description_html="description_html",
         display_name="name",
@@ -299,6 +300,8 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         # related_subreddits="related_subreddits",
         hide_ads="hide_ads",
         quarantine="quarantine",
+        show_media="show_media",
+        show_media_preview="show_media_preview",
         submission_type="link_type",
         submit_link_label="submit_link_label",
         submit_text_label="submit_text_label",
@@ -306,6 +309,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         submit_text_html="submit_text_html",
         subreddit_type="type",
         subscribers="_ups",
+        suggested_comment_sort="suggested_comment_sort",
         title="title",
         url="path",
         user_is_banned="is_banned",
@@ -314,6 +318,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         user_is_moderator="is_moderator",
         user_is_subscriber="is_subscriber",
         user_sr_theme_enabled="user_sr_style_enabled",
+        wiki_enabled="wiki_enabled",
     )
 
     # subreddit *attributes* (right side of the equals)
@@ -341,10 +346,11 @@ class SubredditJsonTemplate(ThingJsonTemplate):
     def raw_data(self, thing):
         data = ThingJsonTemplate.raw_data(self, thing)
 
-        # XXX remove this when feature is enabled and use _data_attrs instead
+        # remove this when feature is enabled and use _data_attrs instead
         if feature.is_enabled('mobile_settings'):
-            for attr in ('community_rules', 'key_color', 'related_subreddits'):
-                data[attr] = self.thing_attr(thing, attr)
+            data['key_color'] = self.thing_attr(thing, 'key_color')
+        if feature.is_enabled('related_subreddits'):
+            data['related_subreddits'] = self.thing_attr(thing, 'related_subreddits')
 
         permissions = getattr(thing, 'mod_permissions', None)
         if permissions:
@@ -386,15 +392,17 @@ class SubredditJsonTemplate(ThingJsonTemplate):
             return None
         elif attr == 'submit_text_html':
             return safemarkdown(thing.submit_text)
-        elif attr == 'community_rules':
-            if thing.community_rules:
-                return thing.community_rules.split('\n')
-            return []
         elif attr == 'user_sr_style_enabled':
             if c.user_is_loggedin:
                 return c.user.use_subreddit_style(thing)
             else:
                 return True
+        elif attr == 'wiki_enabled':
+            is_admin_or_mod = c.user_is_loggedin and (
+                c.user_is_admin or thing.is_moderator_with_perms(c.user, 'wiki')
+            )
+
+            return thing.wikimode == 'anyone' or (thing.wikimode == 'modonly' and is_admin_or_mod)
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
@@ -517,21 +525,43 @@ class IdentityJsonTemplate(ThingJsonTemplate):
         over_18="pref_over_18",
         gold_creddits="gold_creddits",
         gold_expiration="gold_expiration",
+        is_suspended="in_timeout",
+        suspension_expiration_utc="timeout_expiration_utc",
+        features="features",
     )
+    _public_attrs = {
+        "name",
+        "is_suspended",
+    }
 
     def raw_data(self, thing):
+        viewable = True
         attrs = self._data_attrs_.copy()
         if c.user_is_loggedin and thing._id == c.user._id:
             attrs.update(self._private_data_attrs)
+        # Add a public indication when a user is permanently in timeout.
+        elif (thing.in_timeout and thing.timeout_expiration is None):
+            attrs.update({"is_suspended": "in_timeout"})
+            viewable = False
+
         if thing.pref_hide_from_robots:
             response.headers['X-Robots-Tag'] = 'noindex, nofollow'
-        data = {k: self.thing_attr(thing, v) for k, v in attrs.iteritems()}
+
+        data = {k: self.thing_attr(thing, v) for k, v in attrs.iteritems()
+                if viewable or k in self._public_attrs}
         try:
             self.add_message_data(data, thing)
         except OAuth2Scope.InsufficientScopeError:
             # No access to privatemessages, but the rest of
             # the identity information is sufficient.
             pass
+
+        # Add as private data attributes states about this user. This is used
+        # for feature flagging by user state on first-party API clients.
+        if c.user_is_loggedin and thing._id == c.user._id:
+            data['is_employee'] = thing.employee
+            data['in_beta'] = thing.pref_beta
+
         return data
 
     @extra_oauth2_scope("privatemessages")
@@ -558,6 +588,15 @@ class IdentityJsonTemplate(ThingJsonTemplate):
             if not thing.gold:
                 return None
             return calendar.timegm(thing.gold_expiration.utctimetuple())
+        elif attr == "timeout_expiration_utc":
+            expiration_date = thing.timeout_expiration
+            if not expiration_date:
+                return None
+
+            return calendar.timegm(expiration_date.utctimetuple())
+        elif attr == "features":
+            return feature.all_enabled(c.user)
+
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
 
@@ -621,6 +660,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         likes="likes",
         link_flair_css_class="flair_css_class",
         link_flair_text="flair_text",
+        locked="locked",
         media="media_object",
         media_embed="media_embed",
         num_comments="num_comments",
@@ -685,7 +725,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
             if not thing.expunged:
                 return thing.selftext
             else:
-                return ''
+                return '[removed]'
         elif attr == 'selftext_html':
             if not thing.expunged:
                 return safemarkdown(thing.selftext)
@@ -705,6 +745,10 @@ class LinkJsonTemplate(ThingJsonTemplate):
         source_height = preview_object['height']
         source_ratio = float(source_height) / source_width
 
+        # previews with a ratio above the max will be cropped to a lower ratio
+        max_ratio = float(LinkJsonTemplate.PREVIEW_MAX_RATIO)
+        preview_ratio = min(source_ratio, max_ratio)
+
         preview_resolutions = []
         for w in LinkJsonTemplate.PREVIEW_RESOLUTIONS:
             if w > source_width:
@@ -713,7 +757,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
             url = g.image_resizing_provider.resize_image(
                 preview_object, w, censor_nsfw,
                 LinkJsonTemplate.PREVIEW_MAX_RATIO)
-            h = int(w * source_ratio)
+            h = int(w * preview_ratio)
             preview_resolutions.append({
                 "url": url,
                 "width": w,
@@ -751,6 +795,10 @@ class LinkJsonTemplate(ThingJsonTemplate):
                 images['variants']['nsfw'] = self.generate_image_links(
                     preview_object, censor_nsfw=True)
             d['preview']['images'] = [images]
+
+        if c.user_is_loggedin and c.user.in_timeout:
+            d['user_reports'] = []
+            d['mod_reports'] = []
 
         return d
 
@@ -852,6 +900,9 @@ class CommentJsonTemplate(ThingTemplate):
         distinguished = getattr(item, "distinguished", "no")
         data["distinguished"] = distinguished if distinguished != "no" else None
 
+        if feature.is_enabled('sticky_comments'):
+            data["stickied"] = item.link.sticky_comment_id == item._id
+
         if isinstance(item.editted, bool):
             data["edited"] = item.editted
         else:
@@ -882,6 +933,10 @@ class CommentJsonTemplate(ThingTemplate):
             data["report_reasons"] = None
             data["approved_by"] = None
             data["banned_by"] = None
+
+        if c.user_is_loggedin and c.user.in_timeout:
+            data['user_reports'] = []
+            data['mod_reports'] = []
 
         if c.profilepage:
             data["quarantine"] = item.subreddit.quarantine
@@ -1362,13 +1417,10 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
     _data_attrs_ = dict(
         collapse_deleted_comments='site.collapse_deleted_comments',
         comment_score_hide_mins='site.comment_score_hide_mins',
-        # community_rules='site.community_rules',
         content_options='site.link_type',
         default_set='site.allow_top',
         description='site.description',
         domain='site.domain',
-        domain_css='site.css_on_cname',
-        domain_sidebar='site.show_cname_sidebar',
         exclude_banned_modqueue='site.exclude_banned_modqueue',
         header_hover_text='site.header_title',
         # key_color='site.key_color',
@@ -1379,11 +1431,13 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
         # related_subreddits='site.related_subreddits',
         hide_ads="site.hide_ads",
         show_media='site.show_media',
+        show_media_preview='site.show_media_preview',
         submit_link_label='site.submit_link_label',
         submit_text_label='site.submit_text_label',
         submit_text='site.submit_text',
         subreddit_id='site._fullname',
         subreddit_type='site.type',
+        suggested_comment_sort="site.suggested_comment_sort",
         title='site.title',
         wiki_edit_age='site.wiki_edit_age',
         wiki_edit_karma='site.wiki_edit_karma',
@@ -1399,18 +1453,19 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
     def thing_attr(self, thing, attr):
         if attr.startswith('site.') and thing.site:
             return getattr(thing.site, attr[5:])
-        if attr == 'related_subreddits':
+        if attr == 'related_subreddits' and thing.site:
             # string used for form input
-            return '\n'.join(thing.related_subreddits)
+            return '\n'.join(thing.site.related_subreddits)
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
     def raw_data(self, thing):
         data = ThingJsonTemplate.raw_data(self, thing)
 
-        # XXX remove this when feature is enabled and use _data_attrs instead
+        # remove this when feature is enabled and use _data_attrs instead
         if feature.is_enabled('mobile_settings'):
-            for attr in ('community_rules', 'key_color', 'related_subreddits'):
-                data[attr] = self.thing_attr(thing.site, attr)
+            data['key_color'] = self.thing_attr(thing, 'key_color')
+        if feature.is_enabled('related_subreddits'):
+            data['related_subreddits'] = self.thing_attr(thing, 'related_subreddits')
 
         return data
 
@@ -1433,10 +1488,12 @@ class ModActionTemplate(ThingJsonTemplate):
         mod='moderator',
         mod_id36='mod_id36',
         sr_id36='sr_id36',
-        subreddit='sr_name',
+        subreddit='subreddit',
         target_author='target_author',
         target_fullname='target_fullname',
         target_permalink='target_permalink',
+        target_title='target_title',
+        target_body='target_body',
     )
 
     def thing_attr(self, thing, attr):
@@ -1456,6 +1513,15 @@ class ModActionTemplate(ThingJsonTemplate):
                 return None
         elif attr == "moderator":
             return thing.moderator.name
+        elif attr == "subreddit":
+            return thing.subreddit.name
+        elif attr == 'target_title' and isinstance(thing.target, Link):
+            return thing.target.title
+        elif attr == 'target_body' and isinstance(thing.target, Comment):
+            return thing.target.body
+        elif (attr == 'target_body' and isinstance(thing.target, Link)
+              and getattr(thing.target, 'selftext', None)):
+            return thing.target.selftext
 
         return ThingJsonTemplate.thing_attr(self, thing, attr)
 
@@ -1530,3 +1596,18 @@ class TrophyListJsonTemplate(ThingJsonTemplate):
 
     def kind(self, wrapped):
         return "TrophyList"
+
+
+class RulesJsonTemplate(JsonTemplate):
+    def render(self, thing, *a, **kw):
+        rules = {}
+        rules['site_rules'] = thing.site_rules
+        rules['rules'] = thing.rules
+
+        for rule in rules["rules"]:
+            if rule.get("description"):
+                rule["description_html"] = safemarkdown(rule["description"])
+            if not rule.get("kind"):
+                rule["kind"] = "all"
+
+        return ObjectTemplate(rules)

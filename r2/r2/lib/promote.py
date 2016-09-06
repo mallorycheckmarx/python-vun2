@@ -45,10 +45,10 @@ from r2.lib import (
 )
 from r2.lib.db.operators import not_
 from r2.lib.db import queries
-from r2.lib.cache import sgm
 from r2.lib.filters import _force_utf8
 from r2.lib.geoip import location_by_ips
 from r2.lib.memoize import memoize
+from r2.lib.sgm import sgm
 from r2.lib.strings import strings
 from r2.lib.utils import (
     constant_time_compare,
@@ -58,6 +58,7 @@ from r2.lib.utils import (
 from r2.models import (
     Account,
     Bid,
+    Collection,
     DefaultSR,
     FakeAccount,
     FakeSubreddit,
@@ -111,9 +112,10 @@ def promo_keep_fn(item):
 
 # attrs
 
-def _base_host():
-    if g.domain_prefix:
-        base_domain = g.domain_prefix + '.' + g.domain
+def _base_host(is_mobile_web=False):
+    domain_prefix = "m" if is_mobile_web else g.domain_prefix
+    if domain_prefix:
+        base_domain = domain_prefix + '.' + g.domain
     else:
         base_domain = g.domain
     return "%s://%s" % (g.default_scheme, base_domain)
@@ -128,11 +130,12 @@ def promotraffic_url(l): # new traffic url
 def promo_edit_url(l):
     return "%s/promoted/edit_promo/%s" % (_base_host(), l._id36)
 
-def view_live_url(l, srname):
-    host = _base_host()
+def view_live_url(link, campaign, srname):
+    is_mobile_web = campaign.platform == "mobile_web"
+    host = _base_host(is_mobile_web=is_mobile_web)
     if srname:
         host += '/r/%s' % srname
-    return '%s/?ad=%s' % (host, l._fullname)
+    return '%s/?ad=%s' % (host, link._fullname)
 
 def payment_url(action, link_id36, campaign_id36):
     path = '/promoted/%s/%s/%s' % (action, link_id36, campaign_id36)
@@ -156,6 +159,7 @@ def is_promo(link):
 def is_accepted(link):
     return (is_promo(link) and
             link.promote_status != PROMOTE_STATUS.rejected and
+            link.promote_status != PROMOTE_STATUS.edited_live and
             link.promote_status >= PROMOTE_STATUS.accepted)
 
 def is_unpaid(link):
@@ -170,6 +174,9 @@ def is_rejected(link):
 def is_promoted(link):
     return is_promo(link) and link.promote_status == PROMOTE_STATUS.promoted
 
+def is_edited_live(link):
+    return is_promo(link) and link.promote_status == PROMOTE_STATUS.edited_live
+
 def is_finished(link):
     return is_promo(link) and link.promote_status == PROMOTE_STATUS.finished
 
@@ -180,10 +187,14 @@ def is_pending(campaign):
     today = promo_datetime_now().date()
     return today < to_date(campaign.start_date)
 
-def update_query(base_url, query_updates):
+def update_query(base_url, query_updates, unset=False):
     scheme, netloc, path, params, query, fragment = urlparse.urlparse(base_url)
     query_dict = urlparse.parse_qs(query)
     query_dict.update(query_updates)
+
+    if unset:
+        query_dict = dict((k, v) for k, v in query_dict.iteritems() if v is not None)
+
     query = urllib.urlencode(query_dict, doseq=True)
     return urlparse.urlunparse((scheme, netloc, path, params, query, fragment))
 
@@ -247,8 +258,8 @@ def add_trackers(items, sr, adserver_click_urls=None):
             item.third_party_tracking_url_2 = item.third_party_tracking_2
 
         # construct the click redirect url
-        item_url = adserver_click_urls.get(item.campaign, item.url)
-        url = urllib.unquote(_force_utf8(item_url))
+        item_url = adserver_click_urls.get(item.campaign) or item.url
+        url = _force_utf8(item_url)
         hashable = ''.join((url, tracking_name.encode("utf-8")))
         click_mac = hmac.new(
             g.tracking_secret, hashable, hashlib.sha1).hexdigest()
@@ -329,18 +340,21 @@ def get_transactions(link, campaigns):
     bids_by_campaign = {c._id: bid_dict[(c._id, c.trans_id)] for c in campaigns}
     return bids_by_campaign
 
-def new_campaign(link, dates, bid, cpm, target, frequency_cap, frequency_cap_duration,
-                 priority, location, platform, mobile_os, ios_devices,
-                 ios_version_range, android_devices, android_version_range):
-    campaign = PromoCampaign.create(link, target, bid, cpm, dates[0], dates[1],
-                                    frequency_cap, frequency_cap_duration, priority,
+def new_campaign(link, dates, target, frequency_cap,
+                 priority, location, platform,
+                 mobile_os, ios_devices, ios_version_range, android_devices,
+                 android_version_range, total_budget_pennies, cost_basis,
+                 bid_pennies):
+    campaign = PromoCampaign.create(link, target, dates[0], dates[1],
+                                    frequency_cap, priority,
                                     location, platform, mobile_os, ios_devices,
                                     ios_version_range, android_devices,
-                                    android_version_range)
+                                    android_version_range, total_budget_pennies,
+                                    cost_basis, bid_pennies)
     PromotionWeights.add(link, campaign)
     PromotionLog.add(link, 'campaign %s created' % campaign._id)
 
-    if campaign.priority.cpm:
+    if not campaign.is_house:
         author = Account._byID(link.author_id, data=True)
         if getattr(author, "complimentary_promos", False):
             free_campaign(link, campaign, c.user)
@@ -350,39 +364,28 @@ def new_campaign(link, dates, bid, cpm, target, frequency_cap, frequency_cap_dur
 
 
 def free_campaign(link, campaign, user):
-    auth_campaign(link, campaign, user, -1)
+    auth_campaign(link, campaign, user, freebie=True)
 
-def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
-                  frequency_cap_duration, priority, location, platform='desktop',
-                  mobile_os=None, ios_devices=None, ios_version_range=None,
-                  android_devices=None, android_version_range=None):
+
+def edit_campaign(link, campaign, dates, target, frequency_cap,
+                  priority, location,
+                  total_budget_pennies, cost_basis, bid_pennies,
+                  platform='desktop', mobile_os=None, ios_devices=None,
+                  ios_version_range=None, android_devices=None,
+                  android_version_range=None):
     changed = {}
-    if bid != campaign.bid:
-         # if the bid amount changed, cancel any pending transactions
-        void_campaign(link, campaign, reason='changed_bid')
-        changed['bid'] = ("$%0.2f" % campaign.bid, "$%0.2f" % bid)
-        hooks.get_hook('promote.edit_bid').call(
-            link=link,campaign=campaign, previous=campaign.bid, current=bid)
-        campaign.bid = bid
     if dates[0] != campaign.start_date or dates[1] != campaign.end_date:
         original = '%s to %s' % (campaign.start_date, campaign.end_date)
         edited = '%s to %s' % (dates[0], dates[1])
         changed['dates'] = (original, edited)
         campaign.start_date = dates[0]
         campaign.end_date = dates[1]
-    if cpm != campaign.cpm:
-        changed['cpm'] = (campaign.cpm, cpm)
-        campaign.cpm = cpm
     if target != campaign.target:
         changed['target'] = (campaign.target, target)
         campaign.target = target
     if frequency_cap != campaign.frequency_cap:
         changed['frequency_cap'] = (campaign.frequency_cap, frequency_cap)
         campaign.frequency_cap = frequency_cap
-    if frequency_cap_duration != campaign.frequency_cap_duration:
-        changed['frequency_cap_duration'] = (campaign.frequency_cap_duration,
-                                             frequency_cap_duration)
-        campaign.frequency_cap_duration = frequency_cap_duration
     if priority != campaign.priority:
         changed['priority'] = (campaign.priority.name, priority.name)
         campaign.priority = priority
@@ -409,6 +412,16 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
         changed['android_version_range'] = (campaign.android_version_range,
                                             android_version_range)
         campaign.android_version_range = android_version_range
+    if total_budget_pennies != campaign.total_budget_pennies:
+        void_campaign(link, campaign, reason='changed_budget')
+        campaign.total_budget_pennies = total_budget_pennies
+    if cost_basis != campaign.cost_basis:
+        changed['cost_basis'] = (campaign.cost_basis, cost_basis)
+        campaign.cost_basis = cost_basis
+    if bid_pennies != campaign.bid_pennies:
+        changed['bid_pennies'] = (campaign.bid_pennies,
+                                        bid_pennies)
+        campaign.bid_pennies = bid_pennies
 
     change_strs = map(lambda t: '%s: %s -> %s' % (t[0], t[1][0], t[1][1]),
                       changed.iteritems())
@@ -418,7 +431,7 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
     # update the index
     PromotionWeights.reschedule(link, campaign)
 
-    if campaign.priority.cpm:
+    if not campaign.is_house:
         # make it a freebie, if applicable
         author = Account._byID(link.author_id, True)
         if getattr(author, "complimentary_promos", False):
@@ -440,8 +453,18 @@ def terminate_campaign(link, campaign):
     dates = [campaign.start_date, now]
 
     # NOTE: this will delete PromotionWeights after and including now.date()
-    edit_campaign(link, campaign, dates, campaign.bid, campaign.cpm,
-                  campaign.target, campaign.priority, campaign.location)
+    edit_campaign(
+        link=link,
+        campaign=campaign,
+        dates=dates,
+        target=campaign.target,
+        frequency_cap=campaign.frequency_cap,
+        priority=campaign.priority,
+        location=campaign.location,
+        total_budget_pennies=campaign.total_budget_pennies,
+        cost_basis=campaign.cost_basis,
+        bid_pennies=campaign.bid_pennies,
+    )
 
     campaigns = list(PromoCampaign._by_link(link._id))
     is_live = any(is_live_promo(link, camp) for camp in campaigns
@@ -463,6 +486,17 @@ def delete_campaign(link, campaign):
     hooks.get_hook('promote.delete_campaign').call(link=link, campaign=campaign)
 
 
+def toggle_pause_campaign(link, campaign, should_pause):
+    campaign.paused = should_pause
+    campaign._commit()
+
+    action = 'paused' if should_pause else 'resumed'
+    PromotionLog.add(link, '%s campaign %s' % (action, campaign._id))
+
+    hooks.get_hook('promote.edit_campaign').call(link=link,
+        campaign=campaign)
+
+
 def void_campaign(link, campaign, reason):
     transactions = get_transactions(link, [campaign])
     bid_record = transactions.get(campaign._id)
@@ -478,12 +512,17 @@ def void_campaign(link, campaign, reason):
         if bid_record.transaction > 0:
             # notify the user that the transaction was voided if it was not
             # a freebie
-            emailer.void_payment(link, campaign, reason)
+            emailer.void_payment(
+                link,
+                campaign,
+                reason=reason,
+                total_budget_dollars=campaign.total_budget_dollars
+            )
 
 
-def auth_campaign(link, campaign, user, pay_id):
+def auth_campaign(link, campaign, user, pay_id=None, freebie=False):
     """
-    Authorizes (but doesn't charge) a bid with authorize.net.
+    Authorizes (but doesn't charge) a budget with authorize.net.
     Args:
     - link: promoted link
     - campaign: campaign to be authorized
@@ -496,13 +535,18 @@ def auth_campaign(link, campaign, user, pay_id):
     Returns: (True, "") if successful or (False, error_msg) if not. 
     """
     void_campaign(link, campaign, reason='changed_payment')
-    trans_id, reason = authorize.auth_transaction(campaign.bid, user, pay_id,
-                                                  link, campaign._id)
+
+    if freebie:
+        trans_id, reason = authorize.auth_freebie_transaction(
+            campaign.total_budget_dollars, user, link, campaign._id)
+    else:
+        trans_id, reason = authorize.auth_transaction(
+            campaign.total_budget_dollars, user, pay_id, link, campaign._id)
 
     if trans_id and not reason:
-        text = ('updated payment and/or bid for campaign %s: '
-                'SUCCESS (trans_id: %d, amt: %0.2f)' % (campaign._id, trans_id,
-                                                        campaign.bid))
+        text = ('updated payment and/or budget for campaign %s: '
+                'SUCCESS (trans_id: %d, amt: %0.2f)' %
+                (campaign._id, trans_id, campaign.total_budget_dollars))
         PromotionLog.add(link, text)
         if trans_id < 0:
             PromotionLog.add(link, 'FREEBIE (campaign: %s)' % campaign._id)
@@ -519,10 +563,12 @@ def auth_campaign(link, campaign, user, pay_id):
         update_promote_status(link, new_status)
 
         if user and (user._id == link.author_id) and trans_id > 0:
-            emailer.promo_bid(link, campaign.bid, campaign.start_date)
+            emailer.promo_total_budget(link,
+                campaign.total_budget_dollars,
+                campaign.start_date)
 
     else:
-        text = ("updated payment and/or bid for campaign %s: FAILED ('%s')"
+        text = ("updated payment and/or budget for campaign %s: FAILED ('%s')"
                 % (campaign._id, reason))
         PromotionLog.add(link, text)
         trans_id = 0
@@ -600,13 +646,15 @@ def get_date_limits(link, is_sponsor=False):
 
 
 def accept_promotion(link):
+    was_edited_live = is_edited_live(link)
     update_promote_status(link, PROMOTE_STATUS.accepted)
 
     if link._spam:
         link._spam = False
         link._commit()
 
-    emailer.accept_promo(link)
+    if not was_edited_live:
+        emailer.accept_promo(link)
 
     # if the link has campaigns running now charge them and promote the link
     now = promo_datetime_now()
@@ -614,7 +662,9 @@ def accept_promotion(link):
     is_live = False
     for camp in campaigns:
         if is_accepted_promo(now, link, camp):
-            charge_campaign(link, camp)
+            # if link was edited live, do not check against Authorize.net
+            if not was_edited_live:
+                charge_campaign(link, camp)
             if charged_or_not_needed(camp):
                 promote_link(link, camp)
                 is_live = True
@@ -645,11 +695,14 @@ def review_fraud(link, is_fraud):
     queries.unset_payment_flagged_link(link)
 
     if is_fraud:
-        reject_promotion(link, "fraud")
+        reject_promotion(link, "fraud", notify_why=False)
         hooks.get_hook("promote.fraud_identified").call(link=link, sponsor=c.user)
 
 
-def reject_promotion(link, reason=None):
+def reject_promotion(link, reason=None, notify_why=True):
+    if is_rejected(link):
+        return
+
     was_live = is_promoted(link)
     update_promote_status(link, PROMOTE_STATUS.rejected)
     if reason:
@@ -657,7 +710,7 @@ def reject_promotion(link, reason=None):
 
     # Send a rejection email (unless the advertiser requested the reject)
     if not c.user or c.user._id != link.author_id:
-        emailer.reject_promo(link, reason=reason)
+        emailer.reject_promo(link, reason=(reason if notify_why else None))
 
     if was_live:
         all_live_promo_srnames(_update=True)
@@ -675,17 +728,27 @@ def unapprove_promotion(link):
         update_promote_status(link, PROMOTE_STATUS.unseen)
 
 
+def edited_live_promotion(link):
+    update_promote_status(link, PROMOTE_STATUS.edited_live)
+    emailer.edited_live_promo(link)
+
+
 def authed_or_not_needed(campaign):
     authed = campaign.trans_id != NO_TRANSACTION
-    needs_auth = campaign.priority.cpm
+    needs_auth = not campaign.is_house
     return authed or not needs_auth
 
 
 def charged_or_not_needed(campaign):
     # True if a campaign has a charged transaction or doesn't need one
     charged = authorize.is_charged_transaction(campaign.trans_id, campaign._id)
-    needs_charge = campaign.priority.cpm
+    needs_charge = not campaign.is_house
     return charged or not needs_charge
+
+
+def is_served_promo(date, link, campaign):
+    return (campaign.start_date <= date < campaign.end_date and
+            campaign.has_served)
 
 
 def is_accepted_promo(date, link, campaign):
@@ -704,6 +767,11 @@ def is_live_promo(link, campaign):
     return is_promoted(link) and is_scheduled_promo(now, link, campaign)
 
 
+def is_complete_promo(link, campaign):
+    return (campaign.is_paid and 
+        not (is_live_promo(link, campaign) or is_pending(campaign)))
+
+
 def _is_geotargeted_promo(link):
     campaigns = live_campaigns_by_link(link)
     geotargeted = filter(lambda camp: camp.location, campaigns)
@@ -712,11 +780,11 @@ def _is_geotargeted_promo(link):
 
 
 def is_geotargeted_promo(link):
-    key = 'geotargeted_promo_%s' % link._id
-    from_cache = g.cache.get(key)
+    key = 'geopromo:%s' % link._id
+    from_cache = g.gencache.get(key)
     if not from_cache:
         ret = _is_geotargeted_promo(link)
-        g.cache.set(key, ret, time=60)
+        g.gencache.set(key, ret, time=60)
         return ret
     else:
         return from_cache
@@ -746,6 +814,13 @@ def get_scheduled_promos(offset=0):
             yield camp, link
 
 
+def get_served_promos(offset=0):
+    date = promo_datetime_now(offset=offset)
+    for camp, link in get_promos(date):
+        if is_served_promo(date, link, camp):
+            yield camp, link
+
+
 def charge_campaign(link, campaign):
     if charged_or_not_needed(campaign):
         return
@@ -770,7 +845,9 @@ def charge_campaign(link, campaign):
     if not is_promoted(link):
         update_promote_status(link, PROMOTE_STATUS.pending)
 
-    emailer.queue_promo(link, campaign.bid, campaign.trans_id)
+    emailer.queue_promo(link,
+        campaign.total_budget_dollars,
+        campaign.trans_id)
     text = ('auth charge for campaign %s, trans_id: %d' %
             (campaign._id, campaign.trans_id))
     PromotionLog.add(link, text)
@@ -866,10 +943,11 @@ def finalize_completed_campaigns(daysago=1):
         billable_impressions = get_billable_impressions(camp)
         billable_amount = get_billable_amount(camp, billable_impressions)
 
-        if billable_amount >= camp.bid:
+        if billable_amount >= camp.total_budget_pennies:
             if hasattr(camp, 'cpm'):
                 text = '%s completed with $%s billable (%s impressions @ $%s).'
-                text %= (camp, billable_amount, billable_impressions, camp.cpm)
+                text %= (camp, billable_amount, billable_impressions,
+                    camp.bid_dollars)
             else:
                 text = '%s completed with $%s billable (pre-CPM).'
                 text %= (camp, billable_amount) 
@@ -885,43 +963,48 @@ def finalize_completed_campaigns(daysago=1):
 
 def get_refund_amount(camp, billable):
     existing_refund = getattr(camp, 'refund_amount', 0.)
-    charge = camp.bid - existing_refund
+    charge = camp.total_budget_dollars - existing_refund
     refund_amount = charge - billable
     refund_amount = Decimal(str(refund_amount)).quantize(Decimal('.01'),
                                                     rounding=ROUND_UP)
     return max(float(refund_amount), 0.)
 
 
-def refund_campaign(link, camp, billable_amount, billable_impressions):
-    refund_amount = get_refund_amount(camp, billable_amount)
-    if refund_amount <= 0:
-        return
-
+def refund_campaign(link, camp, refund_amount, billable_amount,
+        billable_impressions):
     owner = Account._byID(camp.owner_id, data=True)
-    try:
-        success = authorize.refund_transaction(owner, camp.trans_id,
-                                               camp._id, refund_amount)
-    except authorize.AuthorizeNetException as e:
+    success, reason = authorize.refund_transaction(
+        owner, camp.trans_id, camp._id, refund_amount)
+    if not success:
         text = ('%s $%s refund failed' % (camp, refund_amount))
         PromotionLog.add(link, text)
-        g.log.debug(text + ' (response: %s)' % e)
-        return
+        g.log.debug(text + ' (reason: %s)' % reason)
 
-    text = ('%s completed with $%s billable (%s impressions @ $%s).'
-            ' %s refunded.' % (camp, billable_amount,
-                               billable_impressions, camp.cpm,
-                               refund_amount))
+        return False
+
+    if billable_impressions:
+        text = ('%s completed with $%s billable (%s impressions @ $%s).'
+                ' %s refunded.' % (camp, billable_amount,
+                                   billable_impressions,
+                                   camp.bid_pennies / 100.,
+                                   refund_amount))
+    else:
+        text = ('%s completed with $%s billable. %s refunded' % (camp,
+            billable_amount, refund_amount))
+
     PromotionLog.add(link, text)
     camp.refund_amount = refund_amount
     camp._commit()
     queries.unset_underdelivered_campaigns(camp)
     emailer.refunded_promo(link)
 
+    return True
+
 
 PromoTuple = namedtuple('PromoTuple', ['link', 'weight', 'campaign'])
 
 
-@memoize('all_live_promo_srnames')
+@memoize('all_live_promo_srnames', stale=True)
 def all_live_promo_srnames():
     now = promo_datetime_now()
     srnames = itertools.chain.from_iterable(
@@ -930,25 +1013,97 @@ def all_live_promo_srnames():
     )
     return set(srnames)
 
+@memoize('get_nsfw_collections_srnames', time=(60*60), stale=True)
+def get_nsfw_collections_srnames():
+    all_collections = Collection.get_all()
+    nsfw_collections = [col for col in all_collections if col.over_18]
+    srnames = itertools.chain.from_iterable(
+        col.sr_names for col in nsfw_collections
+    )
 
-def srnames_from_site(user, site):
+    return set(srnames)
+
+
+def is_site_over18(site):
+    # a site should be considered nsfw if it's included in a
+    # nsfw collection because nsfw ads can target nsfw collections.
+    nsfw_collection_srnames = get_nsfw_collections_srnames()
+    return site.over_18 or site.name in nsfw_collection_srnames
+
+
+def srnames_from_site(user, site, include_subscriptions=True):
+    is_logged_in = user and not isinstance(user, FakeAccount)
+    over_18 = is_site_over18(site)
+    srnames = set()
+
     if not isinstance(site, FakeSubreddit):
-        srnames = {site.name}
+        srnames.add(site.name)
     elif isinstance(site, MultiReddit):
-        srnames = {sr.name for sr in site.srs}
-    elif user and not isinstance(user, FakeAccount):
-        srnames = {sr.name for sr in Subreddit.user_subreddits(user, ids=False)}
-        srnames.add(Frontpage.name)
+        srnames = srnames | {sr.name for sr in site.srs}
     else:
-        srnames = {sr.name for sr in Subreddit.user_subreddits(None, ids=False)}
         srnames.add(Frontpage.name)
+
+        if is_logged_in and include_subscriptions:
+            subscriptions = Subreddit.user_subreddits(
+                user,
+                ids=False,
+            )
+
+            # only use subreddits that aren't quarantined and have the same
+            # age gate as the subreddit being viewed.
+            subscriptions = filter(
+                lambda sr: not sr.quarantine and sr.over_18 == over_18,
+                subscriptions,
+            )
+
+            subscription_srnames = {sr.name for sr in subscriptions}
+
+            # remove any subscriptions that may have nsfw ads targeting
+            # them because they're apart of a nsfw collection.
+            nsfw_collection_srnames = get_nsfw_collections_srnames()
+
+            if not over_18:
+                subscription_srnames = (subscription_srnames -
+                    nsfw_collection_srnames)
+
+            srnames = srnames | subscription_srnames
+
     return srnames
 
 
-def srnames_with_live_promos(user, site):
-    site_srnames = srnames_from_site(user, site)
-    promo_srnames = all_live_promo_srnames()
-    return promo_srnames.intersection(site_srnames)
+def keywords_from_context(
+        user, site,
+        include_subscriptions=True,
+        live_promos_only=True,
+    ):
+
+    keywords = srnames_from_site(
+        user, site,
+        include_subscriptions,
+    )
+
+    # if the ad was created by selfserve then we know
+    # whether or not there exists an ad for that keyword
+    # and can remove un-targeted keywords accordingly.
+    if live_promos_only:
+        live_srnames = all_live_promo_srnames()
+        keywords = live_srnames.intersection(keywords)
+
+    if (not isinstance(site,FakeSubreddit) and
+            site._downs > g.live_config["ads_popularity_threshold"]):
+        keywords.add("s.popular")
+
+    if is_site_over18(site):
+        keywords.add("s.nsfw")
+    else:
+        keywords.add("s.sfw")
+
+    if c.user_is_loggedin:
+        keywords.add("loggedin")
+    else:
+        keywords.add("loggedout")
+
+    return keywords
 
 
 # special handling for memcache ascii protocol
@@ -962,7 +1117,7 @@ def _get_live_promotions(sanitized_names):
     ret = {sr_name: [] for sr_name in sanitized_names}
     for camp, link in get_promos(now, sr_names=sr_names):
         if is_live_promo(link, camp):
-            weight = (camp.bid / camp.ndays)
+            weight = (camp.total_budget_dollars / camp.ndays)
             pt = PromoTuple(link=link._fullname, weight=weight,
                             campaign=camp._fullname)
             for sr_name in camp.target.subreddit_names:
@@ -975,8 +1130,13 @@ def _get_live_promotions(sanitized_names):
 def get_live_promotions(sr_names):
     sanitized_names = [SPECIAL_NAMES.get(name, name) for name in sr_names]
     promos_by_sanitized_name = sgm(
-        g.cache, sanitized_names, miss_fn=_get_live_promotions,
-        prefix='live_promotions', time=60, stale=True)
+        cache=g.gencache,
+        keys=sanitized_names,
+        miss_fn=_get_live_promotions,
+        prefix='srpromos:',
+        time=60,
+        stale=True,
+    )
     promos_by_srname = {
         REVERSED_NAMES.get(name, name): val
         for name, val in promos_by_sanitized_name.iteritems()
@@ -1006,11 +1166,13 @@ def get_total_run(thing):
     of the latest campaign.
 
     """
-
+    campaigns = []
     if isinstance(thing, Link):
         campaigns = PromoCampaign._by_link(thing._id)
     elif isinstance(thing, PromoCampaign):
         campaigns = [thing]
+    else:
+        campaigns = []
 
     earliest = None
     latest = None
@@ -1057,12 +1219,12 @@ def get_billable_impressions(campaign):
 
 
 def get_billable_amount(camp, impressions):
-    if hasattr(camp, 'cpm'):
-        value_delivered = impressions / 1000. * camp.cpm / 100.
-        billable_amount = min(camp.bid, value_delivered)
+    if not camp.is_auction:
+        value_delivered = impressions / 1000. * camp.bid_dollars
+        billable_amount = min(camp.total_budget_dollars, value_delivered)
     else:
         # pre-CPM campaigns are charged in full regardless of impressions
-        billable_amount = camp.bid
+        billable_amount = camp.total_budget_dollars
 
     billable_amount = Decimal(str(billable_amount)).quantize(Decimal('.01'),
                                                         rounding=ROUND_DOWN)
@@ -1070,12 +1232,13 @@ def get_billable_amount(camp, impressions):
 
 
 def get_spent_amount(campaign):
-    if hasattr(campaign, 'refund_amount'):
+    if campaign.is_house:
+        spent = 0.
+    elif hasattr(campaign, 'refund_amount'):
         # no need to calculate spend if we've already refunded
-        spent = campaign.bid - campaign.refund_amount
-    elif not hasattr(campaign, 'cpm'):
-        # pre-CPM campaign
-        return campaign.bid
+        spent = campaign.total_budget_dollars - campaign.refund_amount
+    elif campaign.is_auction:
+        spent = campaign.adserver_spent_pennies / 100.
     else:
         billable_impressions = get_billable_impressions(campaign)
         spent = get_billable_amount(campaign, billable_impressions)

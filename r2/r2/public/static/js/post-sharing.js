@@ -92,27 +92,6 @@
     '</div>'
   );
 
-  /**
-   * update the given url's query params
-   * @param  {String} url
-   * @param  {Object} newParams
-   * @return {String}
-   */
-  function replaceParams(url, newParams) {
-    var a = document.createElement('a');
-    var urlObj = $.url(url);
-    var params = urlObj.param();
-
-    Object.keys(newParams).forEach(function(key) {
-      params[key] = newParams[key]
-    });
-
-    a.href = url;
-    a.search = $.param(params);
-    return a.href;
-  }
-
-
   var PostSharingState = Backbone.Model.extend({
     defaults: function() {
       return {
@@ -239,7 +218,7 @@
         ref_source: refSource,
       };
 
-      return replaceParams(this.thingData.link, refParams);
+      return r.utils.replaceUrlParams(this.thingData.link, refParams);
     },
 
     shareToFacebook: function() {
@@ -252,7 +231,7 @@
         description: this.thingData.title,
         redirect_uri: redirectUrl,
       }
-      var shareUrl = replaceParams('https://www.facebook.com/dialog/feed', shareParams);
+      var shareUrl = r.utils.replaceUrlParams('https://www.facebook.com/dialog/feed', shareParams);
 
       this.openWebIntent(shareUrl, 'facebook');
     },
@@ -286,7 +265,7 @@
         text: title,
         via: twitterHandle,
       };
-      var shareUrl = replaceParams('https://twitter.com/intent/tweet', shareParams);
+      var shareUrl = r.utils.replaceUrlParams('https://twitter.com/intent/tweet', shareParams);
 
       this.openWebIntent(shareUrl, 'twitter');
     },
@@ -299,7 +278,7 @@
         posttype: 'link',
         title: title,
       };
-      var shareUrl = replaceParams('https://www.tumblr.com/widgets/share/tool', shareParams);
+      var shareUrl = r.utils.replaceUrlParams('https://www.tumblr.com/widgets/share/tool', shareParams);
 
       this.openWebIntent(shareUrl, 'tumblr');
     },
@@ -462,16 +441,14 @@
           name: 'twitter',
           tooltip: r._('Share to %(name)s').format({name: 'Twitter'}),
         },
-      ];
-
-      if (r.config.feature_tumblr_sharing) {
-        shareOptions.push({
+        {
           name: 'tumblr',
           tooltip: r._('Share to %(name)s').format({name: 'Tumblr'}),
-        });
-      }
+        },
+      ];
 
-      if (r.config.logged) {
+      if (r.config.logged && !r.config.user_in_timeout
+          && r.config.email_verified) {
         shareOptions.push({
           name: 'email',
           tooltip: r._('Email to a Friend'),

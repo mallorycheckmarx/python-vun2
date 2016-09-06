@@ -52,7 +52,7 @@ string_dict = dict(
     time_banned="removed at %s",
     time_approved="approved at %s",
     reports   = "reports: %d",
-    
+
     submitting = _("submitting..."),
 
     # this accomodates asian languages which don't use spaces
@@ -71,7 +71,7 @@ string_dict = dict(
 
     multiple_submitted = _("that link has been submitted to multiple subreddits. you can try to [submit it again](%s)."),
 
-    user_deleted = _("your account has been deleted, but we won't judge you for it."),
+    user_deactivated = _("your account has been deactivated, but we won't judge you for it."),
 
     oauth_login_msg = _(
         "Log in or sign up to connect your reddit account with %(app)s."),
@@ -100,9 +100,6 @@ string_dict = dict(
     link_info_title = _("%(title)s : %(site)s"),
     link_info_og_description = _("%(score)s points and %(num_comments)s comments so far on reddit"),
 
-
-    comments_panel_text = _("""The following is a sample of what Reddit users had to say about this page. The full discussion is available [here](%(fd_link)s); you can also get there by clicking the link's title (in the middle of the toolbar, to the right of the comments button)."""),
-
     submit_link = _("""You are submitting a link. The key to a successful submission is interesting content and a descriptive title."""),
     submit_text = _("""You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Beginning your title with "vote up if" is violation of intergalactic law."""),
     submit_link_label = _("Submit a new link"),
@@ -119,20 +116,23 @@ string_dict = dict(
     formatting_help_info = _('reddit uses a slightly-customized version of [Markdown](http://daringfireball.net/projects/markdown/syntax) for formatting. See below for some basics, or check [the commenting wiki page](/wiki/commenting) for more detailed help and solutions to common issues.'),
     read_only_msg = _("Reddit is in \"emergency read-only mode\" right now. :( You won't be able to log in. We're sorry and are working frantically to fix the problem."),
     heavy_load_msg = _("this page is temporarily in read-only mode due to heavy traffic."),
-    gold_benefits_msg = _("reddit gold is reddit's premium membership program. Here are the benefits:\n\n* [Extra site features](/gold/about)\n* [Extra perks](/gold/partners)\n* Discuss and get help on the features and perks at /r/goldbenefits"),
-    lounge_msg = _("Grab a drink and join us in /r/lounge, the super-secret members-only community that may or may not exist."),
+    in_perma_timeout_msg = _("Your account has been permanently [suspended](https://reddit.zendesk.com/hc/en-us/articles/205687686) from Reddit."),
+    in_temp_timeout_msg = _("Your account has been [suspended](https://reddit.zendesk.com/hc/en-us/articles/205687686) from Reddit for %(days)s."),
+    gold_benefits_msg = "reddit gold is our premium membership program. It grants you access to [extra features](https://www.reddit.com/gold/about) to improve your reddit experience. It also makes you really quite dapper. If you have questions about your gold, please visit /r/goldbenefits.",
+    lounge_msg = "Grab a drink and join us in /r/lounge, the super-secret members-only community that may or may not exist.",
     postcard_msg = _("You sent us a postcard! (Or something similar.) When we run out of room on our refrigerator, we might one day auction off the stuff that people sent in. Is it okay if we include your thing?"),
     over_comment_limit = _("Sorry, the maximum number of comments is %(max)d. (However, if you subscribe to reddit gold, it goes up to %(goldmax)d.)"),
     over_comment_limit_gold = _("Sorry, the maximum number of comments is %d."),
-    youve_got_gold = _("%(sender)s just gifted you %(amount)s of reddit gold!"),
-    giftgold_note = _("Here's a note that was included:\n\n----\n\n"),
-    youve_been_gilded_comment = _("%(sender)s liked [your comment](%(url)s) so much that they gilded it, giving you reddit gold.\n\n"),
-    youve_been_gilded_link = _("%(sender)s liked [your submission](%(url)s) so much that they gilded it, giving you reddit gold.\n\n"),
-    respond_to_anonymous_gilder = _("Want to say thanks to your mysterious benefactor? Reply to this message. You will find out their username if they choose to reply back."),
-    unsupported_respond_to_gilder = _("Sorry, replying directly to your mysterious benefactor is not yet supported for this gilding."),
+    youve_got_gold = "%(sender)s just gifted you %(amount)s of reddit gold!",
+    giftgold_note = "Here's a note that was included:\n\n----\n\n",
+    youve_been_gilded_comment = "%(sender)s liked [your comment](%(url)s) so much that they gilded it, giving you reddit gold.\n\n",
+    youve_been_gilded_link = "%(sender)s liked [your submission](%(url)s) so much that they gilded it, giving you reddit gold.\n\n",
+    respond_to_anonymous_gilder = "Want to say thanks to your mysterious benefactor? Reply to this message. You will find out their username if they choose to reply back.",
+    unsupported_respond_to_gilder = "Sorry, replying directly to your mysterious benefactor is not yet supported for this gilding.",
     anonymous_gilder_warning = _("***WARNING: Responding to this message will reveal your username to the gildee.***\n\n"),
     gold_claimed_code = _("Thanks for claiming a reddit gold code.\n\n"),
-    gold_summary_autorenew = _("You're about to set up an ongoing, autorenewing subscription to reddit gold for yourself (%(user)s). You'll pay %(price)s for this, %(period)s."),
+    gold_summary_autorenew_monthly = _("You're about to set up an ongoing, autorenewing subscription to reddit gold for yourself (%(user)s). \n\nYou'll pay **%(price)s** for this, **monthly**. \n\n>This subscription will renew automatically each month until you cancel. You may cancel at any time. If you cancel, you will not be billed for any additional months of service, and service will continue until the end of the billing period. If you cancel, you will not receive a refund for any service already paid for. Receipts will be delivered via private message in your account."),
+    gold_summary_autorenew_yearly = _("You're about to set up an ongoing, autorenewing subscription to reddit gold for yourself (%(user)s). \n\nYou'll pay **%(price)s** for this, **yearly**. \n\n>This subscription will renew automatically each year until you cancel. You may cancel at any time. If you cancel, you will not be billed for any additional years of service, and service will continue until the end of the billing period. If you cancel, you will not receive a refund for any service already paid for. Receipts will be delivered via private message in your account."),
     gold_summary_onetime = _("You're about to make a one-time purchase of %(amount)s of reddit gold for yourself (%(user)s). You'll pay a total of %(price)s for this."),
     gold_summary_creddits = _("You're about to purchase %(amount)s. They work like gift certificates: each creddit you have will allow you to give one month of reddit gold to someone else. You'll pay a total of %(price)s for this."),
     gold_summary_gift_code = _("You're about to purchase %(amount)s of reddit gold in the form of a gift code. The recipient (or you) will be able to claim the code to redeem that gold to their account. You'll pay a total of %(price)s for this."),
@@ -143,7 +143,6 @@ string_dict = dict(
     gold_summary_gilding_page_comment = _("You're about to give *%(recipient)s* a month of [reddit gold](/gold/about) for this comment:"),
     gold_summary_gilding_page_link = _("You're about to give *%(recipient)s* a month of [reddit gold](/gold/about) for this submission:"),
     gold_summary_gilding_page_footer = _("You'll pay a total of %(price)s for this."),
-    unvotable_message = _("sorry, this has been archived and can no longer be voted on"),
     archived_post_message = _("This is an archived post. You won't be able to vote or comment."),
     locked_post_message = _("This post is locked. You won't be able to comment."),
     account_activity_blurb = _("This page shows a history of recent activity on your account. If you notice unusual activity, you should change your password immediately. Location information is guessed from your computer's IP address and may be wildly wrong, especially for visits from mobile devices."),
@@ -205,7 +204,7 @@ class StringHandler(object):
             return StringHandler(**rval)
         else:
             raise AttributeError
-    
+
     def __iter__(self):
         return iter(self.string_dict)
 

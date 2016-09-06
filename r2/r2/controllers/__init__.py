@@ -69,6 +69,7 @@ def load_controllers():
     from awards import AwardsController
     from errorlog import ErrorlogController
     from newsletter import NewsletterController
+    from googletagmanager import GoogleTagManagerController
     from promotecontroller import PromoteController
     from promotecontroller import SponsorController
     from promotecontroller import PromoteApiController
@@ -79,7 +80,7 @@ def load_controllers():
     from oembed import OEmbedController
     from policies import PoliciesController
     from web import WebLogController
-    
+
     from wiki import WikiController
     from wiki import WikiApiController
 
@@ -87,6 +88,7 @@ def load_controllers():
     from api import ApiminimalController
     from api_docs import ApidocsController
     from apiv1.user import APIv1UserController
+    from apiv1.login import APIv1LoginController
     from apiv1.gold import APIv1GoldController
     from apiv1.scopes import APIv1ScopesController
     from multi import MultiApiController
@@ -98,5 +100,6 @@ def load_controllers():
     from ipn import StripeController
     from ipn import CoinbaseController
     from ipn import RedditGiftsController
+    from mailgun import MailgunWebhookController
 
     _reddit_controllers.update((name.lower(), obj) for name, obj in locals().iteritems())

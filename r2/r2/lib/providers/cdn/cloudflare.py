@@ -69,17 +69,12 @@ class CloudFlareCdnProvider(CdnProvider):
             return None
 
         return client_ip
-     
+
+    def get_client_location(self, environ):
+        return environ.get("HTTP_CF_IPCOUNTRY", None)
+
     def purge_content(self, url):
         """Purges the content specified by url from the cache."""
-        # You'll notice purge is being called multiple times. Our sysadmins
-        # say that it doesn't always fully clear the first time, so they are
-        # now in the habit of always running the purge API call 3 times.
-        # Replicating that less than ideal behaviour here
-
-        self._do_content_purge(url)
-        self._do_content_purge(url)
-        self._do_content_purge(url)
 
         # per the CloudFlare docs:
         #    https://www.cloudflare.com/docs/client-api.html#s4.5
@@ -93,8 +88,7 @@ class CloudFlareCdnProvider(CdnProvider):
         else:
             url_altered = url.replace('http://', 'https://')
 
-        self._do_content_purge(url_altered)
-        self._do_content_purge(url_altered)
+        self._do_content_purge(url)
         self._do_content_purge(url_altered)
 
         return True

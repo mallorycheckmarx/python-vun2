@@ -120,7 +120,7 @@ class IsValidNameTest(unittest.TestCase):
 class ByNameTest(unittest.TestCase):
     def setUp(self):
         self.cache = MagicMock()
-        g.cache = self.cache
+        g.gencache = self.cache
 
         self.subreddit_byID = MagicMock()
         Subreddit._byID = self.subreddit_byID
@@ -226,7 +226,10 @@ class ByNameTest(unittest.TestCase):
 
         self.assertEqual(ret, sr)
         self.cache.set_multi.assert_called_once_with(
-            {sr.name: sr._id}, prefix="subreddit.byname")
+            keys={sr.name: sr._id},
+            prefix="srid:",
+            time=3600,
+        )
 
     def testCacheNegativeResults(self):
         self.cache.get_multi.return_value = {}
@@ -237,7 +240,10 @@ class ByNameTest(unittest.TestCase):
             Subreddit._by_name("doesnotexist")
 
         self.cache.set_multi.assert_called_once_with(
-            {"doesnotexist": Subreddit.SRNAME_NOTFOUND}, prefix="subreddit.byname")
+            keys={"doesnotexist": Subreddit.SRNAME_NOTFOUND},
+            prefix="srid:",
+            time=3600,
+        )
 
     def testExcludeNegativeLookups(self):
         self.cache.get_multi.return_value = {"doesnotexist": Subreddit.SRNAME_NOTFOUND}
