@@ -45,7 +45,9 @@ PROMOTE_STATUS = Enum("unpaid", "unseen", "accepted", "rejected",
 PROMOTE_COST_BASIS = Enum('fixed_cpm', 'cpm', 'cpc',)
 
 
-class PriorityLevel(object):
+PROMOTE_COST_BASIS = Enum('fixed_cpm', 'cpm', 'cpc',)
+
+
     name = ''
     _text = N_('')
     _description = N_('')
