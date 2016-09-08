@@ -365,6 +365,9 @@ class SubredditListingController(ListingController):
 
         render_params['canonical_link'] = self.canonical_link()
 
+        # Set the meta description
+        render_params['short_description'] = self._build_og_description()
+
         return render_params
 
 
