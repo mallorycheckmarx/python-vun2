@@ -251,12 +251,16 @@ class ThingJsonTemplate(JsonTemplate):
                 return None
             return distinguished
 
-        if attr in ["num_reports", "report_reasons", "banned_by", "approved_by"]:
+        if attr in ["num_reports", "report_reasons", "ignore_reports",
+                    "banned_by", "banned_at", "ban_note",
+                    "autobanned", "approved_by", "approved_at"]:
             if c.user_is_loggedin and thing.can_ban:
                 if attr == "num_reports":
                     return thing.reported
                 elif attr == "report_reasons":
                     return Report.get_reasons(thing)
+                elif attr == "ignore_reports":
+                    return thing.ignore_reports
 
                 ban_info = getattr(thing, "ban_info", {})
                 if attr == "banned_by":
@@ -264,8 +268,28 @@ class ThingJsonTemplate(JsonTemplate):
                               if ban_info.get('moderator_banned')
                               else True)
                     return banner if thing._spam else None
+                elif attr == "ban_note":
+                    return ban_info.get("note", True) if thing._spam else None
+                elif attr == "autobanned":
+                    return ban_info.get("auto", False) if thing._spam else None
+                elif attr == "banned_at":
+                    banned_at = (ban_info.get("banned_at")
+                                 if ban_info.get("banned_at")
+                                 else True)
+                    if not isinstance(banned_at, bool):
+                        banned_at = banned_at.astimezone(pytz.UTC).timetuple()
+                        banned_at = time.mktime(banned_at) - time.timezone
+                    return banned_at if thing._spam else None
                 elif attr == "approved_by":
                     return ban_info.get("unbanner") if not thing._spam else None
+                elif attr == "approved_at":
+                    unban_at = (ban_info.get("unbanned_at")
+                                if ban_info.get("unbanned_at")
+                                else True)
+                    if not isinstance(unban_at, bool):
+                        unban_at = unban_at.astimezone(pytz.UTC).timetuple()
+                        unban_at = time.mktime(unban_at) - time.timezone
+                    return unban_at if not thing._spam else None
 
         if attr == 'admin_takedown':
             if thing.admin_takedown:
@@ -664,11 +688,15 @@ class LinkJsonTemplate(ThingJsonTemplate):
         )
     _data_attrs_ = ThingJsonTemplate.data_attrs(
         approved_by="approved_by",
+        approved_at="approved_at",
         archived="archived",
         author="author",
         author_flair_css_class="author_flair_css_class",
         author_flair_text="author_flair_text",
         banned_by="banned_by",
+        banned_at="banned_at",
+        ban_note="ban_note",
+        autobanned="autobanned",
         visited="visited",
         clicked="clicked",
         distinguished="distinguished",
@@ -688,6 +716,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         num_comments="num_comments",
         num_reports="num_reports",
         report_reasons="report_reasons",
+        reports_ignored="ignore_reports",
         mod_reports="mod_reports",
         user_reports="user_reports",
         over_18="over_18",
@@ -931,25 +960,40 @@ class CommentJsonTemplate(ThingTemplate):
         if hasattr(item, "action_type"):
             data["action_type"] = item.action_type
 
+        data["num_reports"] = None
+        data["report_reasons"] = None
+        data["reports_ignored"] = None
+        data["approved_by"] = None
+        data["approved_at"] = None
+        data["banned_by"] = None
+        data["banned_at"] = None
+        data["ban_note"] = None
+        data["autobanned"] = None
         if c.user_is_loggedin and item.can_ban:
             data["num_reports"] = item.reported
             data["report_reasons"] = Report.get_reasons(item)
+            data["reports_ignored"] = item.ignore_reports
 
             ban_info = getattr(item, "ban_info", {})
             if item._spam:
-                data["approved_by"] = None
                 if ban_info.get('moderator_banned'):
                     data["banned_by"] = ban_info.get("banner") 
                 else:
                     data["banned_by"] = True
+                data['ban_note'] = ban_info.get("note", True)
+                data['banned_at'] = True
+                if ban_info.get('banned_at'):
+                    banned_at = ban_info['banned_at'].astimezone(pytz.UTC)
+                    data['banned_at'] = (time.mktime(banned_at.timetuple())
+                                         - time.timezone)
+                data["autobanned"] = ban_info.get("auto", False)
             else:
                 data["approved_by"] = ban_info.get("unbanner")
-                data["banned_by"] = None
-        else:
-            data["num_reports"] = None
-            data["report_reasons"] = None
-            data["approved_by"] = None
-            data["banned_by"] = None
+                data["approved_at"] = True
+                if ban_info.get("unbanned_at"):
+                    unban_at = ban_info['unbanned_at'].astimezone(pytz.UTC)
+                    data["approved_at"] = (time.mktime(unban_at.timetuple())
+                                           - time.timezone)
 
         if c.user_is_loggedin and c.user.in_timeout:
             data['user_reports'] = []

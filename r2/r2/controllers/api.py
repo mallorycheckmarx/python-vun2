@@ -3006,15 +3006,20 @@ class ApiController(RedditController):
     @require_oauth2_scope("modposts")
     @noresponse(VUser(), VModhash(),
                 VSrCanBan('id'),
-                thing = VByName('id'),
-                spam = VBoolean('spam', default=True))
+                thing=VByName('id'),
+                spam=VBoolean('spam', default=True),
+                keep_in_modqueue=VBoolean('filter', default=False))
     @api_doc(api_section.moderation)
-    def POST_remove(self, thing, spam):
+    def POST_remove(self, thing, spam, keep_in_modqueue):
         """Remove a link, comment, or modmail message.
 
         If the thing is a link, it will be removed from all subreddit listings.
         If the thing is a comment, it will be redacted and removed from all
         subreddit comment listings.
+
+        Only one of 'filter' or 'spam' is allowed to be true.
+
+        If the item is already removed, and 'filter' is chosen, nothing occurs.
 
         See also: [/api/approve](#POST_api_approve).
 
@@ -3023,9 +3028,13 @@ class ApiController(RedditController):
         # Don't remove a promoted link
         if getattr(thing, "promoted", None):
             return
+        if keep_in_modqueue and spam:
+            abort(403)
         action_name = "remove"
         if spam:
             action_name = "spam"
+        elif keep_in_modqueue:
+            action_name = "filter"
         VNotInTimeout().run(action_name=action_name, target=thing)
 
         if thing._deleted:
@@ -3034,7 +3043,11 @@ class ApiController(RedditController):
         filtered = thing._spam
         kw = {'target': thing}
 
-        if filtered and spam:
+        if filtered and keep_in_modqueue:
+            # no filtering post that's already filtered by
+            # either the spam filter, automod, or another mod
+            return
+        elif filtered and spam:
             kw['details'] = 'confirm_spam'
             train_spam = False
         elif filtered and not spam:
@@ -3044,6 +3057,9 @@ class ApiController(RedditController):
         elif not filtered and spam:
             kw['details'] = 'spam'
             train_spam = True
+        elif not filtered and keep_in_modqueue:
+            kw['details'] = 'filter'
+            train_spam = False
         elif not filtered and not spam:
             kw['details'] = 'remove'
             train_spam = False
@@ -3051,7 +3067,8 @@ class ApiController(RedditController):
         admintools.spam(thing, auto=False,
                         moderator_banned=not c.user_is_admin,
                         banner=c.user.name,
-                        train_spam=train_spam)
+                        train_spam=train_spam,
+                        keep_in_modqueue=keep_in_modqueue)
 
         if isinstance(thing, (Link, Comment)):
             sr = thing.subreddit_slow

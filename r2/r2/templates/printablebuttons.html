@@ -45,6 +45,10 @@
            ${ynbutton(_("remove"), _("removed"), "remove", hidden_data=dict(spam=False),
              event_action='remove')}
         </li>
+        <li>
+           ${ynbutton(_("filter"), _("filtered"), "remove", hidden_data=dict(spam=False, filter=True),
+             event_action='filter')}
+        </li>
       %endif
 
       %if thing.show_approve:
@@ -237,6 +241,9 @@
         %if not getattr(thing, "moderator_banned", None) or getattr(thing, "autobanned", False):
           ${pretty_button(_("spam"), "big_mod_action", -2, "negative", event_action="spam")}
           ${pretty_button(_("remove"), "big_mod_action", -1, "neutral", event_action="remove")}
+          %if not thing._spam:
+            ${pretty_button(_("filter"), "big_mod_action", -3, "neutral", event_action="filter")}
+          %endif
         %endif
 
         %if getattr(thing, "approval_checkmark", None):

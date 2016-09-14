@@ -48,7 +48,7 @@ admintools_hooks = HookRegistrar()
 class AdminTools(object):
 
     def spam(self, things, auto=True, moderator_banned=False,
-             banner=None, date=None, train_spam=True, **kw):
+             banner=None, date=None, train_spam=True, keep_in_modqueue=False, **kw):
         from r2.lib.db import queries
 
         all_things = tup(things)
@@ -64,7 +64,7 @@ class AdminTools(object):
             if not t._spam and train_spam:
                 note = 'spam'
             elif not t._spam and not train_spam:
-                note = 'remove not spam'
+                note = 'filtered' if keep_in_modqueue else 'remove not spam'
             elif t._spam and not train_spam:
                 note = 'confirm spam'
             elif t._spam and train_spam:
@@ -83,6 +83,7 @@ class AdminTools(object):
             else:
                 ban_info['banner'] = banner
             ban_info.update(auto=auto,
+                            keep_in_modqueue=keep_in_modqueue,
                             moderator_banned=moderator_banned,
                             banned_at=date or datetime.now(g.tz),
                             **kw)
@@ -98,7 +99,7 @@ class AdminTools(object):
             self.author_spammer(new_things, True)
             self.set_last_sr_ban(new_things)
 
-        queries.ban(all_things, filtered=auto)
+        queries.ban(all_things, filtered=auto, keep_in_modqueue=keep_in_modqueue)
 
     def unspam(self, things, moderator_unbanned=True, unbanner=None,
                train_spam=True, insert=True):

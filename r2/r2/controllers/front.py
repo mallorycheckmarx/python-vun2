@@ -754,7 +754,8 @@ class FrontController(RedditController):
                     return True # anything without a verdict
                 if x._spam:
                     ban_info = getattr(x, "ban_info", {})
-                    if ban_info.get("auto", True):
+                    if (ban_info.get("auto", True) or
+                            ban_info.get("keep_in_modqueue", False)):
                         return True # spam, unless banned by a moderator
                 return False
             elif location == "unmoderated":

@@ -1543,7 +1543,7 @@ def edit(thing):
         m.insert(query(thing.sr_id), [thing])
 
 
-def ban(things, filtered=True):
+def ban(things, filtered=True, keep_in_modqueue=False):
     query_cache_inserts, query_cache_deletes = _common_del_ban(things)
     by_srid = _by_srid(things, srs=False)
 
@@ -1556,7 +1556,7 @@ def ban(things, filtered=True):
             # don't add posts by banned users if subreddit prefs exclude them
             add_to_modqueue = (filtered and
                        not (item.subreddit_slow.exclude_banned_modqueue and
-                            item.author_slow._spam))
+                            item.author_slow._spam)) or keep_in_modqueue
 
             if isinstance(item, Link):
                 links.append(item)
@@ -1569,7 +1569,7 @@ def ban(things, filtered=True):
 
         if links:
             query_cache_inserts.append((get_spam_links(sr_id), links))
-            if not filtered:
+            if not (filtered or keep_in_modqueue):
                 query_cache_deletes.append(
                         (get_spam_filtered_links(sr_id), links))
                 query_cache_deletes.append(
@@ -1581,7 +1581,7 @@ def ban(things, filtered=True):
 
         if comments:
             query_cache_inserts.append((get_spam_comments(sr_id), comments))
-            if not filtered:
+            if not (filtered or keep_in_modqueue):
                 query_cache_deletes.append(
                         (get_spam_filtered_comments(sr_id), comments))
 

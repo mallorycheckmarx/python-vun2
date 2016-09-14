@@ -154,6 +154,7 @@ class ModAction(tdb_cassandra.UuidThing):
                      'confirm_spam': _('confirmed spam'),
                      'remove': _('removed not spam'),
                      'spam': _('removed spam'),
+                     'filter': _('removed (filtered into modqueue)'),
                      # removemoderator
                      'remove_self': _('removed self'),
                      # editsettings
