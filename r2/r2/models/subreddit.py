@@ -1837,6 +1837,9 @@ class DefaultSR(_DefaultSR):
     def is_wikicontributor(self, user):
         return self._base.is_wikicontributor(user)
     
+    def is_wikicontributor(self, user):
+        return self._base.is_wikicontributor(user)
+    
     def is_wikibanned(self, user):
         return self._base.is_wikibanned(user)
     
