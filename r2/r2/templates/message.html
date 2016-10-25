@@ -192,7 +192,7 @@ ${self.subject()}
  %if thing.was_comment and hasattr(thing, "parent"):
     <p>
       <a href="#" class="parent-link"
-         onclick="return fetch_parent(this, '${thing.parent_permalink}/.json', '${thing.parent}')">
+         onclick="return fetch_parent(this, '${thing.parent_permalink}.json', '${thing.parent}')">
         ${_("show parent")}
       </a>
     </p>
