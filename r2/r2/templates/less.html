@@ -39,7 +39,7 @@
 <%def name="less_js()">
   %if g.uncompressedJS:
     <script type="text/javascript">
-      less = {env: 'development'};
+      less = {env: 'development', rootpath: '${static('')}'};
     </script>
     ${unsafe(js.use('less'))}
   %endif
