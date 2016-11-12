@@ -127,5 +127,15 @@ ${unsafe(safemarkdown(_("All feeds are invalidated if you change your password, 
     </td>
   </tr>
   %endif
+  <tr>
+    <th>your friends</th>
+    <td class="prefright">
+      <%self:feedbuttons path="/r/friends"></%self:feedbuttons>
+      ${_("your friends' links")}
+      <br/>
+      <%self:feedbuttons path="/r/friends/comments"></%self:feedbuttons>
+      ${_("your friends' comments")}
+    </td>
+  </tr>
 </table>
 </div>
