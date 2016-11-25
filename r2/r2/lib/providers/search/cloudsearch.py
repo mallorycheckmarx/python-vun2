@@ -62,8 +62,8 @@ from r2.models import (
     Thing,
 )
 
-_TIMEOUT = 5 # seconds for http requests to cloudsearch
-_CHUNK_SIZE = 4000000 # Approx. 4 MB, to stay under the 5MB limit
+_TIMEOUT = 5  # Seconds for http requests to cloudsearch
+_CHUNK_SIZE = 4000000  # Approx. 4 MB, to stay under the 5MB limit
 _VERSION_OFFSET = 13257906857
 
 
@@ -71,7 +71,8 @@ class CloudSearchUploader(object):
     use_safe_get = False
     types = ()
 
-    def __init__(self, doc_api, fullnames=None, version_offset=_VERSION_OFFSET):
+    def __init__(self, doc_api, fullnames=None,
+                 version_offset=_VERSION_OFFSET):
         self.doc_api = doc_api
         self._version_offset = version_offset
         self.fullnames = fullnames
@@ -92,8 +93,8 @@ class CloudSearchUploader(object):
         is higher than the one currently indexed. As our documents don't have
         "versions" and could in theory be updated multiple times in one second,
         for now, use "tenths of a second since 12:00:00.00 1/1/2012" as the
-        "version" - this will last approximately 13 years until bumping up against
-        the version max of 2^32 for cloudsearch docs'''
+        "version" - this will last approximately 13 years until bumping up
+        against the version max of 2^32 for cloudsearch docs'''
         return int(time.time() * 10) - self._version_offset
 
     def _version_seconds(self):
@@ -114,7 +115,6 @@ class CloudSearchUploader(object):
     def delete_xml(self, thing, version=None):
         '''Return the cloudsearch XML representation of
         "delete this from the index"
-        
         '''
         version = str(version or self._version())
         delete = etree.Element("delete", id=thing._fullname, version=version)
@@ -123,7 +123,6 @@ class CloudSearchUploader(object):
     def delete_ids(self, ids):
         '''Delete documents from the index.
         'ids' should be a list of fullnames
-        
         '''
         version = self._version()
         deletes = [etree.Element("delete", id=id_, version=str(version))
@@ -135,7 +134,6 @@ class CloudSearchUploader(object):
     def xml_from_things(self):
         '''Generate a <batch> XML tree to send to cloudsearch for
         adding/updating/deleting the given things
-        
         '''
         batch = etree.Element("batch")
         self.batch_lookups()
@@ -182,7 +180,6 @@ class CloudSearchUploader(object):
     def inject(self, quiet=False):
         '''Send things to cloudsearch. Return value is time elapsed, in seconds,
         of the communication with the cloudsearch endpoint
-        
         '''
         xml_things = self.xml_from_things()
 
@@ -204,7 +201,7 @@ class CloudSearchUploader(object):
         g.stats.simple_event("cloudsearch.uploads.adds", delta=adds)
         g.stats.simple_event("cloudsearch.uploads.deletes", delta=deletes)
         g.stats.simple_event("cloudsearch.uploads.warnings",
-                delta=len(warnings))
+                             delta=len(warnings))
 
         if not quiet:
             print "%s Changes: +%i -%i" % (self.__class__.__name__,
@@ -219,7 +216,7 @@ class CloudSearchUploader(object):
         '''Open a connection to the cloudsearch endpoint, and send the documents
         for indexing. Multiple requests are sent if a large number of documents
         are being sent (see chunk_xml())
-        
+
         Raises SearchHTTPError if the endpoint indicates a failure
         '''
         responses = []
@@ -238,8 +235,8 @@ class CloudSearchUploader(object):
                     responses.append(response.read())
                 else:
                     raise SearchHTTPError(response.status,
-                                               response.reason,
-                                               response.read())
+                                          response.reason,
+                                          response.read())
         finally:
             connection.close()
         return responses
@@ -248,7 +245,8 @@ class CloudSearchUploader(object):
 class LinkUploader(CloudSearchUploader):
     types = (Link,)
 
-    def __init__(self, doc_api, fullnames=None, version_offset=_VERSION_OFFSET):
+    def __init__(self, doc_api, fullnames=None,
+                 version_offset=_VERSION_OFFSET):
         super(LinkUploader, self).__init__(doc_api, fullnames, version_offset)
         self.accounts = {}
         self.srs = {}
@@ -301,7 +299,7 @@ class SubredditUploader(CloudSearchUploader):
 
 def chunk_xml(xml, depth=0):
     '''Chunk POST data into pieces that are smaller than the 20 MB limit.
-    
+
     Ideally, this never happens (if chunking is necessary, would be better
     to avoid xml'ifying before testing content_length)'''
     data = etree.tostring(xml)
@@ -312,7 +310,7 @@ def chunk_xml(xml, depth=0):
         depth += 1
         print "WARNING: Chunking (depth=%s)" % depth
         half = len(xml) / 2
-        left_half = xml # for ease of reading
+        left_half = xml  # For ease of reading
         right_half = etree.Element("batch")
         # etree magic simultaneously removes the elements from one tree
         # when they are appended to a different tree
@@ -327,7 +325,7 @@ def chunk_xml(xml, depth=0):
 def _run_changed(msgs, chan):
     '''Consume the cloudsearch_changes queue, and print reporting information
     on how long it took and how many remain
-    
+
     '''
     start = datetime.now(g.tz)
 
@@ -357,7 +355,7 @@ def run_changed(drain=False, min_size=500, limit=1000, sleep_time=10,
                 use_safe_get=False, verbose=False):
     '''Run by `cron` (through `paster run`) on a schedule to send Things to
         Amazon CloudSearch
-    
+
     '''
     if use_safe_get:
         CloudSearchUploader.use_safe_get = True
@@ -407,7 +405,8 @@ def rebuild_link_index(start_at=None, sleeptime=1, cls=Link,
 rebuild_subreddit_index = functools.partial(rebuild_link_index,
                                             cls=Subreddit,
                                             uploader=SubredditUploader,
-                                            doc_api='CLOUDSEARCH_SUBREDDIT_DOC_API',
+                                            doc_api='CLOUDSEARCH_SUBREDDIT'
+                                                    '_DOC_API',
                                             estimate=200000,
                                             chunk_size=1000)
 
@@ -429,12 +428,14 @@ def test_run_srs(*sr_names):
     return uploader.inject()
 
 
-### Query Code ###
+# Query Code
 _SEARCH = "/2011-02-01/search?"
 INVALID_QUERY_CODES = ('CS-UnknownFieldInMatchExpression',
                        'CS-IncorrectFieldTypeInMatchExpression',
                        'CS-InvalidMatchSetExpression',)
-DEFAULT_FACETS = {"reddit": {"count":20}}
+DEFAULT_FACETS = {"reddit": {"count": 20}}
+
+
 def basic_query(query=None, bq=None, faceting=None, size=1000,
                 start=0, rank=None, rank_expressions=None,
                 return_fields=None, record_stats=False, search_api=None):
@@ -497,7 +498,8 @@ basic_subreddit = functools.partial(basic_query,
                                     return_fields=['title', 'reddit',
                                                    'author_fullname'],
                                     record_stats=False,
-                                    search_api=g.CLOUDSEARCH_SUBREDDIT_SEARCH_API)
+                                    search_api=(
+                                        g.CLOUDSEARCH_SUBREDDIT_SEARCH_API))
 
 
 def _encode_query(query, bq, faceting, size, start, rank, rank_expressions,
@@ -610,7 +612,8 @@ class CloudSearchQuery(object):
 
         return self._run_cached(self.q, self.bq.encode('utf-8'), self.sort,
                                 self.rank_expressions, self.faceting,
-                                start=self.start, num=self.num, _update=_update)
+                                start=self.start, num=self.num,
+                                _update=_update)
 
     def preprocess_query(self, query):
         return query
@@ -645,9 +648,9 @@ class CloudSearchQuery(object):
                     faceting=None, start=0, num=1000, _update=False):
         '''Query the cloudsearch API. _update parameter allows for supposed
         easy memoization at later date.
-        
+
         Example result set:
-        
+
         {u'facets': {u'reddit': {u'constraints':
                                     [{u'count': 114, u'value': u'politics'},
                                     {u'count': 42, u'value': u'atheism'},
@@ -668,18 +671,20 @@ class CloudSearchQuery(object):
                             ],
                    u'start': 0},
          u'info': {u'cpu-time-ms': 10,
-                   u'messages': [{u'code': u'CS-InvalidFieldOrRankAliasInRankParameter',
-                                  u'message': u"Unable to create score object for rank '-hot'",
+                   u'messages': [{u'code': u'CS-InvalidField'
+                                           'OrRankAliasInRankParameter',
+                                  u'message': u"Unable to create score object "
+                                              "for rank '-hot'",
                                   u'severity': u'warning'}],
                    u'rid': u'<hash>',
                    u'time-ms': 9},
                    u'match-expr': u"(label 'my query')",
                    u'rank': u'-text_relevance'}
-        
         '''
         try:
             response = basic_query(query=query, bq=bq, size=num, start=start,
-                                   rank=sort, rank_expressions=rank_expressions,
+                                   rank=sort,
+                                   rank_expressions=rank_expressions,
                                    search_api=cls.search_api,
                                    faceting=faceting, record_stats=True)
         except (SearchHTTPError, SearchError) as e:
@@ -753,7 +758,7 @@ class LinkSearchQuery(CloudSearchQuery):
     def _restrict_sr(sr):
         '''Return a cloudsearch appropriate query string that restricts
         results to only contain results from sr
-        
+
         '''
         if isinstance(sr, MultiReddit):
             if not sr.sr_ids:
@@ -817,12 +822,14 @@ class CloudSearchProvider(SearchProvider):
 
     SubredditSearchQuery = CloudSearchSubredditSearchQuery
 
-    def run_changed(self, drain=False, min_size=int(getattr(g, 'SOLR_MIN_BATCH', 500)), limit=1000, sleep_time=10, 
-            use_safe_get=False, verbose=False):
+    def run_changed(self, drain=False,
+                    min_size=int(getattr(g, 'SOLR_MIN_BATCH', 500)),
+                    limit=1000, sleep_time=10, use_safe_get=False,
+                    verbose=False):
         '''Run by `cron` (through `paster run`) on a schedule to send Things to Cloud
         '''
         if use_safe_get:
             CloudSearchUploader.use_safe_get = True
-        amqp.handle_items('cloudsearch_changes', _run_changed, min_size=min_size,
-                          limit=limit, drain=drain, sleep_time=sleep_time,
-                          verbose=verbose)
+        amqp.handle_items('cloudsearch_changes', _run_changed,
+                          min_size=min_size, limit=limit, drain=drain,
+                          sleep_time=sleep_time, verbose=verbose)
