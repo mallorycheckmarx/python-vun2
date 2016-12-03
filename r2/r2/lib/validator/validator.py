@@ -2300,6 +2300,7 @@ class VOneTimeToken(Validator):
 
 class VOneOf(Validator):
     def __init__(self, param, options = (), *a, **kw):
+        self.optional = kw.pop('optional', False)
         Validator.__init__(self, param, *a, **kw)
         self.options = options
 
@@ -2311,6 +2312,11 @@ class VOneOf(Validator):
             return val
 
     def param_docs(self):
+        if self.optional:
+            return {
+                self.param: '(optional) one of (%s)' % ', '.join("`%s`" % s
+                                                      for s in self.options),
+            }
         return {
             self.param: 'one of (%s)' % ', '.join("`%s`" % s
                                                   for s in self.options),
