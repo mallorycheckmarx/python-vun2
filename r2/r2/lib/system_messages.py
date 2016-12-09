@@ -38,9 +38,9 @@ user_added_messages = {
     "moderator_invite": {
         "pm": {
             "subject": N_("Invitation to moderate %(url)s"),
-            "msg": N_("**gadzooks! you are invited to become a moderator of [%(title)s](%(url)s)!**\n\n"
-                      "*to accept*, visit the [moderators page for %(url)s](%(url)s/about/moderators) and click \"accept\".\n\n"
-                      "*otherwise,* if you did not expect to receive this, you can simply ignore this invitation or report it."),
+            "msg": N_("**Gadzooks! you are invited to become a moderator of [%(title)s](%(url)s)!**\n\n"
+                      "*To accept*, visit the [moderators page for %(url)s](%(url)s/about/moderators) and click \"accept\".\n\n"
+                      "*Otherwise,* if you did not expect to receive this, you can simply ignore this invitation or report it."),
         },
         "modmail": {
             "subject": N_("Moderator invited"),
