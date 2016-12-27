@@ -970,6 +970,22 @@ class MinimalController(BaseController):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-XSS-Protection'] = '1; mode=block'
 
+        # add CSP
+        # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
+        response.headers['content-security-policy'] = (
+            "default-src 'self';"
+            "script-src 'self' 'unsafe-inline' www.redditstatic.com;"
+            "style-src 'self' www.redditstatic.com;"
+            'img-src *;'
+            "font-src 'self' fonts.gstatic.com;"
+            "connect-src 'self' events.redditmedia.com googleads.g.doubleclick.net www.youtube.com *.googlevideo.com content.googleapis.com;"
+            'media-src *;'
+            'child-src www.redditmedia.com;'
+            'upgrade-insecure-requests;'
+            'block-all-mixed-content;'
+            'reflected-xss block;'
+        )
+
         if (feature.is_enabled("force_https")
                 and feature.is_enabled("upgrade_cookies")):
             upgrade_cookie_security()
