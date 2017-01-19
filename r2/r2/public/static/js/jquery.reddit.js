@@ -566,7 +566,7 @@ $.insert_things = function(things, append) {
             else
                 s = s.prepend($.unsafe(data.content)).children(".thing:first");
 
-            thing_init_func(s.hide().show());
+            thing_init_func(s);
             $(document).trigger('new_thing', s)
             return s;
         })
