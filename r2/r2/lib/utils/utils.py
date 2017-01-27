@@ -212,9 +212,10 @@ def domain(url):
         Takes a URL and returns the domain part, minus www., if
         present
     """
-    match = r_domain.search(url)
-    if match:
-        domain = strip_www(match.group(1))
+    res = r_domain.findall(url)
+    host = res and res[0]
+    if host:
+        domain = strip_www(host)
     else:
         domain = url
     return domain.lower()
