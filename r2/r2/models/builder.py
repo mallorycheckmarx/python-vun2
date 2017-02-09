@@ -943,7 +943,7 @@ SORT_OPERATOR_BY_NAME = {
     "qa": operators.desc('_qa'),
     "hot": operators.desc('_hot'),
     "top": operators.desc('_score'),
-    "random": operators.shuffled('_confidence'),
+    "random": operators.shuffled('_random'),
 }
 
 
@@ -1481,14 +1481,6 @@ class CommentBuilder(Builder):
                 final.append(comment)
 
         self.timer.intermediate("build_comments")
-
-        if isinstance(self.sort, operators.shuffled):
-            # If we have a sticky comment, do not shuffle the first element
-            # of the list.
-            if len(final) > 0 and final[0]._id == self.link.sticky_comment_id:
-                shuffle_slice(final, 1)
-            else:
-                shuffle(final)
 
         if not self.load_more:
             timer.stop()
