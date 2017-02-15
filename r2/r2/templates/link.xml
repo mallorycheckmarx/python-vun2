@@ -98,6 +98,7 @@
 
     <id>${thing._fullname}</id>
     <link href="${permalink}" />
+    <link href="${permalink}" rel="replies" type="text/html" /> 
     <link href="${permalink}.rss" rel="replies" type="application/atom+xml" />
     %if thing.different_sr:
         <link href="${add_sr(thing.subreddit.path,
