@@ -98,6 +98,7 @@
 
     <id>${thing._fullname}</id>
     <link href="${permalink}" />
+    <link href="${permalink}.rss" rel="replies" type="application/atom+xml" />
     <updated>${html_datetime(thing._date)}</updated>
     <title>${title}</title>
 </entry>
