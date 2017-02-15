@@ -115,7 +115,10 @@
             rel="related"
             type="application/atom+xml"
             title="/r/${thing.subreddit.name}" />
-    %endif  
+    %endif
+    %if not getattr(thing, 'selftext', None):
+        <link href="${thing.url}" rel="related" />
+    %endif
     <updated>${html_datetime(thing._date)}</updated>
     <title>${title}</title>
 </entry>
