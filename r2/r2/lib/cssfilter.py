@@ -243,6 +243,7 @@ SAFE_PROPERTIES = {
     "min-height",
     "min-width",
     "mix-blend-mode",
+    "object-fit",
     "opacity",
     "order",
     "orphans",
