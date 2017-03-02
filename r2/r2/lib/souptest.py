@@ -49,6 +49,7 @@ valid_link_schemes = (
     'ssh://',
     'git://',
     'ts3server://',
+    'magnet:',
 )
 
 allowed_tags = {
