@@ -23,7 +23,7 @@
       http://www.w3.org/2003/entities/2007/xhtml1-special.ent
       http://www.w3.org/2003/entities/2007/xhtml1-symbol.ent
 
-    created on Feb 24 2015 for validating that fragments in an HTML fragment
+    created on Feb 24 2017 for validating that fragments in an HTML fragment
     would be safe for use in both XHTML and HTML5
 
 -->

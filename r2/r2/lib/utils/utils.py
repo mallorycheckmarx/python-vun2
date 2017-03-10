@@ -16,7 +16,7 @@
 # The Original Developer is the Initial Developer.  The Initial Developer of
 # the Original Code is reddit Inc.
 #
-# All portions of the code written by reddit are Copyright (c) 2006-2015 reddit
+# All portions of the code written by reddit are Copyright (c) 2006-2017 reddit
 # Inc. All Rights Reserved.
 ###############################################################################
 
@@ -377,7 +377,7 @@ def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
     # work around CRBUG-464270
     if len(u.hostname) > 255:
         return None
-    # work around for Chrome crash with "%%30%30" - Sep 2015
+    # work around for Chrome crash with "%%30%30" - Sep 2017
     if "%00" in unquote(u.path):
         return None
     if u.username is not None or u.password is not None:
