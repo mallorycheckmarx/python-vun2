@@ -103,7 +103,7 @@ class RedditIsFunDetector(RedditBrowser):
 
 
 @register_detector
-class RedditAndroidDetectorOld(RedditBrowser):
+class OldRedditAndroidDetector(RedditBrowser):
     is_app = True
     look_for = 'RedditAndroid'
     name = 'Reddit: The Official App'
