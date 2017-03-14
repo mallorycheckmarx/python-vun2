@@ -103,11 +103,21 @@ class RedditIsFunDetector(RedditBrowser):
 
 
 @register_detector
-class RedditAndroidDetector(RedditBrowser):
+class RedditAndroidDetectorOld(RedditBrowser):
     is_app = True
     look_for = 'RedditAndroid'
     name = 'Reddit: The Official App'
     agent_string = '{look_for} (?P<version>{version_string})$'
+
+
+@register_detector
+class RedditAndroidDetector(RedditBrowser):
+    is_app = True
+    look_for = 'Reddit'
+    name = 'Reddit: The Official App'
+    agent_string = (
+        '{look_for}\/Version (?P<version>{version_string})\/Build '
+        '(?P<b_number>\d+)\/(?P<platform>.*?) (?P<pversion>{version_string})')
 
 
 @register_detector
