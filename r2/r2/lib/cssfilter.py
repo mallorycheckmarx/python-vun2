@@ -173,6 +173,7 @@ SAFE_PROPERTIES = {
     "font",
     "font-family",
     "font-size",
+    "font-smoothing",
     "font-style",
     "font-variant",
     "font-weight",
