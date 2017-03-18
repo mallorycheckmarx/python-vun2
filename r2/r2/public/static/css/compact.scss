@@ -455,7 +455,6 @@ body[orient="landscape"] > #topbar > h1 {
 /*Subtoolbar (eg hot)*/
 .subtoolbar {
     @include box-sizing(border-box);
-    height: 32px;
     @include vertical_gradient(white, #ccc);
     border-bottom: 1px solid #bbb;
     padding: 6px;
@@ -485,7 +484,7 @@ body[orient="landscape"] > #topbar > h1 {
     @include vertical_gradient(#ddd, #aaa);
     @include border-radius(8px);
     border: 1px solid #aaa;
-    padding-top: 2px; 
+    padding-top: 1px; 
     padding-bottom: 1px; 
     @include box-shadow(0px 1px 1px rgba(255,255,255,.8));
 }
