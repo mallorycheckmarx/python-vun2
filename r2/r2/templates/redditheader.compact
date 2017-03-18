@@ -95,7 +95,7 @@
     <div class="menuitem bottm-bar">
       ${logout(dest=request.fullpath)}
     </div>
-    % endif
+    %endif
    %else:
     <div class="menuitem">
       ${plain_link("log in", "/login", _sr_path=False)}
