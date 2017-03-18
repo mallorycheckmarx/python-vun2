@@ -181,7 +181,11 @@ class ApiController(RedditController):
         things=VByName('id', multiple=True, ignore_missing=True, limit=100),
         url=VUrl('url'),
     )
-    @api_doc(api_section.links_and_comments, uses_site=True)
+    @api_doc(
+        api_section.links_and_comments, 
+        uses_site=True, 
+        extensions=['json', 'xml']
+    )
     def GET_info(self, things, url):
         """
         Return a listing of things specified by their fullnames.
