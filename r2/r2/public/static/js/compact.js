@@ -19,8 +19,7 @@
 $(function() {
     if ($(window).scrollTop() == 0) {
         $(window).scrollTop(1);
-    }
-    ;
+    };
     /* Top menu dropdown*/
     $('#topmenu_toggle').click(function() {
         $(this).toggleClass("active");
@@ -97,6 +96,15 @@ $(function() {
     $(document).on('click', 'a[href=#]', function() {
         return false;
     });
+    
+    /* all internal links should have .compact appended */
+    $(document).on('click', 'a[href*=reddit\\.com]', function() { 
+    	var href = $(this).prop('href'); 
+    	if (!/compact$/.test(href)) { 
+    		$(this).prop('href',href+'.compact');
+    	} 
+    });    
+    
 });
 
 $(function() {
