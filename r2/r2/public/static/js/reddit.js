@@ -725,6 +725,7 @@ function comment_reply_for_elem(elem) {
         form.attr("id", "commentreply_" + thing_id);
         form.find(".error").hide();
     }
+    random_placeholder(form.find('textarea'));
     return form;
 }
 
@@ -885,6 +886,42 @@ function big_mod_toggle(el, press_action, unpress_action) {
     return false
 }
 
+/* positivity stuff */
+var random_placeholders = [
+    "Polite and civil discourse and debate is the best way to keep reddit great.",
+    "This box is used to talk to other humans with views, ideas and feelings just like yours.",
+    "Have you had a hug today?",
+    "Add to the discussion...",
+    "Snoo loves you. (he's our little alien friend)"
+];
+
+function random_placeholder(elem) {
+    var phcount = random_placeholders.length,
+        draw, idx;
+    /* to give a 25% chance of a placeholder, draw a random # between 1 and 5.
+     * if it's 3, put a placeholder */
+    draw = getRandomInt(1,4);
+    if (draw === 3) {
+        idx = getRandomInt(0, phcount);
+        $(elem).attr('placeholder', random_placeholders[idx]);
+    } else {
+        /* clear the placeholder, just in case this was cloned from a root element
+         * that already had one */
+        $(elem).attr('placeholder', '');
+    }
+
+}
+
+function getRandomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function setup_random_comment_placeholders() {
+    $('.commentarea .usertext-edit textarea').each(function() {
+        random_placeholder(this);
+    });
+}
+
 /* The ready method */
 $(function() {
         $("body").click(close_menus);
@@ -893,6 +930,10 @@ $(function() {
          * and call it on all things currently rendered in the
          * page. */
         $("body").set_thing_init(updateEventHandlers);
+
+        /* Set up random placeholders with positive messages meant to get people
+         * to think twice and encourage civilized discourse */
+         setup_random_comment_placeholders();
 
         /* Fall back to the old ".gray" system if placeholder isn't supported
          * by this browser */
