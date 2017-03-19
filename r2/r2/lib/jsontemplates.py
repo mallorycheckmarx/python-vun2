@@ -326,6 +326,14 @@ class SubredditJsonTemplate(ThingJsonTemplate):
 
         return data
 
+    def raw_data(self, thing):
+        data = ThingJsonTemplate.raw_data(self, thing)
+        permissions = getattr(thing, 'mod_permissions', None)
+        if permissions:
+            permissions = [perm for perm, has in permissions.iteritems() if has]
+            data['mod_permissions'] = permissions
+        return data
+
     def thing_attr(self, thing, attr):
         if attr not in self._public_attrs and not thing.can_view(c.user):
             return None
