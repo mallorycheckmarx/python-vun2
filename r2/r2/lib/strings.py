@@ -55,16 +55,16 @@ string_dict = dict(
 
     submitting = _("submitting..."),
 
-    # this accomodates asian languages which don't use spaces
+    # this accommodates asian languages which don't use spaces
     number_label = _("%(num)d %(thing)s"),
 
-    # this accomodates asian languages which don't use spaces
+    # this accommodates asian languages which don't use spaces
     points_label = _("%(num)d %(point)s"),
 
-    # this accomodates asian languages which don't use spaces
+    # this accommodates asian languages which don't use spaces
     time_label = _("%(num)d %(time)s"),
 
-    # this accomodates asian languages which don't use spaces
+    # this accommodates asian languages which don't use spaces
     float_label = _("%(num)5.3f %(thing)s"),
 
     already_submitted = _("that link has already been submitted, but you can try to [submit it again](%s)."),
