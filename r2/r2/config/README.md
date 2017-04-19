@@ -1,0 +1,1 @@
+This folder contains the essencial configuration scrips for our server
