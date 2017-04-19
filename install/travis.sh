@@ -110,6 +110,10 @@ if [ "$ENVIRONMENT" == "vagrant" ]; then
     $RUNDIR/setup_cassandra.sh
     # Configure RabbitMQ
     $RUNDIR/setup_rabbitmq.sh
+else
+    cat <<PACKAGES | xargs apt-get install $APTITUDE_OPTIONS
+zookeeperd
+PACKAGES
 fi
 
 ###############################################################################
