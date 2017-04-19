@@ -26,7 +26,6 @@ import random, string
 
 from pylons import app_globals as g
 
-from Captcha.Base import randomIdentifier
 from Captcha.Visual import Text, Backgrounds, Distortions, ImageCaptcha
 
 
@@ -51,6 +50,10 @@ def get_iden():
 
 def make_solution():
     return randomIdentifier(alphabet=string.ascii_letters, length = SOL_LENGTH).upper()
+
+def randomIdentifier(alphabet = string.ascii_letters + string.digits,
+                     length = 24):
+    return "".join([random.SecureRandom.choice(alphabet) for i in xrange(length)])
 
 def get_image(iden):
     key = "captcha:%s" % iden
