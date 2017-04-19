@@ -304,8 +304,17 @@ def extract_title(data):
     # try to find an og:title meta tag to use
     og_title = (head_soup.find("meta", attrs={"property": "og:title"}) or
                 head_soup.find("meta", attrs={"name": "og:title"}))
+
+    og_url = head_soup.find("meta", attrs={"property": "og:url"})
+
+    if og_url:
+        url_get = og_url.get("content")
+
     if og_title:
         title = og_title.get("content")
+
+        if (title.endswith('on Twitter')) and (('://twitter.com/') in url_get):
+            title = None
 
     # if that failed, look for a <title> tag to use instead
     if not title and head_soup.title and head_soup.title.string:
