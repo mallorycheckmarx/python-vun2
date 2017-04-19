@@ -101,7 +101,7 @@ string_dict = dict(
     link_info_og_description = _("%(score)s points and %(num_comments)s comments so far on reddit"),
 
     submit_link = _("""You are submitting a link. The key to a successful submission is interesting content and a descriptive title."""),
-    submit_text = _("""You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Beginning your title with "vote up if" is violation of intergalactic law."""),
+    submit_text = _("""You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Remember that asking for upvotes is against reddit's rules."""),
     submit_link_label = _("Submit a new link"),
     submit_text_label = _("Submit a new text post"),
     verify_email = _("we're going to need to verify your email address for you to proceed."),
