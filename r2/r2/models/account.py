@@ -391,7 +391,7 @@ class Account(Thing):
         if uid:
             return cls._byID(uid, data=True)
         else:
-            raise NotFound, 'Account %s' % name
+            raise NotFound('Account %s' % name)
 
     @classmethod
     def _names_to_ids(cls, names, ignore_missing=False, allow_deleted=False,
