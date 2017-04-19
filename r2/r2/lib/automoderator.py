@@ -91,6 +91,20 @@ rules_by_subreddit = {}
 
 unnumbered_placeholders_regex = re.compile(r"\{\{(match(?:-[^\d-]+?)?)\}\}")
 match_placeholders_regex = re.compile(r"\{\{match-(?:([^}]+?)-)?(\d+)\}\}")
+
+def generate_community_rule_placeholders(subreddit):
+    def _combine_rule(rule):
+        combined_rule = "**{0}**\n\n".format(rule['short_name'])
+        for line in rule['description'].split('\n'):
+            combined_rule += "> {0}".format(line)
+        return combined_rule
+    rule_replacements = {}
+    for rule in subreddit.community_rules:
+        rule_replacements['{{rule_{0}_title}}'.format((rule['priority'] + 1))] = rule['short_name']
+        rule_replacements['{{rule_{0}_description}}'.format((rule['priority'] + 1))] = rule['description']
+        rule_replacements['{{rule_{0}}'.format((rule['priority'] + 1))] = _combine_rule(rule)
+    return rule_replacements
+
 def replace_placeholders(string, data, matches):
     """Replace placeholders in the string with appropriate values."""
     item = data["item"]
@@ -103,6 +117,8 @@ def replace_placeholders(string, data, matches):
         "{{author_flair_css_class}}": data["author"].flair_css_class(
             data["subreddit"]._id, obey_disabled=True),
     }
+    
+    replacements.update(generate_community_rule_placeholders(data["subreddit"]))
 
     if isinstance(item, Comment):
         context = None
