@@ -951,7 +951,7 @@ SORT_OPERATOR_BY_NAME = {
     "qa": operators.desc('_qa'),
     "hot": operators.desc('_hot'),
     "top": operators.desc('_score'),
-    "random": operators.shuffled('_confidence'),
+    "random": operators.shuffled('_random'),
 }
 
 

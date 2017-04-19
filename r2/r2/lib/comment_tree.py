@@ -136,6 +136,7 @@ def get_comment_scores(link, sort, comment_ids, timer):
 
     from r2.lib.db import queries
     from r2.models import CommentScoresByLink
+    from random import randrange
 
     if not comment_ids:
         # no comments means no scores
@@ -145,6 +146,8 @@ def get_comment_scores(link, sort, comment_ids, timer):
         # comment ids are monotonically increasing, so we can use them as a
         # substitute for creation date
         scores_by_id = {comment_id: comment_id for comment_id in comment_ids}
+    elif sort == "_random":
+        scores_by_id = {comment_id: randrange(1, 10**10) for comment_id in comment_ids}
     else:
         scores_by_id36 = CommentScoresByLink.get_scores(link, sort)
 
