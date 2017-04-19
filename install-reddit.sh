@@ -23,7 +23,11 @@
 set -e
 
 if [[ $EUID -ne 0 ]]; then
-    echo "ERROR: Must be run with root privileges."
+    echo "ERROR: Must be run with root privileges! Would you like to attempt to rerun this as root? (y/N) (must be lowercase)"
+    read rerun
+    if ["$rerun" == "y"]
+        (( EUID != 0 )) && exec sudo -- "$0" "$@"
+    fi
     exit 1
 fi
 
