@@ -185,12 +185,17 @@ class BannedListing(UserListing):
 
     @classmethod
     def populate_from_tempbans(cls, item, tempbans=None):
+        # 84600.0 is the number of seconds in a day
+        rounded_days = lambda td: round((td.total_seconds() / (86400.0)), 1)
+        def pretty_days(td):
+            ret = rounded_days(td)
+            return ret if not ret.is_integer() else int(ret)
         if not tempbans:
             return
         time = tempbans.get(item.user.name)
         if time:
             delay = time - datetime.now(g.tz)
-            item.tempban = max(delay.days, 0)
+            item.tempban = max(pretty_days(delay), 0)
 
     @property
     def form_title(self):
