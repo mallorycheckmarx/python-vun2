@@ -88,7 +88,7 @@ class Mapper(object):
         pass
 
     def process(self, values):
-        raise NotImplemented
+        raise NotImplementedError()
 
     def __call__(self, line):
         line = line.strip('\n')
