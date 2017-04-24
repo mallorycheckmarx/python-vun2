@@ -26,18 +26,15 @@ from pycassa.types import LongType
 from r2.config import feature
 from r2.lib.db.thing import (
     Thing, Relation, NotFound, MultiRelation, CreationError)
-from r2.lib.db.operators import desc
 from r2.lib.errors import RedditError
 from r2.lib.tracking import (
     get_site,
 )
 from r2.lib.utils import (
-    base_url,
     domain,
     epoch_timestamp,
     feature_utils,
     strip_www,
-    timesince,
     title_to_url,
     tup,
     UrlParser,
@@ -57,11 +54,9 @@ from subreddit import (
 )
 from printable import Printable
 from r2.config import extensions
-from r2.lib.memoize import memoize
 from r2.lib.wrapped import Wrapped
 from r2.lib.filters import _force_utf8, _force_unicode
 from r2.lib import hooks, utils
-from mako.filters import url_escape
 from r2.lib.strings import strings, Score
 from r2.lib.db import tdb_cassandra, sorts
 from r2.lib.db.tdb_cassandra import view_of
@@ -72,7 +67,6 @@ from r2.models.gold import (
     make_gold_message,
 )
 from r2.models.modaction import ModAction
-from r2.models.subreddit import MultiReddit
 from r2.models.trylater import TryLater
 from r2.models.query_cache import CachedQueryMutator
 from r2.models.promo import PROMOTE_STATUS
@@ -83,11 +77,9 @@ from pylons import tmpl_context as c
 from pylons import app_globals as g
 from pylons.i18n import _
 from datetime import datetime, timedelta
-from hashlib import md5
 import simplejson as json
 
-import random, re
-import pycassa
+import re
 from collections import defaultdict
 from itertools import cycle
 from pycassa.cassandra.ttypes import NotFoundException

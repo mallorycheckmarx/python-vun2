@@ -24,7 +24,6 @@ import datetime
 import calendar
 import os
 from time import sleep
-import urllib
 
 from boto.s3.connection import S3Connection
 from boto.emr.connection import EmrConnection
@@ -32,9 +31,8 @@ from boto.exception import S3ResponseError
 from pylons import app_globals as g
 from sqlalchemy.exc import DataError
 
-from r2.lib.emr_helpers import (EmrException, terminate_jobflow,
-    modify_slave_count)
-from r2.lib.s3_helpers import get_text_from_s3, s3_key_exists, copy_to_s3
+from r2.lib.emr_helpers import terminate_jobflow
+from r2.lib.s3_helpers import get_text_from_s3, s3_key_exists
 from r2.lib.traffic.emr_traffic import (extract_hour, aggregate_interval,
         coalesce_interval)
 from r2.lib.utils import tup

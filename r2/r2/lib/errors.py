@@ -22,10 +22,8 @@
 
 from webob.exc import HTTPBadRequest, HTTPForbidden, status_map
 from r2.lib.utils import Storage, tup
-from pylons import request
 from pylons import app_globals as g
 from pylons.i18n import _
-from copy import copy
 
 
 error_list = dict((

@@ -20,7 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from pylons.i18n import _, ungettext
+from pylons.i18n import _
 from r2.controllers.reddit_base import (
     base_listing,
     disable_subreddit_css,
@@ -28,7 +28,6 @@ from r2.controllers.reddit_base import (
     RedditController,
     require_https,
 )
-from r2 import config
 from r2.models import *
 from r2.models.recommend import ExploreSettings
 from r2.config import feature
@@ -41,15 +40,10 @@ from r2.lib.menus import *
 from r2.lib.csrf import csrf_exempt
 from r2.lib.utils import to36, sanitize_url, title_to_url
 from r2.lib.utils import query_string, UrlParser, url_links_builder
-from r2.lib.template_helpers import get_domain
-from r2.lib.filters import unsafe, _force_unicode, _force_utf8
+from r2.lib.filters import _force_utf8
 from r2.lib.emailer import Email, generate_notification_email_unsubscribe_token
-from r2.lib.db.operators import desc
-from r2.lib.db import queries
-from r2.lib.db.tdb_cassandra import MultiColumnQuery
 from r2.lib.strings import strings
 from r2.lib.validator import *
-from r2.lib import jsontemplates
 import r2.lib.db.thing as thing
 from r2.lib.errors import errors, ForbiddenError
 from listingcontroller import ListingController
@@ -63,8 +57,6 @@ from pylons import app_globals as g
 from r2.models.token import EmailVerificationToken
 from r2.controllers.ipn import generate_blob, validate_blob, GoldException
 
-from operator import attrgetter
-import string
 import random as rand
 import re
 from urllib import quote_plus

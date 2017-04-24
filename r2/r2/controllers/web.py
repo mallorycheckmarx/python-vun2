@@ -20,10 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import hashlib
-import hmac
 import json
-import re
 
 from pylons import request, response
 from pylons import tmpl_context as c
@@ -38,7 +35,6 @@ from r2.lib.utils import constant_time_compare, UrlParser, is_subdomain
 from r2.lib.validator import (
     nop,
     validate,
-    VFloat,
     VInt,
     VOneOf,
     VPrintable,

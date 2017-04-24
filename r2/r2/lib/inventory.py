@@ -21,15 +21,14 @@
 ###############################################################################
 
 
-from collections import defaultdict, OrderedDict
-from datetime import datetime, timedelta
+from collections import defaultdict
+from datetime import timedelta
 import re
 
 from itertools import chain
 from sqlalchemy import func
 
 from r2.lib.inventory_optimization import get_maximized_pageviews
-from r2.lib.memoize import memoize
 from r2.lib.utils import to_date, tup
 from r2.models import (
     Bid,

@@ -29,7 +29,7 @@ import time
 import re
 
 import r2.lib.utils as r2utils
-from r2.models import (Link, NotFound, Subreddit)
+from r2.models import (NotFound, Subreddit)
 
 
 class InvalidQuery(Exception):
