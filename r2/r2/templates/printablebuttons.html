@@ -539,6 +539,13 @@
           a_class="bylink may-blank full-comments",
           event_action="full_comments")}
     </li>
+    <li>
+      ${self.comment_button("comment", "full comments", 
+                            thing.full_comment_path,
+                            _sr_path = True, 
+                            a_class = None, 
+                            newwindow = thing.new_window)}
+    </li>
   %else:
     <li class="first">
       ${self.bylink_button(_("permalink"), thing.permalink, sr_path=False, event_action="permalink")}
