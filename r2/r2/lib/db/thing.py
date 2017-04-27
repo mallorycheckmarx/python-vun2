@@ -106,7 +106,7 @@ class DataThing(object):
         else:
             old_val = self._t.get(attr, self._defaults.get(attr))
             self._t[attr] = val
-        if make_dirty and val != old_val:
+        if make_dirty and (val != old_val or not self._created):
             self._dirties[attr] = (old_val, val)
 
     def __setstate__(self, state):
