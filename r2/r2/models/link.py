@@ -1761,8 +1761,10 @@ class Comment(Thing, Printable):
                     # If removed by an admin or moderator, distinguish that
                     # from being deleted by the user.
                     if item._spam:
+                        extra_css += " removed"
                         item.body = '[removed]'
                     else:
+                        extra_css += " deleted"
                         item.body = '[deleted]'
 
             if focal_comment == item._id36:
