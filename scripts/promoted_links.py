@@ -50,10 +50,10 @@ PC_PREFIX = PromoCampaign._type_prefix + str(PromoCampaign._type_id)
 
 def error_statistics(errors):
     mean_error = sum(errors) / len(errors)
-    min_error = min([abs(i) for i in errors])
-    max_error = max([abs(i) for i in errors])
+    min_error = min(abs(i) for i in errors)
+    max_error = max(abs(i) for i in errors)
     stdev_error = sqrt(
-        (sum([i ** 2 for i in errors]) / len(errors))
+        (sum(i ** 2 for i in errors) / len(errors))
         - mean_error ** 2)
     return (mean_error, min_error, max_error, stdev_error)
 
