@@ -3397,6 +3397,7 @@ class ApiController(RedditController):
                     t.to_collapse = collapse
             t._commit()
 
+    @require_oauth2_scope("privatemessages")
     @noresponse(VUser(),
                 VModhash(),
                 things = VByName('id', multiple = True))
@@ -3409,6 +3410,7 @@ class ApiController(RedditController):
         """
         self.collapse_handler(things, True)
 
+    @require_oauth2_scope("privatemessages")
     @noresponse(VUser(),
                 VModhash(),
                 things = VByName('id', multiple = True))
