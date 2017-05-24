@@ -84,7 +84,7 @@ cpdef double _confidence(int ups, int downs):
 
     return (left - right) / under
 
-cdef int up_range = 400
+cdef int up_range = 1500
 cdef int down_range = 100
 cdef list _confidences = []
 for ups in xrange(up_range):
