@@ -2713,7 +2713,7 @@ class ApiController(RedditController):
                    sr = VByName('sr'),
                    name = VAvailableSubredditName("name"),
                    title = VLength("title", max_length = 100),
-                   header_title = VLength("header-title", max_length = 500),
+                   header_title = VLength("header_title", max_length = 500),
                    domain = VCnameDomain("domain"),
                    submit_text = VMarkdownLength("submit_text", max_length=1024),
                    public_description = VMarkdownLength("public_description", max_length = 500),
