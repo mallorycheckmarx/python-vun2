@@ -43,6 +43,7 @@ from r2.lib.static import static_mtime
 from r2.lib import js, tracking
 
 import babel.numbers
+import babel.dates
 import simplejson
 import os.path
 from copy import copy
@@ -692,6 +693,11 @@ def format_percent(ratio, locale=None):
         locale = c.locale or g.locale
 
     return babel.numbers.format_percent(ratio, locale=locale)
+
+
+def format_date(date, locale=None):
+    return babel.dates.format_date(date, _("dd MMM yyyy"),
+                                   locale=locale or c.locale)
 
 
 def html_datetime(date):
