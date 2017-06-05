@@ -18,8 +18,6 @@ r.timeseries = {
     _formatTick: function (val, axis) {
         if (val == 0)
             return '0'
-        else if (val < 10)
-            return val.toFixed(2)
 
         for (var i = 1; i < this._units.length; i++) {
             if (val / Math.pow(1000, i - 1) < 1000) {
@@ -29,7 +27,8 @@ r.timeseries = {
 
         val /= Math.pow(1000, i - 1)
 
-        return val.toFixed(axis.tickDecimals) + this._units[i - 1]
+        var sigDigit = Math.pow(10, axis.tickDecimals)
+        return Math.round(val * sigDigit) / sigDigit + this._units[i - 1]
     },
 
     makeTimeSeriesChartsFromTable: function (table) {
@@ -49,6 +48,29 @@ r.timeseries = {
         $('#charts').append(chartRow)
 
         $.each(series, function(i, chart) {
+
+            var dummyPoint = chart.data[chart.data.length-1].slice(0),
+                newDate = new Date(dummyPoint[0])
+
+            switch(table.data('interval')) {
+                case 'hour':
+                    newDate.setUTCHours(newDate.getUTCHours()+1)
+                    break
+                case 'day':
+                    newDate.setUTCHours(newDate.getUTCHours()+24)
+                    break
+                case 'month':
+                    newDate.setUTCMonth(newDate.getUTCMonth()+1)
+                    break
+                default:
+                    dummyPoint = null
+            }
+
+            if(dummyPoint) {
+                dummyPoint[0] = newDate.getTime()
+                chart.data.push(dummyPoint)
+            }
+
             $.plot(chart.placeholder, [chart], options)
         })
 
@@ -122,6 +144,7 @@ r.timeseries = {
 
             yaxis: {
                 min: 0,
+                tickDecimals: 1,
                 tickFormatter: $.proxy(this, '_formatTick')
             }
         }
@@ -168,9 +191,10 @@ r.timeseries = {
                 var datum = data.eq(s.index).data('value')
                 // if we have a maximum number of data points to chart, choose
                 // the most recent ones from the table
-                if (!maxPoints || i > rows.length - maxPoints)
-                    s.data.push([timestamp, datum])
-                s.maxValue = Math.max(s.maxValue, datum)
+                if (!maxPoints || i > rows.length - maxPoints) {
+                    s.data.unshift([timestamp, datum])
+                    s.maxValue = Math.max(s.maxValue, datum)
+                }
             })
         })
 
