@@ -4031,7 +4031,7 @@ class ApiController(RedditController):
         VModhash(),
         VNotInTimeout(),
         flair_csv=nop("flair_csv",
-            docs={"flair_csv": "comma-seperated flair information"}),
+            docs={"flair_csv": "comma-separated flair information"}),
     )
     @api_doc(api_section.flair, uses_site=True)
     def POST_flaircsv(self, flair_csv):
