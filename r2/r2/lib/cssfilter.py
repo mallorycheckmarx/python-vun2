@@ -142,6 +142,8 @@ SAFE_PROPERTIES = {
     "clip",
     "clip-path",
     "color",
+    "column-count",
+    "column-break-inside",
     "content",
     "counter-increment",
     "counter-reset",
