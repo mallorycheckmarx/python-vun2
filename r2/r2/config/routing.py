@@ -71,7 +71,7 @@ def make_map(config):
 
     # redirect old urls to the new
     ABOUT_BASE = "https://about.reddit.com/"
-    mc('/about', controller='redirect', action='redirect', dest=ABOUT_BASE, 
+    mc('/about', controller='redirect', action='redirect', dest=ABOUT_BASE,
        conditions={'function':not_in_sr})
     mc('/about/values', controller='redirect', action='redirect', dest=ABOUT_BASE)
     mc('/about/team', controller='redirect', action='redirect',
@@ -171,7 +171,7 @@ def make_map(config):
           requirements=dict(controller="hot|new|rising|randomrising|ads"))
 
     mc('/user/:username/:where/:show', controller='user', action='listing')
-    
+
     mc('/explore', controller='front', action='explore')
     mc('/api/recommend/feedback', controller='api', action='rec_feedback')
 
@@ -307,7 +307,7 @@ def make_map(config):
     mc('/gold/thanks', controller='front', action='goldthanks')
     mc('/gold/subscription', controller='forms', action='subscription')
     mc('/gilding', controller='front', action='gilding')
-    mc('/creddits', controller='redirect', action='redirect', 
+    mc('/creddits', controller='redirect', action='redirect',
        dest='/gold?goldtype=creddits')
 
     mc('/password', controller='forms', action="password")
@@ -412,7 +412,7 @@ def make_map(config):
        conditions={"method": ["POST"]})
 
     mc('/api/:action', controller='api')
-    
+
     mc('/api/recommend/sr/:srnames', controller='api',
        action='subreddit_recommendations')
 

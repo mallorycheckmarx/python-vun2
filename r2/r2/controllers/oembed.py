@@ -170,9 +170,10 @@ class OEmbedController(MinimalController):
         url=VUrl('url'),
         parent=VBoolean("parent", default=False),
         live=VBoolean("live", default=False),
-        omitscript=VBoolean("omitscript", default=False)
+        omitscript=VBoolean("omitscript", default=False),
+        callback=VBoolean("callback", default=False)
     )
-    def GET_oembed(self, url, parent, live, omitscript):
+    def GET_oembed(self, url, parent, live, omitscript, callback):
         """Get the oEmbed response for a URL, if any exists.
 
         Spec: http://www.oembed.com/
@@ -180,7 +181,10 @@ class OEmbedController(MinimalController):
         Optional parameters (parent, live) are passed through as embed options
         to oEmbed renderers.
         """
-        response.content_type = "application/json"
+        if callback:
+            response.content_type = "application/javascript"
+        else:
+            response.content_type = "application/json"
 
         thing = url_to_thing(url)
         if not thing:
