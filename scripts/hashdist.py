@@ -2,6 +2,7 @@
 
 from Queue import Queue
 import argparse
+import errno
 import logging
 import multiprocessing
 import os
