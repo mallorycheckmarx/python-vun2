@@ -35,6 +35,8 @@ from collections import namedtuple
 from pylons import app_globals as g
 
 
+EXPIRES_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
 HADOOP_FOLDER_SUFFIX = '_$folder$'
 
 SIGNATURE_V4_ALGORITHM = "AWS4-HMAC-SHA256"
