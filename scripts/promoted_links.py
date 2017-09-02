@@ -25,6 +25,7 @@
 from collections import defaultdict
 import datetime
 from math import sqrt
+import random
 
 from pylons import app_globals as g
 from sqlalchemy.sql.functions import sum as sa_sum
