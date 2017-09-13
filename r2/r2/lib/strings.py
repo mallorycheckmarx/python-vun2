@@ -66,9 +66,9 @@ string_dict = dict(
     # this accomodates asian languages which don't use spaces
     float_label = _("%(num)5.3f %(thing)s"),
 
-    already_submitted = _("that link has already been submitted, but you can try to [submit it again](%s)."),
+    already_submitted = _("that link has already been submitted, but you can [click here to try to submit it again](%s)."),
 
-    multiple_submitted = _("that link has been submitted to multiple subreddits. you can try to [submit it again](%s)."),
+    multiple_submitted = _("that link has been submitted to multiple subreddits. you can [click here to try to submit it again](%s)."),
 
     user_deleted = _("your account has been deleted, but we won't judge you for it."),
 
