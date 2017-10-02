@@ -958,7 +958,7 @@ class FrontController(RedditController):
         return Reddit(content=usertext).render()
 
     @require_oauth2_scope("read")
-    @api_doc(api_section.subreddits, uses_site=True)
+    @api_doc(api_section.subreddits, uri='/r/{subreddit}/about/rules')
     def GET_rules(self):
         """Get the rules for the current subreddit"""
         if not feature.is_enabled("subreddit_rules", subreddit=c.site.name):
@@ -997,13 +997,11 @@ class FrontController(RedditController):
         Will 404 if there is not currently a sticky post in this subreddit.
 
         """
-        sticky_fullnames = c.site.get_sticky_fullnames()
-
-        if not num or not sticky_fullnames:
+        if not num or not c.site.sticky_fullnames:
             abort(404)
 
         try:
-            fullname = sticky_fullnames[num-1]
+            fullname = c.site.sticky_fullnames[num-1]
         except IndexError:
             abort(404)
         sticky = Link._by_fullname(fullname, data=True)
@@ -1160,11 +1158,9 @@ class FrontController(RedditController):
         else:
             include_over18 = True
 
-        # do not request facets for api requests, unless specifically requested
-        if is_api():
-            faceting = None if include_facets else {}
-        else:
-            faceting = None
+        # do not request facets--they are not popular with users and result in
+        # looking up unpopular subreddits (which is bad for site performance)
+        faceting = {}
 
         # no subreddit results if fielded search or structured syntax
         if syntax == 'cloudsearch' or (query and ':' in query):

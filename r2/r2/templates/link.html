@@ -49,15 +49,25 @@
 <%def name="make_link(name, css_class, tabindex=0)">
   <%
     media_override = thing.link_child and getattr(thing, 'media_override', False)
+    if thing.is_self:
+      url = thing.href_url
+      inbound_tracking_url = thing.tracking_link(url, thing, name)
+    else:
+      url = thing.href_url
+      inbound_tracking_url = None
   %>
   <a class="${css_class} may-blank ${ c.user_is_loggedin and 'loggedin' or ''}
             ${ media_override and 'open-expando' or '' }"
-     href="${thing.href_url}"
+     href="${url}"
      %if tabindex:
        tabindex="${tabindex}"
      %endif
      %if thing.nofollow:
        rel="nofollow"
+     %endif
+     %if inbound_tracking_url and inbound_tracking_url != url:
+       data-href-url="${url}"
+       data-inbound-url="${inbound_tracking_url}"
      %endif
      >
      ${caller.body()}
@@ -113,9 +123,14 @@
 
   ##the expando button
   <% selftext_hide = thing.is_self and not thing.selftext %>
-  %if thing.link_child and not thing.link_child.expand and not selftext_hide:
-    <div class="expando-button collapsed
-                ${thing.link_child.css_style}"></div>
+  %if thing.link_child:
+    %if not thing.link_child.expand and not selftext_hide:
+      <div class="expando-button collapsed
+                  ${thing.link_child.css_style}"></div>
+    %elif thing.link_child.expand and not thing.link_child.position_inline:
+      <div class="expando-button expanded
+                  ${thing.link_child.css_style}"></div>
+    %endif
   %endif
 
   <p class="tagline">
@@ -127,14 +142,15 @@
      if thing.link_child and thing.link_child.load:
        child_content = unsafe(thing.link_child.content())
      expand = thing.link_child and thing.link_child.expand
+     position_inline = thing.link_child and thing.link_child.position_inline
   %>
 
   ## if we're not on a permalink page we'll render the buttons on top
-  %if not expand:
+  %if not position_inline:
     ${bottom_buttons()}
   %endif
 
-  <div class="expando" ${"style='display: none'" if not expand else ""}
+  <div class="expando expando-uninitialized" ${"style='display: none'" if not expand else ""}
     %if not expand and child_content:
       data-cachedhtml="${websafe(child_content)}"
     %endif
@@ -147,7 +163,7 @@
   </div>
 
   ##if we are on a permalink page, we'll render the buttons below
-  %if expand:
+  %if position_inline:
     ${bottom_buttons()}
   %endif
 </%def>

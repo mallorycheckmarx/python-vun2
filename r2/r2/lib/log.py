@@ -20,106 +20,220 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-import cPickle
-
-from datetime import datetime
+from hashlib import md5
+import sys
 
 from pylons import request
 from pylons import tmpl_context as c
 from pylons import app_globals as g
+from pylons.util import PylonsContext, AttribSafeContextObj, ContextObj
+import raven
+from raven.processors import Processor
 from weberror.reporter import Reporter
 
-
-QUEUE_NAME = 'log_q'
-
-
-def _default_dict():
-    return dict(time=datetime.now(g.display_tz),
-                host=g.reddit_host,
-                port="default",
-                pid=g.reddit_pid)
+from r2.lib.app_globals import Globals
 
 
-def log_text(classification, text=None, level="info"):
-    """Send some log text to log_q for appearance in the streamlog.
+def get_operational_exceptions():
+    import _pylibmc
+    import sqlalchemy.exc
+    import pycassa.pool
+    import r2.lib.db.thing
+    import r2.lib.lock
+    import r2.lib.cache
 
-    This is deprecated. All logging should be done through python's stdlib
-    logging library.
-
-    """
-
-    from r2.lib import amqp
-    from r2.lib.filters import _force_utf8
-
-    if text is None:
-        text = classification
-
-    if level not in ('debug', 'info', 'warning', 'error'):
-        print "What kind of loglevel is %s supposed to be?" % level
-        level = 'error'
-
-    d = _default_dict()
-    d['type'] = 'text'
-    d['level'] = level
-    d['text'] = _force_utf8(text)
-    d['classification'] = classification
-
-    amqp.add_item(QUEUE_NAME, cPickle.dumps(d))
+    return (
+        SystemExit,  # gunicorn is shutting us down
+        _pylibmc.MemcachedError,
+        r2.lib.db.thing.NotFound,
+        r2.lib.lock.TimeoutExpired,
+        sqlalchemy.exc.OperationalError,
+        sqlalchemy.exc.IntegrityError,
+        pycassa.pool.AllServersUnavailable,
+        pycassa.pool.NoConnectionAvailable,
+        pycassa.pool.MaximumRetryException,
+    )
 
 
-class LogQueueErrorReporter(Reporter):
-    """ErrorMiddleware-compatible reporter that writes exceptions to log_q.
+class SanitizeStackLocalsProcessor(Processor):
+    keys_to_remove = (
+        "self",
+        "__traceback_supplement__",
+    )
 
-    The log_q queue processor then picks these up, updates the /admin/errors
-    overview, and decides whether or not to send out emails about them.
+    classes_to_remove = (
+        Globals,
+        PylonsContext,
+        AttribSafeContextObj,
+        ContextObj,
+    )
 
-    """
+    def filter_stacktrace(self, data, **kwargs):
+        def remove_keys(obj):
+            if isinstance(obj, dict):
+                for k in obj.keys():
+                    if k in self.keys_to_remove:
+                        obj.pop(k)
+                    elif isinstance(obj[k], self.classes_to_remove):
+                        obj.pop(k)
+                    elif isinstance(obj[k], basestring):
+                        contains_forbidden_repr = any(
+                            _cls.__name__ in obj[k]
+                            for _cls in self.classes_to_remove
+                        )
+                        if contains_forbidden_repr:
+                            obj.pop(k)
+                    elif isinstance(obj[k], (list, dict)):
+                        remove_keys(obj[k])
+            elif isinstance(obj, list):
+                for v in obj:
+                    if isinstance(v, (list, dict)):
+                        remove_keys(v)
 
-    @staticmethod
-    def _operational_exceptions():
-        """Get a list of exceptions caused by transient operational stuff.
+        for frame in data.get('frames', []):
+            if 'vars' in frame:
+                remove_keys(frame['vars'])
 
-        These errors aren't terribly useful to track in /admin/errors because
-        they aren't directly bugs in the code but rather symptoms of
-        operational issues.
+
+class RavenErrorReporter(Reporter):
+    @classmethod
+    def get_module_versions(cls):
+        return {
+            repo: commit_hash[:6]
+            for repo, commit_hash in g.versions.iteritems()
+        }
+
+    @classmethod
+    def add_http_context(cls, client):
+        """Add request details to the 'request' context
+
+        These fields will be filtered by SanitizePasswordsProcessor
+        as long as they are one of 'data', 'cookies', 'headers', 'env', and
+        'query_string'.
 
         """
 
-        import _pylibmc
-        import sqlalchemy.exc
-        import pycassa.pool
-        import r2.lib.db.thing
-        import r2.lib.lock
-        import r2.lib.cache
-
-        return (
-            SystemExit,  # gunicorn is shutting us down
-            _pylibmc.MemcachedError,
-            r2.lib.db.thing.NotFound,
-            r2.lib.lock.TimeoutExpired,
-            sqlalchemy.exc.OperationalError,
-            sqlalchemy.exc.IntegrityError,
-            pycassa.pool.AllServersUnavailable,
-            pycassa.pool.NoConnectionAvailable,
-            pycassa.pool.MaximumRetryException,
+        HEADER_WHITELIST = (
+            "user-agent",
+            "host",
+            "accept",
+            "accept-encoding",
+            "accept-language",
+            "referer",
         )
+        headers = {
+            k: v for k, v in request.headers.iteritems()
+            if k.lower() in HEADER_WHITELIST
+        }
 
-    def report(self, exc_data):
-        from r2.lib import amqp
+        client.http_context({
+            "url": request.path,
+            "method": request.method,
+            "query_string": request.query_string,
+            "data": request.body,
+            "headers": headers,
+        })
 
-        if issubclass(exc_data.exception_type, self._operational_exceptions()):
+        if "app" in request.GET:
+            client.tags_context({"app": request.GET["app"]})
+
+    @classmethod
+    def add_reddit_context(cls, client):
+        reddit_context = {
+            "language": c.lang,
+            "render_style": c.render_style,
+        }
+
+        if c.site:
+            reddit_context["subreddit"] = c.site.name
+
+        client.extra_context(reddit_context)
+
+    @classmethod
+    def add_user_context(cls, client):
+        user_context = {}
+
+        if c.user_is_loggedin:
+            user_context["user"] = c.user._id
+
+        if c.oauth2_client:
+            user_context["oauth_client_id"] = c.oauth2_client._id
+            user_context["oauth_client_name"] = c.oauth2_client.name
+
+        client.user_context(user_context)
+
+    @classmethod
+    def get_raven_client(cls):
+        app_path_prefixes = [
+            "r2",
+            "reddit_",  # plugins such as 'reddit_liveupdate'
+            "/opt/",    # scripts may be run from /opt/REPO/scripts
+        ]
+        release_str = '|'.join(
+           "%s:%s" % (repo, commit_hash)
+           for repo, commit_hash in sorted(g.versions.items())
+        )
+        release_hash = md5(release_str).hexdigest()
+
+        RAVEN_CLIENT = raven.Client(
+            dsn=g.sentry_dsn,
+            # use the default transport to send errors from another thread:
+            transport=raven.transport.threaded.ThreadedHTTPTransport,
+            include_paths=app_path_prefixes,
+            processors=[
+                'raven.processors.SanitizePasswordsProcessor',
+                'r2.lib.log.SanitizeStackLocalsProcessor',
+            ],
+            release=release_hash,
+            environment=g.pool_name,
+            include_versions=False,     # handled by get_module_versions
+            install_sys_hook=False,
+        )
+        return RAVEN_CLIENT
+
+    @classmethod
+    def capture_exception(cls, exc_info=None):
+        if exc_info is None:
+            # if possible exc_info should be captured as close to the exception
+            # as possible and passed in because sys.exc_info() can give
+            # unexpected behavior
+            exc_info = sys.exc_info()
+
+        if issubclass(exc_info[0], get_operational_exceptions()):
             return
 
-        d = _default_dict()
-        d["type"] = "exception"
-        d["exception_type"] = exc_data.exception_type.__name__
-        d["exception_desc"] = exc_data.exception_value
-        # use the format that log_q expects; same as traceback.extract_tb
-        d["traceback"] = [(f.filename, f.lineno, f.name,
-                           f.get_source_line().strip())
-                          for f in exc_data.frames]
+        client = cls.get_raven_client()
 
-        amqp.add_item(QUEUE_NAME, cPickle.dumps(d))
+        if g.running_as_script:
+            # scripts are run like:
+            # paster run INIFILE -c "python code to execute"
+            # OR
+            # paster run INIFILE script.py
+            # either way sys.argv[-1] will tell us the entry point to the error
+            culprit = 'script: "%s"' % sys.argv[-1]
+        else:
+            cls.add_http_context(client)
+            cls.add_reddit_context(client)
+            cls.add_user_context(client)
+
+            routes_dict = request.environ["pylons.routes_dict"]
+            controller = routes_dict.get("controller", "unknown")
+            action = routes_dict.get("action", "unknown")
+            culprit = "%s.%s" % (controller, action)
+
+        try:
+            client.captureException(
+                exc_info=exc_info,
+                data={
+                    "modules": cls.get_module_versions(),
+                    "culprit": culprit,
+                },
+            )
+        finally:
+            client.context.clear()
+
+    def report(self, exc_data):
+        self.capture_exception()
 
 
 def write_error_summary(error):

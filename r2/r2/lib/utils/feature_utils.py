@@ -20,16 +20,19 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from reddit_base import RedditController
-from r2.lib.pages import Reddit, AdminErrorLog
-from r2.lib.validator import validate, VEmployee
+from pylons import app_globals as g
+from pylons import request
+from pylons import tmpl_context as c
 
-class ErrorlogController(RedditController):
-    @validate(VEmployee())
-    def GET_index(self):
-        res = Reddit(
-            content=AdminErrorLog(),
-            title='error log',
-            show_sidebar=False,
-        ).render()
-        return res
+from r2.config import feature
+
+
+def is_tracking_link_enabled(link=None, element_name=None):
+    if c.user_is_admin:
+        return False  # Less noise while admin mode enabled, esp. in usernotes
+    if element_name and element_name.startswith('trending_sr'):
+        return True
+    if feature.is_enabled('utm_comment_links'):
+        return True
+    return False
+

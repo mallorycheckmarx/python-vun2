@@ -1,6 +1,7 @@
 import datetime
 
 from pycassa.batch import Mutator
+from pycassa.system_manager import ASCII_TYPE
 from pylons import app_globals as g
 import pytz
 
@@ -21,8 +22,8 @@ class IPsByAccount(tdb_cassandra.View):
 
     _use_db = True
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.ASCII_TYPE,
+        "key_validation_class": ASCII_TYPE,
+        "default_validation_class": ASCII_TYPE,
     }
     _compare_with = tdb_cassandra.DateType()
     _ttl = CF_TTL
@@ -81,8 +82,8 @@ class AccountsByIP(tdb_cassandra.View):
 
     _use_db = True
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.ASCII_TYPE,
+        "key_validation_class": ASCII_TYPE,
+        "default_validation_class": ASCII_TYPE,
     }
     _compare_with = tdb_cassandra.DateType()
     _ttl = CF_TTL
@@ -136,9 +137,10 @@ def set_account_ip(account_id, ip, date=None):
 
     Updates all underlying datastores.
     """
-    # don't store private IPs, send a graphite event so we can alert on this
+    # don't store private IPs, send event + string so we can investigate this
     if ip_address(ip).is_private:
         g.stats.simple_event('ip.private_ip_storage_prevented')
+        g.stats.count_string('private_ip_storage_prevented', ip)
         return
 
     if date is None:

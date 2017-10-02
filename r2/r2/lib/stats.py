@@ -27,6 +27,7 @@ import random
 import socket
 import time
 import threading
+import random
 
 from pycassa import columnfamily
 from pycassa import pool
@@ -354,18 +355,17 @@ class Stats:
                 # Work the same for amqp.consume_items and amqp.handle_items.
                 msg_tup = utils.tup(msgs)
 
-                baseplate_integration.start_root_span("amqp." + queue_name)
+                metrics_name = "amqp." + queue_name
                 start = time.time()
                 try:
-                    return processor(msgs, *args)
+                    with baseplate_integration.make_server_span(metrics_name):
+                        return processor(msgs, *args)
                 finally:
                     service_time = (time.time() - start) / len(msg_tup)
                     for n, msg in enumerate(msg_tup):
                         fake_start = start + n * service_time
                         fake_end = fake_start + service_time
-                        self.transact('amqp.%s' % queue_name,
-                                      fake_start, fake_end)
-                    baseplate_integration.stop_root_span()
+                        self.transact(metrics_name, fake_start, fake_end)
                     self.flush()
             return wrap_processor
         return decorator
@@ -379,26 +379,51 @@ class Stats:
     def end_logging_timings(self):
         return self.client.timing_stats.end_logging()
 
-    def cassandra_event(self, operation, column_families, success,
-                        start, end):
+    def cf_key_iter(self, operation, column_families, suffix):
         if not self.client:
             return
         if not isinstance(column_families, list):
             column_families = [column_families]
         for cf in column_families:
-            key = '.'.join([
-                'cassandra', cf, operation,
-                self.CASSANDRA_KEY_SUFFIXES[success]])
+            yield '.'.join(['cassandra', cf, operation, suffix])
+
+    def cassandra_timing(self, operation, column_families, success,
+                         start, end):
+        suffix = self.CASSANDRA_KEY_SUFFIXES[success]
+        for key in self.cf_key_iter(operation, column_families, suffix):
             self.client.timing_stats.record(key, start, end)
+
+    def cassandra_counter(self, operation, column_families, suffix, delta):
+        for key in self.cf_key_iter(operation, column_families, suffix):
+            self.client.counting_stats.record(key, delta)
 
     def pg_before_cursor_execute(self, conn, cursor, statement, parameters,
                                context, executemany):
+        from pylons import tmpl_context as c
+
         context._query_start_time = time.time()
+
+        try:
+            c.trace
+        except TypeError:
+            # the tmpl_context global isn't available out of request
+            return
+
+        if c.trace:
+            context.pg_child_trace = c.trace.make_child("postgres")
+            context.pg_child_trace.start()
 
     def pg_after_cursor_execute(self, conn, cursor, statement, parameters,
                               context, executemany):
         dsn = dict(part.split('=', 1)
                    for part in context.engine.url.query['dsn'].split())
+
+        if getattr(context, "pg_child_trace", None):
+            context.pg_child_trace.set_tag("host", dsn["host"])
+            context.pg_child_trace.set_tag("db", dsn["dbname"])
+            context.pg_child_trace.set_tag("statement", statement)
+            context.pg_child_trace.finish()
+
         start = context._query_start_time
         self.pg_event(dsn['host'], dsn['dbname'], start, time.time())
 
@@ -410,7 +435,7 @@ class Stats:
 
     def count_string(self, key, value, count=1):
         self.client.string_counts.record(key, str(value), count=count)
-   
+
 
 class CacheStats:
     def __init__(self, parent, cache_name):
@@ -532,25 +557,55 @@ class StatsCollectingConnectionPool(pool.ConnectionPool):
 
         def record_error(method_name, cf_name, start, end):
             if cf_name and self.stats:
-                self.stats.cassandra_event(method_name, cf_name, False,
+                self.stats.cassandra_timing(method_name, cf_name, False,
                                            start, end)
 
         def record_success(method_name, cf_name, start, end):
             if cf_name and self.stats:
-                self.stats.cassandra_event(method_name, cf_name, True,
+                self.stats.cassandra_timing(method_name, cf_name, True,
                                            start, end)
 
-        def instrument(f, get_cf_name):
+        def record_size(method_name, cf_name, result, key="size"):
+            if cf_name and self.stats:
+                # if we don't have easy access to the wire-size, we can
+                # proxy because thrift objects have descriptive reprs
+                size = len(repr(result))
+                self.stats.cassandra_counter(method_name, cf_name, key, size)
+
+        # size_sample determines how often we measure and track the size
+        # of the response from cassandra.
+        def instrument(f, get_cf_name, size_sample=0.01):
             def call_with_instrumentation(*args, **kwargs):
+                from pylons import tmpl_context as c
+
                 cf_name = get_cf_name(args, kwargs)
+                method_name = f.__name__
+
+                try:
+                    c.trace
+                except TypeError:
+                    # the tmpl_context global isn't available out of request
+                    cassandra_child_trace = utils.SimpleSillyStub()
+                else:
+                    if c.trace:
+                        cassandra_child_trace = c.trace.make_child("cassandra")
+                        cassandra_child_trace.set_tag("column_family", cf_name)
+                        cassandra_child_trace.set_tag("method", method_name)
+                    else:
+                        cassandra_child_trace = utils.SimpleSillyStub()
+
                 start = time.time()
                 try:
-                    result = f(*args, **kwargs)
+                    with cassandra_child_trace:
+                        result = f(*args, **kwargs)
                 except:
-                    record_error(f.__name__, cf_name, start, time.time())
+                    record_error(method_name, cf_name, start, time.time())
                     raise
                 else:
-                    record_success(f.__name__, cf_name, start, time.time())
+                    if random.random() < size_sample:
+                        record_size(method_name, cf_name, result)
+
+                    record_success(method_name, cf_name, start, time.time())
                     return result
             return call_with_instrumentation
 
@@ -559,4 +614,3 @@ class StatsCollectingConnectionPool(pool.ConnectionPool):
             f = getattr(wrapper, method_name)
             setattr(wrapper, method_name, instrument(f, get_cf_name))
         return wrapper
-

@@ -894,7 +894,7 @@ class MinimalController(BaseController):
         else:
             c.request_timer = SimpleSillyStub()
 
-        baseplate_integration.start_root_span(span_name=key)
+        baseplate_integration.make_server_span(span_name=key).start()
 
         c.response_wrapper = None
         c.start_time = datetime.now(g.tz)
@@ -1031,8 +1031,12 @@ class MinimalController(BaseController):
 
         c.request_timer.intermediate("post")
 
+        # add tags to the trace
+        c.trace.set_tag("user", c.user._fullname if c.user_is_loggedin else None)
+        c.trace.set_tag("render_style", c.render_style)
+
         # push data to statsd
-        baseplate_integration.stop_root_span()
+        baseplate_integration.finish_server_span()
         c.request_timer.stop()
         g.stats.flush()
 

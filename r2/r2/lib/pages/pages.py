@@ -87,7 +87,6 @@ from r2.models.promo import (
     NO_TRANSACTION,
     PROMOTE_COST_BASIS,
     PROMOTE_PRIORITIES,
-    PromotedLinkRoadblock,
     PromotionLog,
     Collection,
 )
@@ -145,12 +144,16 @@ from r2.lib.template_helpers import (
     static,
 )
 from r2.lib.subreddit_search import popular_searches
-from r2.lib.log import log_text
 from r2.lib.memoize import memoize
 from r2.lib.utils import trunc_string as _truncate, to_date
 from r2.lib.filters import safemarkdown
-from r2.lib.utils import Storage, tup, url_is_embeddable_image
-from r2.lib.utils import precise_format_timedelta
+from r2.lib.utils import (
+    Storage,
+    feature_utils,
+    precise_format_timedelta,
+    tup,
+    url_is_embeddable_image,
+)
 from r2.lib.cache import make_key_id, MemcachedError
 
 from babel.numbers import format_currency
@@ -289,6 +292,11 @@ class Reddit(Templated):
         self.mobilewebredirectbar = None
         self.show_timeout_modal = False
 
+        if feature.is_enabled("new_expando_icons"):
+            self.feature_new_expando_icons = True
+        if feature.is_enabled("expando_nsfw_flow"):
+            self.feature_expando_nsfw_flow = True
+
         # generate a canonical link for google
         canonical_url = UrlParser(canonical_link or request.url)
         canonical_url.canonicalize()
@@ -301,12 +309,6 @@ class Reddit(Templated):
             if g.domain_prefix:
                 u.hostname = "%s.%s" % (g.domain_prefix, u.hostname)
             self.canonical_link = u.unparse()
-
-        # Generate a mobile link for Google.
-        u = UrlParser(request.fullpath)
-        u.switch_subdomain_by_extension('mobile')
-        u.scheme = 'https'
-        self.mobile_link = u.unparse()
 
         if self.show_infobar:
             if not infotext:
@@ -340,12 +342,6 @@ class Reddit(Templated):
                     message=infotext,
                     extra_class=infotext_class,
                     show_icon=infotext_show_icon,
-                )
-            elif (isinstance(c.site, DomainSR) and
-                    is_subdomain(c.site.domain, "imgur.com")):
-                self.infobar = RedditInfoBar(message=
-                    _("imgur.com domain listings (including this one) are "
-                      "currently disabled to speed up vote processing.")
                 )
             elif isinstance(c.site, AllMinus) and not c.user.gold:
                 self.infobar = RedditInfoBar(message=strings.all_minus_gold_only,
@@ -1295,8 +1291,10 @@ class PrefOptions(Templated):
                     use_other_theme = False
                     theme.checked = True
 
+        feature_autoexpand_media_previews = feature.is_enabled("autoexpand_media_previews")
         Templated.__init__(self, done=done,
                 error_style_override=error_style_override,
+                feature_autoexpand_media_previews=feature_autoexpand_media_previews,
                 generic_error=generic_error, themes=themes, use_other_theme=use_other_theme)
 
 
@@ -1739,7 +1737,13 @@ class LinkInfoPage(Reddit):
             self.num_duplicates = num_duplicates
 
         self.show_promote_button = show_promote_button
-        robots = "noindex,nofollow" if link._deleted or link._spam else None
+        if link._deleted or link._spam:
+            robots = "noindex,nofollow"
+        elif comment:
+            # We don't want crawlers to index the comment permalink pages.
+            robots = "noindex"
+        else:
+            robots = None
 
         if 'extra_js_config' not in kw:
             kw['extra_js_config'] = {}
@@ -1986,7 +1990,7 @@ class CommentPane(Templated):
         elif num > 100:
             num = (num / 10) * 10
 
-        _id = make_key_id(
+        cache_key_args = [
             self.article._fullname,
             self.article.contest_mode,
             self.article.locked,
@@ -2002,7 +2006,12 @@ class CommentPane(Templated):
             c.can_embed,
             self.max_depth,
             self.edits_visible,
-        )
+        ]
+
+        if feature_utils.is_tracking_link_enabled(self.article):
+            cache_key_args.append("utm_comment_links")
+
+        _id = make_key_id(*cache_key_args)
         key = "pane:%s" % _id
         return key
 
@@ -2996,12 +3005,14 @@ class CreateSubreddit(Templated):
     """reddit creation form."""
     def __init__(self, site = None, name = '', captcha=None):
         allow_image_upload = site and not site.quarantine
+        feature_autoexpand_media_previews = feature.is_enabled("autoexpand_media_previews")
         Templated.__init__(self,
                            site=site,
                            name=name,
                            captcha=captcha,
                            comment_sorts=CommentSortMenu.visible_options(),
                            allow_image_upload=allow_image_upload,
+                           feature_autoexpand_media_previews=feature_autoexpand_media_previews,
                            )
         self.color_options = Subreddit.KEY_COLORS
         self.subreddit_selector = SubredditSelector(
@@ -3698,75 +3709,6 @@ class UserAwards(Templated):
             else:
                 raise NotImplementedError
 
-class AdminErrorLog(Templated):
-    """The admin page for viewing the error log"""
-    def __init__(self):
-        hcb = g.hardcache.backend
-
-        date_groupings = {}
-        hexkeys_seen = {}
-
-        idses = hcb.ids_by_category("error", limit=5000)
-        errors = g.hardcache.get_multi(prefix="error-", keys=idses)
-
-        for ids in idses:
-            date, hexkey = ids.split("-")
-
-            hexkeys_seen[hexkey] = True
-
-            d = errors.get(ids, None)
-
-            if d is None:
-                log_text("error=None", "Why is error-%s None?" % ids,
-                         "warning")
-                continue
-
-            tpl = (d.get('times_seen', 1), hexkey, d)
-            date_groupings.setdefault(date, []).append(tpl)
-
-        self.nicknames = {}
-        self.statuses = {}
-
-        nicks = g.hardcache.get_multi(prefix="error_nickname-",
-                                      keys=hexkeys_seen.keys())
-        stati = g.hardcache.get_multi(prefix="error_status-",
-                                      keys=hexkeys_seen.keys())
-
-        for hexkey in hexkeys_seen.keys():
-            self.nicknames[hexkey] = nicks.get(hexkey, "???")
-            self.statuses[hexkey] = stati.get(hexkey, "normal")
-
-        idses = hcb.ids_by_category("logtext")
-        texts = g.hardcache.get_multi(prefix="logtext-", keys=idses)
-
-        for ids in idses:
-            date, level, classification = ids.split("-", 2)
-            textoccs = []
-            dicts = texts.get(ids, None)
-            if dicts is None:
-                log_text("logtext=None", "Why is logtext-%s None?" % ids,
-                         "warning")
-                continue
-            for d in dicts:
-                textoccs.append( (d['text'], d['occ'] ) )
-
-            sort_order = {
-                'error': -1,
-                'warning': -2,
-                'info': -3,
-                'debug': -4,
-                }[level]
-
-            tpl = (sort_order, level, classification, textoccs)
-            date_groupings.setdefault(date, []).append(tpl)
-
-        self.date_summaries = []
-
-        for date in sorted(date_groupings.keys(), reverse=True):
-            groupings = sorted(date_groupings[date], reverse=True)
-            self.date_summaries.append( (date, groupings) )
-
-        Templated.__init__(self)
 
 class AdminAwards(Templated):
     """The admin page for editing awards"""
@@ -4425,7 +4367,6 @@ class PromotePage(Reddit):
         if c.user_is_sponsor:
             buttons = [
                 NavButton(menu['new_promo'], dest='/promoted/new_promo'),
-                NavButton(menu['roadblock'], dest='/sponsor/roadblock'),
                 NavButton(menu['current_promos'], dest='/sponsor/promoted',
                           aliases=['/sponsor']),
                 NavButton('inventory', '/sponsor/inventory'),
@@ -4774,19 +4715,17 @@ class RefundPage(Reddit):
         self.traffic_url = '/traffic/%s/%s' % (link._id36, campaign._id36)
         Reddit.__init__(self, title="refund", show_sidebar=False)
 
-
-class Roadblocks(PromoteLinkBase):
+class PromotePost(PromoteLinkBase):
     def __init__(self):
-        self.roadblocks = PromotedLinkRoadblock.get_roadblocks()
-        Templated.__init__(self)
-        # reference "now" to what we use for promtions
-        now = promote.promo_datetime_now()
+        PromoteLinkBase.__init__(self)
 
-        startdate = now + datetime.timedelta(1)
-        enddate   = startdate + datetime.timedelta(1)
 
-        self.default_start = startdate.strftime('%m/%d/%Y')
-        self.default_end = enddate.strftime('%m/%d/%Y')
+class SponsorLookupUser(PromoteLinkBase):
+    def __init__(self, id_user=None, email=None, email_users=None):
+        PromoteLinkBase.__init__(
+            self, id_user=id_user, email=email, email_users=email_users or [])
+
+
 
 
 class SponsorLookupUser(PromoteLinkBase):
@@ -4810,18 +4749,21 @@ class TabbedPane(Templated):
         Templated.__init__(self, linkable=linkable)
 
 class LinkChild(object):
-    def __init__(self, link, load = False, expand = False, nofollow = False):
+    def __init__(self, link, load=False, expand=False, nofollow=False,
+                 position_inline=False):
         self.link = link
         self.expand = expand
         self.load = load or expand
         self.nofollow = nofollow
+        self.position_inline = position_inline
 
     def content(self):
         return ''
 
-def make_link_child(item):
+def make_link_child(item, show_media_preview=False):
     link_child = None
     editable = False
+    expandable = getattr(item, 'expand_children', False)
 
     # if the item has a media_object, try to make a MediaEmbed for rendering
     if not c.secure:
@@ -4832,12 +4774,14 @@ def make_link_child(item):
     if media_object:
         media_embed = None
         expand = False
+        position_inline = False
 
         if isinstance(media_object, basestring):
             media_embed = media_object
         else:
-            expand = (media_object.get('type') in g.autoexpand_media_types and
-                      getattr(item, 'expand_children', False))
+            is_autoexpand_type = media_object.get('type') in g.autoexpand_media_types
+            expand = expandable and (show_media_preview or is_autoexpand_type)
+            position_inline = expandable and is_autoexpand_type
 
             try:
                 media_embed = media.get_media_embed(media_object)
@@ -4866,21 +4810,48 @@ def make_link_child(item):
             link_child = MediaChild(item,
                                     media_embed,
                                     load=True,
-                                    expand=expand)
+                                    expand=expand,
+                                    position_inline=position_inline)
 
     # if the item is_self, add a selftext child
     elif item.is_self:
         if not item.selftext: item.selftext = u''
 
-        expand = getattr(item, 'expand_children', False)
-
+        expand = expandable
+        position_inline = expandable
         editable = (expand and
                     item.author == c.user and
                     not item._deleted)
-        link_child = SelfTextChild(item, expand = expand,
-                                   nofollow = item.nofollow)
+        link_child = SelfTextChild(item,
+                                   expand=expand,
+                                   nofollow=item.nofollow,
+                                   position_inline=position_inline)
+    # if the item has a preview image and is on the whitelist, show it
+    elif (feature.is_enabled('media_previews') and
+            item.preview_object and
+            media.allowed_media_preview_url(item.url)):
+        media_object = media.get_preview_image(
+            item.preview_object,
+            include_censored=item.nsfw,
+        )
+        expand = show_media_preview and expandable
+
+        if media_object:
+            media_preview = MediaPreview(
+                media_object=media_object,
+                id36=item._id36,
+                url=item.url,
+            )
+            link_child = MediaChild(
+                item,
+                media_preview,
+                load=True,
+                expand=expand,
+                position_inline=False,
+            )
 
     return link_child, editable
+
 
 class MediaChild(LinkChild):
     """renders when the user hits the expando button to expand media
@@ -4907,6 +4878,17 @@ class MediaEmbed(Templated):
         else:
             self.credentials = ""
         Templated.__init__(self, *args, **kwargs)
+
+
+class MediaPreview(Templated):
+    """Rendered html container for a media child"""
+
+    def __init__(self, media_object, id36, url, **kwargs):
+        self.media_content = media_object["content"]
+        self.width = media_object["width"]
+        self.id36 = id36
+        self.url = url
+        super(MediaPreview, self).__init__(**kwargs)
 
 
 class SelfTextChild(LinkChild):
@@ -5520,9 +5502,8 @@ class LinkCommentsSettings(Templated):
         self.link = link
         self.is_author = c.user_is_loggedin and c.user._id == link.author_id
         self.contest_mode = link.contest_mode
-        stickied_fullnames = self.sr.get_sticky_fullnames()
-        self.stickied = link._fullname in stickied_fullnames
-        self.stickies_full = len(stickied_fullnames) >= Subreddit.MAX_STICKIES
+        self.stickied = link.is_stickied(self.sr)
+        self.stickies_full = self.sr.has_max_stickies
         self.sendreplies = link.sendreplies
         self.can_edit = (
             c.user_is_loggedin and

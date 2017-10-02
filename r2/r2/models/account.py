@@ -30,6 +30,7 @@ import time
 from pylons import request
 from pylons import tmpl_context as c
 from pylons import app_globals as g
+from pycassa.system_manager import ASCII_TYPE, DATE_TYPE, UTF8_TYPE
 
 from r2.config import feature
 from r2.lib import amqp, filters, hooks
@@ -37,7 +38,6 @@ from r2.lib.db.thing import Thing, Relation, NotFound
 from r2.lib.db.operators import lower
 from r2.lib.db.userrel import UserRel
 from r2.lib.db import tdb_cassandra
-from r2.lib.log import log_text
 from r2.lib.memoize import memoize
 from r2.lib.utils import (
     randstr,
@@ -126,9 +126,11 @@ class Account(Thing):
                      sort_options = {},
                      has_subscribed = False,
                      pref_media = 'subreddit',
+                     pref_media_preview = 'subreddit',
                      wiki_override = None,
                      email = "",
                      email_verified = False,
+                     nsfw_media_acknowledged = False,
                      ignorereports = False,
                      pref_show_promote = None,
                      gold = False,
@@ -364,7 +366,7 @@ class Account(Thing):
             return False
 
         return True
-    
+
     @classmethod
     @memoize('account._by_name')
     def _by_name_cache(cls, name, allow_deleted=False):
@@ -456,20 +458,12 @@ class Account(Thing):
             if _update:
                 raise
             else:
-                log_text("friend-rels-bandaid 1",
-                         "Had to recalc friend_rels (1) for %s" % self.name,
-                         "warning")
                 return self.friend_rels(_update=True)
 
         if not _update:
             sorted_1 = sorted([r._thing2_id for r in rels])
             sorted_2 = sorted(list(self.friends))
             if sorted_1 != sorted_2:
-                g.log.error("FR1: %r" % sorted_1)
-                g.log.error("FR2: %r" % sorted_2)
-                log_text("friend-rels-bandaid 2",
-                         "Had to recalc friend_rels (2) for %s" % self.name,
-                         "warning")
                 self.friend_ids(_update=True)
                 return self.friend_rels(_update=True)
         return dict((r._thing2_id, r) for r in rels)
@@ -484,7 +478,7 @@ class Account(Thing):
         friend_ids = self.friend_ids()
         if len(friend_ids) <= limit:
             return friend_ids
-        
+
         with g.stats.get_timer("friends_query.%s" % data_value_name):
             result = self.sort_ids_by_data_value(
                 friend_ids, data_value_name, limit=limit, desc=True)
@@ -536,7 +530,7 @@ class Account(Thing):
             # New PW doesn't matter, they can't log in with it anyway.
             # Even if their PW /was/ 'banned' for some reason, this
             # will change the salt and thus invalidate the cookies
-            change_password(self, 'banned') 
+            change_password(self, 'banned')
 
             # deauthorize all access tokens
             from r2.models.token import OAuth2AccessToken
@@ -1086,9 +1080,9 @@ class AccountsByCanonicalEmail(tdb_cassandra.View):
     __metaclass__ = tdb_cassandra.ThingMeta
 
     _use_db = True
-    _compare_with = tdb_cassandra.UTF8_TYPE
+    _compare_with = UTF8_TYPE
     _extra_schema_creation_args = dict(
-        key_validation_class=tdb_cassandra.UTF8_TYPE,
+        key_validation_class=UTF8_TYPE,
     )
 
     @classmethod
@@ -1111,15 +1105,15 @@ class AccountsByCanonicalEmail(tdb_cassandra.View):
             return []
         account_id36s = cls.get_time_sorted_columns(canonical).keys()
         return Account._byID36(account_id36s, data=True, return_dict=False)
-    
+
 
 class SubredditParticipationByAccount(tdb_cassandra.DenormalizedRelation):
     _use_db = True
     _write_last_modified = False
     _views = []
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.DATE_TYPE,
+        "key_validation_class": ASCII_TYPE,
+        "default_validation_class": DATE_TYPE,
     }
 
     @classmethod
@@ -1137,8 +1131,8 @@ class QuarantinedSubredditOptInsByAccount(tdb_cassandra.DenormalizedRelation):
     _read_consistency_level = tdb_cassandra.CL.QUORUM
     _write_consistency_level = tdb_cassandra.CL.QUORUM
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.DATE_TYPE,
+        "key_validation_class": ASCII_TYPE,
+        "default_validation_class": DATE_TYPE,
     }
     _connection_pool = 'main'
     _views = []

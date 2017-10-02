@@ -39,10 +39,9 @@ from pycassa.system_manager import (
     TIME_UUID_TYPE,
     UTF8_TYPE,
 )
-from pycassa.types import DateType, LongType, IntegerType
+from pycassa.types import DateType
 from pycassa.util import convert_uuid_to_time
 from r2.lib.utils import tup, Storage
-from r2.lib import cache
 from r2.lib.sgm import sgm
 from uuid import uuid1, UUID
 from itertools import chain
@@ -189,35 +188,6 @@ class ThingMeta(type):
 
     def __repr__(cls):
         return '<thing: %s>' % cls.__name__
-
-class Counter(object):
-    __metaclass__ = ThingMeta
-
-    _use_db = False
-    _connection_pool = 'main'
-    _extra_schema_creation_args = {
-        'default_validation_class': COUNTER_COLUMN_TYPE,
-        'replicate_on_write': True
-    }
-
-    _type_prefix = None
-    _cf_name = None
-    _compare_with = UTF8_TYPE
-
-    @classmethod
-    def _byID(cls, key):
-        return cls._cf.get(key)
-
-    @classmethod
-    @will_write
-    def _incr(cls, key, column, delta=1, super_column=None):
-        cls._cf.add(key, column, delta, super_column)
-
-    @classmethod
-    @will_write
-    def _incr_multi(cls, key, data):
-        with cls._cf.batch() as b:
-            b.insert(key, data)
 
 
 class ThingBase(object):

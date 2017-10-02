@@ -20,15 +20,22 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
+from pycassa.system_manager import ASCII_TYPE, UTF8_TYPE
+from pycassa.types import LongType
+
 from r2.config import feature
 from r2.lib.db.thing import (
     Thing, Relation, NotFound, MultiRelation, CreationError)
 from r2.lib.db.operators import desc
 from r2.lib.errors import RedditError
+from r2.lib.tracking import (
+    get_site,
+)
 from r2.lib.utils import (
     base_url,
     domain,
     epoch_timestamp,
+    feature_utils,
     strip_www,
     timesince,
     title_to_url,
@@ -54,13 +61,11 @@ from r2.lib.memoize import memoize
 from r2.lib.wrapped import Wrapped
 from r2.lib.filters import _force_utf8, _force_unicode
 from r2.lib import hooks, utils
-from r2.lib.log import log_text
 from mako.filters import url_escape
 from r2.lib.strings import strings, Score
 from r2.lib.db import tdb_cassandra, sorts
 from r2.lib.db.tdb_cassandra import view_of
 from r2.lib.utils import sanitize_url
-from r2.lib.voting import cast_vote
 from r2.models.gold import (
     GildedCommentsByAccount,
     GildedLinksByAccount,
@@ -130,7 +135,6 @@ class Link(Thing, Printable):
                      flair_text=None,
                      flair_css_class=None,
                      contest_mode=False,
-                     skip_commentstree_q="",
                      sticky_comment_id=None,
                      ignore_reports=False,
                      gildings=0,
@@ -152,16 +156,6 @@ class Link(Thing, Printable):
 
     def __init__(self, *a, **kw):
         Thing.__init__(self, *a, **kw)
-
-    @property
-    def vote_queue_name(self):
-        if self._id36 in g.live_config["fastlane_links"]:
-            return "vote_fastlane_q"
-        else:
-            if g.shard_link_vote_queues:
-                return "vote_link_%s_q" % str(self.sr_id)[-1]
-            else:
-                return "vote_link_q"
 
     @property
     def affects_karma_type(self):
@@ -219,6 +213,7 @@ class Link(Thing, Printable):
     @classmethod
     def _submit(cls, is_self, title, content, author, sr, ip,
                 sendreplies=True):
+        from r2.lib.voting import cast_vote
         from r2.models import admintools
         from r2.models.comment_tree import CommentTree
 
@@ -480,6 +475,62 @@ class Link(Thing, Printable):
         title = title.replace("]", r"\]")
         return "[%s](%s)" % (title, self.make_permalink_slow())
 
+    @classmethod
+    def tracking_link(cls,
+                      link,
+                      wrapped_thing=None,
+                      element_name=None,
+                      context=None,
+                      site_name=None):
+        """Add utm query parameters to reddit.com links to track navigation.
+
+        context => ?utm_medium (listing page, post listing on hybrid page)
+        site_name => ?utm_name (subreddit that user is currently browsing)
+        element_name => ?utm_content (what element leads to this link)
+        """
+
+        if (c.user_is_admin or
+                not feature.is_enabled('utm_comment_links')):
+            return link
+
+        urlparser = UrlParser(link)
+        if not urlparser.path:
+            # `href="#some_anchor"`
+            return link
+        if urlparser.scheme == 'javascript':
+            return link
+        if not urlparser.is_reddit_url():
+            return link
+
+        query_params = {}
+
+        query_params["utm_source"] = "reddit"
+
+        if context is None:
+            if (hasattr(wrapped_thing, 'context') and
+                    wrapped_thing.context != cls.get_default_context()):
+                context = wrapped_thing.context
+            else:
+                context = request.route_dict["controller"]
+        if context:
+            query_params["utm_medium"] = context
+
+        if element_name:
+            query_params["utm_content"] = element_name
+
+        if site_name is None:
+            site_name = get_site()
+        if site_name:
+            query_params["utm_name"] = site_name
+
+        query_params = {k: v for (k, v) in query_params.iteritems() if (
+                        v is not None)}
+
+        if query_params:
+            urlparser.update_query(**query_params)
+            return urlparser.unparse()
+        return link
+
     def _gild(self, user):
         now = datetime.now(g.tz)
 
@@ -544,6 +595,7 @@ class Link(Thing, Printable):
         user_is_admin = c.user_is_admin
         user_is_loggedin = c.user_is_loggedin
         pref_media = user.pref_media
+        pref_media_preview = user.pref_media_preview
         site = c.site
 
         saved = hidden = visited = {}
@@ -616,6 +668,13 @@ class Link(Thing, Printable):
                 elif pref_media != 'off' and not user.pref_compress:
                     show_media = True
 
+            show_media_preview = False
+            if feature.is_enabled('autoexpand_media_previews'):
+                if pref_media_preview == "on":
+                    show_media_preview = True
+                elif pref_media_preview == "subreddit" and item.subreddit.show_media_preview:
+                    show_media_preview = True
+
             item.over_18 = item.over_18 or item.subreddit.over_18
             item.nsfw = item.over_18 and user.pref_label_nsfw
 
@@ -658,6 +717,8 @@ class Link(Thing, Printable):
                 item.thumbnail = "default"
                 item.thumbnail_sprited = True
                 item.preview_image = getattr(item, 'preview_object', None)
+
+            item.show_media_preview = show_media_preview
 
             item.score = max(0, item.score)
 
@@ -768,7 +829,7 @@ class Link(Thing, Printable):
             item.different_sr = (isinstance(site, FakeSubreddit) or
                                  site.name != item.subreddit.name)
 
-            item.stickied = item._fullname in item.subreddit.get_sticky_fullnames()
+            item.stickied = item.is_stickied(item.subreddit)
 
             # we only want to style a sticky specially if we're inside the
             # subreddit that it's stickied in (not in places like front page)
@@ -780,7 +841,8 @@ class Link(Thing, Printable):
                 item.domain_path = item.subreddit_path
 
             # attach video or selftext as needed
-            item.link_child, item.editable = make_link_child(item)
+            item.link_child, item.editable = make_link_child(item, show_media_preview)
+            item.feature_media_previews = feature.is_enabled("media_previews")
 
             if item.is_self and not item.promoted:
                 item.href_url = item.permalink
@@ -877,11 +939,20 @@ class Link(Thing, Printable):
             # This is passed in promotedlink.html
             item.ads_auction_enabled = feature.is_enabled('ads_auction')
 
+            if feature_utils.is_tracking_link_enabled(item):
+                # Split cache for template rendered with tracking link
+                item.use_tracking_link = True
+
         if user_is_loggedin:
             incr_counts(wrapped)
 
+
         # Run this last
         Printable.add_props(user, wrapped)
+
+    @classmethod
+    def get_default_context(cls):
+        return request.route_dict["action_name"]
 
     @property
     def post_hint(self):
@@ -1103,14 +1174,27 @@ class Link(Thing, Printable):
 
         return True
 
+    @property
+    def is_stickied_slow(self):
+        return self.is_stickied(self.subreddit_slow)
+
+    def is_stickied(self, subreddit):
+        if not subreddit.sticky_fullnames:
+            return False
+
+        if self._fullname in subreddit.sticky_fullnames:
+            return True
+
+        return False
+
 
 class LinksByUrlAndSubreddit(tdb_cassandra.View):
     _use_db = True
     _connection_pool = 'main'
     _read_consistency_level = tdb_cassandra.CL.ONE
-    _compare_with = tdb_cassandra.LongType()
+    _compare_with = LongType()
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.UTF8_TYPE,
+        "key_validation_class": UTF8_TYPE,
     }
 
     @classmethod
@@ -1264,19 +1348,14 @@ class Comment(Thing, Printable):
         pass
 
     @property
-    def vote_queue_name(self):
-        if utils.to36(self.link_id) in g.live_config["fastlane_links"]:
-            return "vote_fastlane_q"
-        else:
-            return "vote_comment_q"
-
-    @property
     def affects_karma_type(self):
         return "comment"
 
     @classmethod
     def _new(cls, author, link, parent, body, ip):
         from r2.lib.emailer import message_notification_email
+        from r2.lib.voting import cast_vote
+
         subreddit = link.subreddit_slow
 
         # determine whether the comment should go straight into spam
@@ -2729,7 +2808,7 @@ class LinksByImage(tdb_cassandra.View):
     _fetch_all_columns = True
 
     _extra_schema_creation_args = {
-        'key_validation_class': tdb_cassandra.ASCII_TYPE,
+        'key_validation_class': ASCII_TYPE,
     }
 
     @classmethod
@@ -2984,7 +3063,7 @@ class CommentVisitsByUser(tdb_cassandra.View):
     _ttl = timedelta(days=2)
     _compare_with = tdb_cassandra.DateType()
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+        "key_validation_class": ASCII_TYPE,
     }
     MAX_VISITS = 10
 

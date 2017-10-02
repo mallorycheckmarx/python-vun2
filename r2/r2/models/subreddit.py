@@ -32,7 +32,7 @@ import struct
 
 from pycassa import types
 from pycassa.util import convert_uuid_to_time
-from pycassa.system_manager import DATE_TYPE
+from pycassa.system_manager import ASCII_TYPE, DATE_TYPE, FLOAT_TYPE, UTF8_TYPE
 from pylons import request
 from pylons import tmpl_context as c
 from pylons import app_globals as g
@@ -122,6 +122,7 @@ class BaseSite(object):
         header=None,
         header_title='',
         login_required=False,
+        sticky_fullnames=None,
     )
 
     def __getattr__(self, name):
@@ -206,10 +207,6 @@ class BaseSite(object):
     def get_live_promos(self):
         raise NotImplementedError
 
-    def get_sticky_fullnames(self):
-        # return empty list for "special" subreddits, overridden in Subreddit
-        return []
-
 
 class SubredditExists(Exception): pass
 
@@ -229,6 +226,7 @@ class Subreddit(Thing, Printable, BaseSite):
         reported=0,
         valid_votes=0,
         show_media=False,
+        show_media_preview=True,
         domain=None,
         suggested_comment_sort=None,
         wikimode="disabled",
@@ -412,16 +410,17 @@ class Subreddit(Thing, Printable, BaseSite):
     _specials = {}
 
     SRNAME_NOTFOUND = "n"
+    SRNAME_TTL = int(datetime.timedelta(hours=12).total_seconds())
 
     @classmethod
     def _by_name(cls, names, stale=False, _update = False):
         '''
-        Usages: 
+        Usages:
         1. Subreddit._by_name('funny') # single sr name
-        Searches for a single subreddit. Returns a single Subreddit object or 
+        Searches for a single subreddit. Returns a single Subreddit object or
         raises NotFound if the subreddit doesn't exist.
         2. Subreddit._by_name(['aww','iama']) # list of sr names
-        Searches for a list of subreddits. Returns a dict mapping srnames to 
+        Searches for a list of subreddits. Returns a dict mapping srnames to
         Subreddit objects. Items that were not found are ommitted from the dict.
         If no items are found, an empty dict is returned.
         '''
@@ -470,7 +469,8 @@ class Subreddit(Thing, Printable, BaseSite):
                         optimize_rules=True,
                         data=True,
                     )
-                    fetched = {sr.name.lower(): sr._id for sr in q}
+                    with g.stats.get_timer('subreddit_by_name'):
+                        fetched = {sr.name.lower(): sr._id for sr in q}
                     srids_by_name.update(fetched)
 
                     still_missing = set(srnames) - set(fetched)
@@ -479,7 +479,7 @@ class Subreddit(Thing, Printable, BaseSite):
                         g.gencache.set_multi(
                             keys=fetched,
                             prefix='srid:',
-                            time=3600,
+                            time=cls.SRNAME_TTL,
                         )
                     except MemcachedError:
                         pass
@@ -803,7 +803,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 c.user_is_admin or self.is_moderator_with_perms(user, 'config'))
         else:
             return False
-    
+
     def parse_css(self, content, verify=True):
         from r2.lib import cssfilter
         from r2.lib.template_helpers import (
@@ -909,9 +909,9 @@ class Subreddit(Thing, Printable, BaseSite):
             return True
         elif c.user_is_loggedin:
             if self.type == 'gold_only':
-                return (user.gold or 
-                    user.gold_charter or 
-                    self.is_moderator(user) or 
+                return (user.gold or
+                    user.gold_charter or
+                    self.is_moderator(user) or
                     self.is_moderator_invite(user))
 
             return (self.is_contributor(user) or
@@ -1040,7 +1040,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 item._ups = 0
 
             item.score_hidden = (
-                not item.can_view(user) or 
+                not item.can_view(user) or
                 item.hide_num_users_info
             )
 
@@ -1203,7 +1203,7 @@ class Subreddit(Thing, Printable, BaseSite):
         """
         subreddits that appear in a user's listings. If the user has
         subscribed, returns the stored set of subscriptions.
-        
+
         limit - if it's Subreddit.DEFAULT_LIMIT, limits to 50 subs
                 (100 for gold users)
                 if it's None, no limit is used
@@ -1219,7 +1219,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 limit = Subreddit.gold_limit
             else:
                 limit = Subreddit.sr_limit
-        
+
         # note: for user not logged in, the fake user account has
         # has_subscribed == False by default.
         if user and user.has_subscribed:
@@ -1380,30 +1380,6 @@ class Subreddit(Thing, Printable, BaseSite):
         b = int(256 - (hash(str(self._id) + '  ') % 256)*(1-fade))
         return (r, g, b)
 
-    def get_sticky_fullnames(self):
-        """Return the fullnames of the Links stickied in the subreddit."""
-        
-        # Note: This function is to ease the transition from a single sticky to
-        # multiple. At some point in the future we can probably replace this
-        # function with a simple usage of the sticky_fullnames attr.
-
-        if self.sticky_fullnames is None:
-            # for apps that can't update the db, just return
-            if g.disallow_db_writes:
-                if getattr(self, "sticky_fullname", None):
-                    return [self.sticky_fullname]
-                else:
-                    return []
-
-            # if there's an old single sticky, convert it
-            if getattr(self, "sticky_fullname", None):
-                self.sticky_fullnames = [self.sticky_fullname]
-            else:
-                self.sticky_fullnames = []
-            self._commit()
-
-        return self.sticky_fullnames
-
     def set_sticky(self, link, log_user=None, num=None):
         unstickied_fullnames = []
 
@@ -1428,7 +1404,7 @@ class Subreddit(Thing, Printable, BaseSite):
 
                 # if we're already at the max number of stickies, remove
                 # the bottom-most to make room for this new one
-                if len(sticky_fullnames) >= self.MAX_STICKIES:
+                if self.has_max_stickies:
                     unstickied_fullnames.extend(
                         sticky_fullnames[self.MAX_STICKIES-1:])
                     sticky_fullnames = sticky_fullnames[:self.MAX_STICKIES-1]
@@ -1436,7 +1412,7 @@ class Subreddit(Thing, Printable, BaseSite):
                 sticky_fullnames.append(link._fullname)
 
             self.sticky_fullnames = sticky_fullnames
-            
+
         self._commit()
 
         if log_user:
@@ -1456,13 +1432,19 @@ class Subreddit(Thing, Printable, BaseSite):
             sticky_fullnames.remove(link._fullname)
         except ValueError:
             return
-        
+
         self.sticky_fullnames = sticky_fullnames
         self._commit()
 
         if log_user:
             from r2.models import ModAction
             ModAction.create(self, log_user, "unsticky", target=link)
+
+    @property
+    def has_max_stickies(self):
+        if not self.sticky_fullnames:
+            return False
+        return len(self.sticky_fullnames) >= self.MAX_STICKIES
 
 
 class SubscribedSubredditsByAccount(tdb_cassandra.DenormalizedRelation):
@@ -1797,6 +1779,7 @@ class AllFiltered(Filtered, AllMinus):
 
 
 class _DefaultSR(FakeSubreddit):
+    analytics_name = 'frontpage'
     #notice the space before reddit.com
     name = ' reddit.com'
     path = '/'
@@ -1841,11 +1824,11 @@ class DefaultSR(_DefaultSR):
     @property
     def _should_wiki(self):
         return True
-    
+
     @property
     def wikimode(self):
         return self._base.wikimode if self._base else "disabled"
-    
+
     @property
     def wiki_edit_karma(self):
         return self._base.wiki_edit_karma
@@ -1856,17 +1839,17 @@ class DefaultSR(_DefaultSR):
 
     def is_wikicontributor(self, user):
         return self._base.is_wikicontributor(user)
-    
+
     def is_wikibanned(self, user):
         return self._base.is_wikibanned(user)
-    
+
     def is_wikicreate(self, user):
         return self._base.is_wikicreate(user)
-    
+
     @property
     def _fullname(self):
         return "t5_6"
-    
+
     @property
     def _id36(self):
         return self._base._id36
@@ -2019,12 +2002,12 @@ class TooManySubredditsError(Exception):
 class BaseLocalizedSubreddits(tdb_cassandra.View):
     """Mapping of location to subreddit ids"""
     _use_db = False
-    _compare_with = tdb_cassandra.ASCII_TYPE
+    _compare_with = ASCII_TYPE
     _read_consistency_level = tdb_cassandra.CL.QUORUM
     _write_consistency_level = tdb_cassandra.CL.QUORUM
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
-        "default_validation_class": tdb_cassandra.ASCII_TYPE,
+        "key_validation_class": ASCII_TYPE,
+        "default_validation_class": ASCII_TYPE,
     }
     GLOBAL = "GLOBAL"
 
@@ -2146,9 +2129,9 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
         weighting_scheme="classic",
     )
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.UTF8_TYPE,
-        "column_name_class": tdb_cassandra.UTF8_TYPE,
-        "default_validation_class": tdb_cassandra.UTF8_TYPE,
+        "key_validation_class": UTF8_TYPE,
+        "column_name_class": UTF8_TYPE,
+        "default_validation_class": UTF8_TYPE,
         "column_validation_classes": {
             "date": pycassa.system_manager.DATE_TYPE,
         },
@@ -2156,7 +2139,7 @@ class LabeledMulti(tdb_cassandra.Thing, MultiReddit):
     _float_props = (
         "base_normalized_age_weight",
     )
-    _compare_with = tdb_cassandra.UTF8_TYPE
+    _compare_with = UTF8_TYPE
     _read_consistency_level = tdb_cassandra.CL.ONE
     _write_consistency_level = tdb_cassandra.CL.QUORUM
 
@@ -2644,12 +2627,18 @@ class DomainSR(FakeSubreddit):
         FakeSubreddit.__init__(self)
         domain = domain.lower()
         self.domain = domain
-        self.name = domain 
+        self.name = domain
         self.title = _("%(domain)s on %(reddit.com)s") % {
             "domain": domain, "reddit.com": g.domain}
-        idn = domain.decode('idna')
-        if idn != domain:
-            self.idn = idn
+        try:
+            idn = domain.decode('idna')
+            if idn != domain:
+                self.idn = idn
+        except UnicodeError:
+            # If we were given a bad domain name (e.g. xn--.com) we'll get an
+            # error here. These domains are invalid to register so it should
+            # be fine to ignore the error.
+            pass
 
     def get_links(self, sort, time):
         from r2.lib.db import queries
@@ -2996,7 +2985,7 @@ def unmute_hook(data):
 
 class SubredditsActiveForFrontPage(tdb_cassandra.View):
     """Tracks which subreddits currently have valid frontpage posts.
-    
+
     The front page's "hot" page only includes posts that are newer than
     g.HOT_PAGE_AGE, so there's no point including subreddits in it if they
     haven't had a post inside that period. Since we pick random subsets of
@@ -3016,7 +3005,7 @@ class SubredditsActiveForFrontPage(tdb_cassandra.View):
     _connection_pool = "main"
     _ttl = datetime.timedelta(days=g.HOT_PAGE_AGE)
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+        "key_validation_class": ASCII_TYPE,
     }
     _read_consistency_level = tdb_cassandra.CL.ONE
     _write_consistency_level = tdb_cassandra.CL.QUORUM

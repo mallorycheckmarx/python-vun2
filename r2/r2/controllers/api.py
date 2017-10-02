@@ -108,7 +108,6 @@ from r2.lib.db import tdb_cassandra
 from r2.lib import promote
 from r2.lib import tracking, emailer, newsletter
 from r2.lib.subreddit_search import search_reddits
-from r2.lib.log import log_text
 from r2.lib.filters import safemarkdown
 from r2.lib.media import str_to_image
 from r2.controllers.api_docs import api_doc, api_section
@@ -601,6 +600,7 @@ class ApiController(RedditController):
                 form.set_text(".title-status", "")
             else:
                 form.set_text(".title-status", _("no title found"))
+            form._send_data(title=title)
         
     def _login(self, responder, user, rem = None):
         """
@@ -780,6 +780,9 @@ class ApiController(RedditController):
         self.check_api_friend_oauth_scope(type)
 
         victim = iuser or nuser
+
+        if not victim:
+            abort(400, 'No user specified')
         
         if type in self._sr_friend_types:
             mod_action_by_type = dict(
@@ -1258,11 +1261,19 @@ class ApiController(RedditController):
         OAuth2AccessToken.revoke_all_by_user(c.user)
         OAuth2RefreshToken.revoke_all_by_user(c.user)
 
+    def revoke_sessions_and_login(self, user, password):
+        self.revoke_sessions(user)
+
         # run the change password command to get a new salt
         change_password(c.user, password)
         # the password salt has changed, so the user's cookie has been
         # invalidated.  drop a new cookie.
         self.login(c.user)
+
+    def revoke_sessions(self, user):
+        # deauthorize all access tokens
+        OAuth2AccessToken.revoke_all_by_user(user)
+        OAuth2RefreshToken.revoke_all_by_user(user)
 
     @validatedForm(
         VUser(),
@@ -1321,8 +1332,9 @@ class ApiController(RedditController):
         VModhash(),
         VVerifyPassword("curpass", fatal=False),
         password=VPasswordChange(['newpass', 'verpass']),
+        invalidate_oauth=VBoolean("invalidate_oauth"),
     )
-    def POST_update_password(self, form, jquery, password):
+    def POST_update_password(self, form, jquery, password, invalidate_oauth):
         """Update account password.
 
         Called by /prefs/update on the site. For frontend form verification
@@ -1337,6 +1349,9 @@ class ApiController(RedditController):
         if (password and
             not (form.has_errors("newpass", errors.BAD_PASSWORD) or
                  form.has_errors("verpass", errors.BAD_PASSWORD_MATCH))):
+            if invalidate_oauth:
+                self.revoke_sessions(c.user)
+
             change_password(c.user, password)
 
             if c.user.email:
@@ -1638,7 +1653,7 @@ class ApiController(RedditController):
             return
 
         sr = thing.subreddit_slow
-        stickied = thing._fullname in sr.get_sticky_fullnames()
+        stickied = thing.is_stickied(sr)
 
         if not stickied and (thing._deleted or thing._spam):
             abort(400, "Can't sticky a removed or deleted post")
@@ -2707,6 +2722,7 @@ class ApiController(RedditController):
                    over_18 = VBoolean('over_18'),
                    allow_top = VBoolean('allow_top'),
                    show_media = VBoolean('show_media'),
+                   # show_media_preview = VBoolean('show_media_preview'),
                    public_traffic = VBoolean('public_traffic'),
                    collapse_deleted_comments = VBoolean('collapse_deleted_comments'),
                    exclude_banned_modqueue = VBoolean('exclude_banned_modqueue'),
@@ -2774,6 +2790,11 @@ class ApiController(RedditController):
             value = request.params.get('related_subreddits')
             kw['related_subreddits'] = validator.run(value)
 
+        if feature.is_enabled('autoexpand_media_previews'):
+            validator = VBoolean('show_media_preview')
+            value = request.params.get('show_media_preview')
+            kw["show_media_preview"] = validator.run(value)
+
         # the status button is outside the form -- have to reset by hand
         form.parent().set_html('.status', "")
 
@@ -2794,6 +2815,7 @@ class ApiController(RedditController):
             'public_description',
             'public_traffic',
             'show_media',
+            'show_media_preview',
             'spam_comments',
             'spam_links',
             'spam_selfposts',
@@ -2967,6 +2989,7 @@ class ApiController(RedditController):
             if sr.quarantine:
                 del kw['allow_top']
                 del kw['show_media']
+                del kw['show_media_preview']
 
             #notify ads if sr in a collection changes over_18 to true
             if kw.get('over_18', False) and not sr.over_18:
@@ -3608,22 +3631,12 @@ class ApiController(RedditController):
 
         if rv is None:
             c.errors.add(errors.INVALID_CODE, field = "code")
-            log_text ("invalid gold claim",
-                      "%s just tried to claim %s" % (c.user.name, code),
-                      "info")
         elif rv == "already claimed":
             c.errors.add(errors.CLAIMED_CODE, field = "code")
-            log_text ("invalid gold reclaim",
-                      "%s just tried to reclaim %s" % (c.user.name, code),
-                      "info")
         else:
             days, subscr_id = rv
             if days <= 0:
                 raise ValueError("days = %r?" % days)
-
-            log_text ("valid gold claim",
-                      "%s just claimed %s" % (c.user.name, code),
-                      "info")
 
             if subscr_id:
                 c.user.gold_subscr_id = subscr_id
@@ -4531,6 +4544,25 @@ class ApiController(RedditController):
                 setattr(c.user, "pref_" + ui_elem, False)
                 c.user._commit()
 
+    @noresponse(VUser(),
+                VModhash(),
+                show_nsfw_media=VBoolean("show_nsfw_media"))
+    def POST_set_nsfw_media_pref(self, show_nsfw_media):
+        changed = False
+
+        if show_nsfw_media is not None:
+            no_profanity = not show_nsfw_media
+            if c.user.pref_no_profanity != no_profanity:
+                c.user.pref_no_profanity = no_profanity
+                changed = True
+
+        if not c.user.nsfw_media_acknowledged:
+            c.user.nsfw_media_acknowledged = True
+            changed = True
+
+        if changed:
+            c.user._commit()
+
     @validatedForm(type = VOneOf('type', ('click'), default = 'click'),
                    links = VByName('ids', thing_cls = Link, multiple = True))
     def GET_gadget(self, form, jquery, type, links):
@@ -4792,7 +4824,7 @@ class ApiController(RedditController):
             if not client:
                 form.set_text('.status', _('invalid client id'))
                 return
-            if getattr(client, 'deleted', False):
+            if client.deleted:
                 form.set_text('.status', _('cannot update deleted app'))
                 return
             if not client.has_developer(c.user):

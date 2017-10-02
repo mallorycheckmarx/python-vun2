@@ -45,7 +45,6 @@ from r2.lib.souptest import (
 )
 from r2.lib.template_helpers import add_sr
 from r2.lib.jsonresponse import JQueryResponse, JsonResponse
-from r2.lib.log import log_text
 from r2.lib.permissions import ModeratorPermissionSet
 from r2.models import *
 from r2.models.rules import MAX_RULES_PER_SUBREDDIT
@@ -1203,6 +1202,9 @@ class VCanDistinguish(VByName):
         if c.user_is_loggedin:
             can_distinguish = False
             item = VByName.run(self, thing_name)
+
+            if not item:
+                abort(404)
 
             if item.author_id == c.user._id:
                 if isinstance(item, Message) and c.user.employee:
@@ -2622,15 +2624,6 @@ class VDestination(Validator):
             if u.is_reddit_url(c.site) and u.is_web_safe_url():
                 return dest
 
-        ip = getattr(request, "ip", "[unknown]")
-        fp = getattr(request, "fullpath", "[unknown]")
-        dm = c.domain or "[unknown]"
-
-        log_text("invalid redirect",
-                 "%s attempted to redirect from %s to %s with domain %s"
-                      % (ip, fp, dest, dm),
-                 "info")
-
         return "/"
 
     def param_docs(self):
@@ -2881,7 +2874,7 @@ class VOAuth2ClientID(VRequired):
         client_id = VRequired.run(self, client_id)
         if client_id:
             client = OAuth2Client.get_token(client_id)
-            if client and not getattr(client, 'deleted', False):
+            if client and not client.deleted:
                 return client
             else:
                 self.error()

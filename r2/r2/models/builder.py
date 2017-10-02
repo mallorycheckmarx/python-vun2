@@ -24,7 +24,7 @@ from collections import defaultdict, namedtuple
 from copy import deepcopy
 import datetime
 import heapq
-from random import shuffle, random
+from random import shuffle
 import time
 
 from pylons import request
@@ -50,7 +50,6 @@ from r2.lib.filters import _force_unicode
 from r2.lib.jsontemplates import get_trimmed_sr_dicts
 from r2.lib.utils import (
     long_datetime,
-    shuffle_slice,
     SimpleSillyStub,
     Storage,
     to36,
@@ -847,6 +846,15 @@ class CommentOrdererBase(object):
                 self.link, sort_name, comment_tree.cids, comment_tree_timer)
             comment_tree_timer.intermediate('get_scores')
 
+        if isinstance(self.sort, operators.shuffled):
+            # randomize the scores of top level comments
+            top_level_ids = comment_tree.tree.get(None, [])
+            top_level_scores = [
+                sorter[comment_id] for comment_id in top_level_ids]
+            shuffle(top_level_scores)
+            for i, comment_id in enumerate(top_level_ids):
+                sorter[comment_id] = top_level_scores[i]
+
         self.timer.intermediate("load_storage")
 
         comment_tree = self.modify_comment_tree(comment_tree)
@@ -1082,19 +1090,9 @@ class CommentOrderer(CommentOrdererBase):
         if self.link.num_comments <= 0:
             return []
 
-        read_chance = g.live_config["precomputed_comment_sort_read_chance"]
-        read_enabled = read_chance > random()
-        has_precomputed_order = self.should_read_cache()
-        if read_enabled and has_precomputed_order:
+        if self.should_read_cache():
             with g.stats.get_timer("CommentOrderer.read_cache") as timer:
                 return self.read_cache()
-        elif has_precomputed_order:
-            # we have precomputed order for this link/sort but did not read it
-            # due to random read chance. time the operation to get a direct
-            # comparison between reading precomputed and loading CommentTree,
-            # CommentScoresByLink, calculating order
-            with g.stats.get_timer("CommentOrderer.full_load") as timer:
-                return self._get_comment_order()
         else:
             if bucket == "100_plus":
                 for sort_name, operator in SORT_OPERATOR_BY_NAME.iteritems():
@@ -1187,35 +1185,44 @@ class QACommentOrderer(CommentOrderer):
         return comment_tuples
 
 
-def write_comment_orders(link):
-    precomputed_sorts = set()
+def get_active_sort_orders_for_link(link):
+    # only activate precomputed sorts for links with enough comments.
+    # (value of 0 means not active for any value of link.num_comments)
+    min_comments = g.live_config['precomputed_comment_sort_min_comments']
+    if min_comments <= 0 or link.num_comments < min_comments:
+        return set()
 
+    active_sorts = set(g.live_config['precomputed_comment_sorts'])
+    if g.live_config['precomputed_comment_suggested_sort']:
+        suggested_sort = link.sort_if_suggested()
+        if suggested_sort:
+            active_sorts.add(suggested_sort)
+
+    return active_sorts
+
+
+def write_comment_orders(link):
     # we don't really care about getting detailed timings here, the entire
     # process will be timed by the caller
     timer = SimpleSillyStub()
 
-    # only write precomputed sorts for links with enough comments.
-    # (value of 0 means don't write for any value of link.num_comments)
-    min_comments = g.live_config['precomputed_comment_sort_min_comments']
-    if min_comments and link.num_comments >= min_comments:
-        sorts_to_write = set(g.live_config['precomputed_comment_sorts'])
+    precomputed_sorts = set()
+    for sort_name in get_active_sort_orders_for_link(link):
+        sort = SORT_OPERATOR_BY_NAME.get(sort_name)
+        if not sort:
+            continue
 
-        if g.live_config['precomputed_comment_suggested_sort']:
-            suggested_sort = link.sort_if_suggested()
-            if suggested_sort:
-                sorts_to_write.add(suggested_sort)
+        if sort_name == "qa":
+            QACommentOrderer.write_cache(link, sort, timer)
+        else:
+            CommentOrderer.write_cache(link, sort, timer)
 
-        for sort_name in sorts_to_write:
-            sort = SORT_OPERATOR_BY_NAME.get(sort_name)
-            if not sort:
-                continue
+        precomputed_sorts.add(sort_name)
 
-            if sort_name == "qa":
-                QACommentOrderer.write_cache(link, sort, timer)
-            else:
-                CommentOrderer.write_cache(link, sort, timer)
-
-            precomputed_sorts.add(sort_name)
+    if precomputed_sorts:
+        g.stats.simple_event("CommentOrderer.write_comment_orders.write")
+    else:
+        g.stats.simple_event("CommentOrderer.write_comment_orders.noop")
 
     # replace empty set with None to match the Link._defaults value
     link.precomputed_sorts = precomputed_sorts or None
@@ -1482,14 +1489,6 @@ class CommentBuilder(Builder):
                 final.append(comment)
 
         self.timer.intermediate("build_comments")
-
-        if isinstance(self.sort, operators.shuffled):
-            # If we have a sticky comment, do not shuffle the first element
-            # of the list.
-            if len(final) > 0 and final[0]._id == self.link.sticky_comment_id:
-                shuffle_slice(final, 1)
-            else:
-                shuffle(final)
 
         if not self.load_more:
             timer.stop()

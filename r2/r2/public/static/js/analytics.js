@@ -33,6 +33,7 @@ r.analytics = {
       sr_name: r.config.post_site || null,
       user_id: null,
       user_name: null,
+      user_in_beta: r.config.pref_beta,
     };
 
     if (r.config.user_id) {
@@ -70,8 +71,17 @@ r.analytics = {
       r.analytics.screenviewEvent();
     }
 
+    if (r.config.expando_preference) {
+      r.analytics.contextData.expando_preference = r.config.expando_preference;
+    }
+
+    if (r.config.pref_no_profanity) {
+      r.analytics.contextData.media_preference_hide_nsfw = r.config.pref_no_profanity
+    }
+
     r.analytics.firePageTrackingPixel(r.analytics.stripAnalyticsParams);
 
+    r.hooks.get('analytics').call();
   },
 
   _eventPredicates: {},
@@ -319,6 +329,10 @@ r.analytics = {
       var a = document.createElement('a');
       a.href = window.location.href;
       a.search = $.param(strippedParams);
+      if (!a.search) {
+        // Safari leaves a trailing ? when search is empty
+        a.href = a.href.replace(/\?(#.+)?$/, a.hash);
+      }
 
       window.history.replaceState({}, document.title, a.href);
     }
@@ -357,6 +371,7 @@ r.analytics = {
       'dnt',
       'referrer_domain',
       'referrer_url',
+      'user_in_beta',
     ]);
 
     if (r.config.event_target) {
@@ -448,6 +463,8 @@ r.analytics = {
       'listing_name',
       'referrer_domain',
       'referrer_url',
+      'expando_preference',
+      'media_preference_hide_nsfw',
     ]);
 
     if ('linkIsNSFW' in targetData) {
@@ -457,13 +474,10 @@ r.analytics = {
     if ('linkType' in targetData) {
       payload['target_type'] = targetData.linkType;
       
-      if (targetData.linkType === 'self' ||
-          targetData.linkDomain === r.config.cur_domain) {
-        // self posts and reddit live embeds
-        payload['provider'] = 'reddit';
-      } else {
-        payload['provider'] = 'embedly';
-      }
+    }
+
+    if ('provider' in targetData) {
+      payload['provider'] = targetData.provider;
     }
 
     if ('linkFullname' in targetData) {
@@ -496,6 +510,12 @@ r.analytics = {
     }
 
     r.events.track(eventTopic, eventType, payload).send();
+  },
+
+  sendEvent: function(eventTopic, actionName, defaultFields, customFields, done) {
+    var eventType = 'cs.' + actionName;
+    var payload = this.addContextData(defaultFields, customFields);
+    r.events.track(eventTopic, eventType, payload).send(done);
   },
 };
 

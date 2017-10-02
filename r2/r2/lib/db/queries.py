@@ -1139,62 +1139,6 @@ def new_subreddit(sr):
     amqp.add_item('new_subreddit', sr._fullname)
 
 
-def new_vote(vote):
-    vote_valid = vote.is_automatic_initial_vote or vote.effects.affects_score
-    thing_valid = not (vote.thing._spam or vote.thing._deleted)
-
-    if vote_valid and thing_valid:
-        sr = vote.thing.subreddit_slow
-
-        # these sorts can be changed by voting - we don't need to do "new"
-        # since that's taken care of by new_link and new_comment
-        sorts_to_update = ["hot", "top", "controversial"]
-        results = []
-
-        author = Account._byID(vote.thing.author_id)
-        for sort in sorts_to_update:
-            if isinstance(vote.thing, Link):
-                results.append(get_submitted(author, sort, 'all'))
-            if isinstance(vote.thing, Comment):
-                results.append(get_comments(author, sort, 'all'))
-
-        if isinstance(vote.thing, Link):
-            for sort in sorts_to_update:
-                results.append(get_links(sr, sort, "all"))
-
-            parsed = utils.UrlParser(vote.thing.url)
-            if not is_subdomain(parsed.hostname, 'imgur.com'):
-                for domain in parsed.domain_permutations():
-                    for sort in sorts_to_update:
-                        results.append(get_domain_links(domain, sort, "all"))
-        elif isinstance(vote.thing, Comment):
-            comment = vote.thing
-
-            # update the score periodically when a comment has many votes
-            update_threshold = g.live_config['comment_vote_update_threshold']
-            update_period = g.live_config['comment_vote_update_period']
-            num_votes = comment.num_votes
-            if num_votes <= update_threshold or num_votes % update_period == 0:
-                add_to_commentstree_q(comment)
-
-        add_queries(results, insert_items=vote.thing)
-    
-    if isinstance(vote.thing, Link):
-        with CachedQueryMutator() as m:
-            # if this is a changed vote, remove from the previous cached query
-            if vote.previous_vote:
-                if vote.previous_vote.is_upvote:
-                    m.delete(get_liked(vote.user), [vote.previous_vote])
-                elif vote.previous_vote.is_downvote:
-                    m.delete(get_disliked(vote.user), [vote.previous_vote])
-
-            # and then add to the new cached query
-            if vote.is_upvote:
-                m.insert(get_liked(vote.user), [vote])
-            elif vote.is_downvote:
-                m.insert(get_disliked(vote.user), [vote])
-
-
 def new_message(message, inbox_rels, add_to_sent=True, update_modmail=True):
     from r2.lib.comment_tree import add_message
 
@@ -1811,17 +1755,6 @@ def run_commentstree(qname="commentstree_q", limit=400):
         comments = Comment._by_fullname([msg.body for msg in msgs],
                                         data = True, return_dict = False)
         print 'Processing %r' % (comments,)
-
-        # when fastlaning a thread, we may need to have this qproc ignore
-        # messages that were put into the non-fastlane queue and are causing
-        # both to back up. a full recompute of the old thread will fix these
-        # missed messages.
-        if qname != "commentstree_fastlane_q":
-            fastlaned_links = g.live_config["fastlane_links"]
-            links = Link._byID([com.link_id for com in comments], data=True)
-            comments = [com for com in comments
-                        if utils.to36(com.link_id) not in fastlaned_links and
-                           links[com.link_id].skip_commentstree_q != qname]
 
         if comments:
             add_comments(comments)

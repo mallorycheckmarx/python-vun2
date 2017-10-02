@@ -495,12 +495,10 @@ class HotController(ListingWithPromos):
             return normalized_hot(c.site.kept_sr_ids, obey_age_limit=False,
                                   ageweight=c.site.ageweight)
         else:
-            sticky_fullnames = c.site.get_sticky_fullnames()
+            sticky_fullnames = c.site.sticky_fullnames
             if sticky_fullnames:
-                # need to use a copy of the list because we add all the other
-                # links into this below, so get_sticky_fullnames() will start
-                # returning a list of all the hot links after this if we
-                # modify it directly
+                # make a copy of the list so we're not inadvertently modifying
+                # the subreddit's list of sticky fullnames
                 link_list = sticky_fullnames[:]
                 
                 wrapped = wrap_links(link_list,
@@ -776,7 +774,7 @@ class UserController(ListingController):
         if self.where == 'saved' and c.user.gold:
             srnames = LinkSavesBySubreddit.get_saved_subreddits(self.vuser)
             srnames += CommentSavesBySubreddit.get_saved_subreddits(self.vuser)
-            srs = Subreddit._by_name(srnames)
+            srs = Subreddit._by_name(set(srnames), stale=True)
             srnames = [name for name, sr in srs.iteritems()
                             if sr.can_view(c.user)]
             srnames = sorted(set(srnames), key=lambda name: name.lower())

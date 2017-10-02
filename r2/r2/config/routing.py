@@ -148,8 +148,6 @@ def make_map(config):
     mc('/admin/creddits', controller='admintool', action='creddits')
     mc('/admin/gold', controller='admintool', action='gold')
 
-    mc('/admin/errors', controller='errorlog')
-
     mc('/user/:username/about', controller='user', action='about',
        where='overview')
     mc('/user/:username/trophies', controller='user', action='trophies')
@@ -248,7 +246,6 @@ def make_map(config):
     # sponsor endpoints
     mc('/sponsor/report', controller='sponsor', action='report')
     mc('/sponsor/inventory', controller='sponsor', action='promote_inventory')
-    mc('/sponsor/roadblock', controller='sponsor', action="roadblock")
     mc('/sponsor/lookup_user', controller='sponsor', action="lookup_user")
 
     # sponsor listings
@@ -400,7 +397,7 @@ def make_map(config):
        requirements=dict(action=("promote|unpromote|edit_promo|ad_s3_callback|"
                                  "ad_s3_params|freebie|promote_note|update_pay|"
                                  "edit_campaign|delete_campaign|"
-                                 "add_roadblock|rm_roadblock|check_inventory|"
+                                 "check_inventory|"
                                  "refund_campaign|terminate_campaign|"
                                  "review_fraud|create_promo|"
                                  "toggle_pause_campaign")))
@@ -469,9 +466,6 @@ def make_map(config):
 
     mc('/socialite', controller='redirect', action='redirect',
        dest='https://addons.mozilla.org/firefox/addon/socialite/')
-
-    mc('/mobile', controller='redirect', action='redirect',
-       dest='https://m.reddit.com/')
 
     # Used for showing ads
     mc("/ads/", controller="ad", action="ad")

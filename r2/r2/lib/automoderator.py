@@ -874,7 +874,7 @@ class RuleTarget(object):
         for threshold in thresholds:
             compare_value = getattr(self, threshold, None)
             if compare_value is not None:
-                checks[threshold] = compare_value
+                checks[threshold] = str(compare_value)
 
         # if we don't need to actually check anything, just return True
         if not checks:
@@ -1065,9 +1065,7 @@ class RuleTarget(object):
                     target=item)
 
         if self.set_sticky is not None:
-            stickied_fullnames = data["subreddit"].get_sticky_fullnames()
-            already_stickied = item._fullname in stickied_fullnames
-            if already_stickied != bool(self.set_sticky):
+            if item.is_stickied(data["subreddit"]) != bool(self.set_sticky):
                 if self.set_sticky:
                     # if set_sticky is a bool, don't specify a slot
                     if isinstance(self.set_sticky, bool):

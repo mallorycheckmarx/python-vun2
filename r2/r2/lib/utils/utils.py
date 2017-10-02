@@ -583,6 +583,11 @@ class UrlParser(object):
         extension = self.path_extension().lower()
         return extension in {'gif', 'jpeg', 'jpg', 'png', 'tiff'}
 
+    def has_static_image_extension(self):
+        """Guess if the url leads to a non-animated image."""
+        extension = self.path_extension().lower()
+        return extension in {'jpeg', 'jpg', 'png', 'tiff'}
+
     def set_extension(self, extension):
         """
         Changes the extension of the path to the provided value (the
@@ -883,7 +888,7 @@ def url_to_thing(url):
         sr_name = None
 
     path = sr_pattern.sub('', urlparser.path)
-    if not path:
+    if not path or path == '/':
         if not sr_name:
             return None
 
@@ -1529,6 +1534,7 @@ class Bomb(object):
     def __repr__(cls):
         raise Hell()
 
+
 class SimpleSillyStub(object):
     """A simple stub object that does nothing when you call its methods."""
     def __nonzero__(self):
@@ -1539,6 +1545,9 @@ class SimpleSillyStub(object):
 
     def stub(self, *args, **kwargs):
         pass
+
+    __exit__ = __enter__ = stub
+
 
 def strordict_fullname(item, key='fullname'):
     """Sometimes we migrate AMQP queues from simple strings to pickled

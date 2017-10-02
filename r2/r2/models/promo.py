@@ -21,11 +21,10 @@
 ###############################################################################
 
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import uuid1
 
-from babel.numbers import format_currency
-from pycassa.types import CompositeType
+from pycassa.system_manager import INT_TYPE, TIME_UUID_TYPE, UTF8_TYPE
 from pylons import tmpl_context as c
 from pylons import app_globals as g
 from pylons.i18n import _, N_
@@ -33,9 +32,8 @@ from pylons.i18n import _, N_
 from r2.config import feature
 from r2.lib.unicode import _force_unicode
 from r2.lib.db import tdb_cassandra
-from r2.lib.db.thing import Thing, NotFound
-from r2.lib.memoize import memoize
-from r2.lib.utils import Enum, to_datetime, to_date
+from r2.lib.db.thing import Thing
+from r2.lib.utils import Enum, to_datetime
 from r2.models.subreddit import Subreddit, Frontpage
 
 
@@ -209,11 +207,11 @@ class CollectionStorage(tdb_cassandra.View):
     _use_db = True
     _connection_pool = 'main'
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.UTF8_TYPE,
-        "column_name_class": tdb_cassandra.UTF8_TYPE,
-        "default_validation_class": tdb_cassandra.UTF8_TYPE,
+        "key_validation_class": UTF8_TYPE,
+        "column_name_class": UTF8_TYPE,
+        "default_validation_class": UTF8_TYPE,
     }
-    _compare_with = tdb_cassandra.UTF8_TYPE
+    _compare_with = UTF8_TYPE
     _read_consistency_level = tdb_cassandra.CL.ONE
     _write_consistency_level = tdb_cassandra.CL.QUORUM
     SR_NAMES_DELIM = '|'
@@ -675,7 +673,7 @@ def backfill_campaign_targets():
 class PromotionLog(tdb_cassandra.View):
     _use_db = True
     _connection_pool = 'main'
-    _compare_with = tdb_cassandra.TIME_UUID_TYPE
+    _compare_with = TIME_UUID_TYPE
 
     @classmethod
     def _rowkey(cls, link):
@@ -702,75 +700,6 @@ class PromotionLog(tdb_cassandra.View):
         return [t[1] for t in tuples]
 
 
-class PromotedLinkRoadblock(tdb_cassandra.View):
-    _use_db = True
-    _connection_pool = 'main'
-    _read_consistency_level = tdb_cassandra.CL.ONE
-    _write_consistency_level = tdb_cassandra.CL.QUORUM
-    _compare_with = CompositeType(
-        tdb_cassandra.DateType(),
-        tdb_cassandra.DateType(),
-    )
-
-    @classmethod
-    def _column(cls, start, end):
-        start, end = map(to_datetime, [start, end])
-        return {(start, end): ''}
-
-    @classmethod
-    def _dates_from_key(cls, key):
-        start, end = map(to_date, key)
-        return start, end
-
-    @classmethod
-    def add(cls, sr, start, end):
-        rowkey = sr._id36
-        column = cls._column(start, end)
-        now = datetime.now(g.tz).date()
-        ndays = (to_date(end) - now).days + 7
-        ttl = timedelta(days=ndays).total_seconds()
-        cls._set_values(rowkey, column, ttl=ttl)
-
-    @classmethod
-    def remove(cls, sr, start, end):
-        rowkey = sr._id36
-        column = cls._column(start, end)
-        cls._remove(rowkey, column)
-
-    @classmethod
-    def is_roadblocked(cls, sr, start, end):
-        rowkey = sr._id36
-        start, end = map(to_date, [start, end])
-
-        # retrieve columns for roadblocks starting before end
-        try:
-            columns = cls._cf.get(rowkey, column_finish=(to_datetime(end),),
-                                  column_count=tdb_cassandra.max_column_count)
-        except tdb_cassandra.NotFoundException:
-            return False
-
-        for key in columns.iterkeys():
-            rb_start, rb_end = cls._dates_from_key(key)
-
-            # check for overlap, end dates not inclusive
-            if (start < rb_end) and (rb_start < end):
-                return (rb_start, rb_end)
-        return False
-
-    @classmethod
-    def get_roadblocks(cls):
-        ret = []
-        q = cls._cf.get_range()
-        rows = list(q)
-        srs = Subreddit._byID36([id36 for id36, columns in rows], data=True)
-        for id36, columns in rows:
-            sr = srs[id36]
-            for key in columns.iterkeys():
-                start, end = cls._dates_from_key(key)
-                ret.append((sr.name, start, end))
-        return ret
-
-
 class PromotionPrices(tdb_cassandra.View):
     """
     Check all the following potentially specially priced conditions:
@@ -790,9 +719,9 @@ class PromotionPrices(tdb_cassandra.View):
     _read_consistency_level = tdb_cassandra.CL.ONE
     _write_consistency_level = tdb_cassandra.CL.ALL
     _extra_schema_creation_args = {
-        "key_validation_class": tdb_cassandra.UTF8_TYPE,
-        "column_name_class": tdb_cassandra.UTF8_TYPE,
-        "default_validation_class": tdb_cassandra.INT_TYPE,
+        "key_validation_class": UTF8_TYPE,
+        "column_name_class": UTF8_TYPE,
+        "default_validation_class": INT_TYPE,
     }
 
     COLLECTION_DEFAULT = g.cpm_selfserve_collection.pennies

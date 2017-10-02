@@ -7,6 +7,7 @@
       url: eventInfo.url + '?' + jQuery.param(eventInfo.query),
       data: eventInfo.data,
       contentType: 'text/plain',
+      complete: eventInfo.done,
     });
   }
 
@@ -43,6 +44,8 @@
     send: function(done) {
       if (tracker) {
         tracker.send(done);
+      } else if (typeof done === 'function') {
+        done();
       }
       return this;
     }

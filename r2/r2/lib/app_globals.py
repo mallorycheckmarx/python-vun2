@@ -235,6 +235,7 @@ class Globals(object):
             'RL_LOGIN_AVG_PER_SEC',
             'RL_LOGIN_IP_AVG_PER_SEC',
             'RL_SHARE_AVG_PER_SEC',
+            'tracing_sample_rate',
         ],
 
         ConfigValue.bool: [
@@ -256,8 +257,10 @@ class Globals(object):
             'disable_ads',
             'disable_require_admin_otp',
             'trust_local_proxies',
-            'shard_link_vote_queues',
             'shard_commentstree_queues',
+            'shard_author_query_queues',
+            'shard_subreddit_query_queues',
+            'shard_domain_query_queues',
             'authnet_validate',
             'ENFORCE_RATELIMIT',
             'RL_SITEWIDE_ENABLED',
@@ -270,7 +273,6 @@ class Globals(object):
             'stalecaches',
             'lockcaches',
             'permacache_memcaches',
-            'hardcache_memcaches',
             'cassandra_seeds',
             'automatic_reddits',
             'hardcache_categories',
@@ -281,6 +283,7 @@ class Globals(object):
             'TRAFFIC_LOG_HOSTS',
             'exempt_login_user_agents',
             'autoexpand_media_types',
+            'media_preview_domain_whitelist',
             'multi_icons',
             'hide_subscribers_srs',
             'mcrouter_addr',
@@ -288,6 +291,8 @@ class Globals(object):
 
         ConfigValue.tuple_of(ConfigValue.int): [
             'thumbnail_size',
+            'preview_image_max_size',
+            'preview_image_min_size',
             'mobile_ad_image_size',
         ],
 
@@ -308,7 +313,6 @@ class Globals(object):
             'fraud_email',
             'feedback_email',
             'share_reply',
-            'nerds_email',
             'community_email',
             'smtp_server',
             'events_collector_url',
@@ -342,6 +346,7 @@ class Globals(object):
 
         ConfigValue.baseplate(baseplate_config.Optional(baseplate_config.Endpoint)): [
             "activity_endpoint",
+            "tracing_endpoint",
         ],
 
         ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
@@ -384,7 +389,6 @@ class Globals(object):
             'events_collector_comment_sample_rate',
             'events_collector_use_gzip_chance',
             'https_cert_testing_probability',
-            'precomputed_comment_sort_read_chance',
         ],
         ConfigValue.tuple: [
             'fastlane_links',
@@ -474,6 +478,11 @@ class Globals(object):
         self.baseplate = Baseplate()
         self.baseplate.configure_logging()
         self.baseplate.register(R2BaseplateObserver())
+        self.baseplate.configure_tracing(
+            service_name="r2",
+            tracing_endpoint=self.config.get("tracing_endpoint"),
+            sample_rate=self.config.get("tracing_sample_rate"),
+        )
 
         self.paths = paths
 
@@ -750,15 +759,6 @@ class Globals(object):
         else:
             stalecaches = None
 
-        # hardcache memcache pool
-        hardcache_memcaches = CMemcache(
-            "hardcache",
-            self.hardcache_memcaches,
-            binary=True,
-            min_compress_len=1400,
-            num_clients=num_mc_clients,
-        )
-
         self.startup_timer.intermediate("memcache")
 
         ################# MCROUTER
@@ -914,7 +914,7 @@ class Globals(object):
         # hardcache is used for various things that tend to expire
         # TODO: replace hardcache w/ cassandra stuff
         self.hardcache = HardcacheChain(
-            (localcache_cls(), hardcache_memcaches, HardCache(self)),
+            (localcache_cls(), HardCache(self)),
             cache_negative_results=True,
         )
         cache_chains.update(hardcache=self.hardcache)
