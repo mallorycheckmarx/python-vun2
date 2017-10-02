@@ -1,3 +1,5 @@
+#### This repo has been [archived](https://redd.it/6xfyfg), the information here may be out of date or incorrect
+
 # reddit
 
 <img src="https://secure.gravatar.com/avatar/c638493729c2f009988c9e5bd9b5e116?s=200" align="right">
