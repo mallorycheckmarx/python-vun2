@@ -198,6 +198,7 @@ SAFE_PROPERTIES = {
     "image-orientation",
     "image-rendering",
     "image-resolution",
+    "interpolation-mode", # IE exclusive as "-ms-interpolation-mode"
     "justify-content",
     "left",
     "letter-spacing",
