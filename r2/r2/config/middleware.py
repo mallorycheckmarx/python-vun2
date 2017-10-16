@@ -21,6 +21,7 @@
 ###############################################################################
 
 """Pylons middleware initialization"""
+from collections import OrderedDict
 import importlib
 import re
 import urllib
@@ -52,6 +53,8 @@ from r2.lib import csrf, filters
 # patch in WebOb support for HTTP 429 "Too Many Requests"
 import webob.exc
 import webob.util
+# patch in LimitUploadSize support for whitelisted variations
+from webob.request import Request
 
 class HTTPTooManyRequests(webob.exc.HTTPClientError):
     code = 429
@@ -327,14 +330,37 @@ def _wsgi_json(start_response, status_int, message=""):
     return [filters.websafe_json(data).encode("utf-8")]
 
 
+class LimitUploadSizeMap(dict):
+    """
+    Mapping for custom max sizes for endpoints. Pattern to add to a mapping is
+    ((pathminusleadingslashandextension, dictofpostvalues), maxsizeinbytes)
+    """
+    def __init__(self, *mappedvals):
+        super(LimitUploadSizeMap, self).__init__()
+        self.values = OrderedDict()
+        for (mappedpath, mappedparams), mappedval in mappedvals:
+            self.values[(mappedpath, tuple(mappedparams.items()))] = mappedval
+
+    def __getitem__(self, environ):
+        post_vals = Request(environ).POST
+        for (mappedpath, mappedparams), mappedval in self.values.iteritems():
+            if environ['PATH_INFO'].rstrip('/') == mappedpath:
+                if all(post_vals.get(key) == val for
+                       key, val in mappedparams):
+                    return mappedval
+        return 512000  # default max size 500 Kib
+
+
 class LimitUploadSize(object):
     """
     Middleware for restricting the size of uploaded files (such as
     image files for the CSS editing capability).
     """
-    def __init__(self, app, max_size=1024*500):
+    max_size_map = LimitUploadSizeMap(
+        (('/api/wiki/edit', {'page': 'usernotes'}), 1024 * 1024),
+    )
+    def __init__(self, app):
         self.app = app
-        self.max_size = max_size
 
     def __call__(self, environ, start_response):
         cl_key = 'CONTENT_LENGTH'
@@ -358,9 +384,12 @@ class LimitUploadSize(object):
                     start_response("400 Bad Request", [])
                     return ['<html><body>bad request</body></html>']
 
-            if cl_int > self.max_size:
+            # use a copy of the environ to prevent manipulation
+            # by webob being passed down to downstream apps
+            max_size = self.max_size_map[dict(environ)]
+            if cl_int > max_size:
                 error_msg = "too big. keep it under %d KiB" % (
-                    self.max_size / 1024)
+                    max_size / 1024)
 
                 if is_api:
                     return _wsgi_json(start_response, 413, error_msg)
