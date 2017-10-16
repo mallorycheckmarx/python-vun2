@@ -33,6 +33,7 @@ ${unsafe(js.use("messagecompose"))}
 
 <%utils:submit_form onsubmit="return post_form(this, 'compose', null, null, true)",
                     method="post", _id = "compose-message",
+                    _class="warn-on-unload",
                     action="/message/compose">
 
 ${from_field()}
