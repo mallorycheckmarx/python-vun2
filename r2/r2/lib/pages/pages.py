@@ -3720,13 +3720,9 @@ class AdminAwards(Templated):
 class AdminAwardGive(Templated):
     """The interface for giving an award"""
     def __init__(self, award, recipient='', desc='', url='', hours=''):
-        now = datetime.datetime.now(g.display_tz)
-        if desc:
-            self.description = desc
-        elif award.awardtype == 'regular':
-            self.description = "??? -- " + now.strftime("%Y-%m-%d")
-        else:
-            self.description = ""
+        if award.awardtype == 'regular':
+            desc = "??? -- " + datetime.datetime.now(g.display_tz).strftime("%Y-%m-%d")
+        self.description = desc
         self.url = url
         self.recipient = recipient
         self.hours = hours
