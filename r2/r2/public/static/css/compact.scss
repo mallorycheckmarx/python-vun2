@@ -920,7 +920,7 @@ padding: 5px;
 .gilded-icon:before {
     display: inline-block;
     content: '';
-    background-image: url(../gold-coin.png);  /* SPRITE */
+    background-image: url(./gold-coin.png);  /* SPRITE */
     background-repeat: no-repeat;
     height: 14px;
     width: 13px;
@@ -1164,7 +1164,7 @@ body.post-under-6h-old .gilded-icon {
     text-indent: -9999px;
     width: 11px;
     height: 8px;
-    background-image: url(../cake.png); /* SPRITE */
+    background-image: url(./cake.png); /* SPRITE */
     vertical-align: middle;
 }
 
