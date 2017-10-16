@@ -62,7 +62,7 @@ setup(
         "mako>=0.5",
         "boto >= 2.0",
         "pytz",
-        "pycrypto",
+        "pycrypto>=2.6.1",
         "Babel>=1.0",
         "cython>=0.14",
         "SQLAlchemy",
