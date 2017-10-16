@@ -699,6 +699,9 @@ class ApiController(RedditController):
 
         """
         if container and container.is_contributor(c.user):
+            if container.is_moderator_with_perms(c.user, 'access'):
+                ModAction.create(container, c.user, 'removecontributor',
+                                 target=c.user, details='remove_self')
             container.remove_contributor(c.user)
 
 
@@ -853,7 +856,9 @@ class ApiController(RedditController):
 
         # Log this action
         if new and type in self._sr_friend_types:
-            ModAction.create(container, c.user, action, target=victim)
+            details = (c.user == victim and 'remove_self') or None
+            ModAction.create(container, c.user, action, target=victim,
+                             details=details)
 
         if type == "friend" and c.user.gold:
             c.user.friend_rels_cache(_update=True)
