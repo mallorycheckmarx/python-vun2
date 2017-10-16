@@ -90,6 +90,10 @@
     ${search_faq()}
   %endif
 
+  %if thing.syntax:
+    <input type="hidden" name="syntax" value="${thing.syntax}">
+  %endif
+
   %for k, v in thing.search_params.iteritems():
     <input type="hidden" name="${k}" value="${v}">
   %endfor
