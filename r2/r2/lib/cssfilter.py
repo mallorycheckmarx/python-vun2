@@ -175,6 +175,7 @@ SAFE_PROPERTIES = {
     "font-size",
     "font-style",
     "font-variant",
+    "font-variant-caps",
     "font-weight",
     "grid",
     "grid-area",
