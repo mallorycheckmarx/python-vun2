@@ -32,13 +32,13 @@ user_added_messages = {
     "moderator": {
         "pm": {
             "subject": N_("you are a moderator"),
-            "msg": N_("you have been added as a moderator to [%(title)s](%(url)s)."),
+            "msg": N_("you have been added as a moderator to %(url)s: %(target_title)s."),
         },
     },
     "moderator_invite": {
         "pm": {
             "subject": N_("invitation to moderate %(url)s"),
-            "msg": N_("**gadzooks! you are invited to become a moderator of [%(title)s](%(url)s)!**\n\n"
+            "msg": N_("**gadzooks! you are invited to become a moderator of %(url)s: %(target_title)s!**\n\n"
                       "*to accept*, visit the [moderators page for %(url)s](%(url)s/about/moderators) and click \"accept\".\n\n"
                       "*otherwise,* if you did not expect to receive this, you can simply ignore this invitation or report it."),
         },
@@ -56,7 +56,7 @@ user_added_messages = {
     "contributor": {
         "pm": {
             "subject": N_("you are an approved submitter"),
-            "msg": N_("you have been added as an approved submitter to [%(title)s](%(url)s)."),
+            "msg": N_("you have been added as an approved submitter to %(url)s: %(target_title)s."),
         },
     },
     "traffic": {
@@ -76,6 +76,7 @@ def notify_user_added(rel_type, author, user, target):
     srname = target.path.rstrip("/")
     d = {
         "url": srname,
+        "target_title": target.title,
         "title": "%s: %s" % (srname, target.title),
         "author": "/u/" + author.name,
         "user": "/u/" + user.name,
