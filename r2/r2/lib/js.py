@@ -430,7 +430,7 @@ class LocalizedModule(Module):
 _submodule = {}
 module = {}
 
-catch_errors = "try {{ {content} }} catch (err) {{ r.sendError('Error running module', '{name}', ':', err.toString()) }}"
+catch_errors = "try {{ {content} }} catch (err) {{ r.logging.sendError('Error running module', '{name}', ':', err.toString()) }}"
 
 
 _submodule["config"] = Module("_setup.js",
