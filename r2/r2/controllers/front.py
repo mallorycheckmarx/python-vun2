@@ -987,7 +987,8 @@ class FrontController(RedditController):
     @api_doc(api_section.subreddits, uses_site=True)
     @validate(
         num=VInt("num",
-            min=1, max=Subreddit.MAX_STICKIES, num_default=1, coerce=True),
+            min=-Subreddit.MAX_STICKIES, max=Subreddit.MAX_STICKIES,
+            num_default=1, coerce=True),
     )
     def GET_sticky(self, num):
         """Redirect to one of the posts stickied in the current subreddit
@@ -1001,7 +1002,7 @@ class FrontController(RedditController):
             abort(404)
 
         try:
-            fullname = c.site.sticky_fullnames[num-1]
+            fullname = c.site.sticky_fullnames[num-1 if num > 0 else num]
         except IndexError:
             abort(404)
         sticky = Link._by_fullname(fullname, data=True)
