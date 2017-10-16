@@ -9932,8 +9932,8 @@ body.with-listing-chooser {
     }
 
     .listing-chooser {
-        position: absolute;
-        top: 65px;
+        position: fixed;
+        top: 0;
         left: 0;
         bottom: 0;
         width: @lc-width;
@@ -10045,6 +10045,10 @@ body.with-listing-chooser {
 }
 
 .listing-chooser {
+    .contents {
+        top: 65px;
+        position: relative;
+    }
     h3 {
         color: #777;
         text-align: right;
