@@ -99,9 +99,9 @@ def replace_placeholders(string, data, matches):
         "{{body}}": getattr(item, "body", ""),
         "{{subreddit}}": data["subreddit"].name,
         "{{author_flair_text}}": data["author"].flair_text(
-            data["subreddit"]._id, obey_disabled=True),
+            data["subreddit"]._id, obey_disabled=True, flair_enabled_by_sr=data["subreddit"].flair_enabled),
         "{{author_flair_css_class}}": data["author"].flair_css_class(
-            data["subreddit"]._id, obey_disabled=True),
+            data["subreddit"]._id, obey_disabled=True, flair_enabled_by_sr=data["subreddit"].flair_enabled),
     }
 
     if isinstance(item, Comment):
@@ -1163,10 +1163,10 @@ class RuleTarget(object):
             comment = self.get_field_value_from_item(item, data, "comment_karma")
             value = post + comment
         elif field == "flair_text" and isinstance(item, Account):
-            value = item.flair_text(data["subreddit"]._id, obey_disabled=True)
+            value = item.flair_text(data["subreddit"]._id, obey_disabled=True, flair_enabled_by_sr=data["subreddit"].flair_enabled)
         elif field == "flair_css_class" and isinstance(item, Account):
             value = item.flair_css_class(
-                data["subreddit"]._id, obey_disabled=True)
+                data["subreddit"]._id, obey_disabled=True, flair_enabled_by_sr=data["subreddit"].flair_enabled)
         else:
             value = getattr(item, field, "")
 
