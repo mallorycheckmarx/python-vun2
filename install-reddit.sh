@@ -70,11 +70,11 @@ if [ "$MISSING" != "" ]; then
     important "We're going to grab the scripts we need and show you where you can"
     important "edit the config to suit your environment."
 
-    mkdir -p $SCRIPTDIR
+    sudo -u ${SUDO_USER} mkdir -p $SCRIPTDIR
     pushd $SCRIPTDIR > /dev/null
     for item in ${NEEDED[*]}; do
         echo "Grabbing '${item}'..."
-        wget -q $GITREPO/$item
+        sudo -u ${SUDO_USER} wget -q $GITREPO/$item
         chmod +x $item
     done
     popd > /dev/null
