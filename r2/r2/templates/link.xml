@@ -98,6 +98,27 @@
 
     <id>${thing._fullname}</id>
     <link href="${permalink}" />
+    <link href="${permalink}" rel="replies" type="text/html" /> 
+    <link href="${permalink}.rss" rel="replies" type="application/atom+xml" />
+    %if thing.different_sr:
+        <link href="${add_sr(thing.subreddit.path,
+                          sr_path=False,
+                          retain_extension=False,
+                          force_hostname=True)}"
+            rel="related"
+            type="text/html"
+            title="/r/${thing.subreddit.name}" />
+        <link href="${add_sr(thing.subreddit.path,
+                          sr_path=False,
+                          retain_extension=False,
+                          force_hostname=True)}.rss"
+            rel="related"
+            type="application/atom+xml"
+            title="/r/${thing.subreddit.name}" />
+    %endif
+    %if not getattr(thing, 'selftext', None):
+        <link href="${thing.url}" rel="related" />
+    %endif
     <updated>${html_datetime(thing._date)}</updated>
     <title>${title}</title>
 </entry>
