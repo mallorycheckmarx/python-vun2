@@ -3335,6 +3335,23 @@ class ApiController(RedditController):
         return {'categories': categories}
 
     @require_oauth2_scope("save")
+    @json_validate(VUser())
+    @api_doc(api_section.links_and_comments)
+    def GET_saved_subreddits(self, responder):
+        """Get a list of subreddits to which the currently saved posts belong to.
+
+        See also: [/api/save](#POST_api_save).
+
+        """
+        if not c.user.gold:
+            abort(403)
+        subreddits = LinkSavesBySubreddit.get_saved_subreddits(c.user)
+        subreddits += CommentSavesBySubreddit.get_saved_subreddits(c.user)
+        subreddits = sorted(set(subreddits), key=lambda name: name.lower())
+        subreddits = [dict(subreddit=subreddit) for subreddit in subreddits]
+        return {'subreddits': subreddits}
+
+    @require_oauth2_scope("save")
     @noresponse(
         VUser(),
         VModhash(),
