@@ -1039,7 +1039,8 @@ class ApiController(RedditController):
         else:
             permissions = None
 
-        if type == "moderator_invite" and container.is_moderator(friend):
+        if (type in ("moderator_invite", "moderator") and
+                container.is_moderator(friend)):
             c.errors.add(errors.ALREADY_MODERATOR, field="name")
             form.set_error(errors.ALREADY_MODERATOR, "name")
             return
@@ -1165,6 +1166,11 @@ class ApiController(RedditController):
             table = jquery("." + type + "-table").show().find("table")
             table.insert_table_rows(user_row, index=index)
             table.find(".notfound").hide()
+            # hide the listing in the invite table if it exists
+            if type == 'moderator':
+                table = jquery(".moderator_invite-table")
+                userspan = table.find('a[href$="/user/%s/"]' % friend.name)
+                userspan.parent().parent().parent().hide()
 
         if type == "banned":
             # If the ban is new or has had the duration changed,
