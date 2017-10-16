@@ -9965,13 +9965,14 @@ body.with-listing-chooser {
             &:before {
                 content: '';
                 display: block;
-                position: absolute;
+                position: fixed;
                 width: @lc-grippy-width;
                 height: 100%;
-                background: url(../sidebar-grippy-hide.png) fixed no-repeat;
+                background: url(../sidebar-grippy-hide.png) no-repeat;
                 background-position: (@lc-width + (@lc-grippy-width - @grippy-image-width) / 2) center;
                 margin-left: (@lc-grippy-width - @grippy-image-width) / 2;
                 opacity: .5;
+                will-change: transform; // browser hint to prevent excess repainting
             }
 
             &:after {
