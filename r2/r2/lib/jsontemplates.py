@@ -286,6 +286,8 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         user_is_subscriber="is_subscriber",
         user_sr_theme_enabled="user_sr_style_enabled",
         wiki_enabled="wiki_enabled",
+        show_media_preview="show_media_preview",
+        allow_images="allow_images",
     )
 
     # subreddit *attributes* (right side of the equals)
@@ -1477,6 +1479,8 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
         spam_links='site.spam_links',
         spam_selfposts='site.spam_selfposts',
         spam_comments='site.spam_comments',
+        show_media_preview='site.show_media_preview',
+        allow_images='site.allow_images',
     )
 
     def kind(self, wrapped):
