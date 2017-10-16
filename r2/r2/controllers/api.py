@@ -2871,8 +2871,12 @@ class ApiController(RedditController):
             form.set_error(errors.CANT_CREATE_SR, "")
             c.errors.add(errors.CANT_CREATE_SR, field="")
 
-        # only care about captcha if this is creating a subreddit
-        if not sr and form.has_errors("captcha", errors.BAD_CAPTCHA):
+        # only care about captcha/ratelimit if this is creating a subreddit
+        if sr:
+            c.errors.remove((errors.BAD_CAPTCHA, 'captcha'))
+            c.errors.remove((errors.BAD_CAPTCHA, 'iden'))
+            c.errors.remove((errors.RATELIMIT, 'ratelimit'))
+        elif form.has_errors("captcha", errors.BAD_CAPTCHA):
             return
 
         domain = kw['domain']
