@@ -73,8 +73,7 @@ def get_step_state(emr_connection, jobflowid, step_name, update=False):
     for name, state, start in sorted(steps, key=lambda t: t[2], reverse=True):
         if name == step_name:
             return state
-    else:
-        return NOTFOUND
+    return NOTFOUND
 
 
 def get_jobflow_id(emr_connection, name):
