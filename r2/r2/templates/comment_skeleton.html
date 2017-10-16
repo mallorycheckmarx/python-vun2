@@ -41,7 +41,14 @@
 </%def>
 
 <%def name="thing_css_class(what)">
-  ${parent.thing_css_class(what)} ${"stickied" if getattr(thing, 'is_sticky', None) else ""} ${"collapsed" if thing.collapsed else "noncollapsed"} ${"collapsed-for-reason" if hasattr(thing, "collapsed_reason") else ""}
+  ${parent.thing_css_class(what)} ${"stickied" if getattr(thing, 'is_sticky', None) else ""} ${"collapsed" if thing.collapsed else "noncollapsed"} ${"collapsed-for-reason" if hasattr(thing, "collapsed_reason") else ""} ${distinguished_css_class(what)}
+</%def>
+
+<%def name="distinguished_css_class(what)">
+  <% distinguish_type = getattr(what, 'distinguished', None) %>
+  %if distinguish_type and distinguish_type not in ('gold', 'gold-auto'):
+    ${'distinguished distinguished-%s' % distinguish_type}
+  %endif
 </%def>
 
 <%def name="thing_data_attributes(what)">
