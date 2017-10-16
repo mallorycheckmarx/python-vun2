@@ -369,8 +369,9 @@ class Builder(object):
         if hasattr(item, 'can_view_slow') and not item.was_comment:
             return not item.can_view_slow()
 
-        if hasattr(item, 'subreddit') and not item.subreddit.can_view(user):
-            return True
+        if (hasattr(item, 'subreddit') and not item.subreddit.can_view(user) and
+               (item.author is None or item.author is not c.user)):
+	    return True
 
     def _is_controversial(self, wrapped):
         """Determine if an item meets all criteria to display as controversial."""
