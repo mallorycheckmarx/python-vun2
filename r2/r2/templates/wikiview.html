@@ -21,6 +21,7 @@
 ###############################################################################
 
 <%namespace file="utils.html" import="timestamp"/>
+<%namespace file="subredditstylesheetsource.html" import="stylesheet_images"/>
 
 <%!
     from r2.lib.pages import WrappedUser
@@ -54,3 +55,8 @@
 %endif
 <a href="#" class="toggle-source">${_("view source")}</a>
 </em>
+## render images if it's the subreddit stylesheet
+%if thing.page_images:
+    <hr/>
+    ${stylesheet_images(thing.page_images)}
+%endif
