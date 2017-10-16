@@ -32,8 +32,8 @@
         },
 
         _listen: function() {
-            var throttledUpdate = _.throttle($.proxy(this, '_updateThings'), 20)
-            $(window).on('scroll', throttledUpdate)
+            var debouncedUpdate = _.debounce($.proxy(this, '_updateThings'), 100)
+            $(window).on('scroll', debouncedUpdate)
         },
 
         _updateThings: function(ev) {
