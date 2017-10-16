@@ -24,9 +24,6 @@ from threading import local
 from hashlib import md5
 import cPickle as pickle
 from copy import copy
-from curses.ascii import isgraph
-import logging
-from time import sleep
 
 from pylons import app_globals as g
 
@@ -38,7 +35,7 @@ import random
 from pycassa import ColumnFamily
 from pycassa.cassandra.ttypes import ConsistencyLevel
 
-from r2.lib.utils import in_chunks, prefix_keys, trace, tup
+from r2.lib.utils import in_chunks, prefix_keys, tup
 from r2.lib.hardcachebackend import HardCacheBackend
 
 # This is for use in the health controller

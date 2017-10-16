@@ -21,8 +21,6 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from collections import Counter, OrderedDict
-
 from r2.config import feature
 from r2.lib.contrib.ipaddress import ip_address
 from r2.lib.db.operators import asc
@@ -53,7 +51,6 @@ from r2.models import (
     MultiReddit,
     NotFound,
     OLD_SITEWIDE_RULES,
-    Printable,
     PromoCampaign,
     PromotionPrices,
     IDBuilder,
@@ -64,10 +61,8 @@ from r2.models import (
     StylesheetsEverywhere,
     Subreddit,
     SubredditRules,
-    Target,
     Trophy,
     USER_FLAIR,
-    make_feedurl,
 )
 from r2.models.bidding import Bid
 from r2.models.gold import (
@@ -84,7 +79,6 @@ from r2.models.gold import (
     TIMEZONE as GOLD_TIMEZONE,
 )
 from r2.models.promo import (
-    NO_TRANSACTION,
     PROMOTE_COST_BASIS,
     PROMOTE_PRIORITIES,
     PromotionLog,
@@ -92,7 +86,6 @@ from r2.models.promo import (
 )
 from r2.models.token import OAuth2Client, OAuth2AccessToken
 from r2.models import traffic
-from r2.models import ModAction
 from r2.models import Thing
 from r2.models.wiki import WikiPage, ImagesByWikiPage
 from r2.lib.db import tdb_cassandra, queries
@@ -100,13 +93,12 @@ from r2.config.extensions import is_api
 from r2.lib.menus import CommentSortMenu
 
 from pylons.i18n import _, ungettext
-from pylons import request, config
+from pylons import request
 from pylons import tmpl_context as c
 from pylons import app_globals as g
-from pylons.controllers.util import abort
 
 from r2.lib import hooks, inventory, media
-from r2.lib import promote, tracking
+from r2.lib import promote
 from r2.lib.captcha import get_iden
 from r2.lib.filters import (
     scriptsafe_dumps,
@@ -115,8 +107,6 @@ from r2.lib.filters import (
     _force_utf8,
     unsafe,
     websafe,
-    SC_ON,
-    SC_OFF,
     websafe_json,
     wikimarkdown,
 )
@@ -127,13 +117,12 @@ from r2.lib.normalized_hot import normalized_hot
 from r2.lib.providers import image_resizing
 from r2.lib.strings import (
     get_funny_translated_string,
-    plurals,
     Score,
     strings,
 )
 from r2.lib.utils import is_subdomain, title_to_url, UrlParser
-from r2.lib.utils import url_links_builder, median, to36
-from r2.lib.utils import trunc_time, timesince, timeuntil, weighted_lottery
+from r2.lib.utils import url_links_builder
+from r2.lib.utils import timeuntil
 from r2.lib.template_helpers import (
     add_sr,
     comment_label,
@@ -145,8 +134,7 @@ from r2.lib.template_helpers import (
 )
 from r2.lib.subreddit_search import popular_searches
 from r2.lib.memoize import memoize
-from r2.lib.utils import trunc_string as _truncate, to_date
-from r2.lib.filters import safemarkdown
+from r2.lib.utils import trunc_string as _truncate
 from r2.lib.utils import (
     Storage,
     feature_utils,
@@ -163,9 +151,9 @@ import csv
 import hmac
 import hashlib
 import cStringIO
-import sys, random, datetime, calendar, simplejson, re, time
+import random, datetime, simplejson, re, time
 import time
-from itertools import chain, product
+from itertools import chain
 from urllib import quote, urlencode
 from urlparse import urlparse
 

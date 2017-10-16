@@ -25,7 +25,6 @@ import importlib
 import re
 import urllib
 import tempfile
-import urlparse
 from threading import Lock
 import itertools
 import simplejson
@@ -37,7 +36,6 @@ from paste.registry import RegistryManager
 from paste.urlparser import StaticURLParser
 from paste.deploy.converters import asbool
 from paste.request import path_info_split
-from pylons import response
 from pylons.middleware import ErrorHandler
 from pylons.wsgiapp import PylonsApp
 from routes.middleware import RoutesMiddleware

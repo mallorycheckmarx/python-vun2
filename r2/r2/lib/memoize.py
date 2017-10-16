@@ -20,11 +20,7 @@
 # Inc. All Rights Reserved.
 ###############################################################################
 
-from hashlib import md5
-
-from r2.lib.filters import _force_utf8
-from r2.lib.cache import NoneResult, make_key_id
-from r2.lib.lock import make_lock_factory
+from r2.lib.cache import make_key_id
 from pylons import app_globals as g
 
 

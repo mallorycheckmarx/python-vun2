@@ -44,7 +44,6 @@ from r2.lib.utils import (
     UrlParser,
     constant_time_compare,
     canonicalize_email,
-    tup,
 )
 from r2.models.bans import TempTimeout
 from r2.models.last_modified import LastModified

@@ -24,21 +24,18 @@ import collections
 import json
 import re
 import simplejson
-import socket
 import itertools
 
 from Cookie import CookieError
 from copy import copy
 from datetime import datetime, timedelta
 from functools import wraps
-from hashlib import sha1, md5
+from hashlib import md5
 from urllib import quote, unquote
 from urlparse import urlparse
 
 import babel.core
-import pylibmc
 
-from mako.filters import url_escape
 from pylons import request, response
 from pylons import tmpl_context as c
 from pylons import app_globals as g
@@ -50,7 +47,6 @@ from r2.config.extensions import is_api, set_extension
 from r2.lib import (
     baseplate_integration,
     filters,
-    geoip,
     hooks,
     pages,
     ratelimit,
@@ -78,14 +74,13 @@ from r2.lib.filters import _force_utf8, _force_unicode, scriptsafe_dumps
 from r2.lib.loid import LoId
 from r2.lib.require import RequirementException, require, require_split
 from r2.lib.strings import strings
-from r2.lib.template_helpers import add_sr, JSPreload
-from r2.lib.tracking import encrypt, decrypt, get_pageview_pixel_url
+from r2.lib.template_helpers import JSPreload
+from r2.lib.tracking import decrypt, get_pageview_pixel_url
 from r2.lib.translation import set_lang
 from r2.lib.utils import (
     SimpleSillyStub,
     UniqueIterator,
     extract_subdomain,
-    http_utils,
     is_subdomain,
     is_throttled,
     tup,
@@ -133,7 +128,6 @@ from r2.models import (
     valid_feed,
     valid_otp_cookie,
 )
-from r2.lib.db import tdb_cassandra
 
 
 # Cookies which may be set in a response without making it uncacheable
