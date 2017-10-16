@@ -2736,7 +2736,7 @@ class VFlairAccount(VRequired):
 
     def _lookup(self, name, allow_deleted):
         try:
-            return Account._by_name(name, allow_deleted=allow_deleted)
+            return Account._by_name(name.strip(), allow_deleted=allow_deleted)
         except NotFound:
             return None
 
