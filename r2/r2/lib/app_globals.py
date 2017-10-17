@@ -38,9 +38,9 @@ import sys
 
 from sqlalchemy import engine, event
 from baseplate import Baseplate, config as baseplate_config
+from baseplate.server import einhorn
 from baseplate.thrift_pool import ThriftConnectionPool
 from baseplate.context.thrift import ThriftContextFactory
-from baseplate.server import einhorn
 
 import pkg_resources
 import pytz
@@ -411,7 +411,7 @@ class Globals(object):
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.int): [
             'ticket_groups',
-            'ticket_user_fields', 
+            'ticket_user_fields',
         ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.float): [
             'pennies_per_server_second',
@@ -449,7 +449,7 @@ class Globals(object):
             section in the config file for your application.
 
         ``extra``
-            The configuration returned from ``load_config`` in 
+            The configuration returned from ``load_config`` in
             ``config/middleware.py`` which may be of use in the setup of
             your global variables.
 
@@ -487,7 +487,7 @@ class Globals(object):
         self.paths = paths
 
         self.running_as_script = global_conf.get('running_as_script', False)
-        
+
         # turn on for language support
         self.lang = getattr(self, 'site_lang', 'en')
         self.languages, self.lang_name = get_active_langs(
@@ -496,11 +496,11 @@ class Globals(object):
         all_languages = self.lang_name.keys()
         all_languages.sort()
         self.all_languages = all_languages
-        
+
         # set default time zone if one is not set
         tz = global_conf.get('timezone', 'UTC')
         self.tz = pytz.timezone(tz)
-        
+
         dtz = global_conf.get('display_timezone', tz)
         self.display_tz = pytz.timezone(dtz)
 
@@ -556,7 +556,7 @@ class Globals(object):
             self.config,
             self.pkg_resources_working_set,
             "r2.provider.support",
-            # TODO: fix this later, it refuses to pick up 
+            # TODO: fix this later, it refuses to pick up
             # g.config['ticket_provider'] value, so hardcoding for now.
             # really, the next uncommented line should be:
             #self.ticket_provider,
@@ -686,31 +686,37 @@ class Globals(object):
         self.startup_timer.intermediate("configuration")
 
         ################# ZOOKEEPER
-        zk_hosts = self.config["zookeeper_connection_string"]
-        zk_username = self.config["zookeeper_username"]
-        zk_password = self.config["zookeeper_password"]
-        self.zookeeper = connect_to_zookeeper(zk_hosts, (zk_username,
-                                                         zk_password))
-
-        self.throttles = IPNetworkLiveList(
-            self.zookeeper,
-            root="/throttles",
-            reduced_data_node="/throttles_reduced",
-        )
+        def create_zookeeper_connection():
+            zk_hosts = self.config["zookeeper_connection_string"]
+            zk_username = self.config["zookeeper_username"]
+            zk_password = self.config["zookeeper_password"]
+            self.zookeeper = connect_to_zookeeper(zk_hosts, (zk_username,
+                                                                 zk_password))
+            self.throttles = IPNetworkLiveList(
+                self.zookeeper,
+                root="/throttles",
+                reduced_data_node="/throttles_reduced",
+            )
 
         parser = ConfigParser.RawConfigParser()
         parser.optionxform = str
         parser.read([self.config["__file__"]])
 
         if self.config["liveconfig_source"] == "zookeeper":
+            if not getattr(self, 'zookeeper', None):
+                create_zookeeper_connection()
             self.live_config = LiveConfig(self.zookeeper, LIVE_CONFIG_NODE)
         else:
             self.live_config = extract_live_config(parser, self.plugins)
+            self.throttles = {}
 
         if self.config["secrets_source"] == "zookeeper":
+            if not getattr(self, 'zookeeper', None):
+                create_zookeeper_connection()
             self.secrets = fetch_secrets(self.zookeeper)
         else:
             self.secrets = extract_secrets(parser)
+            self.throttles = {}
 
         ################# PRIVILEGED USERS
         self.admins = PermissionFilteredEmployeeList(
@@ -1074,7 +1080,7 @@ class Globals(object):
 
     def __del__(self):
         """
-        Put any cleanup code to be run when the application finally exits 
+        Put any cleanup code to be run when the application finally exits
         here.
         """
         pass

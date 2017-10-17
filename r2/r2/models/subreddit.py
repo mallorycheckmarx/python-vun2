@@ -280,8 +280,10 @@ class Subreddit(Thing, Printable, BaseSite):
                                                'gilding_server_seconds',
                                                'ban_count')
 
+
     sr_limit = 50
     gold_limit = 100
+    allow_images = None
     DEFAULT_LIMIT = object()
 
     ICON_EXACT_SIZE = (256, 256)
@@ -1427,7 +1429,7 @@ class Subreddit(Thing, Printable, BaseSite):
         # XXX: have to work with a copy of the list instead of modifying
         #   it directly, because it doesn't get marked as "dirty" and
         #   saved properly unless we assign a new list to the attr
-        sticky_fullnames = self.sticky_fullnames[:]
+        sticky_fullnames = self.sticky_fullnames[:] if self.sticky_fullnames is not None else []
         try:
             sticky_fullnames.remove(link._fullname)
         except ValueError:
